@@ -47,6 +47,8 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
     return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
   }
   const setRoomKey = (rootId, keyHex) => { if (ownCrypto) ownCrypto.setKey(rootId, keyHex, 1) }
+  const deriveRid = (keyHex, roomId) => crypto.createHmac("sha256", Buffer.from(String(keyHex), "hex")).update("oasis-room-rid|" + roomId).digest("hex").slice(0, 32)
+  const currentKeyFor = (rootId, tribeId, tribeKeys) => (tribeId && Array.isArray(tribeKeys) && tribeKeys.length ? tribeKeys[0] : lookupKeys(rootId)[0]) || null
 
   const encryptField = (text, keyHex) => {
     const key = Buffer.from(keyHex, "hex")
@@ -288,9 +290,12 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
     if (c.type !== "room") return null
     const f = decryptRoomFields(c, rootId, tribeKeys)
     const author = c.author || node.author
+    const roomId = RID.test(String(c.roomId || "")) ? String(c.roomId) : ""
+    const liveKey = roomId && c.encrypted === true && !f._undec ? currentKeyFor(rootId, c.tribeId, tribeKeys) : null
     return {
       key: node.key,
       rootId,
+      roomId,
       title: f.title,
       description: f.description,
       image: f.image,
@@ -305,7 +310,7 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       tribeId: c.tribeId || null,
       encrypted: c.encrypted === true,
       undecryptable: !!f._undec,
-      rid: f.rid,
+      rid: roomId ? (liveKey ? deriveRid(liveKey, roomId) : "") : f.rid,
       token: typeof c.token === "string" ? c.token : "",
       hub: FEED_ID.test(String(c.hub || "")) ? c.hub : author,
       hubAddress: typeof c.hubAddress === "string" ? c.hubAddress : "",
@@ -420,7 +425,9 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       const type = tribeId ? "INVITE-ONLY" : normalizeStatus(status)
       const tagsArr = normalizeTags(tags)
       const rid = crypto.randomBytes(16).toString("hex")
-      const live = { token: await tokenFor(rid), ...(await pickHub()), media: "audio" }
+      const roomId = crypto.randomBytes(16).toString("hex")
+      const sealed = !!tribeId || type !== "OPEN"
+      const live = { token: await tokenFor(sealed ? roomId : rid), ...(await pickHub()), media: "audio" }
       const base = { type: "room", status: tribeId ? "OPEN" : type, author: userId, members: [userId], invites: [], createdAt: now, updatedAt: now, ...live }
 
       if (type === "OPEN" && !tribeId) {
@@ -441,7 +448,7 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
         description: enc(safeText(description)),
         image: enc(blobRef(image)),
         tags: enc(tagsArr.join(",")),
-        rid: enc(rid),
+        roomId,
         encrypted: true,
         ...(tribeId ? { tribeId } : {})
       })
@@ -643,7 +650,8 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       else if (room.type === "INVITE-ONLY") secrets = lookupKeys(room.rootId).slice(0, 1)
       return {
         rid: room.rid, owner: room.author, token: room.token, hub: room.hub, address: room.hubAddress,
-        ref: room.rootId, title: room.title, secrets: Array.isArray(secrets) && secrets.length ? secrets : null
+        ref: room.rootId, title: room.title, secrets: Array.isArray(secrets) && secrets.length ? secrets : null,
+        ...(room.roomId ? { roomId: room.roomId } : {})
       }
     },
 
@@ -676,6 +684,36 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       const ph = await phone()
       if (!ph || typeof ph.roomMute !== "function") return null
       return asP(ph.roomMute, !!flag)
+    },
+
+    async silence(id, flag) {
+      const ph = await phone()
+      if (!ph || typeof ph.silence !== "function") return null
+      return asP(ph.silence, { id, on: !!flag })
+    },
+
+    async recStart() {
+      const ph = await phone()
+      if (!ph || typeof ph.roomRecStart !== "function") return null
+      return asP(ph.roomRecStart)
+    },
+
+    async recStop() {
+      const ph = await phone()
+      if (!ph || typeof ph.roomRecStop !== "function") return null
+      return asP(ph.roomRecStop)
+    },
+
+    async notify(flag) {
+      const ph = await phone()
+      if (!ph || typeof ph.roomNotify !== "function") return null
+      return asP(ph.roomNotify, !!flag)
+    },
+
+    async clearEvents() {
+      const ph = await phone()
+      if (!ph || typeof ph.roomClearEvents !== "function") return null
+      return asP(ph.roomClearEvents)
     },
 
     async liveState() {

@@ -100,6 +100,23 @@ describe('ssb-db2: the legacy surface the models rely on', (t) => {
     } finally { await closeSbot(sbot); }
   });
 
+  t('typed reads still find a private message of a wanted type once it has fallen out of the log window', async () => {
+    const sbot = makeSbot();
+    try {
+      const { readTyped } = require('../../../src/models/typed_log');
+      const me = sbot.id;
+      const other = ssbKeys.generate().id;
+      const pm = await new Promise((res, rej) => sbot.private.publish({ type: 'schoolEnroll', courseId: '%course', value: true }, [me, other], (e, m) => e ? rej(e) : res(m)));
+      for (let i = 0; i < 12; i++) await publish(sbot, { type: 'post', text: 'noise ' + i });
+      const seen = await readTyped(sbot, ['schoolEnroll'], { limit: 5, withWindow: true, withPrivate: true });
+      ok(seen.some(m => m.key === pm.key && m.value.content.type === 'schoolEnroll' && m.value.private === true), 'the enrolment is there, already opened');
+      const again = await readTyped(sbot, ['schoolEnroll'], { limit: 5, withWindow: true, withPrivate: true });
+      eq(again.filter(m => m.key === pm.key).length, 1, 'and only once');
+      const publicOnly = await readTyped(sbot, ['schoolEnroll'], { limit: 5, withWindow: true });
+      notOk(publicOnly.some(m => m.key === pm.key && typeof m.value.content === 'object'), 'a reader that did not ask for private messages keeps the box closed');
+    } finally { await closeSbot(sbot); }
+  });
+
   t('links: backlinks by destination, votes, replies, tangle heads and self-about', async () => {
     const sbot = makeSbot();
     try {

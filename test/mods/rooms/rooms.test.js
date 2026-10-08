@@ -105,6 +105,130 @@ describe('rooms: meeting on a pub', (t) => {
     } finally { await closeAll(a, b, pub); }
   });
 
+  t('a sealed room is signed once and met wherever its secret says', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, pub); await link(b, pub);
+      const roomId = crypto.randomBytes(16).toString('hex');
+      const token = a.phone.roomToken(roomId);
+      const place = (secret) => crypto.createHmac('sha256', Buffer.from(secret, 'hex')).update('oasis-room-rid|' + roomId).digest('hex').slice(0, 32);
+      const k1 = crypto.randomBytes(32).toString('hex'), k2 = crypto.randomBytes(32).toString('hex');
+      const room = { owner: a.id, token, roomId, hub: pub.id, address: '', ref: '%room', title: 'Sealed' };
+      eq((await asP(a.phone.roomJoin, { ...room, rid: place(k1), secrets: [k1] })).count, 1, 'the owner meets at the place of the first secret');
+      await asP(b.phone.roomJoin, { ...room, rid: place(k1), secrets: [k1] });
+      ok(await waitFor(() => count(a) === 2), 'so does a participant with it');
+      await asP(a.phone.roomLeave); await asP(b.phone.roomLeave);
+      await asP(a.phone.roomJoin, { ...room, rid: place(k2), secrets: [k2] });
+      await asP(b.phone.roomJoin, { ...room, rid: place(k1), secrets: [k1] });
+      ok(await waitFor(() => count(b) === 1 && count(a) === 1, 1500) || (count(a) === 1 && count(b) === 1), 'after the secret changes, whoever kept the old one ends up alone');
+      await asP(b.phone.roomLeave);
+      eq(await joinError(b, { ...room, rid: place(k2), secrets: [k2], token: b.phone.roomToken(roomId) }), 'refused', 'a token not signed by the owner is refused');
+    } finally { await closeAll(a, b, pub); }
+  });
+
+  t('entering and leaving sound different chimes, unless you switch the notices off', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode(); const c = makeNode();
+    const bytesOf = (kind) => Math.round(phone.chimeMs(kind) * 8000 / 1000) * 2;
+    const heardChime = (n, kind) => devices.get(n.id).played.some(buf => buf.length === bytesOf(kind));
+    try {
+      await link(a, pub); await link(b, pub); await link(c, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room);
+      await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => heardChime(a, 'join')), 'A hears B come in');
+      ok(a.phone.roomState().events.some(e => e.t === 'join' && e.id === b.id), 'and sees it in the notices');
+      await asP(b.phone.roomLeave);
+      ok(await waitFor(() => heardChime(a, 'leave')), 'and hears B leave with a different chime');
+      ok(await waitFor(() => a.phone.roomState().events.some(e => e.t === 'leave' && e.id === b.id)), 'and sees who left');
+      await asP(a.phone.roomNotify, false);
+      notOk(a.phone.roomState().notify);
+      eq(a.phone.roomState().events.length, 0, 'with the notices off nothing is listed');
+      devices.get(a.id).played.length = 0;
+      await asP(c.phone.roomJoin, room);
+      ok(await waitFor(() => count(a) === 2), 'C is in');
+      await sleep(200);
+      notOk(heardChime(a, 'join'), 'and no chime was played');
+      await asP(a.phone.roomNotify, true);
+      ok(a.phone.roomState().events.some(e => e.t === 'join' && e.id === c.id), 'the notices come back once switched on');
+      await asP(a.phone.roomClearEvents);
+      eq(a.phone.roomState().events.length, 0, 'and can be wiped at any moment');
+      ok(a.phone.roomState().notify, 'without switching them off');
+    } finally { await closeAll(a, b, c, pub); }
+  });
+
+  t('any participant can record the room; everyone hears it start and stop and sees who records', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    const bytesOf = (kind) => Math.round(phone.chimeMs(kind) * 8000 / 1000) * 2;
+    const heardChime = (n, kind) => devices.get(n.id).played.some(buf => buf.length === bytesOf(kind));
+    try {
+      await link(a, pub); await link(b, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b)));
+      ok(await asP(b.phone.roomRecStart), 'B starts recording');
+      ok(b.phone.roomState().recording, 'B sees the recording on');
+      ok(await waitFor(() => a.phone.roomState().recordingBy.includes(b.id)), 'A sees that B records');
+      ok(heardChime(b, 'recStart') && await waitFor(() => heardChime(a, 'recStart')), 'both hear it start');
+      ok(a.phone.roomState().events.some(e => e.t === 'recStart' && e.id === b.id), 'and A is told who');
+      speak(a.id, 8000, 25);
+      ok(await hears(b.id, 8000), 'B hears A meanwhile');
+      await listen(b.id, 10);
+      ok(await asP(b.phone.roomRecStop), 'B stops');
+      notOk(b.phone.roomState().recording);
+      ok(await waitFor(() => !a.phone.roomState().recordingBy.length), 'A sees it is over');
+      ok(heardChime(b, 'recStop') && await waitFor(() => heardChime(a, 'recStop')), 'both hear it stop');
+      const dir = path.join(b.__dir, 'rooms-recordings');
+      const files = fs.readdirSync(dir).filter(f => f.startsWith(phone.recordingPrefix(room.ref) + '-') && f.endsWith('.wav'));
+      eq(files.length, 1, 'the recording is kept on the recorder\'s device');
+      const wav = fs.readFileSync(path.join(dir, files[0]));
+      eq(wav.toString('ascii', 0, 4), 'RIFF');
+      eq(wav.readUInt32LE(40), wav.length - 44, 'with a complete header');
+      ok(wav.length > 44 + 320, 'and sound inside');
+      ok(b.__events.some(e => e.type === 'roomRecorded' && e.room.ref === room.ref), 'the recorder is told where it is');
+      eq(await asP(b.phone.roomRecStop), null, 'stopping twice changes nothing');
+    } finally { await closeAll(a, b, pub); }
+  });
+
+  t('leaving frees your seat on the pub at once, even when you were alone', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, pub); await link(b, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room);
+      eq((await asP(b.phone.roomCount, { rid: room.rid, hub: pub.id })).count, 1, 'others see one inside');
+      await asP(a.phone.roomLeave);
+      eq(a.phone.roomState(), null, 'the one who left is no longer inside');
+      ok(await waitFor(async () => ((await asP(b.phone.roomCount, { rid: room.rid, hub: pub.id })) || {}).count === 0), 'the pub stops counting them right away');
+      await asP(a.phone.roomLeave);
+      eq(a.phone.roomState(), null, 'leaving twice changes nothing');
+    } finally { await closeAll(a, b, pub); }
+  });
+
+  t('silencing one inhabitant is only for your own ears', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode(); const c = makeNode();
+    try {
+      await link(a, pub); await link(b, pub); await link(c, pub);
+      const room = roomFor(a, pub);
+      for (const n of [a, b, c]) await asP(n.phone.roomJoin, room);
+      ok(await waitFor(() => count(a) === 3 && secure(a) && secure(b) && secure(c)), 'three inside with the key');
+      await asP(a.phone.silence, { id: b.id, on: true });
+      ok(a.phone.roomState().peers.find(p => p.id === b.id).silenced, 'A sees B as silenced');
+      notOk((b.phone.roomState().peers.find(p => p.id === a.id) || {}).silenced, 'B knows nothing about it');
+      speak(b.id, 8000);
+      ok(await hears(c.id, 8000), 'C hears B');
+      await listen(a.id, 4);
+      notOk(heard(a.id, 8000), 'A does not');
+      await asP(a.phone.silence, { id: b.id, on: false });
+      speak(b.id, 6000);
+      ok(await hears(a.id, 6000), 'A hears B again');
+    } finally { await closeAll(a, b, c, pub); }
+  });
+
   t('when everyone inside has Opus the room uses it, and anyone without it keeps the old codec for all', async () => {
     const pub = makeNode({ relayOpen: true, opus: true });
     const a = makeNode({ opus: true }); const b = makeNode({ opus: true }); const c = makeNode({ opus: false });
@@ -306,14 +430,40 @@ describe('rooms: model', (t) => {
     B.setActor();
     await B.use('rooms').joinByInvite(code);
     A.setActor();
-    const before = (await A.use('rooms').liveParams({ ...(await A.use('rooms').getRoomById(r.key)), token: 'x' })).secrets;
+    const seenBefore = await A.use('rooms').getRoomById(r.key);
+    const before = (await A.use('rooms').liveParams({ ...seenBefore, token: 'x' })).secrets;
     await A.use('rooms').removeOpenInvite(r.key);
-    const after = (await A.use('rooms').liveParams({ ...(await A.use('rooms').getRoomById(r.key)), token: 'x' })).secrets;
+    const seenAfter = await A.use('rooms').getRoomById(r.key);
+    const after = (await A.use('rooms').liveParams({ ...seenAfter, token: 'x' })).secrets;
     eq(after.length, 1, 'a room meets with a single secret');
     ok(after[0] !== before[0], 'the secret changes once the open invitation is gone');
+    ok(seenAfter.rid && seenAfter.rid !== seenBefore.rid, 'and so does the meeting place');
+    eq(seenAfter.token, seenBefore.token, 'while the room keeps the same signed identity');
     B.setActor();
+    ok((await B.use('rooms').getRoomById(r.key)).rid !== seenAfter.rid, 'whoever still holds the old secret is sent to the old, empty place');
     await B.use('rooms').ingestKeys();
-    eq((await B.use('rooms').liveParams({ ...(await B.use('rooms').getRoomById(r.key)), token: 'x' })).secrets[0], after[0], 'a participant receives the new one');
+    const seenB = await B.use('rooms').getRoomById(r.key);
+    eq((await B.use('rooms').liveParams({ ...seenB, token: 'x' })).secrets[0], after[0], 'a participant receives the new one');
+    eq(seenB.rid, seenAfter.rid, 'and meets at the new place');
+  });
+
+  t('an invite-only room cannot be dialled by someone who is not inside it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('rooms').createRoom({ title: 'Vault', description: 'x', status: 'INVITE-ONLY' });
+    await A.use('rooms').updateRoomById(r.key, { line: 'SWITCHBOARD' }).catch(() => {});
+    const mine = await A.use('rooms').getRoomById(r.key);
+    ok(mine.number, 'the room has a number');
+    B.setActor();
+    eq((await B.use('rooms').findByNumber(mine.number)).length, 0, 'an outsider dialling it finds nothing');
+    A.setActor();
+    const code = await A.use('rooms').generateInvite(r.key);
+    B.setActor();
+    await B.use('rooms').joinByInvite(code);
+    const found = await B.use('rooms').findByNumber(mine.number);
+    eq(found.length, 1, 'once invited the number works');
+    eq(found[0].rid, mine.rid, 'and leads to the same place');
+    ok((await B.use('rooms').liveParams({ ...found[0], token: 'x' })).secrets.length, 'with the secret in hand');
   });
 
   t('tribe rooms are sealed with the tribe', async () => {

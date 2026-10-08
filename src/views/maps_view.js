@@ -395,7 +395,7 @@ const renderMarkersList = (markers, mapObj, ctx = {}) => {
     })));
 };
 
-const renderMapCard = (mapObj, filter, params = {}) => {
+const renderMapCard = exports.renderMapCard = (mapObj, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   const markerCount = safeArr(mapObj.markers).length + 1;
 

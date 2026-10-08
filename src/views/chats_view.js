@@ -70,7 +70,7 @@ const renderChatStatusChip = (status) => {
   return renderStateChip(variant, icon, label)
 }
 
-const renderChatCard = (chat, filter, params = {}) => {
+const renderChatCard = exports.renderChatCard = (chat, filter, params = {}) => {
   const chips = [
     renderChatStatusChip(chat.status),
     renderEncryptedChip(i18n),

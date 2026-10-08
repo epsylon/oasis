@@ -100,7 +100,7 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
   )
 
 
-const renderPadCard = (pad, filter, spreadInfo) => {
+const renderPadCard = exports.renderPadCard = (pad, filter, spreadInfo) => {
   const chips = [
     renderPadStatusChip(pad.status, pad.isClosed),
     renderEncryptedChip(i18n),

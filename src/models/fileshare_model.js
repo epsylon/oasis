@@ -169,6 +169,15 @@ module.exports = ({ cooler }) => {
     }
   };
 
+  const prefetch = async (pointer) => {
+    try {
+      const client = await openSsb();
+      if (!(await hasBlob(client, pointer.manifestBlobId))) { wantBlob(client, pointer.manifestBlobId, 0); return; }
+      const manifest = fsc.decryptManifest(await getBlob(client, pointer.manifestBlobId), fsc.keyFromHex(pointer.key));
+      for (const ref of manifest.chunks) if (!(await hasBlob(client, ref))) wantBlob(client, ref, 0);
+    } catch (_) {}
+  };
+
   const removeLocalBlobs = async (pointer) => {
     const client = await openSsb();
     let removed = 0;
@@ -196,5 +205,5 @@ module.exports = ({ cooler }) => {
     return pruned;
   };
 
-  return { createShareFromBuffer, createShareFromFile, openManifest, readShareStream, reassembleToBuffer, isAvailable, ensureAvailable, removeLocalBlobs, pruneExpired };
+  return { createShareFromBuffer, createShareFromFile, openManifest, readShareStream, reassembleToBuffer, isAvailable, ensureAvailable, prefetch, removeLocalBlobs, pruneExpired };
 };

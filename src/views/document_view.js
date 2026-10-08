@@ -53,26 +53,33 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
         const pdfId = safeDomId("pdf-container-", doc.key);
 
         const isOwn = doc.author && String(doc.author) === String(userId);
+        const headerActions = typeof params.headerActions === "function"
+          ? params.headerActions(doc)
+          : doc.tribeOrigin
+            ? renderContentActions(null, doc.tribeOrigin.href)
+            : renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title, deleteAction: isOwn ? contentDeleteAction('document', doc.key) : undefined, returnTo });
+        const engagement = typeof params.engagement === "function"
+          ? params.engagement(doc)
+          : doc.tribeOrigin ? null : renderEngagement(doc.key,
+            renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
+            renderCommentsLink({ href: `/documents/${encodeURIComponent(doc.key)}`, count: commentCount })
+          );
         return div(
           { class: "trending-card document-card" + (isOwn ? " own-content" : "") },
           div(
             { class: "card-header activity-card-header" },
             span(),
-            doc.tribeOrigin
-              ? renderContentActions(null, doc.tribeOrigin.href)
-              : renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title, deleteAction: isOwn ? contentDeleteAction('document', doc.key) : undefined, returnTo })
+            headerActions
           ),
           div(
             { class: "card-section document-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(title) : null, doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null, renderLicenseChip(doc.license)),
+            div({ class: "shop-title-row" }, title ? h2(title) : null, doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null, renderLicenseChip(doc.license), ...(typeof params.titleChips === "function" ? params.titleChips(doc) : [])),
             doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
             doc?.url
               ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
               : p(i18n.documentNoFile),
-            doc.tribeOrigin ? null : renderEngagement(doc.key,
-              renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
-              renderCommentsLink({ href: `/documents/${encodeURIComponent(doc.key)}`, count: commentCount })
-            ),
+            ...(typeof params.bodyExtra === "function" ? params.bodyExtra(doc) : []),
+            engagement,
             br(),
             (() => {
               const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;

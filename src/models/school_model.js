@@ -51,7 +51,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     "schoolEnroll", "school-invite", "tombstone", "tribe-keys", "transfer", "transferConfirm", "chatMember", "chat"
   ]
 
-  const readAll = async (ssbClient) => readTyped(ssbClient, SCHOOL_TYPES, { limit: logLimit, withWindow: true })
+  const readAll = async (ssbClient) => readTyped(ssbClient, SCHOOL_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
 
   const buildIndex = (messages, ssbClient) => {
     const tomb = new Set()
@@ -166,9 +166,10 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
 
     if (ssbClient && ssbClient.private && typeof ssbClient.private.unbox === "function") {
       for (const m of messages) {
-        if (typeof m.value?.content !== "string") continue
+        const sealed = typeof m.value?.content === "string"
+        if (!sealed && m.value?.private !== true) continue
         try {
-          const dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
+          const dec = sealed ? ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 }) : m
           const c = dec?.value?.content
           const author = dec?.value?.author
           if (!c || !author) continue

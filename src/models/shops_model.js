@@ -21,7 +21,11 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
   const SHOP_TYPES = ["shop", "shopProduct", "shopOpinion", "shopPurchase", "shop-invite", "shop-invite-tombstone", "shop-open-invite", "shop-open-invite-tombstone", "tombstone"]
 
-  const readAll = async (ssbClient) => readTyped(ssbClient, SHOP_TYPES, { limit: logLimit, withWindow: true })
+  const readAll = async (ssbClient) => readTyped(ssbClient, SHOP_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
+  const openSealed = (ssbClient, m) => {
+    if (typeof m.value?.content === "string") return ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
+    return m.value?.private === true ? m : null
+  }
 
   const SELLER_STATUSES = ["ACCEPTED", "REJECTED", "PAID", "SHIPPED"]
   const BUYER_STATUSES = ["RECEIVED"]
@@ -30,9 +34,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
   const buildOrderStatusMap = (ssbClient, messages) => {
     const map = new Map()
     for (const m of messages) {
-      if (typeof m.value?.content !== "string") continue
       try {
-        const dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
+        const dec = openSealed(ssbClient, m)
         const dc = dec?.value?.content
         if (!dc || dc.type !== "shop-purchase-status" || !dc.orderId) continue
         const ts = dec.value.timestamp || m.timestamp || 0
@@ -657,9 +660,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const out = []
       for (const m of messages) {
-        if (typeof m.value?.content !== "string") continue
         try {
-          const dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
+          const dec = openSealed(ssbClient, m)
           if (!dec?.value?.content) continue
           const dc = dec.value.content
           if (dc.type !== "shop-purchase") continue
@@ -693,9 +695,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const out = []
       for (const m of messages) {
-        if (typeof m.value?.content !== "string") continue
         try {
-          const dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
+          const dec = openSealed(ssbClient, m)
           if (!dec?.value?.content) continue
           const dc = dec.value.content
           if (dc.type !== "shop-purchase") continue
@@ -718,9 +719,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
       let order = null
       for (const m of messages) {
         if (m.key !== orderId) continue
-        if (typeof m.value?.content !== "string") break
         try {
-          const dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
+          const dec = openSealed(ssbClient, m)
           const dc = dec?.value?.content
           if (dc && dc.type === "shop-purchase") order = { ...dc, buyer: dec.value.author }
         } catch (_) {}

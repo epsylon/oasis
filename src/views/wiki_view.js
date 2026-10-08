@@ -361,17 +361,16 @@ exports.wikiPageView = async (page, params = {}) => {
   );
 };
 
-exports.renderTribeWikiSection = (tribe, pages) => {
+exports.renderTribeWikiSection = (tribe, pages, toolbar = null) => {
   const items = Array.isArray(pages) ? pages : [];
   const createBtn = form({ method: "GET", action: "/wiki" },
     input({ type: "hidden", name: "filter", value: "create" }),
     input({ type: "hidden", name: "tribeId", value: tribe.id }),
     button({ type: "submit", class: "create-button" }, i18n.tribeWikiCreate));
-  const header = div({ class: "tribe-content-header" }, h2(i18n.tribeSectionWiki), createBtn);
-  if (!items.length) return div({ class: "tribe-content-list" }, header, p(i18n.tribeWikiEmpty));
+  const header = toolbar || div({ class: "tribe-content-header" }, h2(i18n.tribeSectionWiki), createBtn);
+  if (!items.length) return div({ class: "tribe-content-list" }, header, div({ class: "no-content-box" }, p(i18n.tribeWikiEmpty)));
   return div({ class: "tribe-content-list" },
     header,
-    a({ href: `/wiki?filter=changes&tribeId=${encodeURIComponent(tribe.id)}`, class: "filter-btn" }, String(i18n.wikiChanges).toUpperCase()),
     div({ class: "tribe-grid" }, ...items.map(pg => renderPageCard(pg, { tribeId: tribe.id })))
   );
 };

@@ -390,9 +390,10 @@ module.exports = ({ cooler }) => {
 
   async function readAllLogMessages() {
     const ssbClient = await openSsb();
+    const sealedOnly = ssbClient.private && typeof ssbClient.private.read === 'function';
     const raw = await new Promise((resolve, reject) =>
       pull(
-        ssbClient.createLogStream({ reverse: false, limit: logLimit }),
+        sealedOnly ? ssbClient.private.read({ reverse: false }) : ssbClient.createLogStream({ reverse: false, limit: logLimit }),
         pull.collect((err, arr) => err ? reject(err) : resolve(arr))
       )
     );
@@ -406,7 +407,7 @@ module.exports = ({ cooler }) => {
       const tsIn = m.timestamp || valueIn?.timestamp || Date.now();
       let dec;
       try {
-        dec = ssbClient.private.unbox({ key: keyIn, value: valueIn, timestamp: tsIn });
+        dec = typeof valueIn.content === 'string' ? ssbClient.private.unbox({ key: keyIn, value: valueIn, timestamp: tsIn }) : (valueIn.private === true ? m : null);
       } catch { continue; }
       const v = dec?.value;
       const c = v?.content;

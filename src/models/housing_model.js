@@ -114,7 +114,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
   const HOUSING_MSG_TYPES = ["housing", "housingOpinion", "housingRequest", "tombstone"]
 
-  const readAll = async (ssbClient) => readTyped(ssbClient, HOUSING_MSG_TYPES, { limit: logLimit, withWindow: true })
+  const readAll = async (ssbClient) => readTyped(ssbClient, HOUSING_MSG_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
 
   const buildIndex = (messages, ssbClient) => {
     const tomb = new Set()

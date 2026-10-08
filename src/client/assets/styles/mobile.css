@@ -450,10 +450,6 @@ h3 { font-size: 1em !important; }
   grid-template-columns: repeat(2, 1fr) !important;
 }
 
-.tribe-media-grid {
-  grid-template-columns: repeat(2, 1fr) !important;
-}
-
 .tribe-overview-grid {
   grid-template-columns: 1fr !important;
 }
@@ -466,22 +462,9 @@ h3 { font-size: 1em !important; }
   height: 180px !important;
 }
 
-.tribe-votation-option {
-  flex-direction: column !important;
-  align-items: flex-start !important;
-}
-
 .tribe-content-header {
   flex-direction: column !important;
   gap: 8px !important;
-}
-
-.tribe-content-filters {
-  flex-wrap: wrap !important;
-}
-
-.tribe-media-filters {
-  flex-wrap: wrap !important;
 }
 
 .forum-card {
@@ -1067,11 +1050,6 @@ a.create-button {
   word-break: normal !important;
   overflow-wrap: break-word !important;
 }
-
-.tribe-feed .refeed-column,
-.tribe-feed-full .refeed-column { align-self: center !important; align-items: center !important; justify-content: center !important; }
-.tribe-feed .card-footer,
-.tribe-feed-full .card-footer { display: flex !important; flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 2px !important; }
 
 .invite-qr-card { display: flex !important; justify-content: center !important; border: none !important; background: transparent !important; padding: 0 !important; box-shadow: none !important; margin: 0 auto !important; }
 .invite-qr-img { display: block; margin: 0 auto; }

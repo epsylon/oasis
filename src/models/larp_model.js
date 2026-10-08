@@ -777,14 +777,20 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     const ssbKeys = require('../server/node_modules/ssb-keys');
     const config = require('../server/ssb_config');
     const codes = [];
+    const sealedOnly = client.private && typeof client.private.read === 'function';
     await new Promise((resolve) => {
       pull(
-        client.createLogStream({ reverse: true, limit: 2000 }),
+        sealedOnly ? client.private.read({ reverse: true }) : client.createLogStream({ reverse: true, limit: 2000 }),
         pull.drain((m) => {
           const c = m && m.value && m.value.content;
-          if (typeof c !== 'string' || !c.endsWith('.box')) return;
           let decoded;
-          try { decoded = ssbKeys.unbox(c, config.keys); } catch (_) { return; }
+          if (typeof c === 'string') {
+            if (!c.endsWith('.box')) return;
+            try { decoded = ssbKeys.unbox(c, config.keys); } catch (_) { return; }
+          } else {
+            if (!m.value.private) return;
+            decoded = c;
+          }
           if (!decoded) return;
           if (typeof decoded === 'string') {
             try { decoded = JSON.parse(decoded); } catch (_) { return; }

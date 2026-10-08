@@ -58,13 +58,13 @@ const renderTaskOwnerActions = (task, returnTo) => {
   ];
 };
 
-const renderTaskStatusRow = (task, returnTo) => {
+const renderTaskStatusRow = exports.renderTaskStatusRow = (task, returnTo, action = null) => {
   const st = normalizeStatus(task.status || "OPEN");
   return div({ class: "tribe-side-actions housing-status-row" },
     span({ class: "card-label" }, `${i18n.taskStatus}: `),
     renderStateChip(st === "CLOSED" ? "hidden" : "mutuals", st === "CLOSED" ? "🔒" : "👁", statusLabel(task.status)),
     form(
-      { method: "POST", action: `/tasks/status/${encodeURIComponent(task.id)}`, class: "project-control-form project-control-form--status" },
+      { method: "POST", action: action || `/tasks/status/${encodeURIComponent(task.id)}`, class: "project-control-form project-control-form--status" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       select(
         { name: "status", class: "project-control-select" },
@@ -77,7 +77,7 @@ const renderTaskStatusRow = (task, returnTo) => {
   );
 };
 
-const renderTaskAssignAction = (task, isAssignedToMe, returnTo) => {
+const renderTaskAssignAction = exports.renderTaskAssignAction = (task, isAssignedToMe, returnTo, action = null) => {
   const st = normalizeStatus(task.status || "OPEN");
   if (st === "CLOSED") return null;
   return [
@@ -85,7 +85,7 @@ const renderTaskAssignAction = (task, isAssignedToMe, returnTo) => {
     renderStateChip(isAssignedToMe ? "mutuals" : "whole", isAssignedToMe ? "👤" : "○",
       String(isAssignedToMe ? i18n.taskAssignedChip : i18n.taskUnassignedChip).toUpperCase()),
     form(
-      { method: "POST", action: `/tasks/assign/${encodeURIComponent(task.id)}`, class: "project-control-form" },
+      { method: "POST", action: action || `/tasks/assign/${encodeURIComponent(task.id)}`, class: "project-control-form" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       button({ type: "submit", class: "status-btn project-control-btn" }, isAssignedToMe ? i18n.taskUnassignButton : i18n.taskAssignButton)
     )
@@ -112,11 +112,12 @@ const renderTaskPriorityChip = (priority) => {
   const p = String(priority || "").toUpperCase();
   if (!p) return null;
   const variant =
-    p === "URGENT" ? "closed" :
+    p === "URGENT" || p === "CRITICAL" ? "closed" :
     p === "HIGH" ? "lifespan-orange" :
     p === "MEDIUM" ? "whole" :
     "mutuals";
   const localized =
+    p === "CRITICAL" ? i18n.tribePriorityCritical :
     p === "URGENT" ? i18n.taskPriorityUrgent :
     p === "HIGH" ? i18n.taskPriorityHigh :
     p === "MEDIUM" ? i18n.taskPriorityMedium :
@@ -124,12 +125,13 @@ const renderTaskPriorityChip = (priority) => {
   return renderStateChip(variant, "⚑", localized || p);
 };
 
-const renderTaskItem = (task, filter, spreadInfo) => {
+const renderTaskItem = exports.renderTaskItem = (task, filter, spreadInfo, opts = {}) => {
   const currentFilter = filter || "all";
   const assignees = safeArray(task.assignees);
   const isPrivate = String(task.isPublic || "").toUpperCase() === "PRIVATE";
   const isAuthor = String(task.author) === String(userId);
   const origin = task.tribeOrigin || null;
+  const href = opts.href !== undefined ? opts.href : (origin ? origin.href : `/tasks/${encodeURIComponent(task.id)}`);
 
   const cover = origin ? null : imagesOf(task)[0]
   const heroNode = cover
@@ -151,26 +153,28 @@ const renderTaskItem = (task, filter, spreadInfo) => {
     renderTaskStatusChip(task.status),
     renderTaskPriorityChip(task.priority),
     renderLifespanChip(task.lifetime, i18n),
-    origin ? renderTribeOriginChip(origin) : null
+    origin ? renderTribeOriginChip(origin) : null,
+    ...(Array.isArray(opts.extraChips) ? opts.extraChips : [])
   ].filter(Boolean);
 
+  const headerActions = opts.headerActions !== undefined
+    ? opts.headerActions
+    : origin ? null : renderContentActions(task.id, `/tasks/${encodeURIComponent(task.id)}`, { spread: spreadInfo || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, returnTo: `/tasks?filter=${encodeURIComponent(currentFilter)}`, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined });
 
-  return div({ class: "tribe-card task-card" },
-    origin ? null : div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(task.id, `/tasks/${encodeURIComponent(task.id)}`, { spread: spreadInfo || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, returnTo: `/tasks?filter=${encodeURIComponent(currentFilter)}`, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined })
-    ),
+  return div({ class: "tribe-card task-card" + (isAuthor ? " own-content" : "") },
+    headerActions ? div({ class: "card-header activity-card-header" }, span(), headerActions) : null,
     heroNode,
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: origin ? origin.href : `/tasks/${encodeURIComponent(task.id)}` }, task.title || i18n.tasksTitle)
+          href ? a({ href }, task.title || i18n.tasksTitle) : (task.title || i18n.tasksTitle)
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
-      )
+      ),
+      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : [])
     )
   );
 };

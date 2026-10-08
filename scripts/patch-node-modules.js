@@ -273,3 +273,36 @@ if (fs.existsSync(ssbBoxPath)) {
 } else {
   log('ssb-box patch skipped: file not found');
 }
+
+// === Patch multiserver (voice frames are small and frequent: send them without Nagle's delay) ===
+const msNetPath = path.resolve(__dirname, '../src/server/node_modules/multiserver/plugins/net.js');
+if (fs.existsSync(msNetPath)) {
+  let data = fs.readFileSync(msNetPath, 'utf8');
+  if (data.includes('setNoDelay(true)')) {
+    log('multiserver already patched');
+  } else {
+    const serverTarget = `        function connectionListener(stream) {
+          onConnection(toDuplex(stream))`;
+    const clientTarget = `        .on('connect', function onConnect() {
+          if (started) return
+          started = true
+          cb(null, toDuplex(stream))`;
+    if (data.includes(serverTarget) && data.includes(clientTarget)) {
+      data = data
+        .replace(serverTarget, `        function connectionListener(stream) {
+          try { stream.setNoDelay(true) } catch (_) {}
+          onConnection(toDuplex(stream))`)
+        .replace(clientTarget, `        .on('connect', function onConnect() {
+          if (started) return
+          started = true
+          try { stream.setNoDelay(true) } catch (_) {}
+          cb(null, toDuplex(stream))`);
+      fs.writeFileSync(msNetPath, data);
+      log('Patched multiserver net plugin to disable Nagle on every connection');
+    } else {
+      log('multiserver patch skipped: unexpected net plugin layout');
+    }
+  }
+} else {
+  log('multiserver patch skipped: file not found');
+}

@@ -72,6 +72,7 @@ const FACTORIES = {
   shops: '../../src/models/shops_model',
   pixelia: '../../src/models/pixelia_model',
   pm: '../../src/models/pm_model',
+  phone: '../../src/models/phone_model',
   fileshare: '../../src/models/fileshare_model',
   feed: '../../src/models/feed_model',
   tags: '../../src/models/tags_model',
@@ -192,6 +193,8 @@ function makePeer(network, keypair) {
         banking: { getBankingData: async () => ({ karmaScore: 0 }) }
       };
       deps = { ...baseDeps, services: svc };
+    } else if (name === 'phone') {
+      deps = { ...baseDeps, pmModel: requireOnce('pm'), nameOf: async (id) => id, encryptFile: async () => ({ cipher: {} }) };
     } else if (name === 'reports') {
       deps = baseDeps;
     } else if (name === 'forum') {

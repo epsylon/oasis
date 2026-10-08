@@ -86,7 +86,7 @@ const renderVoteStatusChip = (status) => {
   return renderOpenClosedChip(status, { statusChipOPEN: localized, statusChipCLOSED: localized });
 };
 
-const renderVoteListItem = (v, voteOptionsDefault, activeFilter, spreadInfo) => {
+const renderVoteListItem = exports.renderVoteListItem = (v, voteOptionsDefault, activeFilter, spreadInfo, opts = {}) => {
   const voteOptions = Array.isArray(v.options) && v.options.length ? v.options : voteOptionsDefault;
   const baseCounts = voteOptions.reduce((acc, opt) => {
     acc[opt] = (v.votes && v.votes[opt]) ? v.votes[opt] : 0;
@@ -95,24 +95,29 @@ const renderVoteListItem = (v, voteOptionsDefault, activeFilter, spreadInfo) => 
   const totalVotesNum = typeof v.totalVotes === "number" ? v.totalVotes : parseInt(String(v.totalVotes || "0"), 10) || 0;
   const outcome = computeVoteOutcome(baseCounts, voteOptions, totalVotesNum);
   const origin = v.tribeOrigin || null;
+  const href = opts.href !== undefined ? opts.href : (origin ? origin.href : `/votes/${encodeURIComponent(v.id)}`);
   const chips = [
     renderVoteStatusChip(v.status),
     renderLifespanChip(v.lifetime, i18n),
-    origin ? renderTribeOriginChip(origin) : null
+    origin ? renderTribeOriginChip(origin) : null,
+    ...(Array.isArray(opts.extraChips) ? opts.extraChips : [])
   ].filter(Boolean);
   const returnTo = `/votes?filter=${encodeURIComponent(activeFilter || "all")}`;
   const totalOpinions = Object.values(v.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
   const isOwn = isVoteAuthor(v);
+  const headerActions = opts.headerActions !== undefined
+    ? opts.headerActions
+    : origin ? null : renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`, { spread: spreadInfo || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, returnTo, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined });
 
   return div({ class: "trending-card vote-card" + (isOwn ? " own-content" : "") },
-    origin ? null : div({ class: "card-header activity-card-header" },
+    headerActions ? div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`, { spread: spreadInfo || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, returnTo, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined })
-    ),
+      headerActions
+    ) : null,
     div({ class: "card-section vote-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: origin ? origin.href : `/votes/${encodeURIComponent(v.id)}` }, v.question || i18n.votationsTitle)
+          href ? a({ href }, v.question || i18n.votationsTitle) : (v.question || i18n.votationsTitle)
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
@@ -120,9 +125,36 @@ const renderVoteListItem = (v, voteOptionsDefault, activeFilter, spreadInfo) => 
       origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
       ),
-      origin ? null : div({ class: `job-meta-line vote-outcome vote-outcome-${outcome.variant}` }, `${i18n.voteResults || "Results"}: ${outcome.text}`)
+      origin ? null : div({ class: `job-meta-line vote-outcome vote-outcome-${outcome.variant}` }, `${i18n.voteResults || "Results"}: ${outcome.text}`),
+      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : [])
     )
   );
+};
+
+exports.renderVoteOptionsBlock = (v, voteOptions, action, returnTo, canVote) => {
+  const baseCounts = voteOptions.reduce((acc, opt) => { acc[opt] = (v.votes && v.votes[opt]) ? v.votes[opt] : 0; return acc; }, {});
+  return [
+    canVote ? div({ class: "job-section" },
+      h2({ class: "job-section-title" }, i18n.voteCastTitle || "Cast Vote"),
+      div({ class: "vote-buttons-block" },
+        div({ class: "vote-buttons-row-single" },
+          ...voteOptions.map((opt, idx) =>
+            form({ method: "POST", action },
+              returnTo ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
+              input({ type: "hidden", name: "optionIndex", value: String(idx) }),
+              button({ type: "submit", name: "choice", value: opt }, voteLabel(opt))
+            )
+          )
+        )
+      )
+    ) : null,
+    div({ class: "vote-table" },
+      table(
+        tr(...voteOptions.map((opt) => th(voteLabel(opt)))),
+        tr(...voteOptions.map((opt) => td(String(baseCounts[opt] || 0))))
+      )
+    )
+  ];
 };
 
 const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, activeFilter, params = {}) => {

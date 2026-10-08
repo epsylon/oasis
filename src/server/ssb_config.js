@@ -21,7 +21,7 @@ if (debug) {
 
 const megabyte = Math.pow(2, 20);
 config.blobs = config.blobs || {};
-config.blobs.max = 50 * megabyte;
+config.blobs.max = 75 * megabyte;
 
 config.db2 = { automigrate: false, dangerouslyKillFlumeWhenMigrated: false, ...(config.db2 || {}) };
 

@@ -3,6 +3,7 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { eq, ok, notOk } = require('../../helpers/assert');
+const { makeNetwork, makePeer } = require('../../helpers/setup');
 const SecretStack = require('../../../src/server/node_modules/secret-stack');
 const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
 const phone = require('../../../src/server/phone_module');
@@ -286,6 +287,22 @@ describe('phone: private audio messages', (t) => {
     } finally { await closeNode(a); await closeNode(b); }
   });
 
+  t('a recording too short to hold a word is never sent', async () => {
+    const a = makeNode(); const b = makeNode({ dnd: true });
+    try {
+      await link(a, b);
+      await asP(a.phone.call, b.id);
+      ok(await waitFor(() => a.phone.state().phase === 'recording', 4000), 'the message starts');
+      ok(await waitFor(() => devices.get(a.id).mics.size > 0, 2000));
+      speak(a.id, 3000, 5);
+      let err = null;
+      try { await asP(a.phone.recordStop); } catch (e) { err = e; }
+      eq(err && err.message, 'empty', 'a tenth of a second is not a message');
+      eq(a.phone.state(), null, 'the call is over');
+      eq(ended(a)[0].outcome, 'noanswer', 'and nothing was left for the other side');
+    } finally { await closeNode(a); await closeNode(b); }
+  });
+
   t('two beeps warn before the limit, then recording stops by itself', async () => {
     const a = makeNode({ pamWarnMs: 1000 });
     try {
@@ -482,6 +499,53 @@ describe('phone: joint calls', (t) => {
     } finally { await closeNode(a); await closeNode(b); await closeNode(c); }
   });
 
+  t('you can stop hearing one person while everyone else keeps hearing them', async () => {
+    const a = makeNode(); const b = makeNode(); const c = makeNode();
+    try {
+      await link(a, b); await link(a, c);
+      await asP(a.phone.call, [b.id, c.id]);
+      await ringing(b); await ringing(c);
+      await asP(b.phone.accept); await asP(c.phone.accept);
+      ok(await waitFor(() => a.phone.state().peers.every(p => p.phase === 'connected') && b.phone.state().phase === 'connected' && c.phone.state().phase === 'connected'), 'everyone is in');
+      await asP(a.phone.silence, { id: b.id, on: true });
+      ok(a.phone.state().peers.find(p => p.id === b.id).silenced, 'the caller sees whom they silenced');
+      speak(b.id, 5000);
+      await sleep(200);
+      await pump(a.id);
+      ok(await waitFor(() => heard(c.id, 5000)), 'C still hears B');
+      notOk(heard(a.id, 5000), 'the caller does not');
+      await asP(a.phone.silence, { id: b.id, on: false });
+      notOk(a.phone.state().peers.find(p => p.id === b.id).silenced);
+      speak(b.id, 4000);
+      await sleep(200);
+      await pump(a.id);
+      ok(await waitFor(() => heard(a.id, 4000)), 'hearing again brings the voice back');
+      let bad = null;
+      try { await asP(a.phone.silence, { id: a.id, on: true }); } catch (e) { bad = e; }
+      ok(bad, 'you cannot silence yourself this way');
+    } finally { await closeNode(a); await closeNode(b); await closeNode(c); }
+  });
+
+  t('in a call for two, silencing the other keeps the call alive', async () => {
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, b);
+      await asP(a.phone.call, b.id);
+      await ringing(b);
+      await asP(b.phone.accept);
+      ok(await waitFor(() => a.phone.state().phase === 'connected' && b.phone.state().phase === 'connected'));
+      await asP(a.phone.silence, { id: b.id, on: true });
+      ok(a.phone.state().silenced, 'the call shows the other side is silenced');
+      speak(b.id, 7000);
+      await sleep(300);
+      notOk(heard(a.id, 7000), 'A does not hear B');
+      ok(await waitFor(async () => { speak(a.id, 9000); await sleep(40); return heard(b.id, 9000); }), 'B still hears A');
+      eq(a.phone.state().phase, 'connected', 'and the call goes on');
+      await asP(a.phone.silence, { id: b.id, on: false });
+      ok(await waitFor(async () => { speak(b.id, 6000); await sleep(40); return heard(a.id, 6000); }), 'A hears B again');
+    } finally { await closeNode(a); await closeNode(b); }
+  });
+
   t('people who leave or never answer drop out while the rest keep talking', async () => {
     const a = makeNode(); const b = makeNode(); const c = makeNode();
     try {
@@ -579,5 +643,57 @@ describe('phone: answering from the desktop notification', (t) => {
       process.env.PATH = oldPath;
       fs.rmSync(bin, { recursive: true, force: true });
     }
+  });
+});
+
+describe('phone: voice messages left for you', (t) => {
+  const share = { key: 'k', manifestBlobId: '&m.sha256' };
+
+  t('a received voicemail counts as pending until it is listened to', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('pm').sendPam(B.keypair.id, share, 7);
+    B.setActor();
+    const phoneB = B.use('phone');
+    const pams = await phoneB.pams();
+    eq(pams.length, 1, 'B sees the voicemail');
+    eq(pams[0].from, A.keypair.id);
+    eq(pams[0].heard, false, 'not listened to yet');
+    eq(await phoneB.refreshCount(), 1, 'it is counted as pending');
+    ok(await phoneB.pamCipher(pams[0].key), 'opening it hands back the audio');
+    eq((await phoneB.pams())[0].heard, false, 'looking at it is not listening to it');
+    eq(phoneB.markHeard(pams[0].key), true, 'playing it to the end marks it as listened');
+    eq((await phoneB.pams())[0].heard, true);
+    eq(await phoneB.refreshCount(), 0, 'so it is no longer pending');
+    eq(phoneB.markHeard(pams[0].key), false, 'listening again changes nothing');
+  });
+
+  t('a voicemail whose audio has not arrived yet is shown as still downloading', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('pm').sendPam(B.keypair.id, share, 5);
+    B.setActor();
+    const asked = [];
+    const phoneB = require('../../../src/models/phone_model')({
+      cooler: { open: async () => ({ id: B.keypair.id }) }, pmModel: B.use('pm'), nameOf: async () => '', isPublic: false,
+      isAvailable: async () => false, prefetch: async (s) => { asked.push(s.manifestBlobId); }
+    });
+    const pams = await phoneB.pams();
+    eq(pams.length, 1, 'the message is listed');
+    eq(pams[0].ready, false, 'but its audio is not ready');
+    eq(asked.join(','), share.manifestBlobId, 'and the audio is requested from the network');
+    const ready = require('../../../src/models/phone_model')({
+      cooler: { open: async () => ({ id: B.keypair.id }) }, pmModel: B.use('pm'), nameOf: async () => '', isPublic: false,
+      isAvailable: async () => true
+    });
+    eq((await ready.pams())[0].ready, true, 'once every piece is here it can be played');
+  });
+
+  t('your own voicemails are never pending for you', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('pm').sendPam(B.keypair.id, share, 3);
+    eq((await A.use('phone').pams()).length, 0);
+    eq(await A.use('phone').refreshCount(), 0);
   });
 });

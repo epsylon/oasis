@@ -43,7 +43,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
   const readAll = async (ssbClient) =>
-    readTyped(ssbClient, JOB_TYPES, { limit: logLimit, withWindow: true })
+    readTyped(ssbClient, JOB_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
 
   const buildIndex = (messages, ssbClient) => {
     const tomb = new Set()

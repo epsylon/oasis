@@ -114,13 +114,14 @@ const renderEventStatusChip = (status) => {
   return renderOpenClosedChip(status, { statusChipOPEN: localized, statusChipCLOSED: localized });
 };
 
-const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
+const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo, opts = {}) => {
   const currentFilter = filter || "all";
   const attendees = safeArray(e.attendees);
   const isPrivate = normalizePrivacy(e.isPublic) === "private";
   const isAttending = attendees.includes(userId);
   const price = parseFloat(e.price || 0);
   const origin = e.tribeOrigin || null;
+  const href = opts.href !== undefined ? opts.href : (origin ? origin.href : `/events/${encodeURIComponent(e.id)}`);
 
   const chips = [
     renderPrivacyChip(isPrivate, i18n),
@@ -132,22 +133,26 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
     origin ? null : e.subscriptionIn === true
       ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
       : (e.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null),
-    origin ? renderTribeOriginChip(origin) : null
+    origin ? renderTribeOriginChip(origin) : null,
+    ...(Array.isArray(opts.extraChips) ? opts.extraChips : [])
   ].filter(Boolean);
 
   const dateText = e.date ? moment(e.date).format("YYYY/MM/DD HH:mm") : "";
 
   const isOwn = e.organizer && String(e.organizer) === String(userId);
+  const headerActions = opts.headerActions !== undefined
+    ? opts.headerActions
+    : origin ? null : renderContentActions(e.id, `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`, { spread: spreadInfo || null, author: e.organizer || e.author, favKind: 'events', isFavorite: e.isFavorite, reportTitle: e.title, deleteAction: isOwn ? contentDeleteAction('event', e.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` });
   return div({ class: "trending-card event-card" + (isOwn ? " own-content" : "") },
-    origin ? null : div(
+    headerActions ? div(
       { class: "card-header activity-card-header" },
       span(),
-      renderContentActions(e.id, `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`, { spread: spreadInfo || null, author: e.organizer || e.author, favKind: 'events', isFavorite: e.isFavorite, reportTitle: e.title, deleteAction: isOwn ? contentDeleteAction('event', e.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` })
-    ),
+      headerActions
+    ) : null,
     div({ class: "card-section event-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: origin ? origin.href : `/events/${encodeURIComponent(e.id)}` }, e.title || i18n.eventsTitle)
+          href ? a({ href }, e.title || i18n.eventsTitle) : (e.title || i18n.eventsTitle)
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
@@ -160,7 +165,8 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo) => {
         : null,
       origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
-      )
+      ),
+      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : [])
     )
   );
 };

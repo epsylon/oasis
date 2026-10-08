@@ -43,11 +43,21 @@ const renderCallPanel = (st, now) => {
   } else if (st.phase === 'connecting' || st.phase === 'connected') {
     const inCall = st.group ? linkList(st.peers.filter(x => x.phase === 'connected').map(x => x.id)) : who;
     const ringing = st.group ? st.peers.filter(x => x.phase === 'calling').map(x => x.id) : [];
+    const silenceButton = (id, on) => on
+      ? postButton('/phone/silence', i18n.phoneUnsilence, true, { id, on: 0 })
+      : postButton('/phone/silence', i18n.phoneSilence, false, { id, on: 1 });
+    const peerRow = (pr) => div({ class: 'phone-contact room-peer' },
+      span({ class: 'phone-call-icon' }, '✆'),
+      userLink(pr.id),
+      silenceButton(pr.id, pr.silenced)
+    );
     body = [
       line(i18n.phoneInCall, ' ', ...inCall, ' ', span({ class: 'phone-call-clock' }, liveClock(st.answeredAt || st.startedAt))),
       ringing.length ? div({ class: 'phone-call-ringing' }, i18n.phoneCalling, ' ', ...linkList(ringing)) : null,
+      st.group ? div({ class: 'phone-contacts phone-call-peers' }, ...st.peers.filter(x => x.phase === 'connected').map(peerRow)) : null,
       actions(
         st.muted ? postButton('/phone/mute', i18n.phoneUnmute, false, { mute: 0 }) : postButton('/phone/mute', i18n.phoneMute, false, { mute: 1 }),
+        st.group ? null : silenceButton(st.peer, st.silenced),
         postButton('/phone/hangup', i18n.phoneHangup, true)
       )
     ];
@@ -153,7 +163,9 @@ const renderRecords = (pams) =>
               ),
               tr(td({ class: 'card-label' }, i18n.pmEncryptionLabel || 'Encryption'), td({ class: 'card-value pm-encryption-cell' }, renderEncryptedChip(i18n)))
             ),
-            audio({ controls: true, preload: 'none', src: `/phone/pam/${encodeURIComponent(m.key)}/audio` }),
+            m.ready === false
+              ? div({ class: 'phone-record-pending' }, span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.torrentStateDownloading)))
+              : audio({ controls: true, preload: 'metadata', src: `/phone/pam/${encodeURIComponent(m.key)}/audio` }),
             div({ class: 'pm-actions' },
               renderCallButton(m.from, { upper: true, cls: 'pm-btn' }),
               form({ method: 'POST', action: `/phone/pam/${encodeURIComponent(m.key)}/delete`, class: 'pm-action-form' },

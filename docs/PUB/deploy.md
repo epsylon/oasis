@@ -44,7 +44,7 @@ OASIS_AI=none ./install.sh
 Two example config files live in `docs/PUB/`:
 
 - [`server-config.json.example`](./server-config.json.example) — the Oasis Sbot config (cap, friends graph, gossip, incoming/outgoing ports). Goes into `src/configs/server-config.json`.
-- [`oasis-config.json.example`](./oasis-config.json.example) — the Oasis config tuned for a PUB (AI/wallet/market/jobs/shops off; LAN broadcasting off). Goes into `src/configs/oasis-config.json`. The PUB reads it: modules and theme of the HUB, the media cache limit (step 17), the ECOin RPC for UBI (step 19) and the call relay (step 20).
+- [`oasis-config.json.example`](./oasis-config.json.example) — the Oasis config tuned for a PUB (AI/wallet/market/jobs/shops off; LAN broadcasting off). Goes into `src/configs/oasis-config.json`. The PUB reads it: modules and theme of the HUB, the media cache limit (step 16), the ECOin RPC for UBI (step 18) and the call relay (step 19).
 
 To make the PUB reachable as a Tor hidden service, as well or instead (optional), see [`TOR.md`](./TOR.md).
 
@@ -220,11 +220,7 @@ The default seed PUB at `solarnethub.com` is included in `autofollow.feeds` abov
 
 The PUB also serves a read-only web HUB with the items its inhabitants chose to publish on the CLEARNET (each item is created as OASIS or CLEARNET by its author), plus the public pages of the public tribes. See [`clearnet.md`](./clearnet.md) for the URLs and the reverse proxy setup.
 
-## 16) Upgrading a PUB to the ssb-db2 version
-
-Stop the PUB, copy `~/.ssb` somewhere safe, update the code and start it again: the first start migrates `~/.ssb/flume` into `~/.ssb/db2` on its own (the larger the log, the longer it takes) and the HUB answers normally afterwards. Replication with inhabitants on either version keeps working, the wire protocol has not changed. Never start the previous version on the migrated folder: it would not see the log and could fork the PUB's own feed. A guard file left in `flume/` makes such a start fail on purpose.
-
-## 17) Disk: media cache and snapshots
+## 16) Disk: media cache and snapshots
 
 **Media cache.** Every Oasis node keeps the blobs it downloads in a cache that is **unlimited by default** (Settings → Media cache); when a limit is set, the least recently opened ones are removed once it is exceeded. A PUB is the place others fetch media from, so it has its own limit: `oasis-config.json` carries a separate `pubMaxMB`, which the example leaves unlimited (`0`). If the disk fills up, set a limit in megabytes and restart; the PUB then keeps its own files and anything opened recently, and periodically drops the rest, oldest first. Dropped blobs are fetched again from whoever still has them the next time someone opens them.
 
@@ -232,13 +228,13 @@ Stop the PUB, copy `~/.ssb` somewhere safe, update the code and start it again: 
 "blobCache": { "maxMB": 0, "pubMaxMB": <megabytes> }
 ```
 
-**Snapshots.** Shortly after boot, and then periodically, the PUB writes two files under `~/.ssb/oasis/content/`: `snapshot-recent.oasissn`, the complete feeds of the recently active inhabitants, and `snapshot.oasissn`, every message it holds, most recently active feeds first. Feeds travel whole, because each message is validated against the previous one: private messages are included as the same ciphertext every peer already replicates, nothing is ever decrypted, and blobs are not included. It never touches the web: it travels only over the secret-handshake connection, through the `snapshot` sbot plugin, and the PUB hands it exclusively to feeds it follows, that is, to inhabitants who redeemed one of its invites. Nobody browsing the HUB can fetch it. When a newcomer accepts an invite, their Oasis joins the PUB and immediately pulls the recent snapshot in the background, so what is happening now is usable almost at once, then the full one, while ordinary replication keeps filling in whatever is newer; messages replication already brought are simply skipped. Feeds always arrive whole and in order, which is what the log requires. Nothing is needed on your side.
+**Snapshots.** The PUB periodically writes two files under `~/.ssb/oasis/content/`: `snapshot-recent.oasissn`, the complete feeds of the recently active inhabitants, and `snapshot.oasissn`, every message it holds. Private messages are included as the same ciphertext every peer already replicates, nothing is ever decrypted, and blobs are not included. It never touches the web: it travels only over the secret-handshake connection, and the PUB hands it exclusively to feeds it follows, that is, to inhabitants who redeemed one of its invites. Nobody browsing the HUB can fetch it. When a newcomer accepts an invite, their Oasis pulls the recent snapshot and then the full one, while ordinary replication keeps filling in whatever is newer. Nothing is needed on your side.
 
-## 18) Mirroring the AI models
+## 17) Mirroring the AI models
 
 `install.sh` downloads the AI models from a list of mirrors rather than from one address, so the network does not depend on a single server. A PUB with a web server can be one of them: publish `oasis-42-1-chat.Q4_K_M.gguf.tar.gz` and `oasis-embeddings.tar.gz`, unchanged, at the root of your domain or any path, and tell us the URL so it joins the built-in list; until then, your inhabitants can use it with `OASIS_MODEL_MIRRORS=https://pub.example.org`. The installer checks each package before using it, so a broken or partial copy is skipped, never installed.
 
-## 19) UBI: paying inhabitants from the PUB (ecoind)
+## 18) UBI: paying inhabitants from the PUB (ecoind)
 
 A PUB pays the Universal Basic Income (UBI) in ECOin when it runs `ecoind` next to Oasis. There is no switch: Oasis turns the UBI engine on by itself when both conditions hold on the same node:
 
@@ -249,17 +245,15 @@ A PUB pays the Universal Basic Income (UBI) in ECOin when it runs `ecoind` next 
 "wallet": { "url": "http://localhost:7474", "user": "<rpcuser>", "pass": "<rpcpassword>", "fee": "5" }
 ```
 
-Fund that wallet with the ECO to be distributed. On boot the PUB logs `[UBI] PUB engine on`, and then, periodically, it:
+Fund that wallet with the ECO to be distributed. Periodically, the PUB:
 
 1. computes the monthly epoch (pool, weights, allocations) from the network activity;
 2. pays the pending `ubiClaim` messages addressed to it with `sendtoaddress` to the ECOin address each claimant published (Profile → Edit → Sensors → ECOIN Wallet), publishing a `ubiClaimResult` per payment;
-3. announces `pubAvailability` (available when the wallet balance covers at least one floor payment). The announcement is only republished when the state changes or after a long while, so the PUB feed is not flooded.
+3. announces `pubAvailability` (available when the wallet balance covers at least one floor payment).
 
-**Who pays a claim.** A claim is paid only by the PUB it was addressed to. The network's default PUB (the one in the built-in invite code) also takes over the claims of the current and the previous month that another PUB has left unpaid for days; once that time has passed, the PUB the claim was addressed to no longer pays it.
+**Who pays a claim.** A claim is paid only by the PUB it was addressed to, and each claim is paid once.
 
-**One payment per claim.** The PUB keeps a ledger of the claims it has paid and checks its wallet before paying. If the wallet does not answer, the claim waits for a later tick; an attempt that fails is retried later. The rebalances between PUBs follow the same rule.
-
-Inhabitants configure nothing: their Oasis reads the `pubAvailability` announcements it replicates, prefers the network's default PUB while it announces *available* and otherwise picks the available PUB with the newest announcement (stale announcements are ignored). Banking → Overview shows which PUB it is connected to, when it was last seen, whether their ECOin address is published and whether this month's UBI has been claimed. The claim is a `ubiClaim` message addressed to that PUB; the payment lands in their wallet on the PUB's next tick. An inhabitant can also refuse this month's UBI; a refused claim is never paid.
+Inhabitants configure nothing: their Oasis reads the `pubAvailability` announcements it replicates and picks an available PUB, preferring the network's default PUB (the one in the built-in invite code) while it announces *available*. Banking → Overview shows which PUB it is connected to, whether their ECOin address is published and whether this month's UBI has been claimed. The claim is a `ubiClaim` message addressed to that PUB. An inhabitant can also refuse this month's UBI; a refused claim is never paid.
 
 ### Funding the pool
 
@@ -271,13 +265,13 @@ The pool comes from the PUB wallet: each month, a share of the balance above a r
 
 Eligible claimants are feeds past a grace period, with a published ECOin address and activity in the network. Claiming or publishing a wallet gives no karma. Taxes (ECO and ARCH) are not paid anywhere: they are deducted from the part of the UBI above the floor, and the floor itself is always paid.
 
-Diagnostics on the PUB console: `[ECOin RPC] pub … failed: …` when ecoind is unreachable or refuses a call, `[UBI] claim … skipped: …` when a claimant has no published address, refused the UBI or the PUB wallet is empty, `[UBI] claim … waiting: …` when the wallet does not answer, `[UBI] claim … not paid yet: …` when `sendtoaddress` failed and will be retried, `[UBI] paid …` for each payment and `[UBI] found payment of …` when the wallet already holds it. Rebalances log in the same way (`[UBI] rebalanced …`, `[UBI] rebalance to … skipped/waiting/not sent`). If ecoind is stopped the engine simply idles and announces *unavailable*; it resumes on the next tick once RPC answers again.
+If ecoind is stopped the engine simply idles and announces *unavailable*; it resumes once RPC answers again.
 
-## 20) Phone and Rooms: relaying encrypted calls
+## 19) Phone and Rooms: relaying encrypted calls
 
-Inhabitants call each other from **Phone**. When two of them cannot reach each other directly (different home networks), their calls go through a PUB they are both connected to, or through the PUB of the inhabitant being called. The PUB only passes the call along: the audio is end-to-end encrypted between the two inhabitants and the PUB never has the key. It relays only when one side is an inhabitant it follows. A joint call travels as one call between the caller and each inhabitant, so through a PUB it weighs as much as one relayed call per inhabitant.
+Inhabitants call each other from **Phone**. When two of them cannot reach each other directly (different home networks), their calls go through a PUB they are both connected to, or through the PUB of the inhabitant being called. The PUB only passes the call along: the audio is end-to-end encrypted between the two inhabitants and the PUB never has the key. It relays only when one side is an inhabitant it follows.
 
-**Rooms** meet on the PUB their creator was connected to when the room was opened. The PUB forwards what each participant sends to the others in the room without being able to read it: the room key stays among the participants. Participants only send while they are active, so a room where few are active at once stays light even when many take part. The PUB hosts rooms opened by inhabitants it follows.
+**Rooms** meet on the PUB their creator was connected to when the room was opened. The PUB forwards what each participant sends to the others in the room without being able to read it: the room key stays among the participants. The PUB hosts rooms opened by inhabitants it follows.
 
 Nothing has to be installed or opened: the relay runs inside Oasis over the connections the PUB already has, and it is on unless `oasis-config.json` says otherwise. To stop relaying calls and hosting rooms, set it off there:
 

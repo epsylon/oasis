@@ -183,48 +183,84 @@ exports.roomsView = async (rooms, filter, roomToEdit, params = {}) => {
   )
 }
 
-const renderJoinBox = (room, live, occ, canJoin) => {
-  if (live) {
-    return div({ class: "tribe-side-actions room-live-actions" },
-      form({ method: "POST", action: "/rooms/mute", class: "room-join-form" },
-        input({ type: "hidden", name: "mute", value: live.muted ? "0" : "1" }),
-        input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
-        button({ type: "submit", class: "tribe-action-btn" }, String(live.muted ? i18n.phoneUnmute : i18n.phoneMute).toUpperCase())
-      ),
-      form({ method: "POST", action: "/rooms/leave", class: "room-join-form" },
-        input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
-        button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.roomLeave).toUpperCase())
-      )
-    )
-  }
-  if (!canJoin) return null
-  return div({ class: "tribe-side-actions" }, joinForm(room, occ))
+const eventLine = (ev) => {
+  const key = ev.t === "join" ? "roomEventJoined" : ev.t === "leave" ? "roomEventLeft" : ev.t === "recStart" ? "roomEventRecStart" : "roomEventRecStop"
+  const [before, after] = String(i18n[key] || "{name}").split("{name}")
+  return [before, userLink(ev.id), after]
 }
-
-const renderLivePanel = (room, live, occ) => {
-  const head = (...left) => div({ class: "room-live-head" },
-    div({ class: "room-live-head-main" }, ...left),
-    a({ href: roomHref(room), class: "tribe-action-btn room-refresh-btn" }, String(i18n.liveRefresh).toUpperCase())
+const renderRecChip = () => span({ class: "room-rec-chip" }, "● " + String(i18n.roomRecording).toUpperCase())
+const fmtDuration = (ms) => { const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000)); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}` }
+const refreshLink = (room) => a({ href: roomHref(room), class: "tribe-action-btn room-refresh-btn" }, String(i18n.liveRefresh).toUpperCase())
+const renderLiveControls = (room, live) => div({ class: "room-live-controls" },
+  form({ method: "POST", action: "/rooms/notify", class: "phone-action-form" },
+    input({ type: "hidden", name: "on", value: live.notify ? "0" : "1" }),
+    button({ type: "submit", class: live.notify ? "tribe-action-btn" : "tribe-action-btn room-notify-off" }, "🔔 " + String(live.notify ? i18n.roomNotificationsOn : i18n.roomNotificationsOff).toUpperCase())
+  ),
+  live.notify && safeArr(live.events).length
+    ? form({ method: "POST", action: "/rooms/notify/clear", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.roomClearNotices).toUpperCase()))
+    : null,
+  form({ method: "POST", action: "/rooms/mute", class: "phone-action-form" },
+    input({ type: "hidden", name: "mute", value: live.muted ? "0" : "1" }),
+    input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
+    button({ type: "submit", class: "tribe-action-btn" }, String(live.muted ? i18n.phoneUnmute : i18n.phoneMute).toUpperCase())
+  ),
+  live.recording
+    ? form({ method: "POST", action: "/rooms/rec/stop", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.roomRecStop).toUpperCase()))
+    : form({ method: "POST", action: "/rooms/rec/start", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.roomRec).toUpperCase())),
+  live.recording || safeArr(live.recordingBy).length ? renderRecChip() : null,
+  refreshLink(room),
+  form({ method: "POST", action: "/rooms/leave", class: "phone-action-form" },
+    input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
+    button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.roomLeave).toUpperCase())
+  )
+)
+const renderRoomEvents = (live) => live.notify && safeArr(live.events).length
+  ? ul({ class: "room-events" }, ...safeArr(live.events).slice().reverse().map(ev => li({ class: "room-event" }, span({ class: "date-link" }, moment(ev.ts).format("HH:mm:ss")), span({ class: "room-event-text" }, ...eventLine(ev)))))
+  : null
+const renderRecordings = (recordings) => safeArr(recordings).length
+  ? div({ class: "phone-block room-recordings-block" },
+      h2(i18n.roomRecordings),
+      ul({ class: "room-recordings" }, ...recordings.map(r => li({ class: "room-recording" },
+        span({ class: "date-link" }, moment(r.at).format("YYYY/MM/DD HH:mm")),
+        span({ class: "phone-call-clock" }, fmtDuration(r.durationMs)),
+        a({ href: `/rooms/recordings/${encodeURIComponent(r.name)}`, class: "tribe-action-btn", download: r.name }, String(i18n.fileDownload).toUpperCase()),
+        form({ method: "POST", action: `/rooms/recordings/${encodeURIComponent(r.name)}/delete`, class: "phone-action-form" },
+          button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.delete }, "✕"))
+      )))
+    )
+  : null
+const renderLivePanel = (room, live, occ, canJoin = false) => {
+  const head = (left, controls = null) => div({ class: "room-live-head" },
+    div({ class: "room-live-head-main" }, left),
+    controls || refreshLink(room)
   )
   if (live) {
-    const who = (id, speaking, muted, you) => div({ class: "phone-contact room-peer" + (speaking ? " room-peer-speaking" : "") },
-      span({ class: "phone-call-icon" }, speaking ? "●" : "○"),
+    const silenceForm = (id, on) => form({ method: "POST", action: "/rooms/silence", class: "phone-action-form" },
+      input({ type: "hidden", name: "id", value: id }),
+      input({ type: "hidden", name: "on", value: on ? "0" : "1" }),
+      button({ type: "submit", class: on ? "tribe-action-btn danger-btn" : "tribe-action-btn" }, String(on ? i18n.phoneUnsilence : i18n.phoneSilence).toUpperCase())
+    )
+    const who = (id, speaking, muted, you, silenced = false, recording = false) => div({ class: "phone-contact room-peer" + (speaking ? " room-peer-speaking" : "") },
+      speaking ? span({ class: "phone-call-icon" }, "●") : null,
       userLink(id),
       you ? span({ class: "room-peer-you" }, i18n.roomYou) : null,
-      muted ? span({ class: "room-peer-muted" }, String(i18n.roomMuted).toUpperCase()) : null
+      muted ? span({ class: "room-peer-muted" }, String(i18n.roomMuted).toUpperCase()) : null,
+      recording ? renderRecChip() : null,
+      you ? null : silenceForm(id, silenced)
     )
     return div({ class: "phone-call-panel room-live-panel" },
-      head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null)),
+      head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null), renderLiveControls(room, live)),
       live.secure ? null : p({ class: "room-waiting" }, i18n.roomWaitingKey),
       div({ class: "phone-contacts" },
-        who(userId, live.speaking && !live.muted, live.muted, true),
-        ...safeArr(live.peers).map(pr => who(pr.id, pr.speaking && !pr.muted, pr.muted, false))
-      )
+        who(userId, live.speaking && !live.muted, live.muted, true, false, !!live.recording),
+        ...safeArr(live.peers).map(pr => who(pr.id, pr.speaking && !pr.muted && !pr.silenced, pr.muted, false, !!pr.silenced, !!pr.recording))
+      ),
+      renderRoomEvents(live)
     )
   }
   const count = occ ? occ.count : 0
   return div({ class: "phone-block room-live-panel" },
-    head(p({ class: "phone-empty" }, count > 0 ? String(i18n.roomSomeone).replace("{n}", String(count)) : i18n.roomNobody))
+    head(p({ class: "phone-empty" }, count > 0 ? String(i18n.roomSomeone).replace("{n}", String(count)) : i18n.roomNobody), canJoin ? div({ class: "room-live-controls" }, refreshLink(room), joinForm(room, occ)) : null)
   )
 }
 
@@ -297,7 +333,6 @@ exports.singleRoomView = async (room, params = {}) => {
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.roomParticipants}: ${safeArr(room.members).length}`)
     ),
-    renderJoinBox(room, live, live ? null : occ, canJoin),
     inviteActions.length ? div({ class: "tribe-side-actions" }, ...inviteActions) : null,
     isAuthor && !room.isClosed
       ? div({ class: "tribe-side-actions housing-status-row" },
@@ -326,12 +361,13 @@ exports.singleRoomView = async (room, params = {}) => {
           live
             ? renderLivePanel(room, live, occ)
             : [
-                renderLivePanel(room, null, occ),
+                renderLivePanel(room, null, occ, canJoin),
                 details({ class: "pad-members-details", ...(safeArr(room.members).length <= 8 ? { open: true } : {}) },
                   summary({ class: "tribe-members-count" }, `${i18n.roomParticipants}: ${safeArr(room.members).length}`),
                   div({ class: "pad-members-chips" }, ...safeArr(room.members).map(m => span({ class: "pad-member-chip" }, userLink(m))))
                 )
-              ]
+              ],
+          renderRecordings(params.recordings)
         ]
   )
 
@@ -341,19 +377,22 @@ exports.singleRoomView = async (room, params = {}) => {
   )
 }
 
-exports.renderTribeRoomsSection = (tribe, rooms, occupancy, live) => {
+exports.renderTribeRoomsSection = (tribe, rooms, occupancy, live, toolbar = null) => {
   const items = safeArr(rooms)
   const createBtn = form({ method: "GET", action: "/rooms" },
     input({ type: "hidden", name: "filter", value: "create" }),
     input({ type: "hidden", name: "tribeId", value: tribe.id }),
     button({ type: "submit", class: "create-button" }, i18n.tribeRoomCreate))
-  const head = div({ class: "tribe-content-header" }, h2(i18n.tribeSectionRooms), createBtn)
-  if (!items.length) return div({ class: "tribe-content-list" }, head, p(i18n.tribeRoomsEmpty))
+  const head = toolbar || div({ class: "tribe-content-header" }, h2(i18n.tribeSectionRooms), createBtn)
+  if (!items.length) return div({ class: "tribe-content-list" }, head, div({ class: "no-content-box" }, p(i18n.tribeRoomsEmpty)))
   return div({ class: "tribe-content-list" },
     head,
     ul({ class: "mailing-archive" }, ...items.map(r => renderRoomItem(r, { occupancy, live })))
   )
 }
+
+exports.renderRoomItem = renderRoomItem
+exports.roomStatsBy = (rooms) => renderModuleStatsBy(safeArr(rooms), r => r.isClosed ? "CLOSED" : r.type, [{ value: "OPEN", label: i18n.roomStatusOpen }, { value: "INVITE-ONLY", label: i18n.roomStatusInviteOnly }, { value: "CLOSED", label: i18n.roomStatusClosed }])
 
 exports.clearnetRoomView = async (room) => {
   const { escapeHtml: esc, renderKindTag, renderClearnetPage } = require("./clearnet_view")

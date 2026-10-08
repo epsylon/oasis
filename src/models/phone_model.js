@@ -9,6 +9,7 @@ const HISTORY_MAX = 200;
 const HEARD_MAX = 1000;
 const LATEST_MAX = 5;
 const PUBS_TTL_MS = 5 * 60 * 1000;
+const RECOUNT_DELAY_MS = 500;
 const FEED_ID = /^@[A-Za-z0-9+/]{43}=\.ed25519$/;
 
 const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) { return fallback; } };
@@ -22,7 +23,7 @@ const rpcValue = (fn, ...args) => new Promise((resolve) => {
   } catch (_) { resolve(null); }
 });
 
-module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile }) => {
+module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile, isAvailable, prefetch }) => {
   const historyFile = statePath('phone-history.json');
   const seenFile = statePath('phone-seen.json');
   let ssb = null;
@@ -102,6 +103,25 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile }) => {
     try { if (typeof ph.roomState === 'function') sharedState.setPhoneRoom((await rpcValue(ph.roomState)) || null); } catch (_) {}
   };
 
+  let arrivalsWatched = false;
+  let recountTimer = null;
+  const scheduleRecount = () => {
+    if (recountTimer) return;
+    recountTimer = setTimeout(() => { recountTimer = null; refreshCount().catch(() => {}); }, RECOUNT_DELAY_MS);
+    if (recountTimer.unref) recountTimer.unref();
+  };
+  const watchArrivals = async () => {
+    if (arrivalsWatched) return;
+    const s = await open();
+    if (!s || !s.db || typeof s.db.onMsgAdded !== 'function') return;
+    arrivalsWatched = true;
+    s.db.onMsgAdded((ev) => {
+      const v = ev && ev.kvt && ev.kvt.value;
+      if (!v || v.author === s.id || typeof v.content !== 'string') return;
+      scheduleRecount();
+    }, false);
+  };
+
   const act = async (method, ...args) => {
     await subscribe();
     const ph = await phone();
@@ -162,6 +182,8 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile }) => {
   return {
     async start() {
       await subscribe();
+      await watchArrivals().catch(() => {});
+      await refreshCount();
       await refreshPubs(true);
       if (!pubsTimer) { pubsTimer = setInterval(() => { refreshPubs(true).catch(() => {}); }, PUBS_TTL_MS); if (pubsTimer.unref) pubsTimer.unref(); }
     },
@@ -188,6 +210,7 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile }) => {
     reject: () => act('reject'),
     hangup: () => act('end'),
     mute: (flag) => act('mute', !!flag),
+    silence: (id, flag) => act('silence', { id, on: !!flag }),
     dismiss: () => act('dismiss'),
     recordCancel: () => act('recordCancel'),
     async sendPam() { await subscribe(); return finishPam(); },
@@ -222,23 +245,32 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile }) => {
     async pams() {
       const me = (await open()).id;
       const heard = new Set(seen().heard);
-      return (await pmModel.listPams())
+      const list = (await pmModel.listPams())
         .filter(m => m.value.author !== me)
-        .map(m => ({ key: m.key, from: m.value.author, sentAt: m.value.content.sentAt || new Date(m.timestamp || 0).toISOString(), durationSec: Number(m.value.content.durationSec) || 0, heard: heard.has(m.key) }))
+        .map(m => ({ key: m.key, from: m.value.author, sentAt: m.value.content.sentAt || new Date(m.timestamp || 0).toISOString(), durationSec: Number(m.value.content.durationSec) || 0, heard: heard.has(m.key), share: m.value.content.share, ready: true }))
         .sort((a, b) => String(b.sentAt).localeCompare(String(a.sentAt)));
+      if (typeof isAvailable === 'function') {
+        for (const item of list) {
+          item.ready = await isAvailable(item.share).catch(() => false);
+          if (!item.ready && typeof prefetch === 'function') prefetch(item.share).catch(() => {});
+        }
+      }
+      return list.map(({ share, ...rest }) => rest);
     },
     async pamCipher(key) {
       const m = await findPam(key);
       const share = m && m.value && m.value.content && m.value.content.share;
       if (!share || typeof share.key !== 'string' || typeof share.manifestBlobId !== 'string') return null;
-      const s = seen();
-      if (!s.heard.includes(key)) {
-        s.heard.push(key);
-        s.heard = s.heard.slice(-HEARD_MAX);
-        writeJson(seenFile, s);
-        refreshCount();
-      }
       return share;
+    },
+    markHeard(key) {
+      const s = seen();
+      if (s.heard.includes(key)) return false;
+      s.heard.push(key);
+      s.heard = s.heard.slice(-HEARD_MAX);
+      writeJson(seenFile, s);
+      refreshCount();
+      return true;
     },
     async deletePam(key) {
       const m = await findPam(key);

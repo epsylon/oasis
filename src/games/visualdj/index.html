@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visual DJ</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --panel: #1a1a1a;
+      --border: #333;
+      --accent: #ff4ad6;
+      --deckb: #4affd6;
+      --mix: #ff9500;
+      --fx: #4a9eff;
+      --text: #ffffff;
+      --muted: #888;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body { margin: 0; padding: 10px; font-family: Consolas, monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; }
+    .container { display: flex; gap: 10px; align-items: stretch; flex: 1; min-height: 0; }
+    .stage-panel {
+      background: var(--panel); border: 2px solid var(--border); border-radius: 10px;
+      padding: 10px; flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0;
+    }
+    .controls-panel {
+      background: var(--panel); border: 2px solid var(--border); border-radius: 10px;
+      padding: 10px; width: 460px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; overflow-x: hidden;
+    }
+    .decks { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    h3 { margin: 0 0 6px 0; color: var(--accent); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+    .deck-section { border: 2px solid var(--accent); border-radius: 8px; padding: 8px; margin: 0; background: #1a0f17; }
+    .deck-section.deck-b { border-color: var(--deckb); background: #0f1a17; }
+    .deck-section.deck-b h3 { color: var(--deckb); }
+    .deck-section.deck-b input[type="range"] { accent-color: var(--deckb); }
+    .deck-section.deck-b .value-display { color: var(--deckb); }
+    .deck-section.deck-b .program-btn { border-color: var(--deckb); color: var(--deckb); }
+    .deck-section.deck-b .program-btn.active, .deck-section.deck-b .program-btn:hover { background: var(--deckb); color: #000; }
+    .mix-section { border: 2px solid var(--mix); border-radius: 8px; padding: 8px; margin: 0; background: #1a0f00; }
+    .mix-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+    .fx-section { border: 2px solid var(--fx); border-radius: 8px; padding: 8px; margin: 0; background: #0a0f1a; }
+    .fx-section h3 { color: var(--fx); }
+    .fx-section input[type="range"] { accent-color: var(--fx); }
+    .fx-section .value-display { color: var(--fx); }
+    .fx-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-bottom: 6px; }
+    .fx-btn { border-color: var(--fx); color: var(--fx); padding: 3px 1px; font-size: 9px; }
+    .fx-btn:hover, .fx-btn.on { background: var(--fx); color: #000; }
+    .fx-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+    .fx-text { display: flex; gap: 6px; align-items: center; }
+    .fx-text input[type="text"] {
+      flex: 1; min-width: 0; background: #000; color: var(--fx); border: 1px solid var(--fx); border-radius: 4px;
+      padding: 2px 6px; font-family: inherit; font-size: 11px; height: 20px;
+    }
+    .scenes { display: flex; gap: 4px; align-items: center; flex: none; }
+    .scenes .label-inline { font-size: 10px; color: #ccc; text-transform: uppercase; letter-spacing: 1px; margin-right: 2px; }
+    .scene-btn { border-color: var(--fx); color: var(--fx); padding: 2px 7px; font-size: 10px; height: 20px; }
+    .scene-btn:hover, .scene-btn.on { background: var(--fx); color: #000; }
+    .scene-btn.armed { border-style: dashed; }
+    .scene-btn.empty { opacity: 0.45; }
+    .mix-section h3 { color: var(--mix); }
+    .mix-section input[type="range"] { accent-color: var(--mix); }
+    .mix-section .value-display { color: var(--mix); }
+    .status { background:#000; color:var(--accent); padding:6px 10px; border-radius:6px; margin-bottom:6px; font-size:11px; flex: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mix-status { background:#1a0f00; color:var(--mix); border: 1px solid var(--mix); }
+    .toolbar { display:flex; gap:8px; margin-bottom:8px; flex-wrap: wrap; flex: none; }
+    button {
+      padding: 6px 10px; border: 1px solid var(--accent); background: var(--panel); color: var(--accent);
+      border-radius: 6px; cursor: pointer; transition: all .2s; font-family: inherit; font-size: 12px;
+    }
+    button:hover { background: var(--accent); color: #000; }
+    button.on { background: var(--accent); color: #000; }
+    button.mix-btn { border-color: var(--mix); color: var(--mix); }
+    button.mix-btn:hover, button.mix-btn.on { background: var(--mix); color: #000; }
+    .stage { position: relative; background: #000; border-radius: 6px; overflow: hidden; flex: 1; min-height: 120px; }
+    canvas { width: 100%; height: 100%; display: block; background: #000; cursor: crosshair; }
+    .stage:fullscreen { border-radius: 0; }
+    .stage:fullscreen canvas { width: 100vw; height: 100vh; object-fit: contain; }
+    .help { background:#0a0a2a; color:#99aaff; padding:6px 10px; border-radius:6px; margin-top:8px; font-size:10px; line-height: 1.6; flex: none; }
+    .help kbd { background:#000; border:1px solid #334; border-radius:3px; padding:0 4px; color:#fff; }
+    .control-group { margin: 0; padding: 0; }
+    label { display:block; margin: 0; font-size:10px; color:#ccc; text-transform:uppercase; letter-spacing:1px; line-height: 14px; }
+    input[type="range"] { width:100%; margin: 0 0 2px 0; height: 14px; accent-color: var(--accent); }
+    select {
+      width: 100%; background: #000; color: var(--mix); border: 1px solid var(--mix); border-radius: 4px;
+      padding: 1px 4px; font-family: inherit; font-size: 11px; margin: 0 0 4px 0; height: 20px;
+    }
+    .value-display { background:#000; color:var(--accent); padding:0 5px; border-radius:3px; font-size:10px; float:right; line-height: 14px; }
+    .programs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 6px; }
+    .program-btn { padding: 3px 1px; font-size: 9px; letter-spacing: 0; }
+    .program-btn.active { background: var(--accent); color: #000; }
+    #topbar { width:100%; padding:6px 16px; display:flex; align-items:center; gap:16px; background:#111; border-bottom:1px solid #333; margin-bottom:8px; flex: none; }
+    #topbar a { color:#FFA500; text-decoration:none; font-size:14px; }
+    #topbar a:hover { text-decoration:underline; }
+    #topbar span { color:#FFA500; font-weight:bold; }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <a href="/games" target="_top">&#8592; Back to Games</a>
+    <span>VISUAL DJ</span>
+  </div>
+  <div class="container">
+    <div class="stage-panel">
+      <div class="status" id="status">Status: Paused | FPS: -- | BPM: 120 | Time: 0.0 s</div>
+      <div class="status mix-status" id="mixStatus">Deck A: Plasma | Deck B: Tunnel | Mix: 50% A/B | Blend: Screen | Mic: Off</div>
+      <div class="toolbar">
+        <button id="playBtn">&#9654; Play</button>
+        <button id="flashBtn">&#10024; Flash</button>
+        <button id="tapBtn" class="mix-btn">&#9201; Tap Tempo</button>
+        <button id="micBtn" class="mix-btn">&#127908; Mic</button>
+        <button id="snapBtn">&#128247; Snapshot</button>
+        <button id="fullBtn">&#9974; Fullscreen</button>
+      </div>
+      <div class="stage" id="stage">
+        <canvas id="stageCanvas" width="680" height="540"></canvas>
+      </div>
+      <div class="help">
+        <strong>Live controls:</strong><br />
+        Drag on the stage to move the crossfader, click to flash.<br />
+        <kbd>1</kbd>-<kbd>8</kbd> pattern on deck A &middot; <kbd>Q</kbd>-<kbd>I</kbd> pattern on deck B &middot; <kbd>Z</kbd>-<kbd>/</kbd> effects &middot; <kbd>&larr;</kbd> <kbd>&rarr;</kbd> crossfade &middot; <kbd>Space</kbd> flash &middot; <kbd>T</kbd> tap tempo &middot; <kbd>P</kbd> play/pause &middot; <kbd>F</kbd> fullscreen &middot; <kbd>Shift</kbd>+<kbd>1</kbd>-<kbd>4</kbd> scenes
+      </div>
+    </div>
+
+    <div class="controls-panel">
+      <div class="decks">
+      <div class="deck-section" id="deckAPanel">
+        <h3>Deck A</h3>
+        <div class="programs" id="programsA"></div>
+        <div class="control-group">
+          <label>Speed <span class="value-display" id="speedADisplay">1.00</span></label>
+          <input type="range" id="speedA" min="0" max="3" step="0.05" value="1" />
+          <label>Intensity <span class="value-display" id="intensityADisplay">0.70</span></label>
+          <input type="range" id="intensityA" min="0" max="1" step="0.05" value="0.7" />
+          <label>Hue <span class="value-display" id="hueADisplay">320</span></label>
+          <input type="range" id="hueA" min="0" max="360" step="1" value="320" />
+          <label>Zoom <span class="value-display" id="zoomADisplay">1.00</span></label>
+          <input type="range" id="zoomA" min="0.3" max="3" step="0.05" value="1" />
+          <label>Rotation <span class="value-display" id="rotADisplay">0.00</span></label>
+          <input type="range" id="rotA" min="-2" max="2" step="0.05" value="0" />
+        </div>
+      </div>
+
+      <div class="deck-section deck-b" id="deckBPanel">
+        <h3>Deck B</h3>
+        <div class="programs" id="programsB"></div>
+        <div class="control-group">
+          <label>Speed <span class="value-display" id="speedBDisplay">1.00</span></label>
+          <input type="range" id="speedB" min="0" max="3" step="0.05" value="1" />
+          <label>Intensity <span class="value-display" id="intensityBDisplay">0.70</span></label>
+          <input type="range" id="intensityB" min="0" max="1" step="0.05" value="0.7" />
+          <label>Hue <span class="value-display" id="hueBDisplay">170</span></label>
+          <input type="range" id="hueB" min="0" max="360" step="1" value="170" />
+          <label>Zoom <span class="value-display" id="zoomBDisplay">1.00</span></label>
+          <input type="range" id="zoomB" min="0.3" max="3" step="0.05" value="1" />
+          <label>Rotation <span class="value-display" id="rotBDisplay">0.00</span></label>
+          <input type="range" id="rotB" min="-2" max="2" step="0.05" value="0" />
+        </div>
+      </div>
+      </div>
+
+      <div class="mix-section">
+        <h3>Mixer</h3>
+        <div class="mix-grid">
+          <label>Crossfader A &harr; B <span class="value-display" id="crossfadeDisplay">50%</span></label>
+          <label>Blend mode</label>
+          <input type="range" id="crossfade" min="0" max="1" step="0.01" value="0.5" />
+          <select id="blend">
+            <option value="screen" selected>Screen</option>
+            <option value="lighter">Add</option>
+            <option value="source-over">Normal</option>
+            <option value="difference">Difference</option>
+            <option value="multiply">Multiply</option>
+            <option value="overlay">Overlay</option>
+          </select>
+          <label>Auto mix (s) <span class="value-display" id="automixDisplay">Off</span></label>
+          <label>Trails <span class="value-display" id="trailsDisplay">0.30</span></label>
+          <input type="range" id="automix" min="0" max="60" step="1" value="0" />
+          <input type="range" id="trails" min="0" max="0.95" step="0.05" value="0.3" />
+          <label>Brightness <span class="value-display" id="brightnessDisplay">1.00</span></label>
+          <label>Strobe (per beat) <span class="value-display" id="strobeDisplay">0.00</span></label>
+          <input type="range" id="brightness" min="0.2" max="2" step="0.05" value="1" />
+          <input type="range" id="strobe" min="0" max="1" step="0.05" value="0" />
+          <label>Beat pulse <span class="value-display" id="pulseDisplay">0.50</span></label>
+          <label>Mic sensitivity <span class="value-display" id="micGainDisplay">2.0</span></label>
+          <input type="range" id="pulse" min="0" max="1" step="0.05" value="0.5" />
+          <input type="range" id="micGain" min="0.5" max="6" step="0.1" value="2" />
+        </div>
+      </div>
+
+      <div class="fx-section">
+        <h3>Effects</h3>
+        <div class="fx-grid" id="fxGrid"></div>
+        <div class="fx-row">
+          <label>FX amount <span class="value-display" id="fxAmountDisplay">0.50</span></label>
+          <label>Text size <span class="value-display" id="textSizeDisplay">0.50</span></label>
+          <input type="range" id="fxAmount" min="0" max="1" step="0.05" value="0.5" />
+          <input type="range" id="textSize" min="0.1" max="1" step="0.05" value="0.5" />
+        </div>
+        <div class="fx-text">
+          <input type="text" id="overlayText" maxlength="40" placeholder="Text on stage..." autocomplete="off" />
+          <div class="scenes" id="scenes">
+            <span class="label-inline">Scenes</span>
+            <button class="scene-btn" id="sceneSave" title="Arm, then pick a slot to store the current setup">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PROGRAMS = [
+      { id: 'plasma', name: 'Plasma' },
+      { id: 'tunnel', name: 'Tunnel' },
+      { id: 'particles', name: 'Stars' },
+      { id: 'waves', name: 'Waves' },
+      { id: 'grid', name: 'Grid' },
+      { id: 'kaleido', name: 'Kaleido' },
+      { id: 'lissajous', name: 'Curves' },
+      { id: 'blocks', name: 'Blocks' }
+    ];
+    const KEYS_A = ['1', '2', '3', '4', '5', '6', '7', '8'];
+    const KEYS_B = ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i'];
+    const EFFECTS = [
+      { id: 'mirror', name: 'Mirror' },
+      { id: 'quad', name: 'Quad' },
+      { id: 'pixelate', name: 'Pixels' },
+      { id: 'rgb', name: 'RGB split' },
+      { id: 'invert', name: 'Invert' },
+      { id: 'scanlines', name: 'Scanlines' },
+      { id: 'vignette', name: 'Vignette' },
+      { id: 'grain', name: 'Grain' },
+      { id: 'shake', name: 'Shake' },
+      { id: 'cycle', name: 'Color cycle' }
+    ];
+    const KEYS_FX = ['z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/'];
+    const SCENE_SLOTS = 4;
+
+    const hsl = (h, s, l, a) => 'hsla(' + ((h % 360) + 360) % 360 + ',' + s + '%,' + l + '%,' + (a === undefined ? 1 : a) + ')';
+
+    class Deck {
+      constructor(name, program, hue) {
+        this.name = name;
+        this.program = program;
+        this.speed = 1; this.intensity = 0.7; this.hue = hue; this.zoom = 1; this.rot = 0;
+        this.time = 0; this.angle = 0;
+        this.canvas = document.createElement('canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.low = document.createElement('canvas');
+        this.low.width = 96; this.low.height = 72;
+        this.lowCtx = this.low.getContext('2d');
+        this.image = this.lowCtx.createImageData(this.low.width, this.low.height);
+        this.particles = [];
+        this.blocks = [];
+        this.blockBeat = -1;
+      }
+
+      resize(w, h) {
+        if (this.canvas.width !== w || this.canvas.height !== h) { this.canvas.width = w; this.canvas.height = h; }
+      }
+
+      step(dt, beat) {
+        this.time += dt * this.speed * (1 + beat * 0.5);
+        this.angle += dt * this.rot;
+      }
+
+      render(w, h, beat, beatIndex) {
+        const ctx = this.ctx;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.clearRect(0, 0, w, h);
+        ctx.save();
+        ctx.translate(w / 2, h / 2);
+        ctx.rotate(this.angle);
+        ctx.scale(this.zoom, this.zoom);
+        ctx.translate(-w / 2, -h / 2);
+        const p = { w, h, t: this.time, beat, hue: this.hue, k: this.intensity, beatIndex };
+        this['draw_' + this.program](ctx, p);
+        ctx.restore();
+      }
+
+      draw_plasma(ctx, p) {
+        const lw = this.low.width, lh = this.low.height, d = this.image.data;
+        const t = p.t * 0.8;
+        for (let y = 0; y < lh; y++) {
+          for (let x = 0; x < lw; x++) {
+            const nx = x / lw - 0.5, ny = y / lh - 0.5;
+            const v = Math.sin(nx * 10 + t) + Math.sin(ny * 10 - t * 0.7) + Math.sin((nx + ny) * 10 + t * 0.5) + Math.sin(Math.hypot(nx, ny) * 20 - t * 1.3);
+            const n = (v + 4) / 8;
+            const hue = (p.hue + n * 120 * p.k + p.beat * 40) % 360;
+            const rgb = this.hslToRgb(hue / 360, 0.9, 0.25 + 0.45 * n * (0.5 + p.k * 0.5));
+            const i = (y * lw + x) * 4;
+            d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = 255;
+          }
+        }
+        this.lowCtx.putImageData(this.image, 0, 0);
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(this.low, -p.w * 0.5, -p.h * 0.5, p.w * 2, p.h * 2);
+      }
+
+      draw_tunnel(ctx, p) {
+        const cx = p.w / 2, cy = p.h / 2;
+        const maxR = Math.hypot(cx, cy) * 1.2;
+        const rings = 14 + Math.round(p.k * 16);
+        for (let i = rings; i >= 0; i--) {
+          const f = ((i / rings) + (p.t * 0.25 % 1)) % 1;
+          const r = Math.pow(f, 2.2) * maxR;
+          ctx.beginPath();
+          const sides = 5 + Math.round(p.k * 7);
+          for (let s = 0; s <= sides; s++) {
+            const a = (s / sides) * Math.PI * 2 + p.t * 0.3 + f * 2;
+            const wob = 1 + Math.sin(a * 3 + p.t * 2) * 0.08 * p.k;
+            const x = cx + Math.cos(a) * r * wob, y = cy + Math.sin(a) * r * wob;
+            if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.strokeStyle = hsl(p.hue + f * 90, 100, 40 + f * 30, 0.35 + f * 0.65);
+          ctx.lineWidth = 1 + f * (6 + p.beat * 10);
+          ctx.stroke();
+        }
+      }
+
+      draw_particles(ctx, p) {
+        const want = 120 + Math.round(p.k * 380);
+        while (this.particles.length < want) this.particles.push({ x: Math.random() * 2 - 1, y: Math.random() * 2 - 1, z: Math.random() });
+        if (this.particles.length > want) this.particles.length = want;
+        const cx = p.w / 2, cy = p.h / 2;
+        const dz = 0.004 + p.beat * 0.02;
+        for (const s of this.particles) {
+          s.z -= dz * this.speed;
+          if (s.z <= 0.02) { s.x = Math.random() * 2 - 1; s.y = Math.random() * 2 - 1; s.z = 1; }
+          const px = cx + (s.x / s.z) * cx, py = cy + (s.y / s.z) * cy;
+          const prev = s.z + dz * 3;
+          const qx = cx + (s.x / prev) * cx, qy = cy + (s.y / prev) * cy;
+          const b = 1 - s.z;
+          ctx.strokeStyle = hsl(p.hue + b * 60, 100, 50 + b * 40, Math.min(1, b * 1.4));
+          ctx.lineWidth = 1 + b * 3;
+          ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(px, py); ctx.stroke();
+        }
+      }
+
+      draw_waves(ctx, p) {
+        const lines = 8 + Math.round(p.k * 24);
+        for (let i = 0; i < lines; i++) {
+          const f = i / lines;
+          const yBase = p.h * (0.1 + f * 0.8);
+          ctx.beginPath();
+          for (let x = -20; x <= p.w + 20; x += 6) {
+            const nx = x / p.w;
+            const y = yBase + Math.sin(nx * (4 + f * 6) + p.t * (1 + f) + i) * (10 + p.k * 40 + p.beat * 40) * Math.sin(p.t * 0.3 + f * 3);
+            if (x === -20) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.strokeStyle = hsl(p.hue + f * 120, 100, 45 + f * 25, 0.5 + f * 0.5);
+          ctx.lineWidth = 1 + f * 3;
+          ctx.stroke();
+        }
+      }
+
+      draw_grid(ctx, p) {
+        const horizon = p.h * 0.45;
+        const cx = p.w / 2;
+        ctx.fillStyle = hsl(p.hue + 180, 80, 10 + p.beat * 15, 1);
+        ctx.fillRect(0, 0, p.w, horizon);
+        const sun = ctx.createRadialGradient(cx, horizon, 10, cx, horizon, p.w * 0.3);
+        sun.addColorStop(0, hsl(p.hue, 100, 65, 0.9));
+        sun.addColorStop(1, hsl(p.hue, 100, 50, 0));
+        ctx.fillStyle = sun; ctx.fillRect(0, 0, p.w, horizon);
+        ctx.fillStyle = '#000'; ctx.fillRect(0, horizon, p.w, p.h - horizon);
+        ctx.strokeStyle = hsl(p.hue, 100, 60, 0.9);
+        ctx.lineWidth = 1.5;
+        const cols = 8 + Math.round(p.k * 12);
+        for (let i = -cols; i <= cols; i++) {
+          const x = cx + (i / cols) * p.w * 0.7;
+          ctx.beginPath(); ctx.moveTo(cx + (x - cx) * 0.05, horizon); ctx.lineTo(cx + (x - cx) * 3, p.h); ctx.stroke();
+        }
+        const rows = 12;
+        for (let r = 0; r < rows; r++) {
+          const f = ((r / rows) + (p.t * 0.4 % 1)) % 1;
+          const y = horizon + Math.pow(f, 2) * (p.h - horizon);
+          ctx.globalAlpha = 0.3 + f * 0.7;
+          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(p.w, y); ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      draw_kaleido(ctx, p) {
+        const cx = p.w / 2, cy = p.h / 2;
+        const seg = 6 + Math.round(p.k * 6);
+        const r = Math.min(cx, cy) * (0.9 + p.beat * 0.2);
+        for (let s = 0; s < seg; s++) {
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate((s / seg) * Math.PI * 2);
+          if (s % 2) ctx.scale(1, -1);
+          for (let i = 0; i < 7; i++) {
+            const a = p.t * (0.5 + i * 0.13) + i;
+            const d = r * (0.2 + 0.7 * (0.5 + 0.5 * Math.sin(p.t * 0.7 + i)));
+            const x = Math.cos(a) * d, y = Math.sin(a) * d * 0.5;
+            ctx.fillStyle = hsl(p.hue + i * 30 + p.t * 20, 100, 55, 0.6);
+            ctx.beginPath(); ctx.arc(x, y, 8 + i * 4 + p.beat * 12, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = hsl(p.hue + i * 30 + 180, 100, 70, 0.8);
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(x, y); ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+
+      draw_lissajous(ctx, p) {
+        const cx = p.w / 2, cy = p.h / 2;
+        const ax = cx * 0.85, ay = cy * 0.85;
+        const curves = 2 + Math.round(p.k * 4);
+        for (let c = 0; c < curves; c++) {
+          const fx = 2 + c, fy = 3 + c * 0.5 + Math.sin(p.t * 0.1) * 0.5;
+          const ph = p.t * 0.5 + c;
+          ctx.beginPath();
+          for (let i = 0; i <= 400; i++) {
+            const u = (i / 400) * Math.PI * 2;
+            const x = cx + Math.sin(u * fx + ph) * ax * (1 - c * 0.08);
+            const y = cy + Math.sin(u * fy) * ay * (1 - c * 0.08);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.strokeStyle = hsl(p.hue + c * 50 + p.t * 10, 100, 60, 0.85);
+          ctx.lineWidth = 1.5 + c * 0.5 + p.beat * 4;
+          ctx.stroke();
+        }
+      }
+
+      draw_blocks(ctx, p) {
+        const cols = 8, rows = 6;
+        if (p.beatIndex !== this.blockBeat || !this.blocks.length) {
+          this.blockBeat = p.beatIndex;
+          this.blocks = [];
+          const n = 4 + Math.round(p.k * 20);
+          for (let i = 0; i < n; i++) this.blocks.push({ c: Math.floor(Math.random() * cols), r: Math.floor(Math.random() * rows), h: Math.random() * 90 });
+        }
+        const bw = p.w / cols, bh = p.h / rows;
+        for (const b of this.blocks) {
+          ctx.fillStyle = hsl(p.hue + b.h, 100, 40 + p.beat * 35, 0.5 + p.beat * 0.5);
+          const inset = (1 - p.beat) * 6;
+          ctx.fillRect(b.c * bw + inset, b.r * bh + inset, bw - inset * 2, bh - inset * 2);
+        }
+        ctx.strokeStyle = hsl(p.hue, 60, 30, 0.6);
+        ctx.lineWidth = 1;
+        for (let c = 1; c < cols; c++) { ctx.beginPath(); ctx.moveTo(c * bw, 0); ctx.lineTo(c * bw, p.h); ctx.stroke(); }
+        for (let r = 1; r < rows; r++) { ctx.beginPath(); ctx.moveTo(0, r * bh); ctx.lineTo(p.w, r * bh); ctx.stroke(); }
+      }
+
+      hslToRgb(h, s, l) {
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        const f = (t) => {
+          if (t < 0) t += 1; if (t > 1) t -= 1;
+          if (t < 1 / 6) return p + (q - p) * 6 * t;
+          if (t < 1 / 2) return q;
+          if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+          return p;
+        };
+        return [Math.round(f(h + 1 / 3) * 255), Math.round(f(h) * 255), Math.round(f(h - 1 / 3) * 255)];
+      }
+    }
+
+    class VisualDJ {
+      constructor() {
+        this.canvas = document.getElementById('stageCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.stage = document.getElementById('stage');
+        this.deckA = new Deck('A', 'plasma', 320);
+        this.deckB = new Deck('B', 'tunnel', 170);
+        this.crossfade = 0.5; this.blend = 'screen'; this.automix = 0; this.automixDir = 1;
+        this.trails = 0.3; this.brightness = 1; this.strobe = 0; this.pulse = 0.5; this.micGain = 2;
+        this.running = false; this.time = 0; this.last = 0; this.fps = 0; this.frames = 0; this.fpsAt = 0;
+        this.bpm = 120; this.beatAt = 0; this.beatIndex = 0; this.taps = [];
+        this.flash = 0;
+        this.mic = null; this.micLevel = 0;
+        this.dragging = false; this.dragMoved = false;
+        this.fx = new Set(); this.fxAmount = 0.5; this.textSize = 0.5; this.overlayText = '';
+        this.fxCanvas = document.createElement('canvas'); this.fxCtx = this.fxCanvas.getContext('2d');
+        this.chanCanvas = document.createElement('canvas'); this.chanCtx = this.chanCanvas.getContext('2d');
+        this.pixCanvas = document.createElement('canvas'); this.pixCtx = this.pixCanvas.getContext('2d');
+        this.grainCanvas = document.createElement('canvas'); this.grainCanvas.width = 160; this.grainCanvas.height = 120;
+        this.grainCtx = this.grainCanvas.getContext('2d'); this.grainImage = this.grainCtx.createImageData(160, 120);
+        this.scanPattern = null;
+        this.scenes = new Array(SCENE_SLOTS).fill(null); this.sceneArmed = false;
+        this.buildPrograms();
+        this.buildEffects();
+        this.buildScenes();
+        this.bindControls();
+        this.resize();
+        this.updateControls();
+        this.render(0);
+        this.updateStatus();
+        requestAnimationFrame(() => this.resize());
+      }
+
+      buildPrograms() {
+        const make = (deck, holder, keys) => {
+          holder.innerHTML = '';
+          PROGRAMS.forEach((prog, i) => {
+            const b = document.createElement('button');
+            b.className = 'program-btn' + (deck.program === prog.id ? ' active' : '');
+            b.textContent = prog.name;
+            b.title = 'Key ' + keys[i].toUpperCase();
+            b.addEventListener('click', () => this.setProgram(deck, prog.id));
+            holder.appendChild(b);
+          });
+        };
+        make(this.deckA, document.getElementById('programsA'), KEYS_A);
+        make(this.deckB, document.getElementById('programsB'), KEYS_B);
+      }
+
+      setProgram(deck, id) {
+        deck.program = id;
+        const holder = document.getElementById(deck === this.deckA ? 'programsA' : 'programsB');
+        [...holder.children].forEach((b, i) => b.classList.toggle('active', PROGRAMS[i].id === id));
+        this.updateStatus();
+        if (!this.running) this.render(0);
+      }
+
+      buildEffects() {
+        const holder = document.getElementById('fxGrid');
+        holder.innerHTML = '';
+        EFFECTS.forEach((fx, i) => {
+          const b = document.createElement('button');
+          b.className = 'fx-btn' + (this.fx.has(fx.id) ? ' on' : '');
+          b.textContent = fx.name;
+          b.title = 'Key ' + KEYS_FX[i].toUpperCase();
+          b.addEventListener('click', () => this.toggleFx(fx.id));
+          holder.appendChild(b);
+        });
+      }
+
+      toggleFx(id) {
+        if (this.fx.has(id)) this.fx.delete(id); else this.fx.add(id);
+        [...document.getElementById('fxGrid').children].forEach((b, i) => b.classList.toggle('on', this.fx.has(EFFECTS[i].id)));
+        if (!this.running) this.render(0);
+      }
+
+      buildScenes() {
+        const holder = document.getElementById('scenes');
+        [...holder.querySelectorAll('.scene-slot')].forEach(b => b.remove());
+        for (let i = 0; i < SCENE_SLOTS; i++) {
+          const b = document.createElement('button');
+          b.className = 'scene-btn scene-slot' + (this.scenes[i] ? '' : ' empty');
+          b.textContent = String(i + 1);
+          b.title = 'Shift+' + (i + 1);
+          b.addEventListener('click', () => this.scene(i));
+          holder.appendChild(b);
+        }
+        document.getElementById('sceneSave').addEventListener('click', () => this.armScene(!this.sceneArmed));
+      }
+
+      armScene(on) {
+        this.sceneArmed = on;
+        document.getElementById('sceneSave').classList.toggle('on', on);
+        [...document.querySelectorAll('.scene-slot')].forEach(b => b.classList.toggle('armed', on));
+      }
+
+      snapshotState() {
+        const deck = (d) => ({ program: d.program, speed: d.speed, intensity: d.intensity, hue: d.hue, zoom: d.zoom, rot: d.rot });
+        return {
+          a: deck(this.deckA), b: deck(this.deckB),
+          crossfade: this.crossfade, blend: this.blend, automix: this.automix, trails: this.trails, brightness: this.brightness,
+          strobe: this.strobe, pulse: this.pulse, micGain: this.micGain,
+          fx: [...this.fx], fxAmount: this.fxAmount, textSize: this.textSize, overlayText: this.overlayText
+        };
+      }
+
+      applyState(st) {
+        for (const [deck, d] of [[this.deckA, st.a], [this.deckB, st.b]]) {
+          Object.assign(deck, { speed: d.speed, intensity: d.intensity, hue: d.hue, zoom: d.zoom, rot: d.rot });
+          this.setProgram(deck, d.program);
+        }
+        for (const k of ['crossfade', 'blend', 'automix', 'trails', 'brightness', 'strobe', 'pulse', 'micGain', 'fxAmount', 'textSize', 'overlayText']) this[k] = st[k];
+        this.fx = new Set(st.fx);
+        [...document.getElementById('fxGrid').children].forEach((b, i) => b.classList.toggle('on', this.fx.has(EFFECTS[i].id)));
+        this.syncInputs();
+        this.updateControls();
+        if (!this.running) this.render(0);
+      }
+
+      syncInputs() {
+        const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        for (const [sfx, deck] of [['A', this.deckA], ['B', this.deckB]]) {
+          set('speed' + sfx, deck.speed); set('intensity' + sfx, deck.intensity); set('hue' + sfx, deck.hue); set('zoom' + sfx, deck.zoom); set('rot' + sfx, deck.rot);
+        }
+        for (const k of ['crossfade', 'automix', 'trails', 'brightness', 'strobe', 'pulse', 'micGain', 'fxAmount', 'textSize', 'overlayText']) set(k, this[k]);
+        set('blend', this.blend);
+      }
+
+      scene(i) {
+        const slots = [...document.querySelectorAll('.scene-slot')];
+        if (this.sceneArmed) {
+          this.scenes[i] = this.snapshotState();
+          slots[i].classList.remove('empty');
+          this.armScene(false);
+          return;
+        }
+        if (!this.scenes[i]) return;
+        this.applyState(this.scenes[i]);
+        slots.forEach((b, j) => b.classList.toggle('on', j === i));
+      }
+
+      bindControls() {
+        const fxSliders = ['fxAmount', 'textSize'];
+        for (const id of fxSliders) {
+          document.getElementById(id).addEventListener('input', (e) => {
+            this[id] = parseFloat(e.target.value);
+            this.updateControls();
+            if (!this.running) this.render(0);
+          });
+        }
+        document.getElementById('overlayText').addEventListener('input', (e) => { this.overlayText = e.target.value; if (!this.running) this.render(0); });
+        const deckSliders = [['speed', 'speed'], ['intensity', 'intensity'], ['hue', 'hue'], ['zoom', 'zoom'], ['rot', 'rot']];
+        for (const [id, prop] of deckSliders) {
+          for (const [suffix, deck] of [['A', this.deckA], ['B', this.deckB]]) {
+            document.getElementById(id + suffix).addEventListener('input', (e) => {
+              deck[prop] = parseFloat(e.target.value);
+              this.updateControls();
+              if (!this.running) this.render(0);
+            });
+          }
+        }
+        const mix = ['crossfade', 'automix', 'trails', 'brightness', 'strobe', 'pulse', 'micGain'];
+        for (const id of mix) {
+          document.getElementById(id).addEventListener('input', (e) => {
+            this[id] = parseFloat(e.target.value);
+            this.updateControls();
+            if (!this.running) this.render(0);
+          });
+        }
+        document.getElementById('blend').addEventListener('change', (e) => { this.blend = e.target.value; this.updateStatus(); if (!this.running) this.render(0); });
+        document.getElementById('playBtn').addEventListener('click', () => this.toggle());
+        document.getElementById('flashBtn').addEventListener('click', () => this.doFlash());
+        document.getElementById('tapBtn').addEventListener('click', () => this.tap());
+        document.getElementById('micBtn').addEventListener('click', () => this.toggleMic());
+        document.getElementById('snapBtn').addEventListener('click', () => this.snapshot());
+        document.getElementById('fullBtn').addEventListener('click', () => this.fullscreen());
+
+        this.canvas.addEventListener('mousedown', (e) => { this.dragging = true; this.dragMoved = false; this.dragTo(e); });
+        this.canvas.addEventListener('mousemove', (e) => { if (this.dragging) { this.dragMoved = true; this.dragTo(e); } });
+        const up = () => { if (this.dragging && !this.dragMoved) this.doFlash(); this.dragging = false; };
+        this.canvas.addEventListener('mouseup', up);
+        this.canvas.addEventListener('mouseleave', () => { this.dragging = false; });
+        this.canvas.addEventListener('touchstart', (e) => { this.dragging = true; this.dragMoved = false; this.dragTo(e.touches[0]); e.preventDefault(); }, { passive: false });
+        this.canvas.addEventListener('touchmove', (e) => { if (this.dragging) { this.dragMoved = true; this.dragTo(e.touches[0]); } e.preventDefault(); }, { passive: false });
+        this.canvas.addEventListener('touchend', up);
+
+        window.addEventListener('keydown', (e) => this.onKey(e));
+        window.addEventListener('resize', () => this.resize());
+        document.addEventListener('fullscreenchange', () => this.resize());
+      }
+
+      dragTo(e) {
+        if (!this.dragMoved) return;
+        const r = this.canvas.getBoundingClientRect();
+        this.crossfade = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+        this.updateControls();
+        if (!this.running) this.render(0);
+      }
+
+      onKey(e) {
+        if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName) && e.key !== 'Escape') return;
+        const k = e.key.toLowerCase();
+        if (e.shiftKey && /^Digit[1-4]$/.test(e.code)) { e.preventDefault(); return this.scene(Number(e.code.slice(5)) - 1); }
+        const ia = KEYS_A.indexOf(k), ib = KEYS_B.indexOf(k), ifx = KEYS_FX.indexOf(k);
+        if (ia >= 0) return this.setProgram(this.deckA, PROGRAMS[ia].id);
+        if (ib >= 0) return this.setProgram(this.deckB, PROGRAMS[ib].id);
+        if (ifx >= 0) return this.toggleFx(EFFECTS[ifx].id);
+        if (k === ' ') { e.preventDefault(); return this.doFlash(); }
+        if (k === 'arrowleft') { e.preventDefault(); this.crossfade = Math.max(0, this.crossfade - 0.05); this.updateControls(); return; }
+        if (k === 'arrowright') { e.preventDefault(); this.crossfade = Math.min(1, this.crossfade + 0.05); this.updateControls(); return; }
+        if (k === 'p') return this.toggle();
+        if (k === 'f') return this.fullscreen();
+        if (k === 't') return this.tap();
+      }
+
+      resize() {
+        const w = this.stage.clientWidth || 680;
+        const h = this.stage.clientHeight || Math.round(w * (540 / 680));
+        if (w < 10 || h < 10) return;
+        this.canvas.width = w; this.canvas.height = h;
+        this.deckA.resize(w, h); this.deckB.resize(w, h);
+        if (!this.running) this.render(0);
+      }
+
+      toggle() {
+        this.running = !this.running;
+        const btn = document.getElementById('playBtn');
+        btn.innerHTML = this.running ? '&#9208; Pause' : '&#9654; Play';
+        btn.classList.toggle('on', this.running);
+        if (this.running) { this.last = performance.now(); this.beatAt = this.last; requestAnimationFrame((t) => this.loop(t)); }
+        this.updateStatus();
+      }
+
+      doFlash() { this.flash = 1; if (!this.running) this.render(0); }
+
+      tap() {
+        const now = performance.now();
+        if (this.taps.length && now - this.taps[this.taps.length - 1] > 2500) this.taps = [];
+        this.taps.push(now);
+        if (this.taps.length > 8) this.taps.shift();
+        if (this.taps.length >= 2) {
+          const span = this.taps[this.taps.length - 1] - this.taps[0];
+          this.bpm = Math.round(Math.max(40, Math.min(240, 60000 / (span / (this.taps.length - 1)))));
+        }
+        this.beatAt = now;
+        this.beatIndex++;
+        this.updateStatus();
+      }
+
+      async toggleMic() {
+        const btn = document.getElementById('micBtn');
+        if (this.mic) {
+          try { this.mic.stream.getTracks().forEach(t => t.stop()); this.mic.context.close(); } catch (e) {}
+          this.mic = null; this.micLevel = 0;
+          btn.classList.remove('on');
+          this.updateStatus();
+          return;
+        }
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+          const context = new (window.AudioContext || window.webkitAudioContext)();
+          const source = context.createMediaStreamSource(stream);
+          const analyser = context.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+          this.mic = { stream, context, analyser, data: new Uint8Array(analyser.frequencyBinCount), avg: 0 };
+          btn.classList.add('on');
+        } catch (e) {
+          this.mic = null;
+          btn.classList.remove('on');
+          btn.textContent = '\u{1F3A4} Mic unavailable';
+          setTimeout(() => { btn.innerHTML = '&#127908; Mic'; }, 2000);
+        }
+        this.updateStatus();
+      }
+
+      readMic(now) {
+        if (!this.mic) { this.micLevel = 0; return; }
+        this.mic.analyser.getByteTimeDomainData(this.mic.data);
+        let e = 0;
+        for (let i = 0; i < this.mic.data.length; i++) { const v = (this.mic.data[i] - 128) / 128; e += v * v; }
+        const rms = Math.sqrt(e / this.mic.data.length);
+        this.mic.avg = this.mic.avg * 0.95 + rms * 0.05;
+        this.micLevel = Math.min(1, rms * this.micGain);
+        if (rms > this.mic.avg * 1.6 && rms > 0.03 && now - this.beatAt > 60000 / this.bpm * 0.5) {
+          this.beatAt = now; this.beatIndex++;
+        }
+      }
+
+      snapshot() {
+        try {
+          const a = document.createElement('a');
+          a.download = 'visualdj-' + new Date().toISOString().replace(/[:.]/g, '-') + '.png';
+          a.href = this.canvas.toDataURL('image/png');
+          a.click();
+        } catch (e) {}
+      }
+
+      fullscreen() {
+        if (document.fullscreenElement) { document.exitFullscreen(); return; }
+        if (this.stage.requestFullscreen) this.stage.requestFullscreen().catch(() => {});
+      }
+
+      beatValue(now) {
+        const period = 60000 / this.bpm;
+        while (now - this.beatAt >= period) { this.beatAt += period; this.beatIndex++; }
+        const phase = (now - this.beatAt) / period;
+        const envelope = Math.pow(1 - phase, 3);
+        return Math.min(1, envelope * this.pulse + this.micLevel * 0.8);
+      }
+
+      loop(now) {
+        if (!this.running) return;
+        const dt = Math.min(0.1, (now - this.last) / 1000);
+        this.last = now;
+        this.time += dt;
+        this.frames++;
+        if (now - this.fpsAt > 500) { this.fps = Math.round(this.frames * 1000 / (now - this.fpsAt)); this.frames = 0; this.fpsAt = now; this.updateStatus(); }
+        this.readMic(now);
+        if (this.automix > 0) {
+          this.crossfade += (dt / this.automix) * this.automixDir;
+          if (this.crossfade >= 1) { this.crossfade = 1; this.automixDir = -1; }
+          if (this.crossfade <= 0) { this.crossfade = 0; this.automixDir = 1; }
+          this.updateControls();
+        }
+        this.render(dt);
+        requestAnimationFrame((t) => this.loop(t));
+      }
+
+      render(dt) {
+        const now = performance.now();
+        const beat = this.running ? this.beatValue(now) : 0;
+        const w = this.canvas.width, h = this.canvas.height;
+        const ctx = this.ctx;
+        this.deckA.step(dt, beat); this.deckB.step(dt, beat);
+        this.deckA.resize(w, h); this.deckB.resize(w, h);
+        this.deckA.render(w, h, beat, this.beatIndex);
+        this.deckB.render(w, h, beat, this.beatIndex);
+
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1 - this.trails;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, w, h);
+
+        const amt = this.fxAmount;
+        let sx = 0, sy = 0;
+        if (this.fx.has('shake') && this.running) { const m = beat * amt * 30; sx = (Math.random() - 0.5) * m; sy = (Math.random() - 0.5) * m; }
+        if (this.fx.has('cycle')) ctx.filter = 'hue-rotate(' + Math.round((this.time * 40 * (0.5 + amt)) % 360) + 'deg)';
+        ctx.globalAlpha = (1 - this.crossfade) * this.brightness;
+        if (ctx.globalAlpha > 0.005) ctx.drawImage(this.deckA.canvas, sx, sy);
+        ctx.globalAlpha = this.crossfade * this.brightness;
+        ctx.globalCompositeOperation = this.blend;
+        if (ctx.globalAlpha > 0.005) ctx.drawImage(this.deckB.canvas, -sx, -sy);
+        ctx.filter = 'none';
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        this.applyEffects(w, h, beat);
+
+        ctx.globalCompositeOperation = 'source-over';
+        const strobeOn = this.strobe > 0 && beat > 1 - this.strobe * 0.6;
+        const white = Math.max(this.flash, strobeOn ? 0.6 : 0);
+        if (white > 0.01) {
+          ctx.globalAlpha = Math.min(1, white);
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, w, h);
+        }
+        this.flash = Math.max(0, this.flash - dt * 4);
+        ctx.globalAlpha = 1;
+      }
+
+      snap(w, h) {
+        if (this.fxCanvas.width !== w || this.fxCanvas.height !== h) { this.fxCanvas.width = w; this.fxCanvas.height = h; }
+        this.fxCtx.globalCompositeOperation = 'source-over';
+        this.fxCtx.clearRect(0, 0, w, h);
+        this.fxCtx.drawImage(this.canvas, 0, 0);
+      }
+
+      applyEffects(w, h, beat) {
+        const ctx = this.ctx, amt = this.fxAmount;
+        if (this.fx.has('pixelate')) {
+          const size = 3 + amt * 25;
+          const pw = Math.max(1, Math.round(w / size)), ph = Math.max(1, Math.round(h / size));
+          if (this.pixCanvas.width !== pw || this.pixCanvas.height !== ph) { this.pixCanvas.width = pw; this.pixCanvas.height = ph; }
+          this.pixCtx.imageSmoothingEnabled = true;
+          this.pixCtx.drawImage(this.canvas, 0, 0, pw, ph);
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(this.pixCanvas, 0, 0, pw, ph, 0, 0, w, h);
+          ctx.imageSmoothingEnabled = true;
+        }
+        if (this.fx.has('mirror')) {
+          this.snap(w, h);
+          ctx.save(); ctx.translate(w, 0); ctx.scale(-1, 1);
+          ctx.drawImage(this.fxCanvas, 0, 0, w / 2, h, 0, 0, w / 2, h);
+          ctx.restore();
+        }
+        if (this.fx.has('quad')) {
+          this.snap(w, h);
+          ctx.save(); ctx.translate(0, h); ctx.scale(1, -1);
+          ctx.drawImage(this.fxCanvas, 0, 0, w, h / 2, 0, 0, w, h / 2);
+          ctx.restore();
+        }
+        if (this.fx.has('rgb')) {
+          this.snap(w, h);
+          const off = (2 + amt * 18) * (0.6 + beat * 0.6);
+          if (this.chanCanvas.width !== w || this.chanCanvas.height !== h) { this.chanCanvas.width = w; this.chanCanvas.height = h; }
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
+          for (const [color, dx] of [['#f00', -off], ['#0f0', 0], ['#00f', off]]) {
+            const c = this.chanCtx;
+            c.globalCompositeOperation = 'source-over'; c.clearRect(0, 0, w, h); c.drawImage(this.fxCanvas, 0, 0);
+            c.globalCompositeOperation = 'multiply'; c.fillStyle = color; c.fillRect(0, 0, w, h);
+            c.globalCompositeOperation = 'destination-in'; c.drawImage(this.fxCanvas, 0, 0);
+            ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(this.chanCanvas, dx, 0);
+          }
+          ctx.globalCompositeOperation = 'source-over';
+        }
+        if (this.fx.has('invert')) {
+          ctx.globalCompositeOperation = 'difference'; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+          ctx.globalCompositeOperation = 'source-over';
+        }
+        if (this.fx.has('scanlines')) {
+          if (!this.scanPattern) {
+            const t = document.createElement('canvas'); t.width = 1; t.height = 3;
+            const tc = t.getContext('2d'); tc.fillStyle = 'rgba(0,0,0,0.55)'; tc.fillRect(0, 2, 1, 1);
+            this.scanPattern = ctx.createPattern(t, 'repeat');
+          }
+          ctx.globalAlpha = 0.4 + amt * 0.6; ctx.fillStyle = this.scanPattern; ctx.fillRect(0, 0, w, h); ctx.globalAlpha = 1;
+        }
+        if (this.fx.has('vignette')) {
+          const g = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * (0.5 - amt * 0.3), w / 2, h / 2, Math.hypot(w, h) / 2);
+          g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,' + (0.5 + amt * 0.5) + ')');
+          ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+        }
+        if (this.fx.has('grain')) {
+          const d = this.grainImage.data;
+          for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+          this.grainCtx.putImageData(this.grainImage, 0, 0);
+          ctx.globalCompositeOperation = 'overlay'; ctx.globalAlpha = 0.2 + amt * 0.6;
+          ctx.imageSmoothingEnabled = false; ctx.drawImage(this.grainCanvas, 0, 0, w, h); ctx.imageSmoothingEnabled = true;
+          ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+        }
+        if (this.overlayText) {
+          const size = Math.max(14, Math.round(Math.min(w, h) * (0.06 + this.textSize * 0.2) * (1 + beat * 0.12)));
+          ctx.save();
+          ctx.font = 'bold ' + size + 'px Consolas, monospace';
+          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.shadowColor = hsl(this.deckA.hue + this.time * 30, 100, 60, 1); ctx.shadowBlur = 20 + beat * 30;
+          ctx.lineWidth = Math.max(2, size * 0.08); ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+          ctx.strokeText(this.overlayText, w / 2, h / 2);
+          ctx.fillStyle = hsl(this.deckA.hue + this.time * 30, 100, 85, 1);
+          ctx.fillText(this.overlayText, w / 2, h / 2);
+          ctx.restore();
+        }
+      }
+
+      updateControls() {
+        const set = (id, v, d = 2) => { const el = document.getElementById(id); if (el) el.textContent = typeof v === 'number' ? v.toFixed(d) : v; };
+        for (const [s, deck] of [['A', this.deckA], ['B', this.deckB]]) {
+          set('speed' + s + 'Display', deck.speed); set('intensity' + s + 'Display', deck.intensity);
+          set('hue' + s + 'Display', deck.hue, 0); set('zoom' + s + 'Display', deck.zoom); set('rot' + s + 'Display', deck.rot);
+        }
+        set('crossfadeDisplay', Math.round(this.crossfade * 100) + '%');
+        document.getElementById('crossfade').value = this.crossfade;
+        set('automixDisplay', this.automix > 0 ? this.automix + ' s' : 'Off');
+        set('trailsDisplay', this.trails); set('brightnessDisplay', this.brightness); set('strobeDisplay', this.strobe);
+        set('pulseDisplay', this.pulse); set('micGainDisplay', this.micGain, 1);
+        set('fxAmountDisplay', this.fxAmount); set('textSizeDisplay', this.textSize);
+        this.updateStatus();
+      }
+
+      updateStatus() {
+        const name = (id) => (PROGRAMS.find(p => p.id === id) || {}).name || id;
+        const blendName = document.getElementById('blend').selectedOptions[0].textContent;
+        document.getElementById('status').textContent = 'Status: ' + (this.running ? 'Playing' : 'Paused') + ' | FPS: ' + (this.running ? this.fps : '--') + ' | BPM: ' + this.bpm + ' | Time: ' + this.time.toFixed(1) + ' s';
+        document.getElementById('mixStatus').textContent = 'Deck A: ' + name(this.deckA.program) + ' | Deck B: ' + name(this.deckB.program) + ' | Mix: ' + Math.round(this.crossfade * 100) + '% A/B | Blend: ' + blendName + ' | Mic: ' + (this.mic ? 'On' : 'Off');
+      }
+    }
+
+    const dj = new VisualDJ();
+  </script>
+</body>
+</html>

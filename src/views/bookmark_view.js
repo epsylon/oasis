@@ -48,7 +48,7 @@ const renderTags = (tags) => {
     : null;
 };
 
-const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
+const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
   return filteredBookmarks.length
@@ -67,26 +67,34 @@ const renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
 
         const isOwn = bookmark.author && String(bookmark.author) === String(userId);
         const reachChip = bookmark.tribeOrigin ? renderTribeOriginChip(bookmark.tribeOrigin) : bookmark.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id)) : null;
+        const extraChips = typeof params.titleChips === "function" ? params.titleChips(bookmark).filter(Boolean) : [];
+        const headerActions = typeof params.headerActions === "function"
+          ? params.headerActions(bookmark)
+          : bookmark.tribeOrigin
+            ? renderContentActions(null, bookmark.tribeOrigin.href)
+            : renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, { spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, author: bookmark.author, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title, deleteAction: isOwn ? contentDeleteAction('bookmark', bookmark.id) : undefined, returnTo });
+        const engagement = typeof params.engagement === "function"
+          ? params.engagement(bookmark)
+          : bookmark.tribeOrigin ? null : renderEngagement(bookmark.id,
+            renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
+            renderCommentsLink({ href: `/bookmarks/${encodeURIComponent(bookmark.id)}`, count: commentCount })
+          );
         return div(
           { class: "trending-card bookmark-card" + (isOwn ? " own-content" : "") },
           div(
             { class: "card-header activity-card-header" },
             span(),
-            bookmark.tribeOrigin
-              ? renderContentActions(null, bookmark.tribeOrigin.href)
-              : renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, { spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, author: bookmark.author, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title, deleteAction: isOwn ? contentDeleteAction('bookmark', bookmark.id) : undefined, returnTo })
+            headerActions
           ),
           div(
             { class: "card-section bookmark-card-body" },
             h2({ class: "bookmark-title" }, bookmark.url ? urlLink : (bookmark.title || "")),
-            bookmark.lifetime || reachChip ? div({ class: "card-chips-row" }, renderLifespanChip(bookmark.lifetime, i18n), reachChip) : null,
+            bookmark.lifetime || reachChip || extraChips.length ? div({ class: "card-chips-row" }, renderLifespanChip(bookmark.lifetime, i18n), reachChip, ...extraChips) : null,
             bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null,
-            renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
+            params.hideLastVisit ? null : renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
+            ...(typeof params.bodyExtra === "function" ? params.bodyExtra(bookmark) : []),
             br,
-            bookmark.tribeOrigin ? null : renderEngagement(bookmark.id,
-              renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
-              renderCommentsLink({ href: `/bookmarks/${encodeURIComponent(bookmark.id)}`, count: commentCount })
-            ),
+            engagement,
             (() => {
               const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
               const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;

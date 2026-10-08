@@ -19,7 +19,7 @@ Only items placed on the CLEARNET are ever listed or served. Nothing else of the
 
 ## What an inhabitant has to do
 
-Nothing on the PUB side. Every publishable item in Oasis is created as **OASIS** (visible to the inhabitants of Oasis only) or **CLEARNET** (also published on these public pages). The author chooses when creating the item and can switch it later from the item's own page; a form that also asks whether the item is private asks first where it is published. The choice travels with the feed, so every PUB that replicates the inhabitant applies it, and any replicating PUB can be used to share a link.
+Nothing on the PUB side. Every publishable item in Oasis is created as **OASIS** (visible to the inhabitants of Oasis only) or **CLEARNET** (also published on these public pages). The author chooses when creating the item and can switch it later from the item's own page. The choice travels with the feed, so every PUB that replicates the inhabitant applies it, and any replicating PUB can be used to share a link.
 
 If `pub.example.org` replicates you, your podcast is reachable at:
 
@@ -29,7 +29,7 @@ https://pub.example.org/c/podcasts/<id>
 
 Private, hidden, closed, invite-only, paid or tribe content can never be CLEARNET. An item that is later hidden, closed or made private leaves the CLEARNET, and it does not come back on its own when it is reopened: its author has to switch it again.
 
-Modules with a CLEARNET choice: audios, videos, images, documents, files, torrents, bookmarks, blogs, feed, wiki, podcasts, market, shops, school, jobs, events, projects, rooms, maps, calendars, emergencies, campaigns and housing. Some of them only when the item is open to everyone: rooms (only OPEN rooms; the public page shows just the room's name and its number, nothing to click), maps (open maps, with the markers of every contributor), calendars (open), emergencies (active), campaigns (open) and housing (public).
+Modules with a CLEARNET choice: audios, videos, images, documents, files, torrents, bookmarks, blogs, feed, wiki, podcasts, market, shops, school, jobs, events, projects, rooms, maps, calendars, emergencies, campaigns and housing. Some of them only when the item is open to everyone: rooms (OPEN rooms), maps (open maps, with the markers of every contributor), calendars (open), emergencies (active), campaigns (open) and housing (public).
 
 Content of a **public tribe** has its own reach level, chosen by its members: TRIBE, OASIS or CLEARNET. What they open to the CLEARNET is served on the tribe's page under `/c/tribe/…` and listed in the HUB with the public tribes. Private tribes never appear.
 
@@ -79,6 +79,6 @@ Then launch the PUB allowing your domain (with the systemd unit of the [deploy g
 
 ## Notes
 
-- The HUB reads the replicated log and keeps a short-lived index of the CLEARNET items; a change made by an inhabitant shows up once the PUB has replicated it. On a large PUB a caching proxy in front of `/c` keeps it snappy.
+- A change made by an inhabitant shows up once the PUB has replicated it. On a large PUB a caching proxy in front of `/c` keeps it snappy.
 - `/robots.txt` disallows crawlers on the whole site; `/c/sitemap.xml` is there for the search engines you point at the HUB yourself.
 - Themes follow the PUB's own `oasis-config.json`; the example config in this folder is a good starting point.

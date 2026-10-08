@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 220" style="background:#000">
+  <rect width="400" height="220" fill="#000"/>
+  <rect x="10" y="10" width="380" height="200" rx="6" fill="#0a0a0a" stroke="#1a1a1a" stroke-width="1"/>
+
+  <circle cx="110" cy="100" r="62" fill="#1a0f17" stroke="#ff4ad6" stroke-width="2"/>
+  <circle cx="110" cy="100" r="46" fill="none" stroke="#ff4ad6" stroke-width="1" opacity="0.5"/>
+  <circle cx="110" cy="100" r="30" fill="none" stroke="#ff4ad6" stroke-width="1" opacity="0.35"/>
+  <circle cx="110" cy="100" r="8" fill="#ff4ad6"/>
+  <path d="M 60 100 Q 72 70 85 100 Q 98 130 110 100 Q 122 70 135 100 Q 148 130 160 100" stroke="#ff9500" stroke-width="2" fill="none" opacity="0.9"/>
+
+  <circle cx="290" cy="100" r="62" fill="#0f1a17" stroke="#4affd6" stroke-width="2"/>
+  <polygon points="290,46 337,73 337,127 290,154 243,127 243,73" fill="none" stroke="#4affd6" stroke-width="1" opacity="0.5"/>
+  <polygon points="290,66 319,83 319,117 290,134 261,117 261,83" fill="none" stroke="#4affd6" stroke-width="1" opacity="0.35"/>
+  <circle cx="290" cy="100" r="8" fill="#4affd6"/>
+  <path d="M 240 100 L 255 80 L 270 115 L 285 70 L 300 125 L 315 85 L 330 110 L 340 100" stroke="#ff9500" stroke-width="2" fill="none" opacity="0.9"/>
+
+  <rect x="150" y="176" width="100" height="6" rx="3" fill="#333"/>
+  <rect x="150" y="176" width="55" height="6" rx="3" fill="#ff9500"/>
+  <rect x="199" y="170" width="12" height="18" rx="2" fill="#fff"/>
+
+  <text x="200" y="213" font-family="'Courier New', monospace" font-size="13" fill="#ff9500" text-anchor="middle" font-weight="bold" letter-spacing="3">VISUALDJ</text>
+</svg>

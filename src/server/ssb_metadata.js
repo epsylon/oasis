@@ -5,6 +5,23 @@ const pkg = require('./package.json');
 const config = require('./ssb_config');
 const updater = require('../backend/updater.js');
 
+const formatMB = (bytes, decimals = 0) => `${(bytes / (1024 * 1024)).toFixed(decimals)} MB`;
+
+const blobUsageOnDisk = (ssbPath) => {
+  const out = { bytes: 0, files: 0 };
+  const walk = (dir) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.isFile()) { try { out.bytes += fs.statSync(full).size; out.files += 1; } catch (_) {} }
+    }
+  };
+  if (ssbPath) walk(path.join(ssbPath, 'blobs', 'sha256'));
+  return out;
+};
+
 let printed = false;
 let checkedForUpdate = false;
 let pendingClearnetModules = null;
@@ -127,7 +144,12 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   console.log(`- Mode: ${networkPaused ? 'paused' : (isOnline ? 'online' : 'offline')}`);
   console.log(`- Replication (hops): ${hops}`);
   const oasisCfg = (() => { try { return require('../configs/config-manager.js').getConfig() || {}; } catch (_) { return {}; } })();
-  console.log(`- Blockchain backlog: ${Number(oasisCfg.ssbLogStream && oasisCfg.ssbLogStream.limit) || 1000}`);
+  console.log(`- Blockchain backlog: ${Number(oasisCfg.ssbLogStream && oasisCfg.ssbLogStream.limit) || 1000} blocks`);
+  console.log(`- Blob size limit: ${formatMB(Number(config.blobs && config.blobs.max) || 0)}`);
+  const cacheMb = Number(oasisCfg.blobCache && (isPublic ? oasisCfg.blobCache.pubMaxMB : oasisCfg.blobCache.maxMB)) || 0;
+  const cacheUsage = blobUsageOnDisk(config.path);
+  console.log(`- Media cache limit: ${cacheMb > 0 ? formatMB(cacheMb * 1024 * 1024) : 'Unlimited'}`);
+  console.log(`- Current usage: ${formatMB(cacheUsage.bytes, 1)} · ${cacheUsage.files} files`);
   console.log(`- LAN Broadcasting (UDP): ${localDiscovery ? 'enabled' : 'disabled'}`);
   const clearnetModules = await waitForClearnet();
   const clearnetStatus = (clearnetModules && clearnetModules.length > 0) ? clearnetModules.join(', ') : 'disabled';

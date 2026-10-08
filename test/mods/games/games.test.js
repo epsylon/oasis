@@ -41,6 +41,34 @@ describe('games: submitting scores', (t) => {
   });
 });
 
+describe('games: the catalogue', (t) => {
+  t('every listed game ships its page and thumbnail, and nothing else is offered', async () => {
+    const fs = require('fs'); const path = require('path');
+    const dir = path.join(__dirname, '../../../src/games');
+    const shipped = fs.readdirSync(dir).filter(d => fs.statSync(path.join(dir, d)).isDirectory()).sort();
+    const { gamesView } = require('../../../src/views/games_view');
+    const html = String(gamesView('all', null, ''));
+    const listed = [...html.matchAll(/href="\/games\/([a-z0-9]+)"/g)].map(m => m[1]).sort();
+    eq(listed.join(','), shipped.join(','), 'the catalogue and the shipped games are the same set');
+    for (const id of shipped) {
+      ok(fs.existsSync(path.join(dir, id, 'index.html')), `${id} has a page`);
+      ok(fs.existsSync(path.join(dir, id, 'thumbnail.svg')), `${id} has a thumbnail`);
+    }
+  });
+
+  t('a game that keeps no board refuses scores and shows none', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const games = A.use('games');
+    const { gamesView } = require('../../../src/views/games_view');
+    const html = String(gamesView('all', null, ''));
+    const listed = [...html.matchAll(/href="\/games\/([a-z0-9]+)"/g)].map(m => m[1]);
+    const hall = await games.getHallOfFame();
+    const silent = listed.filter(id => !hall[id]);
+    ok(silent.length > 0, 'some games are played for their own sake');
+    for (const id of silent) await throwsAsync(() => games.submitScore(id, 10), /invalid game/);
+  });
+});
+
 describe('games: hall of fame ranking', (t) => {
   t('players are ranked by score across the network', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);

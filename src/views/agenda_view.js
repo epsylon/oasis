@@ -1,19 +1,10 @@
 const { div, h2, p, section, button, form, img, input, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
 const { safeExternalHref } = require("../backend/renderStyledText");
-const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction } = require('./main_views');
+const { template, i18n, userLink, renderContentActions, renderModuleStats, renderStateChip, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
 const userId = config.keys.id;
-
-const renderCardField = (labelText, value) =>
-  div({ class: 'card-field' },
-    span({ class: 'card-label' }, labelText),
-    span(
-      { class: 'card-value' },
-      ...(Array.isArray(value) ? value : [value ?? ''])
-    )
-  );
 
 function getViewDetailsAction(item) {
   switch (item.type) {
@@ -47,154 +38,96 @@ const agendaDeleteAction = (item) => {
   return contentDeleteAction(item.type, item.id);
 };
 
+const chip = (text, kind = "whole", icon = null) => (text === null || text === undefined || text === "") ? null : renderStateChip(kind, icon, String(text).toUpperCase());
+const timeChip = (value, fmt = "YYYY/MM/DD HH:mm") => value ? p({ class: "time-chip" }, moment(value).format(fmt)) : null;
+const metaLine = (text) => text && String(text).trim() ? p({ class: "job-meta-line" }, String(text)) : null;
+const priceChip = (text) => text ? div({ class: "price-chip" }, text) : null;
+const countLine = (labelText, value) => div({ class: "tribe-card-members" }, span({ class: "tribe-members-count" }, `${labelText}: ${value}`));
+const statusKind = (status) => String(status || "").toUpperCase() === "CLOSED" ? "closed" : "mutuals";
+
 const renderAgendaItem = (item, userId, filter, extras = {}) => {
-  const fmt = d => moment(d).format('YYYY/MM/DD HH:mm:ss');
   const author = item.seller || item.organizer || item.from || item.author || '';
-
-  const commonFields = [
-    p({ class: 'card-footer' },
-      span({ class: 'date-link' }, `${item.createdAt ? moment(item.createdAt).format('YYYY/MM/DD HH:mm') : ''}`),
-      author ? userLink(author) : ''
-    )
-  ];
-
-  let details = [];
+  const chips = [];
+  const body = [];
   let actionButton = null;
 
   if (filter === 'discarded') {
-    actionButton = form({ method: 'POST', action: `/agenda/restore/${encodeURIComponent(item.id)}` },
-      button({ type: 'submit', class: 'restore-btn' }, i18n.agendaRestoreButton)
+    actionButton = form({ method: 'POST', action: `/agenda/restore/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
+      button({ type: 'submit', class: 'tribe-action-btn' }, String(i18n.agendaRestoreButton).toUpperCase())
     );
   } else {
-    actionButton = form({ method: 'POST', action: `/agenda/discard/${encodeURIComponent(item.id)}` },
-      button({ type: 'submit', class: 'discard-btn' }, i18n.agendaDiscardButton)
+    actionButton = form({ method: 'POST', action: `/agenda/discard/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
+      button({ type: 'submit', class: 'tribe-action-btn' }, String(i18n.agendaDiscardButton).toUpperCase())
     );
   }
+  const extraActions = [];
 
   if (item.type === 'market') {
-    details = [
-      renderCardField(i18n.marketItemType + ":", String(item.item_type || '').toUpperCase()),
-      renderCardField(i18n.marketItemStatus + ":", item.status),
-      renderCardField(i18n.marketItemStock + ":", item.stock),
-      div({ class: "price-chip" }, `${item.price} ECO`),
-      renderCardField(i18n.marketItemIncludesShipping + ":", item.includesShipping ? i18n.agendaYes : i18n.agendaNo),
-      renderCardField(i18n.deadline + ":", item.deadline ? moment(item.deadline).format("YYYY/MM/DD HH:mm") : '')
-    ];
+    chips.push(chip(item.item_type), chip(item.status, statusKind(item.status)), chip(`${i18n.marketItemStock}: ${item.stock}`), item.includesShipping ? chip(i18n.marketItemIncludesShipping, 'mutuals', '✓') : null);
     if (String(item.item_type || '').toLowerCase() === 'auction') {
       const bids = Array.isArray(item.auctions_poll) ? item.auctions_poll.map(bid => parseFloat(String(bid).split(':')[1])).filter(n => !isNaN(n)) : [];
       const maxBid = bids.length ? Math.max(...bids) : 0;
-      details.push(renderCardField(i18n.marketItemHighestBid + ":", `${maxBid} ECO`));
+      chips.push(chip(`${i18n.marketItemHighestBid}: ${maxBid} ECO`, 'whole', '▲'));
     }
-    const seller = author ? p(userLink(author)) : '';
-    details.push(br(), div({ class: 'members-list' }, i18n.marketItemSeller + ': ', seller));
+    body.push(priceChip(`${item.price} ECO`), timeChip(item.deadline));
   }
 
   if (item.type === 'tribe') {
-    details = [
-      renderCardField(i18n.agendaAnonymousLabel + ":", item.isAnonymous ? i18n.agendaYes : i18n.agendaNo),
-      renderCardField(i18n.agendaInviteModeLabel + ":", (item.inviteMode ? String(item.inviteMode).toUpperCase() : i18n.noInviteMode)),
-      renderCardField(i18n.agendaLocationLabel + ":", item.location || i18n.noLocation),
-      renderCardField(i18n.agendaMembersCount + ":", Array.isArray(item.members) ? item.members.length : 0),
-      br()
-    ];
-    const membersList = Array.isArray(item.members) ? item.members.map(member => p(userLink(member))) : [];
-    details.push(div({ class: 'members-list' }, `${i18n.agendaMembersLabel}:`, membersList));
+    chips.push(item.isAnonymous ? chip(i18n.agendaAnonymousLabel, 'hidden') : null, chip(item.inviteMode ? item.inviteMode : i18n.noInviteMode));
+    body.push(metaLine(item.location || i18n.noLocation), countLine(i18n.agendaMembersLabel, Array.isArray(item.members) ? item.members.length : 0));
   }
 
   if (item.type === 'report') {
-    details = [
-      renderCardField(i18n.agendareportStatus + ":", item.status || i18n.noStatus),
-      renderCardField(i18n.agendareportCategory + ":", item.category || i18n.noCategory),
-      renderCardField(i18n.agendareportSeverity + ":", (item.severity ? String(item.severity).toUpperCase() : i18n.noSeverity))
-    ];
+    chips.push(chip(item.status || i18n.noStatus, statusKind(item.status)), chip(item.category || i18n.noCategory), chip(item.severity || i18n.noSeverity, 'closed'));
   }
 
   if (item.type === 'event') {
-    details = [
-      renderCardField(i18n.eventDateLabel + ":", item.date ? fmt(item.date) : ''),
-      renderCardField(i18n.eventLocationLabel + ":", item.location || ''),
-      renderCardField(i18n.eventPriceLabel + ":", `${item.price} ECO`),
-      renderCardField(
-        i18n.eventUrlLabel + ":",
-        item.url ? p(a({ href: safeExternalHref(item.url), target: "_blank" }, item.url)) : p(i18n.noUrl)
-      )
-    ];
-    actionButton = actionButton || form({ method: 'POST', action: `/events/attend/${encodeURIComponent(item.id)}` },
-      button({ type: 'submit', class: 'assign-btn' }, `${i18n.eventAttendButton}`)
-    );
+    body.push(timeChip(item.date), metaLine(item.location), parseFloat(item.price || 0) > 0 ? priceChip(`${item.price} ECO`) : null,
+      item.url ? p({ class: 'job-meta-line' }, a({ href: safeExternalHref(item.url), target: "_blank" }, item.url)) : null);
+    if (filter !== 'discarded') extraActions.push(form({ method: 'POST', action: `/events/attend/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
+      button({ type: 'submit', class: 'tribe-action-btn' }, String(i18n.eventAttendButton).toUpperCase())));
   }
 
   if (item.type === 'task') {
-    details = [
-      renderCardField(i18n.taskStatus + ":", item.status),
-      renderCardField(i18n.taskPriorityLabel + ":", item.priority),
-      renderCardField(i18n.taskStartTimeLabel + ":", item.startTime ? moment(item.startTime).format("YYYY/MM/DD HH:mm") : ''),
-      renderCardField(i18n.taskEndTimeLabel + ":", item.endTime ? moment(item.endTime).format("YYYY/MM/DD HH:mm") : ''),
-      renderCardField(i18n.taskLocationLabel + ":", item.location || '')
-    ];
+    chips.push(chip(item.status, statusKind(item.status)), chip(item.priority, 'closed'));
+    body.push(timeChip(item.startTime), timeChip(item.endTime), metaLine(item.location));
     const assigned = Array.isArray(item.assignees) && item.assignees.includes(userId);
-    actionButton = actionButton || form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(item.id)}` },
-      button({ type: 'submit', class: 'assign-btn' }, assigned ? i18n.taskUnassignButton : i18n.taskAssignButton)
-    );
+    if (filter !== 'discarded') extraActions.push(form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
+      button({ type: 'submit', class: 'tribe-action-btn' }, String(assigned ? i18n.taskUnassignButton : i18n.taskAssignButton).toUpperCase())));
   }
 
   if (item.type === 'transfer') {
-    details = [
-      renderCardField(i18n.agendaTransferConcept + ":", item.concept),
-      renderCardField(i18n.agendaTransferAmount + ":", item.amount),
-      renderCardField(i18n.agendaTransferDeadline + ":", item.deadline ? fmt(item.deadline) : ''),
-      br()
-    ];
-    const membersList = item.to ? p(userLink(item.to)) : '';
-    details.push(div({ class: 'members-list' }, i18n.to + ': ', membersList));
+    body.push(metaLine(item.concept), priceChip(`${item.amount} ECO`), timeChip(item.deadline),
+      item.to ? p({ class: 'job-meta-line' }, `${i18n.to}: `, userLink(item.to)) : null);
   }
-  
+
   if (item.type === 'project') {
-    details = [
-      renderCardField(i18n.projectStatus + ":", item.status || i18n.noStatus),
-      renderCardField(i18n.projectProgress + ":", `${item.progress || 0}%`),
-      renderCardField(i18n.projectGoal + ":", `${item.goal} ECO`),
-      renderCardField(i18n.projectPledged + ":", `${item.pledged || 0} ECO`),
-      renderCardField(i18n.projectDeadline + ":", item.deadline ? moment(item.deadline).format("YYYY/MM/DD HH:mm") : i18n.noDeadline)
-    ];
+    chips.push(chip(item.status || i18n.noStatus, statusKind(item.status)), chip(`${item.progress || 0}%`, 'mutuals'));
+    body.push(priceChip(`${item.pledged || 0} / ${item.goal} ECO`), item.deadline ? timeChip(item.deadline) : metaLine(i18n.noDeadline));
   }
 
   if (item.type === 'calendar') {
-    details = [
-      renderCardField((i18n.calendarStatusLabel || 'Status') + ':', item.isClosed ? (i18n.calendarStatusClosed || 'CLOSED') : (i18n.calendarStatusOpen || 'OPEN')),
-      renderCardField((i18n.calendarDeadlineLabel || 'Deadline') + ':', item.deadline ? moment(item.deadline).format('YYYY/MM/DD HH:mm') : ''),
-      renderCardField((i18n.calendarParticipantsLabel || 'Participants') + ':', Array.isArray(item.participants) ? item.participants.length : 0)
-    ];
+    chips.push(chip(item.isClosed ? (i18n.calendarStatusClosed || 'CLOSED') : (i18n.calendarStatusOpen || 'OPEN'), item.isClosed ? 'closed' : 'mutuals'));
+    body.push(timeChip(item.deadline), countLine(i18n.calendarParticipantsLabel || 'Participants', Array.isArray(item.participants) ? item.participants.length : 0));
   }
 
   if (item.type === 'campaign') {
-    details = [
-      renderCardField(i18n.campaignSignaturesLabel + ":", `${item.signatureCount || 0} / ${item.goal || 0}`),
-      item.deadline ? renderCardField(i18n.campaignDeadlineLabel + ":", fmt(item.deadline)) : null
-    ].filter(Boolean);
+    chips.push(chip(`${i18n.campaignSignaturesLabel}: ${item.signatureCount || 0} / ${item.goal || 0}`, 'mutuals', '✍'));
+    body.push(timeChip(item.deadline));
   }
 
   if (item.type === 'logisticsRoute') {
-    details = [
-      renderCardField(i18n.logisticsKindLabel + ":", `${String(item.kind || '').toUpperCase()} · ${String(item.mode || '').toUpperCase()}`),
-      renderCardField(i18n.logisticsOriginLabel + ":", `${item.origin || ''} → ${item.destination || ''}`),
-      item.date ? renderCardField(i18n.logisticsDateLabel + ":", fmt(item.date)) : null
-    ].filter(Boolean);
+    chips.push(chip(item.kind), chip(item.mode));
+    body.push(metaLine(`${item.origin || ''} → ${item.destination || ''}`), timeChip(item.date));
   }
 
   if (item.type === 'housing') {
     const isOwner = String(item.author) === String(userId);
     const requestCount = Number(item.requestCount) || 0;
-    details = [
-      renderCardField(i18n.housingType + ":", (i18n["housingType" + String(item.housing_type || '').toUpperCase()] || item.housing_type || '').toUpperCase()),
-      renderCardField(i18n.housingStatus + ":", String(item.status || '').toUpperCase() === 'CLOSED' ? i18n.housingStatusCLOSED : i18n.housingStatusOPEN),
-      item.place ? renderCardField(i18n.housingPlace + ":", item.place) : null,
-      renderCardField(i18n.housingPrice + ":", String(item.housing_type) === 'couchsurfing' ? (i18n.housingFree || 'FREE') : `${item.price} ECO`),
-      item.availableFrom ? renderCardField(i18n.housingAvailableFrom + ":", moment(item.availableFrom).format('YYYY/MM/DD')) : null,
-      isOwner
-        ? renderCardField(i18n.housingRequests + ":", String(requestCount))
-        : renderCardField(i18n.housingRequests + ":", i18n.housingRequestedBadge || 'REQUESTED')
-    ].filter(Boolean);
+    chips.push(chip(i18n["housingType" + String(item.housing_type || '').toUpperCase()] || item.housing_type),
+      chip(String(item.status || '').toUpperCase() === 'CLOSED' ? i18n.housingStatusCLOSED : i18n.housingStatusOPEN, statusKind(item.status)),
+      isOwner ? chip(`${i18n.housingRequests}: ${requestCount}`) : chip(i18n.housingRequestedBadge || 'REQUESTED', 'mutuals', '✓'));
+    body.push(metaLine(item.place), priceChip(String(item.housing_type) === 'couchsurfing' ? (i18n.housingFree || 'FREE') : `${item.price} ECO`), timeChip(item.availableFrom, 'YYYY/MM/DD'));
   }
 
   if (item.type === 'job') {
@@ -202,57 +135,36 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
       ? item.subscribers
       : (typeof item.subscribers === 'string'
           ? item.subscribers.split(',').map(s => s.trim()).filter(Boolean)
-          : (item.subscribers && typeof item.subscribers.length === 'number'
-              ? Array.from(item.subscribers)
-              : []));
-
-    const subsInterleaved = subs
-      .map((id, i) => [i > 0 ? ', ' : '', userLink(id)])
-      .flat();
-
-    details = [
-      renderCardField(i18n.jobStatus + ":", item.status),
-      renderCardField(i18n.jobLocation + ":", (item.location || '').toUpperCase()),
-      renderCardField(i18n.jobType + ":", (item.job_type || '').toUpperCase()),
-      renderCardField(i18n.jobSalary + ":", `${item.salary} ECO`),
-      renderCardField(i18n.jobVacants + ":", item.vacants),
-      renderCardField(i18n.jobLanguages + ":", (item.languages || '').toUpperCase()),
-      br(),
-      div(
-        { class: 'members-list' },
-        i18n.jobSubscribers + ': ',br(),br(),
-        ...(subs.length ? subsInterleaved : [i18n.noSubscribers.toUpperCase()])
-      ),
-    ];
-
+          : (item.subscribers && typeof item.subscribers.length === 'number' ? Array.from(item.subscribers) : []));
+    chips.push(chip(item.status, statusKind(item.status)), chip(item.job_type), chip(item.languages), chip(`${i18n.jobVacants}: ${item.vacants}`));
+    body.push(metaLine(item.location), priceChip(`${item.salary} ECO`), countLine(i18n.jobSubscribers, subs.length));
     const subscribed = subs.includes(userId);
-    if (!subscribed && String(item.status).toUpperCase() !== 'CLOSED' && item.author !== userId) {
-      actionButton = form({ method: 'POST', action: `/jobs/subscribe/${encodeURIComponent(item.id)}` },
-        button({ type: 'submit', class: 'subscribe-btn' }, i18n.jobSubscribeButton)
-      );
+    if (filter !== 'discarded' && !subscribed && String(item.status).toUpperCase() !== 'CLOSED' && item.author !== userId) {
+      extraActions.push(form({ method: 'POST', action: `/jobs/subscribe/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
+        button({ type: 'submit', class: 'tribe-action-btn' }, String(i18n.jobSubscribeButton).toUpperCase())));
     }
   }
 
   if (item.type === 'industry') {
     const st = String(item.status || 'PROPOSED').toUpperCase();
-    details = [
-      renderCardField((i18n.industryFacility || 'Facility') + ":", item.facilityName || ''),
-      renderCardField((i18n.industryStatusLabel || 'Status') + ":", i18n['industryBuildStatus_' + st] || st)
-    ];
+    chips.push(chip(i18n['industryBuildStatus_' + st] || st, statusKind(st)));
+    body.push(metaLine(item.facilityName));
   }
 
   const isOwn = author && String(author) === String(userId);
   const favKind = CONTENT_FAV_KIND[item.type];
   const favIndex = extras.favIndex instanceof Map ? extras.favIndex : null;
   const spreadMap = extras.spreadMap instanceof Map ? extras.spreadMap : null;
+  const href = getViewDetailsAction(item);
+  const title = item.title || item.name || item.concept || '';
   return div({ class: 'trending-card agenda-card' + (isOwn ? ' own-content' : '') },
     div({ class: 'card-header activity-card-header' },
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
         span({ class: 'pm-exposition-text' }, String(item.type || '').toUpperCase())
       ),
-      renderContentActions(item.id, getViewDetailsAction(item), {
+      renderContentActions(item.id, href, {
         author,
-        reportTitle: item.title || item.name || item.concept || '',
+        reportTitle: title,
         spread: CONTENT_SPREADABLE.has(item.type) ? ((spreadMap && spreadMap.get(item.id)) || null) : undefined,
         ...(favKind ? { favKind, isFavorite: item.isFavorite === true || (!!favIndex && [item.rootId, item.id].some(id => id && favIndex.get(String(id)) === favKind)) } : {}),
         returnTo: `/agenda?filter=${encodeURIComponent(filter || 'all')}`,
@@ -260,11 +172,14 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
       })
     ),
     div({ class: 'card-section agenda-card-body' },
-      actionButton,
-      br(),
-      h2(item.title || item.name || item.concept || ''),
-      ...details,
-      ...commonFields
+      div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, a({ href }, title))),
+      chips.filter(Boolean).length ? div({ class: 'card-chips-row' }, ...chips.filter(Boolean)) : null,
+      ...body.filter(Boolean),
+      p({ class: 'card-footer' },
+        span({ class: 'date-link' }, `${item.createdAt ? moment(item.createdAt).format('YYYY/MM/DD HH:mm') : ''}`),
+        author ? userLink(author) : ''
+      ),
+      div({ class: 'agenda-card-actions' }, actionButton, ...extraActions)
     )
   );
 };
@@ -280,9 +195,8 @@ exports.agendaView = async (data, filter, q = '', extras = {}) => {
         h2(i18n.agendaTitle),
         p(i18n.agendaDescription)
       ),
-      emptyAgenda ? null : div({ class: 'filters' },
-        form({ method: 'GET', action: '/agenda' },
-          ...[
+      emptyAgenda ? null : div({ class: 'mode-buttons-row' },
+        ...[
             ['all', i18n.agendaFilterAll],
             ['today', i18n.agendaFilterToday || 'TODAY'],
             ['upcoming', i18n.agendaFilterUpcoming || 'UPCOMING'],
@@ -306,12 +220,15 @@ exports.agendaView = async (data, filter, q = '', extras = {}) => {
             ['discarded', 'DISCARDED']
           ].filter(([value]) => value === 'all' || filter === value || Number(counts[value] || 0) > 0)
             .map(([value, labelText]) =>
-              button({ type: 'submit', name: 'filter', value, class: filter === value ? 'filter-btn active' : 'filter-btn' },
-                `${labelText} (${counts[value] || 0})`))
-        )
+              form({ method: 'GET', action: '/agenda' },
+                input({ type: 'hidden', name: 'filter', value }),
+                button({ type: 'submit', class: filter === value ? 'filter-btn active' : 'filter-btn' }, String(labelText).toUpperCase())))
       ),
       emptyAgenda ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
-        renderModuleStats(items.length),
+        renderModuleStats(items.length, [
+          ['today', i18n.agendaFilterToday || 'TODAY'], ['upcoming', i18n.agendaFilterUpcoming || 'UPCOMING'], ['overdue', i18n.agendaFilterOverdue || 'OVERDUE'],
+          ['open', i18n.agendaFilterOpen], ['closed', i18n.agendaFilterClosed], ['discarded', 'DISCARDED']
+        ].map(([value, label]) => ({ label: String(label).toUpperCase(), count: Number(counts[value] || 0) }))),
         form({ method: 'GET', action: '/agenda', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.agendaSearchPlaceholder, class: 'filter-box__input' }),
@@ -320,11 +237,9 @@ exports.agendaView = async (data, filter, q = '', extras = {}) => {
           )
         )
       ),
-      div({ class: 'agenda-list' },
-        items.length
-          ? items.map(item => renderAgendaItem(item, userId, filter, extras || {}))
-          : p(i18n.agendaNoItems)
-      )
+      items.length
+        ? div({ class: 'jobs-grid agenda-list' }, ...items.map(item => renderAgendaItem(item, userId, filter, extras || {})))
+        : div({ class: 'no-content-box' }, p({ class: 'no-content' }, i18n.agendaNoItems))
     )
   );
 };

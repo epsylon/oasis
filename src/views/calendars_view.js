@@ -45,7 +45,7 @@ const renderCalendarStatusChip = (cal) => {
   return renderStateChip(variant, icon, label)
 }
 
-const renderCalendarCard = (cal, spreadInfo) => {
+const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
   const href = `/calendars/${encodeURIComponent(cal.rootId)}`
   const chips = [
     renderCalendarStatusChip(cal),

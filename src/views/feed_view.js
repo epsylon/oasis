@@ -99,7 +99,7 @@ const renderFeedComposer = ({ text = "", media = "", rows = 5, clearnet = false 
   );
 };
 
-const renderFeedCard = (feed, spreadMap = null) => {
+const renderFeedCard = exports.renderFeedCard = (feed, spreadMap = null, opts = {}) => {
     const content = feed.value.content || {};
     const rawText = typeof content.text === "string" ? content.text : "";
     const safeText = rawText.trim();
@@ -117,20 +117,34 @@ const renderFeedCard = (feed, spreadMap = null) => {
     const refeedsNum = Number(content.refeeds || 0) || 0;
     const commentCount = Number(content.commentCount || 0);
     const styledNodes = renderStyledText(safeText, { zoomImages: true });
+    const refeedAction = opts.refeedAction || `/feed/refeed/${encodeURIComponent(feed.key)}`;
+    const canRefeed = opts.canRefeed !== false && !(authorId && String(authorId) === String(me));
+    const headerActions = opts.headerActions !== undefined
+        ? opts.headerActions
+        : feed.tribeOrigin
+            ? renderContentActions(null, feed.tribeOrigin.href)
+            : renderContentActions(feed.key, `/feed/${encodeURIComponent(feed.key)}`, {
+                author: authorId,
+                spread: (spreadMap && spreadMap.get(feed.key)) || null,
+                reportTitle: safeText,
+                ...(((signerId && String(signerId) === String(me)) || (authorId && String(authorId) === String(me))) ? { deleteAction: `/feed/delete/${encodeURIComponent(feed.key)}` } : {})
+            });
+    const chipsRow = opts.chips !== undefined
+        ? opts.chips
+        : feed.tribeOrigin ? div({ class: "card-chips-row" }, renderTribeOriginChip(feed.tribeOrigin)) : feed.clearnet === true ? div({ class: "card-chips-row" }, renderReachChip(true, i18n, clearnetItemHref("feed", "", feed.key))) : null;
+    const engagement = opts.engagement !== undefined
+        ? opts.engagement
+        : feed.tribeOrigin ? null : renderEngagement(feed.key,
+            renderOpinionsVoting('/feed/opinions', feed.key, content.opinions, null, content.opinions_inhabitants),
+            renderCommentsLink({ href: `/feed/${encodeURIComponent(feed.key)}`, count: commentCount })
+        );
 
     return div(
         { class: "trending-card feed-card" + (authorId && String(authorId) === String(me) ? " own-content" : "") },
         div(
             { class: "card-header activity-card-header" },
             span(),
-            feed.tribeOrigin
-                ? renderContentActions(null, feed.tribeOrigin.href)
-                : renderContentActions(feed.key, `/feed/${encodeURIComponent(feed.key)}`, {
-                    author: authorId,
-                    spread: (spreadMap && spreadMap.get(feed.key)) || null,
-                    reportTitle: safeText,
-                    ...(((signerId && String(signerId) === String(me)) || (authorId && String(authorId) === String(me))) ? { deleteAction: `/feed/delete/${encodeURIComponent(feed.key)}` } : {})
-                })
+            headerActions
         ),
         div(
             { class: "card-section feed-card-body" },
@@ -139,17 +153,17 @@ const renderFeedCard = (feed, spreadMap = null) => {
             feed.tribeOrigin ? null : div(
                 { class: "refeed-column" },
                 h1(String(refeedsNum)),
-                (authorId && String(authorId) === String(me))
-                    ? null
-                    : form(
-                        { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
+                canRefeed
+                    ? form(
+                        { method: "POST", action: refeedAction },
                         button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", title: i18n.refeedButton, "aria-label": i18n.refeedButton, ...(alreadyRefeeded ? { disabled: true } : {}) }, "ꕿ")
-                    ),
+                    )
+                    : null,
             ),
             div(
                 { class: "feed-main" },
                 div({ class: "feed-text" }, ...styledNodes),
-                feed.tribeOrigin ? div({ class: "card-chips-row" }, renderTribeOriginChip(feed.tribeOrigin)) : feed.clearnet === true ? div({ class: "card-chips-row" }, renderReachChip(true, i18n, clearnetItemHref("feed", "", feed.key))) : null,
+                chipsRow,
                 p(
                     { class: "card-footer" },
                     span({ class: "date-link" }, `${createdAt}`),
@@ -158,10 +172,7 @@ const renderFeedCard = (feed, spreadMap = null) => {
                 )
             )
         ),
-        feed.tribeOrigin ? null : renderEngagement(feed.key,
-            renderOpinionsVoting('/feed/opinions', feed.key, content.opinions, null, content.opinions_inhabitants),
-            renderCommentsLink({ href: `/feed/${encodeURIComponent(feed.key)}`, count: commentCount })
-        )
+        engagement
         )
     );
 };

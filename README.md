@@ -232,12 +232,12 @@ Connect your accounts from **Settings → Multiverse**, then open them from **Mu
 
 Oasis contains its own telephone: voice calls between inhabitants, end-to-end encrypted, with no operator, server or account in between.
 
- + Every inhabitant has a phone number, derived from their Oasis ID and shown on their profile. Dial it (or an Oasis ID) from **Phone**, or call from a profile; a number that belongs to one inhabitant is called straight away.
- + A call shows **Connecting** until the other device has it, then rings for both. If the other side is busy or cannot be reached, you are told and can leave a message.
+ + Every inhabitant has a phone number, derived from their Oasis ID and shown on their profile. Dial it (or an Oasis ID) from **Phone**, or call from a profile.
+ + If the other side is busy or cannot be reached, you are told and can leave a message.
  + Call several inhabitants at once to make a joint call.
  + When nobody answers, leave a Private Audio Message (PaM).
  + Choose who can call you (everyone, or only mutual supporters) in **Settings → Phone**.
- + **Do not disturb** is published on your profile as a chip and can be switched from your profile or from Settings; callers are told before anything rings.
+ + **Do not disturb** can be switched from your profile or from Settings.
  + The call lives in the bar at the top of every page, next to the other notices of Oasis, so you can keep browsing.
  + When two inhabitants cannot reach each other directly, the call is relayed by a PUB, which cannot listen to it.
 
@@ -246,8 +246,8 @@ Oasis contains its own telephone: voice calls between inhabitants, end-to-end en
 Rooms are encrypted meeting places, under **Community → Rooms**, that inhabitants join and leave whenever they want.
 
  + A room is OPEN or INVITE-ONLY (entered with an invite code); tribes and sub-tribes have rooms of their own.
- + Entering a room joins its call: you hear whoever is talking, with no second step.
- + Each room has a phone number, and its creator chooses **Do not disturb** or **Switchboard**: with Switchboard, dialling the number from Phone enters the room; a room with nobody inside cannot be called.
+ + Entering a room joins its call.
+ + Each room has a phone number, and its creator chooses **Do not disturb** or **Switchboard**: with Switchboard, dialling the number from Phone enters the room.
  + Everything is encrypted end to end: the PUB of the room's creator relays it without being able to read it.
  + Mute yourself whenever you want.
  + An OPEN room can be published as CLEARNET: its public page shows only its name and number.
@@ -263,16 +263,6 @@ See [docs/phone/README.md](docs/phone/README.md) for both.
 ## PDF export
 
 Many content pages offer **Generate PDF** and **Share via PM** (the PDF travels encrypted, attached to a new private message): reports, votes, events, tasks, calendars, CVs, emergencies, campaigns, logistics routes, mailing lists, the Pixelia canvas and transfers (as smart contracts). Pads, wiki pages and school certificates can be downloaded as PDF too.
-
-## Writing
-
-Long writings (blogs, private messages, mailing lists, forums, comments, tribe content) are stored as several linked messages and always read back as one document, so no text is ever cut.
-
-## Withdrawing content
-
-Your own comments and L.A.R.P. wall posts can be deleted by you: they are hidden for everyone. A vote can no longer be edited or deleted once it has received votes or opinions, or when it belongs to Parliament or Courts.
-
-----------
 
 ## Clearnet
 
@@ -294,7 +284,7 @@ Tribes are groups with their own encrypted content. In a public tribe (and in th
  + **OASIS**: a readable copy is visible to every inhabitant, on the tribe page, in the general module lists and in Activity, with a chip naming the tribe.
  + **CLEARNET**: also on the tribe's public web page, `/c/tribe/…`.
 
-Opening leaves a readable copy outside the tribe: moving it back to TRIBE hides it, and that stays so even if the member who closed it leaves the tribe, but copies already shared cannot be erased. The copy carries no votes, attendees, assignees or opinions; editing refreshes it while it is open and deleting withdraws it. Private tribes allow TRIBE only, and a tribe that becomes private withdraws everything it had opened.
+Opening leaves a readable copy outside the tribe: moving it back to TRIBE hides it, but copies already shared cannot be erased. Private tribes keep everything inside.
 
 ----------
   

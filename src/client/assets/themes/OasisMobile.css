@@ -811,6 +811,29 @@ h3 { font-size: 1em !important; }
 }
 .oasis-menu-btn .oasis-menu-ico { font-size: 1.05rem !important; }
 
+.oasis-phone-state {
+  order: 2 !important;
+  flex: 1 1 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  margin: -18px 0 6px !important;
+}
+.oasis-phone-state-btn {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  font: inherit !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  padding: 2px 10px !important;
+  min-height: 0 !important;
+  line-height: 1.2 !important;
+  font-size: 0.8rem !important;
+  border-radius: 999px !important;
+}
+.oasis-phone-state-btn .pm-exposition-icon { font-size: 0.95rem !important; }
+
 .oasis-menu-slot {
   display: inline-flex !important;
 }
@@ -842,7 +865,7 @@ h3 { font-size: 1em !important; }
 .header .top-bar-right nav ul,
 .header .top-bar-mid nav ul {
   display: grid !important;
-  grid-template-columns: repeat(3, 1fr) !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   gap: 6px !important;
   overflow: visible !important;
   list-style: none !important;
@@ -868,9 +891,13 @@ h3 { font-size: 1em !important; }
   width: 100% !important;
   min-height: 42px !important;
   box-sizing: border-box !important;
-  padding: 6px 8px !important;
-  font-size: 0.85rem !important;
-  white-space: nowrap !important;
+  padding: 6px 4px !important;
+  font-size: 0.78rem !important;
+  line-height: 1.15 !important;
+  text-align: center !important;
+  white-space: normal !important;
+  overflow-wrap: break-word !important;
+  hyphens: auto !important;
   border: 1px solid #FFD700 !important;
   border-radius: 8px !important;
   background: #161616 !important;

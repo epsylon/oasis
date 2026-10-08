@@ -18,7 +18,7 @@ Most of these files are created the first time something needs them. A missing f
 | `secret` | Your identity — the ed25519 keypair your feed is signed with. Whoever holds it *is* you, and nobody can reissue it. Back it up (Tools › Backup), never share it. |
 | `secret.bak-DATE` | The identity that was here before you imported another one from Backup. Kept so an import can be undone. |
 | `db2/` | The log itself and its indexes. See the table below. |
-| `flume/` | Only on a device that ran an Oasis older than the ssb-db2 move: the previous log. It is migrated into `db2/` on the first start of the new version and then removed, leaving a single small `flume/log.offset` that is not a log but a guard: an older Oasis cannot read it and refuses to start, instead of starting with an empty log and forking your feed. Keep it. |
+| `flume/` | Only on a device whose log was migrated into `db2/` from the previous log format. What remains is a single small `flume/log.offset` that is not a log but a guard: software that only knows that format refuses to start, instead of starting with an empty log and forking your feed. Keep it. |
 | `blobs/` | The blob store: every image, audio, video and attachment, filed by its hash. |
 | `blobs_push/` | A small database tracking which blobs still have to be handed to which peer. |
 | `ebt/` | Replication bookkeeping: how far along each peer is in each feed, so a reconnection resumes instead of starting over. |
@@ -59,7 +59,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `keys/events-keys.json` | The same, for private events. |
 | `keys/school-keys.json` | The same, for school courses. |
 | `keys/forum-keys.json` | The same, for private forums. |
-| `keys/*.pre-realias` | A copy of a keyring kept before an earlier format change. Safe to keep. |
+| `keys/*.pre-realias` | A copy of a keyring kept before its format was converted. Safe to keep. |
 | `keys/<feed id>.asc` | A GPG **public** key published on a profile — yours, or one imported from someone else to check their signatures. Never a private key. |
 | `banking/wallet-addresses.json` | The ECOin address known for each inhabitant, yours included. |
 | `banking/banking-address-book.json` | The addresses you saved by hand, with the label you gave them. |
@@ -67,9 +67,9 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `banking/banking-epochs.json` | The monthly UBI epochs already closed by this node, with what was distributed in each. Only on a PUB. |
 | `banking/banking-eco-history.json` | Samples of the ECOin value, supply and inflation over time. This is what the Exchange charts draw. |
 | `banking/banking-funds-history.json` | Samples of your own ECOin wallet balance over time. This is what the funds chart of Banking › Overview draws. |
-| `banking/banking-ubi-paid.json` | On a PUB, the ledger of UBI already paid: one entry per inhabitant and month, with its transaction, or with the attempts made so far and the last error while a payment is still pending. It is what stops the same month being paid twice. |
-| `banking-rebalance-pending.json` | On a PUB, the rebalance to another PUB that was handed to the wallet but not yet confirmed, so the next tick checks the wallet for it before sending anything again. Written at the root of `~/.ssb/oasis/`. |
-| `clearnet-since.json` | A marker that this identity has published the moment from which its CLEARNET choices are made item by item; it is published once. Written at the root of `~/.ssb/oasis/`. |
+| `banking/banking-ubi-paid.json` | On a PUB, the ledger of UBI already paid: one entry per inhabitant and month, with its transaction. It is what stops the same month being paid twice. |
+| `banking-rebalance-pending.json` | On a PUB, the rebalance to another PUB that was handed to the wallet but not yet confirmed. Written at the root of `~/.ssb/oasis/`. |
+| `clearnet-since.json` | A marker that this identity has published, on its profile, the moment from which its CLEARNET choices apply; it is written once. Written at the root of `~/.ssb/oasis/`. |
 | `banking/banking-ubi-notice.json` | Which UBI payments BankingBot has already told you about, so it does not repeat itself. |
 | `banking/banking-confirm-notice.json` | The same, for contracts waiting for your confirmation. |
 | `content/content_favorites.json` | What you marked as a favourite, by content type. |

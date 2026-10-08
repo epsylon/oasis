@@ -1985,7 +1985,13 @@ const WISH_LEVELS = ['whole', 'mutuals', 'only-lan', 'local'];
 const phoneNumbers = require('../models/phone_number');
 const PHONE_FILTERS = ['all', 'records', 'missed', 'incoming', 'outgoing', 'create'];
 const PHONE_GROUP_MAX = require('../server/phone_module').GROUP_MAX;
-const phoneModel = require('../models/phone_model')({ cooler, pmModel, nameOf: async (id) => about.name(id), isPublic: config.public, encryptFile: (filepath) => encryptUploadForTribe({ filepath, size: fs.statSync(filepath).size }, { filename: 'pam.wav', mime: 'audio/wav' }) });
+const pamPointer = (share) => ({ type: 'fileShare', v: 1, key: share.key, manifestBlobId: share.manifestBlobId, filename: 'pam.wav', mime: 'audio/wav' });
+const phoneModel = require('../models/phone_model')({
+  cooler, pmModel, nameOf: async (id) => about.name(id), isPublic: config.public,
+  encryptFile: (filepath) => encryptUploadForTribe({ filepath, size: fs.statSync(filepath).size }, { filename: 'pam.wav', mime: 'audio/wav' }),
+  isAvailable: (share) => fileshareModel.isAvailable(pamPointer(share)),
+  prefetch: (share) => fileshareModel.prefetch(pamPointer(share))
+});
 const { phoneView } = require('../views/phone_view');
 const createTorrentForFile = async (ctx, blobMarkdown, { title }) => {
   try {
@@ -2357,6 +2363,21 @@ const roomFilterFn = (filter, uid, occupancy) => {
   if (filter === 'closed') return (r) => r.isClosed;
   return () => true;
 };
+const ROOM_RECORDINGS_DIR = path.join(ssbConfig.path, 'rooms-recordings');
+const roomRecordingFile = (name) => {
+  if (!/^[0-9a-f]{16}-\d{10,16}\.wav$/.test(String(name || ''))) return null;
+  const file = path.join(ROOM_RECORDINGS_DIR, String(name));
+  return fs.existsSync(file) ? file : null;
+};
+const listRoomRecordings = (rootId) => {
+  const prefix = require('../server/phone_module').recordingPrefix(rootId) + '-';
+  let names = [];
+  try { names = fs.readdirSync(ROOM_RECORDINGS_DIR); } catch (_) { return []; }
+  return names
+    .filter(n => n.startsWith(prefix) && n.endsWith('.wav'))
+    .map(n => { let size = 0; try { size = fs.statSync(path.join(ROOM_RECORDINGS_DIR, n)).size; } catch (_) {} return { name: n, size, at: Number(n.slice(prefix.length, -4)) || 0, durationMs: Math.max(0, Math.round((size - 44) / 16)) }; })
+    .sort((a, b) => b.at - a.at);
+};
 const roomAccess = async (room, uid) => {
   if (!room) return 'invalid';
   if (room.tribeId) {
@@ -2420,7 +2441,14 @@ const refreshLiveRooms = async () => {
   const mine = (await roomsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []))
     .filter(r => !r.isClosed && (r.author === uid || r.members.includes(uid) || r.tribeId) && !(live && live.ref === r.rootId));
   const occupancy = await roomsModel.occupancies(mine);
-  sharedState.setLiveRooms(mine.filter(r => (occupancy.get(r.rootId) || {}).count > 0).map(r => ({ ref: r.rootId, title: r.title, count: occupancy.get(r.rootId).count, max: occupancy.get(r.rootId).max })));
+  sharedState.setLiveRooms(
+    mine.filter(r => (occupancy.get(r.rootId) || {}).count > 0).map(r => ({ ref: r.rootId, title: r.title, count: occupancy.get(r.rootId).count, max: occupancy.get(r.rootId).max })),
+    mine.filter(r => occupancy.has(r.rootId) && !((occupancy.get(r.rootId) || {}).count > 0)).map(r => r.rootId)
+  );
+};
+const syncRoomBanner = async () => {
+  if (config.public) return;
+  sharedState.setPhoneRoom(await roomsModel.liveState().catch(() => null));
 };
 const calModesFromCensus = (census, me) => {
   return {
@@ -3441,7 +3469,7 @@ const preparePreview = async function (ctx) {
   return { authorMeta, text, formattedText, mentions, contentWarning }
 }
 const megabyte = Math.pow(2, 20);
-const maxSize = 50 * megabyte;
+const maxSize = 75 * megabyte;
 const collectFediverseMedia = async (ctx) => {
   const files = ctx.request.files && ctx.request.files.media;
   if (!files) return [];
@@ -5016,6 +5044,7 @@ router
         const occ = await roomsModel.occupancy(rooms[0]).catch(() => null);
         if (occ && Number(occ.count) === 0) { sendErrorPage(ctx, PHONE_ERRORS.nobody, { status: 400 }); return; }
         const error = await enterRoom(rooms[0]);
+        await syncRoomBanner();
         if (error) { sendErrorPage(ctx, roomErrorMessage(error), { status: 400 }); return; }
         ctx.redirect(`/rooms/${encodeURIComponent(rooms[0].rootId)}`);
         return;
@@ -5069,6 +5098,7 @@ router
   .post('/phone/reject', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.reject().catch(() => null); safeRefererRedirect(ctx, '/phone'); })
   .post('/phone/hangup', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.hangup().catch(() => null); safeRefererRedirect(ctx, '/phone'); })
   .post('/phone/mute', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.mute(String(ctx.request.body.mute) === '1').catch(() => null); safeRefererRedirect(ctx, '/phone'); })
+  .post('/phone/silence', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.silence(String(ctx.request.body.id || ''), String(ctx.request.body.on) === '1').catch(() => null); safeRefererRedirect(ctx, '/phone'); })
   .post('/phone/dismiss', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.dismiss().catch(() => null); ctx.redirect('/phone'); })
   .post('/phone/pam/cancel', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.recordCancel().catch(() => null); safeRefererRedirect(ctx, '/phone'); })
   .post('/phone/pam/send', koaBody(), async (ctx) => {
@@ -5080,7 +5110,27 @@ router
     if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.status = 404; ctx.body = ''; return; }
     const cipher = await phoneModel.pamCipher(ctx.params.key).catch(() => null);
     if (!cipher) { ctx.status = 404; ctx.body = ''; return; }
-    await sendDecryptedBlob(ctx, cipher, 'pam.wav', 'audio/wav');
+    const pointer = pamPointer(cipher);
+    if (!(await fileshareModel.isAvailable(pointer).catch(() => false))) { fileshareModel.prefetch(pointer).catch(() => {}); ctx.status = 404; ctx.body = ''; return; }
+    const buffer = await fileshareModel.reassembleToBuffer(pointer).catch(() => null);
+    if (!buffer || !buffer.length) { ctx.status = 404; ctx.body = ''; return; }
+    const size = buffer.length;
+    let start = 0, end = size - 1;
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(ctx.get('Range') || ''));
+    if (range && (range[1] || range[2])) {
+      if (range[1]) { start = Number(range[1]); end = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1; }
+      else { start = Math.max(0, size - Number(range[2])); }
+      if (!(start >= 0 && start <= end && end < size)) { ctx.status = 416; ctx.set('Content-Range', `bytes */${size}`); ctx.body = ''; return; }
+      ctx.status = 206;
+      ctx.set('Content-Range', `bytes ${start}-${end}/${size}`);
+    }
+    ctx.type = 'audio/wav';
+    ctx.set('Accept-Ranges', 'bytes');
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.length = end - start + 1;
+    const key = ctx.params.key;
+    if (end === size - 1) ctx.res.once('finish', () => { try { phoneModel.markHeard(key); } catch (_) {} });
+    ctx.body = buffer.subarray(start, end + 1);
   })
   .post('/phone/pam/:key/delete', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.deletePam(ctx.params.key).catch(() => null); ctx.redirect('/phone'); })
   .get('/inbox', async ctx => {
@@ -5827,7 +5877,7 @@ router
     tribe.reachAllowed = await tribeReachAllowed(tribe.id);
     tribe.rootId = await tribesModel.getRootId(tribe.id).catch(() => tribe.id);
     const uid = getViewerId();
-    const query = { feedFilter: 'TOP', ...ctx.query };
+    const query = { ...ctx.query };
     if (tribe.isAnonymous === true && !tribe.members.includes(uid)) {
       ctx.redirect('/tribes');
       return;
@@ -9066,8 +9116,10 @@ router
     const census = await roomsCensus();
     await warmAuthorNames([room, ...room.members.map(m => ({ author: m }))]);
     room.clearnet = await clearnetPublic('rooms', room).catch(() => false);
+    const roomMember = room.author === uid || room.members.includes(uid) || isTribeMember;
     ctx.body = await singleRoomView({ ...room, isFavorite: fav.has(String(room.rootId)), isTribeMember }, {
       live, occ, available: await phoneModel.available().catch(() => false),
+      recordings: roomMember ? listRoomRecordings(room.rootId) : [],
       spreads: await spreads.forMessage(room.rootId).catch(() => null),
       modesAvail: roomModesFromCensus(census, uid, await roomsModel.occupancies(census.filter(r => !r.isClosed)))
     });
@@ -11507,12 +11559,13 @@ router
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
     const tribe = await tribesModel.getTribeById(ctx.params.id);
     if (!tribe.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
+    const back = safeReturnTo(ctx, `/tribe/${encodeURIComponent(ctx.params.id)}?section=opinions`, ['/tribe/']);
     const item = await tribesContentModel.getById(ctx.params.contentId);
-    if (!item || item.tribeId !== ctx.params.id) { ctx.status = 404; ctx.redirect(`/tribe/${encodeURIComponent(ctx.params.id)}?section=opinions`); return; }
+    if (!item || item.tribeId !== ctx.params.id) { ctx.status = 404; ctx.redirect(back); return; }
     try {
       await tribesContentModel.castOpinion(ctx.params.contentId, ctx.params.category);
     } catch (_) {}
-    ctx.redirect(`/tribe/${encodeURIComponent(ctx.params.id)}?section=opinions`);
+    ctx.redirect(back);
   })
   .post('/panic/remove', koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
@@ -13209,7 +13262,7 @@ router
   .post("/rooms/delete/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
     const live = await roomsModel.liveState();
-    if (live && live.ref === ctx.params.id) await roomsModel.leave();
+    if (live && live.ref === ctx.params.id) { await roomsModel.leave(); await syncRoomBanner(); }
     try { await roomsModel.deleteRoomById(ctx.params.id); } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); return; }
     ctx.redirect('/rooms');
   })
@@ -13238,12 +13291,14 @@ router
     const room = await roomsModel.getRoomById(ctx.params.id).catch(() => null);
     if (!room) { ctx.redirect('/rooms'); return; }
     const error = await enterRoom(room);
+    await syncRoomBanner();
     if (error) { sendErrorPage(ctx, roomErrorMessage(error), { status: 400 }); return; }
     ctx.redirect(`/rooms/${encodeURIComponent(room.rootId)}`);
   })
   .post("/rooms/leave", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
     await roomsModel.leave();
+    await syncRoomBanner();
     if ((ctx.request.body || {}).returnTo) ctx.redirect(safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']));
     else safeRefererRedirect(ctx, '/rooms');
   })
@@ -13253,9 +13308,45 @@ router
     if ((ctx.request.body || {}).returnTo) ctx.redirect(safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']));
     else safeRefererRedirect(ctx, '/rooms');
   })
-  .post("/rooms/live/dismiss", koaBody(), async (ctx) => {
+  .post("/rooms/silence", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
-    sharedState.dismissLiveRoom(String((ctx.request.body || {}).ref || ''));
+    const b = ctx.request.body || {};
+    await roomsModel.silence(String(b.id || ''), String(b.on) === '1').catch(() => null);
+    if (b.returnTo) ctx.redirect(safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']));
+    else safeRefererRedirect(ctx, '/rooms');
+  })
+  .post("/rooms/rec/start", koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    await roomsModel.recStart().catch(() => null);
+    safeRefererRedirect(ctx, '/rooms');
+  })
+  .post("/rooms/rec/stop", koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    await roomsModel.recStop().catch(() => null);
+    safeRefererRedirect(ctx, '/rooms');
+  })
+  .post("/rooms/notify", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    await roomsModel.notify(String((ctx.request.body || {}).on) === '1').catch(() => null);
+    safeRefererRedirect(ctx, '/rooms');
+  })
+  .post("/rooms/notify/clear", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    await roomsModel.clearEvents().catch(() => null);
+    safeRefererRedirect(ctx, '/rooms');
+  })
+  .get("/rooms/recordings/:name", async (ctx) => {
+    if (config.public || !checkMod(ctx, 'roomsMod')) { ctx.status = 404; ctx.body = ''; return; }
+    const file = roomRecordingFile(ctx.params.name);
+    if (!file) { ctx.status = 404; ctx.body = ''; return; }
+    ctx.type = 'audio/wav';
+    ctx.set('Content-Disposition', contentDisposition('attachment', ctx.params.name));
+    ctx.body = fs.createReadStream(file);
+  })
+  .post("/rooms/recordings/:name/delete", koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    const file = roomRecordingFile(ctx.params.name);
+    if (file) { try { fs.unlinkSync(file); } catch (_) {} }
     safeRefererRedirect(ctx, '/rooms');
   })
   .post("/rooms/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'rooms', 'add'))
@@ -14478,9 +14569,11 @@ const middleware = [
         try { await refreshPeerHealth(); } catch (_) {}
         try { await syncPhoneVisibility(); } catch (_) {}
         try { await announceOasisVersion(); } catch (_) {}
+        try { await syncRoomBanner(); } catch (_) {}
         try { await refreshLiveRooms(); } catch (_) {}
         try { sharedState.setFeaturedEmergency(await emergenciesModel.featured()); } catch (_) {}
         try { await refreshInboxCount(); } catch (_) {}
+        try { if (!config.public) await phoneModel.refreshCount(); } catch (_) {}
         try { await refreshMentionsCount(); } catch (_) {}
         try { await calendarsModel.checkDueReminders(); } catch (_) {}
         try { await tasksModel.checkDueReminders(); } catch (_) {}

@@ -412,3 +412,18 @@ describe('activity: podcasts surface as cards', (t) => {
     ok(html.includes('Night talks') && html.includes('/podcasts/episode/'), 'cards link to the channel and the episode');
   });
 });
+
+describe('activity: phone events stay in the phone module', (t) => {
+  t('a voicemail left for you produces no activity card', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const share = { key: 'k', manifestBlobId: '&m.sha256' };
+    await A.use('pm').sendPam(B.keypair.id, share, 5);
+    const ssb = await A.cooler.open();
+    await new Promise((res, rej) => ssb.publish({ type: 'pam', from: A.keypair.id, to: [A.keypair.id, B.keypair.id], share, durationSec: 5, sentAt: new Date().toISOString(), private: true }, (e, r) => e ? rej(e) : res(r)));
+    B.setActor();
+    const feed = await B.use('activity').listFeed('all');
+    ok(!feed.some(a => a.type === 'pam'), 'no card for the voicemail, boxed or not');
+    ok(!feed.some(a => a.content && a.content.private === true), 'nothing private ever becomes a card');
+  });
+});

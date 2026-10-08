@@ -83,6 +83,30 @@ const syncWindow = async (ssb, cache, limit) => {
   return entry;
 };
 
+const syncPrivate = async (ssb, cache) => {
+  if (!ssb.private || typeof ssb.private.read !== 'function') return null;
+  let entry = cache.private;
+  if (!entry) {
+    entry = { byKey: new Map(), warming: null, warm: false };
+    cache.private = entry;
+    entry.warming = collectStream(ssb.private.read({ reverse: true }))
+      .then((msgs) => { insert(entry, msgs); entry.warm = true; })
+      .catch(() => { cache.private = null; });
+    await entry.warming;
+    return entry;
+  }
+  await entry.warming;
+  if (!entry.warm) return entry;
+  const tail = await collectStream(ssb.private.read({ reverse: true, limit: TAIL_PROBE }));
+  const fresh = tail.filter((m) => m && m.key && !entry.byKey.has(m.key));
+  if (fresh.length === tail.length && tail.length === TAIL_PROBE) {
+    insert(entry, await collectStream(ssb.private.read({ reverse: true })));
+  } else {
+    insert(entry, fresh);
+  }
+  return entry;
+};
+
 const readTyped = async (ssbClient, types, opts = {}) => {
   const limit = opts.limit;
   if (typeof ssbClient.messagesByType !== 'function') {
@@ -105,7 +129,11 @@ const readTyped = async (ssbClient, types, opts = {}) => {
   const windowEntry = opts.withWindow
     ? (!allWarm ? await syncWindow(ssbClient, cache, limit) : cache.window)
     : null;
-  for (const e of [...entries, windowEntry]) if (e && e.warm) e.tip = tipKey;
+  const withPrivate = opts.withPrivate === true;
+  const privateEntry = withPrivate && wanted.size
+    ? (!allWarm || !upToDate(cache.private) ? await syncPrivate(ssbClient, cache) : cache.private)
+    : null;
+  for (const e of [...entries, windowEntry, privateEntry]) if (e && e.warm) e.tip = tipKey;
 
   for (const m of logTail) {
     if (!m || !m.key || !m.value) continue;
@@ -125,6 +153,12 @@ const readTyped = async (ssbClient, types, opts = {}) => {
   }
   if (windowEntry) {
     for (const [k, m] of windowEntry.byKey) if (!union.has(k)) union.set(k, m);
+  }
+  if (privateEntry && privateEntry.warm) {
+    for (const [k, m] of privateEntry.byKey) {
+      const t = m && m.value && m.value.content && m.value.content.type;
+      if (typeof t === 'string' && wanted.has(t)) union.set(k, m);
+    }
   }
   return Array.from(union.values()).sort((a, b) => {
     const at = (a.value && a.value.timestamp) || 0;

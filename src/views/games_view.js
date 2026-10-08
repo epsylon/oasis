@@ -7,6 +7,7 @@ const getGames = () => [
   { id: 'ecoinflow', title: () => i18n.gamesTheFlowTitle, desc: () => i18n.gamesTheFlowDesc },
   { id: 'neoninfiltrator', title: () => i18n.gamesNeonInfiltratorTitle, desc: () => i18n.gamesNeonInfiltratorDesc },
   { id: 'audiopendulum', title: () => i18n.gamesAudioPendulumTitle, desc: () => i18n.gamesAudioPendulumDesc },
+  { id: 'visualdj', title: () => i18n.gamesVisualDjTitle, desc: () => i18n.gamesVisualDjDesc },
   { id: 'spaceinvaders', title: () => i18n.gamesSpaceInvadersTitle, desc: () => i18n.gamesSpaceInvadersDesc },
   { id: 'arkanoid', title: () => i18n.gamesArkanoidTitle, desc: () => i18n.gamesArkanoidDesc },
   { id: 'pingpong', title: () => i18n.gamesPingPongTitle, desc: () => i18n.gamesPingPongDesc },
@@ -55,7 +56,7 @@ const renderHallOfFame = (hall, games) => {
   );
 };
 
-const VALID_GAME_IDS = new Set(['cocoland','ecoinflow','neoninfiltrator','audiopendulum','spaceinvaders','arkanoid','pingpong','asteroids','rockpaperscissors','tiktaktoe','flipflop','8ball','artillery','labyrinth','cocoman','tetris','minesweeper']);
+const VALID_GAME_IDS = new Set(['cocoland','ecoinflow','neoninfiltrator','audiopendulum','visualdj','spaceinvaders','arkanoid','pingpong','asteroids','rockpaperscissors','tiktaktoe','flipflop','8ball','artillery','labyrinth','cocoman','tetris','minesweeper']);
 
 exports.gameShellView = (name) => {
   if (!VALID_GAME_IDS.has(name)) {

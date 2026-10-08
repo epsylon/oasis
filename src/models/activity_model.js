@@ -77,6 +77,7 @@ const HIDDEN_ENVELOPE_TYPES = new Set([
   'larpAutoInvite',
   'karmaScore',
   'pubAvailability',
+  'pam',
   'calendarReminderSent',
   'taskReminderSent',
   'ubiClaim',
@@ -314,6 +315,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
         let c = v?.content;
         if (!c) continue;
         if (typeof c === 'string' && c.endsWith('.box')) continue;
+        if (c.private === true) continue;
         if (c.type && HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
         if (c.type === 'larpHousePost' && !larpPostVisible(v.author, String(c.house || '').toLowerCase())) continue;
         if (typeof c.type === 'string' && /e2ee/i.test(c.type)) continue;

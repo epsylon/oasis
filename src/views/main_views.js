@@ -685,18 +685,19 @@ const renderCardMetaRow = (...nodes) => {
 };
 exports.renderCardMetaRow = renderCardMetaRow;
 
-const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters) => {
+const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters, pathFor = null) => {
   const ops = opinions || {};
   const total = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
   const myId = (config.keys && config.keys.id) ? config.keys.id : '';
   const alreadyVoted = Array.isArray(voters) && myId ? voters.includes(myId) : false;
+  const actionFor = (category) => typeof pathFor === 'function' ? pathFor(id, category) : `${basePath}/${encodeURIComponent(id)}/${category}`;
   const votingDetails = details({ class: 'opinions-voting-collapse' },
     summary({ class: total > 0 ? 'opinions-summary engage-on' : 'opinions-summary' },
       span({ class: 'opinions-summary-icon' }, 'ꔍ'),
       span({ class: 'opinions-summary-count' }, `(${total})`)),
     div({ class: 'voting-buttons' },
       opinionCategoriesList.map((category) =>
-        form({ method: 'POST', action: `${basePath}/${encodeURIComponent(id)}/${category}` },
+        form({ method: 'POST', action: actionFor(category) },
           returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
           button({ class: alreadyVoted ? 'vote-btn disabled' : 'vote-btn', type: 'submit', ...(alreadyVoted ? { disabled: true } : {}) },
             `${String(i18n['vote' + category.charAt(0).toUpperCase() + category.slice(1)] || category).toUpperCase()} [${ops[category] || 0}]`)
@@ -1950,6 +1951,9 @@ const template = (titlePrefix, ...elements) => {
         try {
           const onboarding = require('../models/onboarding_model');
           if (!onboarding.bannerVisible(config && config.path)) return null;
+          let here = '';
+          try { here = (require('../models/typed_log').requestScope.getStore() || {}).path || ''; } catch (_) {}
+          if (here === '/welcome' || here.startsWith('/welcome/')) return null;
           return div(
             { class: "update-banner welcome-banner" },
             span({ class: "update-banner-icon" }, "🌴"),

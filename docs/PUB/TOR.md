@@ -76,11 +76,11 @@ Then, in **Peers**:
 - **Connect**: host `<address>.onion`, the PUB port and the PUB key; or
 - **Import**: paste the full `onion:` address of the PUB.
 
-The PUB then appears in Peers like any other, with its onion host, a tick in the **TOR** column and the Oasis version it announces. **Graphos → Federation** draws the same PUBs, marking the ones that are reachable only over Tor.
+The PUB then appears in Peers like any other, marked as reachable over Tor.
 
 ## Notes
 
-- Without a local Tor, onion addresses cannot be reached: Peers shows the PUB as **TOR only**, and an invite code or an address that points to an onion host is refused with the same explanation until Tor runs. Every other failure to connect is shown in Peers with its own readable reason (not responding, refuses the connection, unknown address, different keys, and so on), so a Tor-only PUB is never mistaken for a dead one.
+- Without a local Tor, onion addresses cannot be reached: Peers shows the PUB as **TOR only**, and an invite code or an address that points to an onion host is refused with the same explanation until Tor runs.
 - An inhabitant only needs Tor running; there is nothing to open on their side.
 - Inhabitants and PUBs without Tor still get everything a Tor-only PUB carries, through any node that talks to both: the Tor-only PUB itself when it connects out to a clearnet PUB, or a PUB that also runs Tor. Give a Tor-only PUB at least one clearnet PUB to connect to, so it is part of the network instead of an island.
 - A PUB reachable both over its normal address and over Tor is reached over its normal address by everyone without Tor.

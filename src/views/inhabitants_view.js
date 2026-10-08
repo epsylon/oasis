@@ -471,3 +471,4 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
 
 exports.lastActivityBadge = lastActivityBadge;
 exports.resolvePhoto = resolvePhoto;
+exports.renderInhabitantCard = renderInhabitantCard;

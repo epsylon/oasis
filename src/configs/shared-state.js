@@ -41,10 +41,9 @@ module.exports = {
   getPhoneRoom: () => _phoneRoom,
   setPhoneRoom: (st) => { _phoneRoom = st || null; },
   getLiveRooms: () => _liveRooms.filter(r => !_dismissedLiveRooms.has(r.ref)),
-  setLiveRooms: (list) => {
+  setLiveRooms: (list, emptyRefs) => {
     _liveRooms = Array.isArray(list) ? list : [];
-    const live = new Set(_liveRooms.map(r => r.ref));
-    for (const ref of [..._dismissedLiveRooms]) if (!live.has(ref)) _dismissedLiveRooms.delete(ref);
+    for (const ref of (Array.isArray(emptyRefs) ? emptyRefs : [])) _dismissedLiveRooms.delete(String(ref));
   },
   dismissLiveRoom: (ref) => { if (ref) _dismissedLiveRooms.add(String(ref)); },
   getPubIds: () => _pubIds,
