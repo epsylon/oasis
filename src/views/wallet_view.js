@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, span, table, thead, tbody, tr, td, th, ul, li, a, br, label, img } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderWalletChip, renderStateChip } = require('./main_views');
+const { template, i18n, userLink, renderWalletChip, renderStateChip, paged } = require('./main_views');
 
 const TX_CATEGORY_CHIPS = {
     receive: ["mutuals", "\u2B07"],
@@ -71,7 +71,7 @@ exports.walletHistoryView = async (balance, transactions, address) => {
                 )
             ),
             tbody(
-                ...rows.map(tx => {
+                ...paged(rows).map(tx => {
                     const date = new Date((tx.time || tx.timereceived || 0) * 1000);
                     const amount = Number(tx.amount) || 0;
                     const fee = Number(tx.fee) || 0;

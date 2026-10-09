@@ -405,3 +405,6 @@ a.user-link:focus, button.user-link:focus {
 .map-stage .map-popup-meta { color: #777777; }
 .map-popup-close { color: #777777; }
 .map-popup-close:hover { color: #FF6F00; }
+.oasis-pager-info { color: #888888; }
+.oasis-pager-btn { background: #FFFFFF; color: #555555 !important; border: 1px solid #E0E0E0; text-decoration: none !important; }
+.oasis-pager-btn:hover, .oasis-pager-btn.active { border-color: #2C2C2C; color: #2C2C2C !important; text-decoration: none !important; }

@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -137,7 +137,7 @@ exports.campaignsView = async (campaigns, filter = "ALL", params = {}) => {
                 div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
               )
             ),
-            div({ class: "tribe-grid" }, list.length ? list.map(c => renderCampaignCard(c, params)) : p(i18n.campaignNoItems))
+            div({ class: "tribe-grid" }, list.length ? paged(list).map(c => renderCampaignCard(c, params)) : p(i18n.campaignNoItems))
           ]
     )
   );

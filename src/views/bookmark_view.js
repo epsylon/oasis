@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, textarea, br, a, span, 
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -250,7 +250,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
                 )
               )
             ),
-            div({ class: "bookmark-list" }, renderBookmarkList(list, filter, { q, sort, spreadMap: params.spreadMap }))
+            div({ class: "bookmark-list" }, renderBookmarkList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

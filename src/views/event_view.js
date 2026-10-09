@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -401,7 +401,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
             )
           )
         : filtered.length > 0
-          ? div({ class: "jobs-grid" }, filtered.map((e) => renderEventItem(e, currentFilter, params.spreadMap && params.spreadMap.get(e.id))))
+          ? div({ class: "jobs-grid" }, paged(filtered).map((e) => renderEventItem(e, currentFilter, params.spreadMap && params.spreadMap.get(e.id))))
           : div({ class: "no-content-box" }, p(i18n.noevents))
     )
   );

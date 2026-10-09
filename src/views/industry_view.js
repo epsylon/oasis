@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, img, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, renderCardMetaRow, moduleIsEmpty } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, renderCardMetaRow, moduleIsEmpty, paged } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderMapEmbedWithZoom } = require("./maps_view")
@@ -371,7 +371,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
                 )
               )
             ),
-            div({ class: "industry-list" }, renderFacilityList(facilitiesOrForm, f, params.spreadMap))
+            div({ class: "industry-list" }, renderFacilityList(paged(facilitiesOrForm), f, params.spreadMap))
           )
     )
   )

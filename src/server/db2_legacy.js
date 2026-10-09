@@ -7,7 +7,7 @@ const ssbKeys = require('ssb-keys');
 const ssbMsgs = require('ssb-msgs');
 const { heads } = require('ssb-sort');
 const Plugin = require('ssb-db2/indexes/plugin');
-const { where, and, or, type, author, descending, sortByArrival, toPullStream, seqs, isDecrypted } = require('ssb-db2/operators');
+const { where, and, or, type, author, descending, sortByArrival, toPullStream, seqs, isDecrypted, batch } = require('ssb-db2/operators');
 
 const BIPF_CONTENT = bipf.allocAndEncode('content');
 const BIPF_AUTHOR = bipf.allocAndEncode('author');
@@ -185,7 +185,7 @@ module.exports = [
       sbot.db.registerIndex(LinksIndex);
       const linksIndex = () => sbot.db.getIndex('oasisLinks');
 
-      const query = (ops, extra) => sbot.db.query(...[ops ? where(ops) : null, ...extra, toPullStream()].filter(Boolean));
+      const query = (ops, extra) => sbot.db.query(...[ops ? where(ops) : null, ...extra, batch(1000), toPullStream()].filter(Boolean));
 
       const stream = (ops, opts = {}) => {
         const shape = () => pull.map(m => legacy(m, { private: opts.private }));

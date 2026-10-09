@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -266,12 +266,12 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
         : isProducts
           ? div({ class: "shop-products-grid" },
               list.length
-                ? list.map(prod => renderProductCard(prod, prod.shopId, buildReturnTo(filter, { q }), params))
+                ? paged(list).map(prod => renderProductCard(prod, prod.shopId, buildReturnTo(filter, { q }), params))
                 : p(i18n.shopNoProducts)
             )
           : div({ class: "tribe-grid" },
               list.length
-                ? list.map(shopItem => renderShopCard(shopItem, filter, params))
+                ? paged(list).map(shopItem => renderShopCard(shopItem, filter, params))
                 : p(i18n.shopNoItems)
             )
     )
@@ -573,7 +573,7 @@ exports.shopOrdersView = async (shop, orders) => {
     { const cb = renderCallButton(o.buyer, { cls: "tribe-action-btn", pam: true }); if (cb) acts.push(cb); }
     return div({ class: "tribe-side-actions" }, ...acts)
   }
-  const rows = (orders || []).map(o => div({ class: "shop-order-card card-section" },
+  const rows = paged(orders || []).map(o => div({ class: "shop-order-card card-section" },
     div({ class: "card-chips-row" }, renderEncryptedChip(i18n), orderStatusChip(o.status)),
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderProduct || "Product"}:`), span({ class: "card-value" }, String(o.title || o.productId || ""))),
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderPrice || "Price"}:`), span({ class: "card-value" }, `${Number(o.price || 0).toFixed(6)} ECO`)),
@@ -611,7 +611,7 @@ exports.myPurchasesView = async (purchases, params = {}) => {
     }
     return acts.length ? div({ class: "tribe-side-actions" }, ...acts) : null
   }
-  const rows = (purchases || []).map(o => div({ class: "shop-order-card card-section" },
+  const rows = paged(purchases || []).map(o => div({ class: "shop-order-card card-section" },
     div({ class: "card-chips-row" }, renderEncryptedChip(i18n), orderStatusChip(o.status)),
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderProduct || "Product"}:`), span({ class: "card-value" }, String(o.title || o.productId || ""))),
     div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderPrice || "Price"}:`), span({ class: "card-value" }, `${Number(o.price || 0).toFixed(6)} ECO`)),

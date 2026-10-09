@@ -4,7 +4,7 @@ const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/renderStyledText");
 
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
@@ -483,7 +483,7 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
                 input({ type: "hidden", name: "filter", value: filter }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.mapSearchPlaceholder, class: "filter-box__input" }),
                 div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.mapSearchButton)))),
-            div({ class: "jobs-grid" }, renderMapList(list, filter, { q, spreadMap: params.spreadMap })))));
+            div({ class: "jobs-grid" }, renderMapList(paged(list), filter, { q, spreadMap: params.spreadMap })))));
 };
 
 exports.singleMapView = async (mapObj, filter = "all", params = {}) => {

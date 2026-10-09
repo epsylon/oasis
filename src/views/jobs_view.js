@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -523,7 +523,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
               )
             ),
             br(),
-            renderCVList(jobsOrCVs)
+            renderCVList(paged(jobsOrCVs))
           )
         : filter === "CREATE" || filter === "EDIT"
           ? (() => {
@@ -558,7 +558,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
                   button({ type: "submit", class: "filter-box__button" }, i18n.jobsSearchButton)
                 )
               ),
-              div({ class: "jobs-list" }, renderJobList(jobsOrCVs, filter, { ...params, search, minSalary, maxSalary, sort }))
+              div({ class: "jobs-list" }, renderJobList(paged(jobsOrCVs), filter, { ...params, search, minSalary, maxSalary, sort }))
             )
     )
   )

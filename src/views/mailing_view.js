@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, details, summary, ul, li, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { TEXT_CAP } = require('../backend/long_text');
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderContentActions, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderContentActions, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { renderStyledText } = require("../backend/renderStyledText");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -156,7 +156,7 @@ exports.mailingView = async (lists, filter = "ALL", params = {}) => {
                 div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
               )
             ),
-            list.length ? ul({ class: "mailing-archive" }, ...list.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0)).map(l => renderArchiveItem(l, params))) : div({ class: "tribe-grid" }, p(i18n.mailingNoItems))
+            list.length ? ul({ class: "mailing-archive" }, ...paged(list.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0))).map(l => renderArchiveItem(l, params))) : div({ class: "tribe-grid" }, p(i18n.mailingNoItems))
           ]
     )
   );

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, span, table, thead, tbody, tr, th, td, input, textarea, br, option, select, a, label } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderModuleStatsBy } = require("./main_views");
+const { template, i18n, renderModuleStatsBy, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -242,7 +242,7 @@ exports.logsView = (items, filter, mode, opts = {}) => {
   const body = section(
     div({ class: "tags-header module-header-line" }, h2(listTitle), p(description)),
     renderToolbar(filter, opts.search || {}, hasItems, items, emptyLogs, opts.avail || null),
-    div({ class: "logs-list" }, renderTable(items))
+    div({ class: "logs-list" }, renderTable(paged(items)))
   );
   return template(listTitle, body);
 };

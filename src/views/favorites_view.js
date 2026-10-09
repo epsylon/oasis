@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, a, span, img } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_TORRENTABLE } = require("./main_views");
+const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -221,7 +221,7 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "", param
           )
         )
       ),
-      div({ class: "bookmark-list" }, safeArr(items).length ? safeArr(items).map((it) => renderFavoriteCard(it, filter, params.spreadMap)) : p(i18n.favoritesNoItems))
+      div({ class: "bookmark-list" }, safeArr(items).length ? paged(safeArr(items)).map((it) => renderFavoriteCard(it, filter, params.spreadMap)) : p(i18n.favoritesNoItems))
     )
   );
 };

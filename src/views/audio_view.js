@@ -18,7 +18,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -281,7 +281,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
                 )
               )
             ),
-            div({ class: "audios-list" }, renderAudioList(list, filter, { q, sort, spreadMap: params.spreadMap }))
+            div({ class: "audios-list" }, renderAudioList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

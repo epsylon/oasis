@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged } = require("./main_views")
 const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
@@ -177,7 +177,7 @@ exports.roomsView = async (rooms, filter, roomToEdit, params = {}) => {
       isForm
         ? renderRoomForm(filter === "edit" ? roomToEdit : null, params)
         : (shown.length
-            ? ul({ class: "mailing-archive" }, ...shown.map(r => renderRoomItem(r, params)))
+            ? ul({ class: "mailing-archive" }, ...paged(shown).map(r => renderRoomItem(r, params)))
             : div({ class: "tribe-grid" }, p(i18n.roomsNoItems)))
     )
   )
@@ -396,7 +396,7 @@ exports.renderTribeRoomsSection = (tribe, rooms, occupancy, live, toolbar = null
   if (!items.length) return div({ class: "tribe-content-list" }, head, div({ class: "no-content-box" }, p(i18n.tribeRoomsEmpty)))
   return div({ class: "tribe-content-list" },
     head,
-    ul({ class: "mailing-archive" }, ...items.map(r => renderRoomItem(r, { occupancy, live })))
+    ul({ class: "mailing-archive" }, ...paged(items).map(r => renderRoomItem(r, { occupancy, live })))
   )
 }
 

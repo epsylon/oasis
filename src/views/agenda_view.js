@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, img, input, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
 const { safeExternalHref } = require("../backend/renderStyledText");
-const { template, i18n, userLink, renderContentActions, renderModuleStats, renderStateChip, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction } = require('./main_views');
+const { template, i18n, userLink, renderContentActions, renderModuleStats, renderStateChip, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
@@ -238,7 +238,7 @@ exports.agendaView = async (data, filter, q = '', extras = {}) => {
         )
       ),
       items.length
-        ? div({ class: 'jobs-grid agenda-list' }, ...items.map(item => renderAgendaItem(item, userId, filter, extras || {})))
+        ? div({ class: 'jobs-grid agenda-list' }, ...paged(items).map(item => renderAgendaItem(item, userId, filter, extras || {})))
         : div({ class: 'no-content-box' }, p({ class: 'no-content' }, i18n.agendaNoItems))
     )
   );

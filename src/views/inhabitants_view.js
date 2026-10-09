@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, span, strong } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { renderCallButton, template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock, renderModuleStats } = require('./main_views');
+const { renderCallButton, template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock, renderModuleStats, paged } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { renderContentStats } = require('./clearnet_view');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -312,13 +312,13 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
         )
       ),
       filter === 'GALLERY'
-        ? renderGalleryInhabitants(inhabitants)
+        ? renderGalleryInhabitants(paged(inhabitants))
         : div({ class: 'inhabitants-list' },
             inhabitants.length
-              ? inhabitants.map(user => renderInhabitantCard(user, filter, currentUserId, fediverseConfigured))
+              ? paged(inhabitants).map(user => renderInhabitantCard(user, filter, currentUserId, fediverseConfigured))
               : p({ class: 'no-results' }, i18n.noInhabitantsFound)
           ),
-      ...renderLightbox(inhabitants)
+      ...renderLightbox(paged(inhabitants))
     )
   );
 };

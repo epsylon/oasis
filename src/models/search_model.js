@@ -352,7 +352,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     return Array.from(map.values());
   };
 
-  const search = async ({ query, types = [], resultsPerPage = "10" }) => {
+  const search = async ({ query, types = [] }) => {
     const ssbClient = await openSsb();
     const viewerId = ssbClient.id;
     const queryLower = String(query || '').toLowerCase();
@@ -473,11 +473,6 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       acc[t].push(msg);
       return acc;
     }, {});
-
-    if (resultsPerPage !== "all") {
-      const limit = parseInt(resultsPerPage, 10);
-      for (const key in grouped) grouped[key] = grouped[key].slice(0, limit);
-    }
 
     return grouped;
   };

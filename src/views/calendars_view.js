@@ -1,6 +1,6 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views")
 const { renderMapEmbed } = require("./maps_view")
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -236,7 +236,7 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
       showForm
         ? renderCreateForm(calendarToEdit, params)
         : (calendars.length > 0
-            ? div({ class: "tribe-grid" }, ...calendars.map(c => renderCalendarCard(c, params && params.spreadMap && params.spreadMap.get(c.rootId))))
+            ? div({ class: "tribe-grid" }, ...paged(calendars).map(c => renderCalendarCard(c, params && params.spreadMap && params.spreadMap.get(c.rootId))))
             : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.calendarsNoItems || "No calendars found.")))
     )
   )

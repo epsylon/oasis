@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, span, pre, table, thead, tbody, tr, td, th, br, strong, label, ul, li } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, userLink, formatCarbon, renderStateChip, renderModuleStats, renderWalletChip } = require("../views/main_views");
+const { template, i18n, userLink, formatCarbon, renderStateChip, renderModuleStats, renderWalletChip, paged } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
@@ -625,8 +625,8 @@ const renderEpochList = (epochs = []) =>
         { class: "bank-epochs" },
         thead(tr(th(i18n.bankEpochId), th(i18n.bankPool), th(i18n.bankEpochAllocations), th(""))),
         tbody(
-          ...epochs
-            .sort((a, b) => String(b.id).localeCompare(String(a.id)))
+          ...paged(epochs
+            .sort((a, b) => String(b.id).localeCompare(String(a.id))))
             .map(e =>
               tr(
                 td(e.id),
@@ -773,7 +773,7 @@ const renderAddresses = (data, userId) => {
           table({ class: "bank-addresses" },
             thead(tr(th(i18n.bankAddAddressLabel.replace(/\s*\(.*\)\s*$/, "")), th(i18n.bankAddAddressUser), th(i18n.bankAddress), th(i18n.bankAddressSource), th(""))),
             tbody(
-              ...rows.map(r => tr(
+              ...paged(rows).map(r => tr(
                 td(r.label || (r.id ? "" : i18n.bankAddressUnnamed)),
                 td(r.id ? userLink(r.id) : ""),
                 td(strong({ class: "bank-address-code" }, r.address)),
@@ -834,7 +834,7 @@ const renderBankingView = (data, filter, userId, isPub) =>
         : filter === "addresses"
         ? renderAddresses(data, userId)
         : allocationsTable(
-            filterAllocations((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), filter, userId),
+            paged(filterAllocations((data.allocations || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)), filter, userId)),
             userId
           )
     )
@@ -895,7 +895,7 @@ const renderEpochView = (epoch, allocations, userId = "", data = {}) => {
               )
             ),
             h2(i18n.bankEpochAllocations),
-            allocationsTable(rows, userId)
+            allocationsTable(paged(rows), userId)
           )
     )
   );

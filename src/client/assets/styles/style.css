@@ -8837,3 +8837,8 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 
 .agenda-card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .agenda-list.jobs-grid{margin-top:12px}
+.oasis-pager{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin:24px 0 8px 0}
+.oasis-pager-info{color:#9a8a2e;font-size:12px;margin-right:4px}
+.oasis-pager-sizes{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-right:auto;padding:0}
+.oasis-pager-btn{display:inline-block;padding:6px 14px;background:#1C1C1C;color:#E6C200;border:1px solid #333;border-radius:14px;font-size:13px;text-decoration:none;transition:border-color .15s ease,color .15s ease,background .15s ease}
+.oasis-pager-btn:hover,.oasis-pager-btn.active{border-color:#FFD700;color:#FFD700;text-decoration:none}

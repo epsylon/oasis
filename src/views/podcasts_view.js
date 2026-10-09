@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, audio: audioHyperaxe, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderStyledText } = require("../backend/renderStyledText");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
@@ -148,7 +148,7 @@ exports.podcastsView = async (channels, filter = "ALL", params = {}) => {
                 div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
               )
             ),
-            div({ class: "tribe-grid" }, list.length ? list.map(c => renderChannelCard(c, params)) : p(i18n.podcastNoItems))
+            div({ class: "tribe-grid" }, list.length ? paged(list).map(c => renderChannelCard(c, params)) : p(i18n.podcastNoItems))
           ]
     )
   );

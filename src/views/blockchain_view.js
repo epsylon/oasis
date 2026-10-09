@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, input, span, pre, table, tr, td, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink } = require("../views/main_views");
+const { template, i18n, userLink, paged } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
@@ -521,7 +521,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
       h2({ class: 'block-diagram-title' }, 'Blockchain Blocks'),
       shown.length === 0
         ? div(p(i18n.blockchainNoBlocks))
-        : shown
+        : paged(shown
             .sort((a,b)=>{
               const ta = a.type==='market'&&a.content.updatedAt
                 ? new Date(a.content.updatedAt).getTime()
@@ -530,7 +530,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
                 ? new Date(b.content.updatedAt).getTime()
                 : b.ts;
               return tb - ta;
-            })
+            }))
             .map(block=>
               div({ class:'block' },
                 div({ class:'block-buttons' },

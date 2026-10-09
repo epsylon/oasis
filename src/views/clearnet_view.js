@@ -409,32 +409,34 @@ const renderClearnetNotFound = () => {
   });
 };
 
-const CLEARNET_PAGE_SIZE = 100;
 const CLEARNET_PAGER_CSS = `
 .cn-pager{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin:24px 0 8px 0}
 .cn-pager-info{color:var(--fg-dim);font-size:12px;margin-right:4px}
+.cn-pager-sizes{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-right:auto}
 .cn-pager-btn{display:inline-block;padding:6px 14px;background:var(--bg-elev);color:var(--fg-soft);border:1px solid var(--border);border-radius:14px;font-size:13px;text-decoration:none;transition:border-color .15s ease,color .15s ease,background .15s ease}
-.cn-pager-btn:hover{border-color:var(--fg);color:var(--fg);text-decoration:none}
+.cn-pager-btn:hover,.cn-pager-btn.active{border-color:var(--fg);color:var(--fg);text-decoration:none}
 `;
-const paginateClearnet = (list, page) => {
-  const all = Array.isArray(list) ? list : [];
-  const pages = Math.max(1, Math.ceil(all.length / CLEARNET_PAGE_SIZE));
-  const current = Math.min(pages, Math.max(1, parseInt(page, 10) || 1));
-  return { items: all.slice((current - 1) * CLEARNET_PAGE_SIZE, current * CLEARNET_PAGE_SIZE), page: current, pages, total: all.length };
-};
-const renderClearnetPager = ({ base, params = {}, page, pages }) => {
-  if (!(pages > 1)) return '';
-  const href = (n) => {
+const paginateClearnet = (list, page) => mv().slicePage(list, page, mv().listPerPage(cnScope().query));
+const renderClearnetPager = ({ base, params = {}, page, pages, per, total }) => {
+  const query = String(cnScope().query || '');
+  const sizes = !!per && mv().showPageSizes(total, query);
+  if (!(pages > 1) && !sizes) return '';
+  const chosen = new URLSearchParams(query).has('perPage');
+  const href = (n, size) => {
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) q.set(k, String(v));
+    if (size || chosen) q.set('perPage', size || per);
     if (n > 1) q.set('page', String(n));
     const s = q.toString();
     return escapeHtml(s ? `${base}?${s}` : base);
   };
-  const info = cnText('cnPageOf', 'Page {page} of {pages}').replace('{page}', String(page)).replace('{pages}', String(pages));
+  const sizeLinks = sizes
+    ? `<span class="cn-pager-sizes"><span class="cn-pager-info">${escapeHtml(cnText('searchPerPageLabel', 'Results per page'))}</span>${mv().LIST_PAGE_SIZES.map(s => `<a class="cn-pager-btn${s === per ? ' active' : ''}" href="${href(1, s)}">${escapeHtml(mv().pageSizeLabel(s))}</a>`).join('')}</span>`
+    : '';
+  const info = pages > 1 ? `<span class="cn-pager-info">${escapeHtml(cnText('cnPageOf', 'Page {page} of {pages}').replace('{page}', String(page)).replace('{pages}', String(pages)))}</span>` : '';
   const prev = page > 1 ? `<a class="cn-pager-btn" href="${href(page - 1)}">${escapeHtml(cnText('cnPrevPage', '← Previous'))}</a>` : '';
   const next = page < pages ? `<a class="cn-pager-btn" href="${href(page + 1)}">${escapeHtml(cnText('cnNextPage', 'Next →'))}</a>` : '';
-  return `<div class="cn-pager"><span class="cn-pager-info">${escapeHtml(info)}</span>${prev}${next}</div>`;
+  return `<div class="cn-pager">${sizeLinks}${info}${prev}${next}</div>`;
 };
 
 const renderClearnetMediaView = ({ kind, item }) => {
@@ -575,7 +577,6 @@ module.exports = {
   renderClearnetSearchForm,
   renderClearnetPage,
   renderClearnetNotFound,
-  CLEARNET_PAGE_SIZE,
   CLEARNET_PAGER_CSS,
   paginateClearnet,
   renderClearnetPager,

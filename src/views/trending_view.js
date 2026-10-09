@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
@@ -377,7 +377,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
       ),
       section(
         cards.length
-          ? div({ class: 'trending-container' }, ...cards)
+          ? div({ class: 'trending-container' }, ...paged(cards))
           : div({ class: 'no-results' }, p(i18n.trendingNoContentMessage))
       )
     )

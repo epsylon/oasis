@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow, paged } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
@@ -210,7 +210,7 @@ exports.wikiView = async (pages, filter = "all", params = {}) => {
               )
             ),
             div({ class: "tribe-grid" },
-              list.length ? list.map(pg => renderPageCard(pg, params)) : p(i18n.wikiNoPages)
+              list.length ? paged(list).map(pg => renderPageCard(pg, params)) : p(i18n.wikiNoPages)
             )
           ]
     )
@@ -226,7 +226,7 @@ exports.wikiChangesView = async (changes, params = {}) => {
     section(
       div({ class: "tags-header" }, h2(i18n.wikiChanges)),
       list.length
-        ? div({ class: "wiki-changes" }, ...list.map(c =>
+        ? div({ class: "wiki-changes" }, ...paged(list).map(c =>
             div({ class: "card-section wiki-change" },
               div({ class: "card-field" },
                 span({ class: "card-label" }, `#${c.index}`),
@@ -371,7 +371,7 @@ exports.renderTribeWikiSection = (tribe, pages, toolbar = null) => {
   if (!items.length) return div({ class: "tribe-content-list" }, header, div({ class: "no-content-box" }, p(i18n.tribeWikiEmpty)));
   return div({ class: "tribe-content-list" },
     header,
-    div({ class: "tribe-grid" }, ...items.map(pg => renderPageCard(pg, { tribeId: tribe.id })))
+    div({ class: "tribe-grid" }, ...paged(items).map(pg => renderPageCard(pg, { tribeId: tribe.id })))
   );
 };
 

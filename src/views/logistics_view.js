@@ -1,5 +1,5 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -235,7 +235,7 @@ exports.logisticsView = async (routes, filter = "ALL", params = {}) => {
                 div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
               )
             ),
-            div({ class: "tribe-grid" }, list.length ? list.map(r => renderRouteCard(r, params)) : p(i18n.logisticsNoItems))
+            div({ class: "tribe-grid" }, list.length ? paged(list).map(r => renderRouteCard(r, params)) : p(i18n.logisticsNoItems))
           ]
     )
   );

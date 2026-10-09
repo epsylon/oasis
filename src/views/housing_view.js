@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
-const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderMediaThumb, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -412,7 +412,7 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
                   button({ type: "submit", class: "filter-box__button" }, i18n.housingSearchButton)
               )
             ),
-            div({ class: "housing-list" }, renderHousingList(items, filter, params))
+            div({ class: "housing-list" }, renderHousingList(paged(items), filter, params))
           )
     )
   )

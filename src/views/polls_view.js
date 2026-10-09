@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
@@ -236,7 +236,7 @@ exports.pollsView = async (polls = [], filter = "ALL", params = {}) => {
     renderFilterBar(mode, params.q, true, polls, params.censusList),
     section(
       polls.length
-        ? div({ class: "jobs-grid" }, ...polls.map(pl => renderPollCard(pl, mode, spreadMap.get(pl.id))))
+        ? div({ class: "jobs-grid" }, ...paged(polls).map(pl => renderPollCard(pl, mode, spreadMap.get(pl.id))))
         : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.pollsNoItems))
     )
   );

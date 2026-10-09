@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderContentActions, renderEngagement, renderModuleStats, moduleIsEmpty, paged } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledHtml, renderStyledText } = require("../backend/renderStyledText");
@@ -267,7 +267,7 @@ exports.feedView = (feeds, opts = "ALL") => {
       filter === "CREATE"
         ? renderFeedComposer({ rows: 4 })
         : feeds && feeds.length > 0
-          ? div({ class: "feed-container" }, feeds.map((feed) => renderFeedCard(feed, spreadMap)).filter(Boolean))
+          ? div({ class: "feed-container" }, paged(feeds.filter((feed) => String((feed.value.content || {}).text || "").trim())).map((feed) => renderFeedCard(feed, spreadMap)).filter(Boolean))
           : div({ class: "no-results" }, p(i18n.noFeedsFound))
     )
   );

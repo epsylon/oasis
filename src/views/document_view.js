@@ -4,7 +4,7 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -218,7 +218,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
                 )
               )
             ),
-            div({ class: "documents-list" }, renderDocumentList(list, filter, { q, sort, spreadMap: params.spreadMap }))
+            div({ class: "documents-list" }, renderDocumentList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

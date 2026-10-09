@@ -1,5 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -210,7 +210,7 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
       : div(
           filteredPads.length === 0
             ? p({ class: "no-content" }, i18n.padsNoItems || "No pads found.")
-            : div({ class: "tribe-grid pads-grid" }, ...filteredPads.map(pd => renderPadCard(pd, filter, params && params.spreadMap && params.spreadMap.get(pd.rootId))))
+            : div({ class: "tribe-grid pads-grid" }, ...paged(filteredPads).map(pd => renderPadCard(pd, filter, params && params.spreadMap && params.spreadMap.get(pd.rootId))))
         )
   )
 

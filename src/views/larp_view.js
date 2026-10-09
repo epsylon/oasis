@@ -1,6 +1,6 @@
 const { div, h1, h2, h3, p, section, button, form, input, span, img, a, br, table, tr, td, textarea, label, strong, details, summary } = require("../server/node_modules/hyperaxe");
 const { renderStyledText } = require("../backend/renderStyledText");
-const { template, i18n, userLink } = require("./main_views");
+const { template, i18n, userLink, paged } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
@@ -206,7 +206,7 @@ const renderPostsBlock = (posts, house, canPost) => {
     stream.length === 0
       ? p({ class: 'empty' }, i18n.larpPostsEmpty || 'No posts yet.')
       : div({ class: 'larp-posts-list' },
-          stream.map(entry => div({ class: entry.post.author === userId ? 'larp-post own-comment' : 'larp-post' },
+          paged(stream).map(entry => div({ class: entry.post.author === userId ? 'larp-post own-comment' : 'larp-post' },
             entry.post.author === userId && entry.post.id
               ? form({ method: 'POST', action: `/larp/post/delete/${encodeURIComponent(entry.post.id)}`, class: 'comment-delete-form' },
                   button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.chatDelete }, '✕'))

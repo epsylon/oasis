@@ -489,6 +489,62 @@ const renderMobileCounters = () => {
   );
 };
 
+const LIST_PAGE_SIZE = 50;
+const LIST_PAGE_SIZES = ['10', '50', '100', 'all'];
+const listScope = () => { try { return require('../models/typed_log').requestScope.getStore() || null; } catch (_) { return null; } };
+const listPerPage = (query) => {
+  const v = String(new URLSearchParams(String(query || '')).get('perPage') || '').toLowerCase();
+  return LIST_PAGE_SIZES.includes(v) ? v : String(LIST_PAGE_SIZE);
+};
+const slicePage = (list, page, per) => {
+  const all = Array.isArray(list) ? list : [];
+  const size = per === 'all' ? Math.max(1, all.length) : Number(per) || LIST_PAGE_SIZE;
+  const pages = Math.max(1, Math.ceil(all.length / size));
+  const current = Math.min(pages, Math.max(1, parseInt(page, 10) || 1));
+  return { items: all.slice((current - 1) * size, current * size), page: current, pages, total: all.length, per: String(per) };
+};
+const showPageSizes = (total, query) => total > Number(LIST_PAGE_SIZES[0]) && (total > LIST_PAGE_SIZE || new URLSearchParams(String(query || '')).has('perPage'));
+const pageSizeLabel = (s) => s === 'all' ? String(i18n.all || 'All').toUpperCase() : s;
+exports.LIST_PAGE_SIZE = LIST_PAGE_SIZE;
+exports.LIST_PAGE_SIZES = LIST_PAGE_SIZES;
+exports.listPerPage = listPerPage;
+exports.slicePage = slicePage;
+exports.showPageSizes = showPageSizes;
+exports.pageSizeLabel = pageSizeLabel;
+const paged = (list) => {
+  const store = listScope();
+  const query = store ? store.query : '';
+  const { items, ...pager } = slicePage(list, new URLSearchParams(String(query || '')).get('page'), listPerPage(query));
+  if (store) store.pager = pager;
+  return items;
+};
+exports.paged = paged;
+exports.currentPerPage = () => { const store = listScope(); return listPerPage(store ? store.query : ''); };
+const renderListPager = () => {
+  const store = listScope();
+  const pg = store && store.pager;
+  if (!pg) return null;
+  const sizes = showPageSizes(pg.total, store.query);
+  if (!(pg.pages > 1) && !sizes) return null;
+  const href = (n, per) => {
+    const q = new URLSearchParams(String(store.query || ''));
+    for (const k of ['page', 'error', 'errsig']) q.delete(k);
+    if (per) q.set('perPage', per);
+    if (n > 1) q.set('page', String(n));
+    const s = q.toString();
+    return s ? `${store.path}?${s}` : store.path;
+  };
+  return nav({ class: 'oasis-pager' },
+    sizes ? span({ class: 'oasis-pager-sizes' },
+      span({ class: 'oasis-pager-info' }, i18n.searchPerPageLabel || 'Results per page'),
+      ...LIST_PAGE_SIZES.map(s => a({ href: href(1, s), class: s === pg.per ? 'oasis-pager-btn active' : 'oasis-pager-btn' }, pageSizeLabel(s)))
+    ) : null,
+    pg.pages > 1 ? span({ class: 'oasis-pager-info' }, String(i18n.cnPageOf || 'Page {page} of {pages}').replace('{page}', String(pg.page)).replace('{pages}', String(pg.pages))) : null,
+    pg.page > 1 ? a({ href: href(pg.page - 1), class: 'oasis-pager-btn' }, i18n.cnPrevPage || '← Previous') : null,
+    pg.page < pg.pages ? a({ href: href(pg.page + 1), class: 'oasis-pager-btn' }, i18n.cnNextPage || 'Next →') : null
+  );
+};
+
 const renderLogWindowNote = () => {
   let store = null;
   try { store = require('../models/typed_log').requestScope.getStore(); } catch (_) { store = null; }
@@ -2139,7 +2195,7 @@ const template = (titlePrefix, ...elements) => {
             )
           )
         ),
-        main({ id: "content", class: "main-column" }, elements, renderLogWindowNote(), renderMobileCounters())
+        main({ id: "content", class: "main-column" }, elements, renderListPager(), renderLogWindowNote(), renderMobileCounters())
       ),
     renderFooter()
     )
@@ -3123,7 +3179,7 @@ const buildClearnetHub = ({ items = {}, filterBase, filterType = '', query = '',
     }).join('')}
   </div>`;
   const paged = paginateClearnet(visibleItems, page);
-  const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter, q: query }, page: paged.page, pages: paged.pages });
+  const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter, q: query }, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
   const sections = visibleItems.length
     ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${visibleItems.length})</h2><div class="cn-hub-grid">${paged.items.map(it => renderHubItem(it.modulePath, it)).join('')}</div>${pager}`
     : (allItems.length ? `${filterButtons}<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
@@ -3218,7 +3274,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
     }).join('')}
   </div>`;
   const paged = paginateClearnet(visibleItems, page);
-  const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter }, page: paged.page, pages: paged.pages });
+  const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter }, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
   const sections = totalCount
     ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${totalCount})</h2><div class="cn-hub-grid">${paged.items.map(it => renderHubItem(it.modulePath, it)).join('')}</div>${pager}`
     : (allItems.length ? `${filterButtons}<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
@@ -3529,11 +3585,10 @@ exports.authorView = async ({
           ? authorActions.filter(a => keyToTypes[activeFilter].has(a.type))
           : authorActions;
         visible.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-        const limited = visible.slice(0, 50);
         const { renderActionCards } = require('./activity_view');
         mainColumnContent.push(filterRow);
         mainColumnContent.push(div({ class: 'feed-container profile-module-section' },
-          renderActionCards(limited, (config.keys && config.keys.id) ? config.keys.id : '', allActions || limited, spreadMap instanceof Map ? spreadMap : new Map())
+          renderActionCards(visible, (config.keys && config.keys.id) ? config.keys.id : '', allActions || visible, spreadMap instanceof Map ? spreadMap : new Map(), { paged: true })
         ));
       }
     }
@@ -4558,7 +4613,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
           const msgTs = (m) => new Date(m?.value?.content?.sentAt || m.timestamp || 0).getTime()
           if (sortMode === 'recent') {
             if (!sorted.length) return p({ class: 'empty' }, i18n.noPrivateMessages)
-            return [...sorted].sort((a, b) => msgTs(b) - msgTs(a)).map(renderMsg)
+            return paged([...sorted].sort((a, b) => msgTs(b) - msgTs(a))).map(renderMsg)
           }
 
           const threadGroups = {}
@@ -4580,7 +4635,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
           }, 0)
           threadOrder.sort((a, b) => threadTs(b) - threadTs(a))
 
-          return threadOrder.map(tid => {
+          return paged(threadOrder).map(tid => {
             const msgs = threadGroups[tid]
             const latest = msgs[msgs.length - 1]
             const earlier = msgs.slice(0, -1)

@@ -413,3 +413,6 @@ nav, .sidebar-left nav, .sidebar-right nav, .sidebar-left ul, .sidebar-right ul 
 .map-stage .map-popup-meta { color: #00AA00; }
 .map-popup-close { color: #00AA00; }
 .map-popup-close:hover { color: #ffffff; }
+.oasis-pager-info { color: #008800; }
+.oasis-pager-btn { background: #0a0a0a; color: #00CC00; border: 1px solid #00FF00; }
+.oasis-pager-btn:hover, .oasis-pager-btn.active { border-color: #00FF00; color: #00FF00; }

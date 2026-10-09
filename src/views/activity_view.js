@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction } = require('./main_views');
+const { template, i18n, paged, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 const { roomNumberOf } = require('../models/phone_number');
 
@@ -336,7 +336,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
   }
 
   const seenDocumentTitles = new Set();
-  const items = buildActivityItemsWithPostThreads(deduped, all);
+  const grouped = buildActivityItemsWithPostThreads(deduped, all);
+  const items = extras && extras.paged ? paged(grouped) : grouped;
 
   const spreadOrdinalById = new Map();
   const spreadsByLink = new Map();
@@ -2323,7 +2324,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
           )
         )
       ),
-    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, rawActions, spreadMap, extras))
+    section({ class: 'feed-container' }, renderActionCards(filteredActions, userId, rawActions, spreadMap, { ...extras, paged: true }))
     )
   );
 

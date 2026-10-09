@@ -1,6 +1,6 @@
 const { hr, div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -512,7 +512,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                 ]
           )
         : filtered.length > 0
-          ? div({ class: "jobs-grid" }, filtered.map((r) => renderReportCard(r, userId, filter, params.spreadMap && params.spreadMap.get(r.id))))
+          ? div({ class: "jobs-grid" }, paged(filtered).map((r) => renderReportCard(r, userId, filter, params.spreadMap && params.spreadMap.get(r.id))))
           : div({ class: "no-content-box" }, p(i18n.reportsNoItems))
     )
   );

@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -326,7 +326,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
             )
           )
         : filtered.length > 0
-          ? div({ class: "jobs-grid" }, filtered.map((t) => renderTaskItem(t, currentFilter, params.spreadMap && params.spreadMap.get(t.id))))
+          ? div({ class: "jobs-grid" }, paged(filtered).map((t) => renderTaskItem(t, currentFilter, params.spreadMap && params.spreadMap.get(t.id))))
           : div({ class: "no-content-box" }, p(i18n.notasks))
     )
   );

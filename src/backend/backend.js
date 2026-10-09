@@ -3760,7 +3760,7 @@ const resolveCommentComponents = async function (ctx) {
   }
   return { messages, myFeedId, parentMessage, contentWarning };
 };
-const { clearnetHubView, authorView, previewCommentView, commentView, editProfileView, likesView, supportersView, threadView, privateView, previewSubtopicView, subtopicView, imageSearchView, setLanguage, tribeAccessDeniedView, inviteRequiredView, clearnetInhabitantView, clearnetBlogView } = require("../views/main_views");
+const { clearnetHubView, authorView, previewCommentView, commentView, editProfileView, likesView, supportersView, threadView, privateView, previewSubtopicView, subtopicView, imageSearchView, setLanguage, tribeAccessDeniedView, inviteRequiredView, clearnetInhabitantView, clearnetBlogView, listPerPage } = require("../views/main_views");
 const { activityView } = require("../views/activity_view");
 const { cvView, createCVView } = require("../views/cv_view");
 const { indexingView } = require("../views/indexing_view");
@@ -4575,7 +4575,8 @@ router
     const fromTs = ctx.query.from ? new Date(ctx.query.from).getTime() : null;
     const toTs = ctx.query.to ? new Date(ctx.query.to).getTime() : null;
     const query = ctx.query.query || '';
-    if (!query) return ctx.body = await searchView({ messages: [], query, types: [] });
+    const types = [].concat(ctx.query.type || []).map(String).filter(Boolean);
+    if (!query) return ctx.body = await searchView({ messages: [], query, types });
     const userId = getViewerId();
     const allTribes = await tribesModel.listAll();
     const anonTribeIds = new Set(allTribes.filter(t => t.isAnonymous === true).map(t => t.id));
@@ -4594,7 +4595,7 @@ router
       if (c.type === 'schoolCourse' && String(c.visibility || '').toUpperCase() === 'INVITE' && c.author !== userId && !(Array.isArray(c.invited) && c.invited.includes(userId))) return false;
       return true;
     });
-    const results = await searchModel.search({ query, types: [] });
+    const results = await searchModel.search({ query, types });
     try {
       if (checkMod(ctx, 'aiMod') && aiEmbedder.isInstalled()) {
         const ssbSem = await cooler.open();
@@ -4643,7 +4644,7 @@ router
       if (Number.isFinite(toTs)) scoped = scoped.filter(m => (m.value?.timestamp || m.timestamp || 0) <= toTs);
       if (scoped.length > 0) finalResults[type] = scoped;
     }
-    ctx.body = await searchView({ results: finalResults, query, types: [], ...(await searchExtras(finalResults)) });
+    ctx.body = await searchView({ results: finalResults, query, types, ...(await searchExtras(finalResults)) });
   })
   .get("/images", async (ctx) => {
     if (!checkMod(ctx, 'imagesMod')) { ctx.redirect('/modules'); return; }
@@ -6373,7 +6374,9 @@ router
     } catch (_) {}
     const favIndex = await contentFavorites.getFavoriteIndex().catch(() => new Map());
     await attachCommentMeta(allActions);
-    ctx.body = activityView(allActions, filter, userId, q, { spreadMap, favIndex, returnTo: `/activity?filter=${encodeURIComponent(filter)}` });
+    const actPage = parseInt(String((ctx.query && ctx.query.page) || ''), 10);
+    const actPer = ctx.query && ctx.query.perPage ? listPerPage(ctx.querystring) : '';
+    ctx.body = activityView(allActions, filter, userId, q, { spreadMap, favIndex, returnTo: `/activity?filter=${encodeURIComponent(filter)}${q ? `&q=${encodeURIComponent(q)}` : ''}${actPer ? `&perPage=${actPer}` : ''}${actPage > 1 ? `&page=${actPage}` : ''}` });
   })
   .get("/profile", async (ctx) => {
     const myFeedId = await meta.myFeedId(), gt = Number(ctx.request.query.gt || -1), lt = Number(ctx.request.query.lt || -1);
@@ -10512,48 +10515,12 @@ router
     ctx.redirect('/inbox');
   })
   .post("/search", koaBody(), async (ctx) => {
-    const b = ctx.request.body, query = b.query || "";
-    let types = b.type || [];
-    if (typeof types === "string") types = [types];
-    if (!Array.isArray(types)) types = [];
-    if (!query) return ctx.body = await searchView({ messages: [], query, types });
-    const userId = getViewerId();
-    const allTribes = await tribesModel.listAll();
-    const anonTribeIds = new Set(allTribes.filter(t => t.isAnonymous === true).map(t => t.id));
-    const applySearchPrivacy = (msgs) => msgs.filter(msg => {
-      const c = msg.value?.content;
-      if (!c) return true;
-      if (c.type === 'pub') return false;
-      if (Array.isArray(c.recps)) return false;
-      if (c.type === 'post' && (c.private === true || c.recps)) return false;
-      if (c.tribeId && anonTribeIds.has(c.tribeId)) return false;
-      if (c.type === 'event' && c.isPublic === 'private' && c.organizer !== userId && !(Array.isArray(c.attendees) && c.attendees.includes(userId))) return false;
-      if (c.type === 'task' && String(c.isPublic).toUpperCase() === 'PRIVATE' && c.author !== userId && !(Array.isArray(c.assignees) && c.assignees.includes(userId))) return false;
-      if (c.status === 'PRIVATE') return false;
-      if (c.type === 'shop' && (c.visibility === 'CLOSED' || c.encryptedPayload) && c.author !== userId) return false;
-      if (c.type === 'schoolCourse' && c.encryptedPayload) return false;
-      if (c.type === 'schoolCourse' && String(c.visibility || '').toUpperCase() === 'INVITE' && c.author !== userId && !(Array.isArray(c.invited) && c.invited.includes(userId))) return false;
-      return true;
-    });
-    const results = await searchModel.search({ query, types });
-    try {
-      if (checkMod(ctx, 'aiMod') && aiEmbedder.isInstalled()) {
-        const ssbSem = await cooler.open();
-        const sem = await semanticSearch.search(ssbSem, query, { embed: aiEmbedder.embed, cosine: aiEmbedder.cosine, limit: getConfig().ssbLogStream?.limit || 1000 });
-        for (const { msg } of sem) {
-          const t = msg && msg.value && msg.value.content && msg.value.content.type;
-          if (!t) continue;
-          if (!Array.isArray(results[t])) results[t] = [];
-          if (!results[t].some(m => m && m.key === msg.key)) results[t].push(msg);
-        }
-      }
-    } catch (_) {}
-    const searchResults = Object.entries(results).reduce((acc, [type, msgs]) => {
-      const filtered = applySearchPrivacy(msgs).map(msg => (!msg.value?.content) ? {} : { ...msg, content: msg.value.content, author: msg.value.content.author || 'Unknown' });
-      if (filtered.length > 0) acc[type] = filtered;
-      return acc;
-    }, {});
-    ctx.body = await searchView({ results: searchResults, query, types, ...(await searchExtras(searchResults)) });
+    const b = ctx.request.body || {};
+    const q = new URLSearchParams();
+    for (const k of ['query', 'from', 'to', 'inhabitant', 'perPage']) if (typeof b[k] === 'string' && b[k]) q.set(k, b[k]);
+    for (const t of [].concat(b.type || [])) if (typeof t === 'string' && t) q.append('type', t);
+    const s = q.toString();
+    ctx.redirect(s ? `/search?${s}` : '/search');
   })
   .post("/subtopic/preview/:message",
     koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }),

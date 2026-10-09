@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE } = require("./main_views");
+const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged } = require("./main_views");
 const { getViewDetailsAction } = require("./activity_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -96,7 +96,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
     ),
     section(
       items.length
-        ? div({ class: "mentions-list" }, ...items.map(item => renderMentionCard(item, readKeys, params)))
+        ? div({ class: "mentions-list" }, ...paged(items).map(item => renderMentionCard(item, readKeys, params)))
         : div({ class: "no-content-box" }, p({ class: "empty" }, i18n.noMentions))
     )
   );

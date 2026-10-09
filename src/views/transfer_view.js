@@ -1,6 +1,6 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { getConfig } = require('../configs/config-manager.js');
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -427,7 +427,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
             ),
             filtered.length
               ? div({ class: "jobs-grid transfers-grid" },
-                  filtered.map(t => generateTransferCard(t, normalizedFilter, { q, minAmount: minAmountRaw, maxAmount: maxAmountRaw, sort, spreadMap: params.spreadMap }))
+                  paged(filtered).map(t => generateTransferCard(t, normalizedFilter, { q, minAmount: minAmountRaw, maxAmount: maxAmountRaw, sort, spreadMap: params.spreadMap }))
                 )
               : div({ class: "no-content-box" }, p(q || String(minAmountRaw) || String(maxAmountRaw) ? i18n.transfersNoMatch : i18n.transfersNoItems))
           )

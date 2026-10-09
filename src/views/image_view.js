@@ -4,7 +4,7 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
@@ -288,10 +288,10 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
                 )
               )
             ),
-            filter === "gallery" ? renderGallery(list) : div({ class: "images-list" }, renderImageList(list, filter, { q, sort, spreadMap: params.spreadMap }))
+            filter === "gallery" ? renderGallery(paged(list)) : div({ class: "images-list" }, renderImageList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
           )
     ),
-    ...(filter === "gallery" ? renderLightbox(list) : [])
+    ...(filter === "gallery" ? renderLightbox(paged(list)) : [])
   );
 };
 

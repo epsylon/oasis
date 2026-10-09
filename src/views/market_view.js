@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged } = require("./main_views")
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
@@ -473,7 +473,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
         : div(
             { class: "market-grid" },
             filtered.length > 0
-              ? filtered.map((item) => {
+              ? paged(filtered).map((item) => {
                   const isOwner = String(item.seller) === String(userId)
 
                   return div({ class: "tribe-card market-tribe-card" },

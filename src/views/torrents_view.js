@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -356,7 +356,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
                 )
               )
             ),
-            div({ class: "audios-list" }, renderTorrentTable(list, filter, { q, sort, spreadMap: params.spreadMap }))
+            div({ class: "audios-list" }, renderTorrentTable(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

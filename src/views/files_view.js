@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderFileDownloads, contentDeleteAction } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderFileDownloads, contentDeleteAction, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -246,7 +246,7 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
                 )
               )
             ),
-            div({ class: "audios-list" }, renderFileTable(list, filter, { q, sort, spreadMap: params.spreadMap }))
+            div({ class: "audios-list" }, renderFileTable(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
           )
     )
   );

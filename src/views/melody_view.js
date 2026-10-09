@@ -2,7 +2,7 @@
 
 const { div, h2, p, section, audio, source, span, a, form, input, button, br, textarea, label } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderEcoTax, renderContentActions } = require("./main_views");
+const { template, i18n, userLink, renderEcoTax, renderContentActions, paged } = require("./main_views");
 
 const renderSequenceList = (sequence, availableIds = null) => {
   if (!sequence || sequence.length === 0) {
@@ -131,7 +131,7 @@ exports.melodyView = ({ feedId, total, sequence, filter, bcsAudios }) => {
   const description = i18n.melodyDescription || "Play the melody of your blockchain — each block becomes a note.";
   const activeFilter = filter === "all" ? "all" : "mine";
   const body = activeFilter === "all"
-    ? renderBcsList(bcsAudios)
+    ? renderBcsList(paged(bcsAudios || []))
     : renderOwnPanel({ feedId, total, sequence });
 
   return template(

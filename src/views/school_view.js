@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, renderStyledHtml } = require("../backend/renderStyledText")
@@ -215,7 +215,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
         ? renderCourseForm(filter, filter === "edit" ? (courseToEdit || {}) : (params.draft || {}), params)
         : div({ class: "tribe-grid" },
             list.length
-              ? list.map(course => renderCourseCard(course, filter, params))
+              ? paged(list).map(course => renderCourseCard(course, filter, params))
               : p(i18n.schoolNoCourses)
           )
     )

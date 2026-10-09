@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged } = require('./main_views');
 const { renderTribeWikiSection } = require('./wiki_view');
 const { renderEncryptedChip: renderTribeEncryptedChip, renderLicenseSelect, renderReachChip, renderClearnetPage, escapeHtml, renderRichText, blobUrl: cnBlobUrl, paginateClearnet, renderClearnetPager, CLEARNET_PAGER_CSS } = require('./clearnet_view');
 const { renderPollCard } = require('./polls_view');
@@ -317,7 +317,9 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
 
   const allT = allTribes || tribes;
 
-  const tribeCards = sorted.map(t => {
+  const shownTribes = filter === 'create' || filter === 'edit' ? [] : paged(sorted);
+
+  const tribeCards = shownTribes.map(t => {
     const isMember = t.members.includes(userId);
     const parentTribe = t.parentTribeId ? allT.find(p => p.id === t.parentTribeId) : null;
 
@@ -397,12 +399,12 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
       (filter === 'create' || filter === 'edit')
         ? createForm
         : filter === 'gallery'
-          ? renderGallery(sorted)
+          ? renderGallery(shownTribes)
           : tribeCards.length > 0
             ? div({ class: 'tribe-grid' }, tribeCards)
             : div({ class: "no-content-box" }, p(i18n.noTribes))
      ),
-    ...renderLightbox(sorted)
+    ...renderLightbox(shownTribes)
   );
 };
 
@@ -504,7 +506,7 @@ const renderTribeActivitySection = (tribe, sectionData) => {
   const tribeUrl = `/tribe/${encodeURIComponent(tribe.id)}`;
   const threadsById = reachIndexOf(activities);
   return div({ class: 'tribe-content-list tribe-content-list-spaced' },
-    activities.slice(0, 50).map(item => {
+    paged(activities).map(item => {
       if (item.encrypted) return div({ class: 'card card-rpg' }, div({ class: 'tribe-card-body' }, p({ class: 'tribe-meta-label' }, i18n.tribeContentEncrypted || 'Encrypted content')));
       if (item.contentType === 'chatThread') {
         const replies = Array.isArray(item.replies) ? item.replies : [];
@@ -592,7 +594,7 @@ const renderTribeTrendingSection = (tribe, sectionData, query) => {
     div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionTrending)),
     div({ class: 'tribe-filter-bar' }, periodBtn('day', i18n.tribeTrendingPeriodDay), periodBtn('week', i18n.tribeTrendingPeriodWeek), periodBtn('all', i18n.tribeTrendingPeriodAll)),
     items.length === 0 ? p(i18n.tribeTrendingEmpty) :
-      items.slice(0, 30).map((item, idx) => {
+      paged(items.map((item, idx) => [item, idx])).map(([item, idx]) => {
         if (item.encrypted) return div({ class: 'tribe-content-card' }, div({ class: 'tribe-content-meta' }, span(`#${idx + 1}`)), p({ class: 'tribe-meta-label' }, i18n.tribeContentEncrypted || 'Encrypted content'));
         return div({ class: 'tribe-content-card' },
         div({ class: 'tribe-content-meta' },
@@ -633,7 +635,7 @@ const renderTribeTagsSection = (tribe, sectionData, query) => {
               th(i18n.tagsTableHeaderCount || 'Count')
             )),
             tbody(
-              sortedTags.map(t => tr(
+              (selectedTag ? sortedTags : paged(sortedTags)).map(t => tr(
                 td(a({ href: `${tribeUrl}?section=tags&tag=${encodeURIComponent(t.tag)}` }, t.tag)),
                 td(`${t.count}`)
               ))
@@ -643,7 +645,7 @@ const renderTribeTagsSection = (tribe, sectionData, query) => {
     selectedTag ? div({ class: 'tribe-content-list' },
       h2(`#${selectedTag} (${filteredItems.length})`),
       filteredItems.length === 0 ? p(i18n.tribeTagsEmpty || 'No items') :
-        filteredItems.slice(0, 50).map(item => div({ class: 'card card-rpg' },
+        paged(filteredItems).map(item => div({ class: 'card card-rpg' },
           div({ class: 'card-header' }, h2({ class: 'card-label' }, `[${String(contentTypeName(item.contentType)).toUpperCase()}]`)),
           div({ class: 'card-body' },
             renderTribeReachListChip(tribe, item, threadsById),
@@ -675,7 +677,7 @@ const renderTribeSearchSection = (tribe, sectionData, query) => {
     sq.length >= 2 ? div(
       h2(`${i18n.tribeSearchResults}: ${results.length}`),
       results.length === 0 ? p(i18n.tribeSearchEmpty) :
-        results.map(item => div({ class: 'card card-rpg' },
+        paged(results).map(item => div({ class: 'card card-rpg' },
           div({ class: 'card-header' },
             h2({ class: 'card-label' }, `[${String(contentTypeName(item.contentType)).toUpperCase()}]`)
           ),
@@ -885,7 +887,7 @@ const renderFeedTribeView = (feedItems, tribe, query = {}) => {
   const items = applyTribeFilter(feed, filter.toLowerCase(), q, BASE_MODES, it => Number(it.refeeds || 0));
   const returnTo = sectionHref(tribe, 'feed', { filter, q });
   const banner = query.sent ? div({ class: 'feed-success-msg' }, p('✓ ' + (i18n.feedPublishedSuccess || i18n.tribeFeedSent))) : null;
-  const cards = items.map(m => {
+  const cards = paged(items).map(m => {
     const chip = tribeReachChipFor(tribe, m);
     const controls = renderTribeReachControls(tribe, m, returnTo);
     return renderFeedCard(toFeedShape(m), null, {
@@ -973,7 +975,7 @@ const renderEventsSection = (tribe, items, query = {}) => {
     header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'events', filter, q, openClosedStats(list, e => tribeStatusOf(e) === 'CLOSED', i18n.eventStatusOpen, i18n.eventStatusClosed), i18n.eventSearchPlaceholder),
-    list.length ? div({ class: 'jobs-grid' }, ...list.map(e => renderTribeEventCard(tribe, e, member, returnTo))) : renderTribeEmpty(i18n.noevents || i18n.tribeEventsEmpty)
+    list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(e => renderTribeEventCard(tribe, e, member, returnTo))) : renderTribeEmpty(i18n.noevents || i18n.tribeEventsEmpty)
   );
 };
 
@@ -1050,7 +1052,7 @@ const renderTasksSection = (tribe, items, query = {}) => {
     header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'tasks', filter, q, renderModuleStatsBy(list, tribeStatusOf, [{ value: 'OPEN', label: i18n.taskStatusOpen }, { value: 'IN-PROGRESS', label: i18n.taskStatusInProgress }, { value: 'CLOSED', label: i18n.taskStatusClosed }]), i18n.taskSearchPlaceholder),
-    list.length ? div({ class: 'jobs-grid' }, ...list.map(t => renderTribeTaskCard(tribe, t, member, returnTo))) : renderTribeEmpty(i18n.notasks || i18n.tribeTasksEmpty)
+    list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(t => renderTribeTaskCard(tribe, t, member, returnTo))) : renderTribeEmpty(i18n.notasks || i18n.tribeTasksEmpty)
   );
 };
 
@@ -1128,7 +1130,7 @@ const renderVotationsSection = (tribe, items, query = {}) => {
     header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'votations', filter, q, openClosedStats(list, v => tribeStatusOf(v) === 'CLOSED', i18n.voteStatusOpen, i18n.voteStatusClosed), i18n.votesSearchPlaceholder),
-    list.length ? div({ class: 'jobs-grid' }, ...list.map(v => renderTribeVotationCard(tribe, v, member, returnTo))) : renderTribeEmpty(i18n.novotes || i18n.tribeVotationsEmpty)
+    list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(v => renderTribeVotationCard(tribe, v, member, returnTo))) : renderTribeEmpty(i18n.novotes || i18n.tribeVotationsEmpty)
   );
 };
 
@@ -1180,7 +1182,7 @@ const renderTribePollsSection = (tribe, items, query = {}) => {
     header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'polls', filter, q, openClosedStats(list, pl => tribeStatusOf(pl) === 'CLOSED', i18n.pollStatusOpen, i18n.pollStatusClosed), i18n.pollSearchPlaceholder),
-    list.length ? div({ class: 'jobs-grid' }, ...list.map(pl => renderPollCard(pl, filter, null))) : renderTribeEmpty(i18n.pollsNoItems)
+    list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(pl => renderPollCard(pl, filter, null))) : renderTribeEmpty(i18n.pollsNoItems)
   );
 };
 
@@ -1313,7 +1315,7 @@ const renderForumSection = (tribe, items, query = {}) => {
     emptyMod ? null : renderTribeSearchRow(tribe, 'forum', filter, q, renderModuleStats(list.length), i18n.forumSearchPlaceholder),
     list.length
       ? ul({ class: 'mailing-archive' },
-          ...list.map(t => {
+          ...paged(list).map(t => {
             const participants = new Set([t.author, ...allItems.filter(i => i.contentType === 'forum-reply' && i.parentId === t.id).map(r => r.author)].filter(Boolean));
             return li({ class: 'mailing-archive-item' },
               div({ class: 'emergency-update-head mailing-archive-head' },
@@ -1399,7 +1401,7 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
     header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, cfg.key, filter, q, renderModuleStats(list.length), i18n[cfg.search]),
-    list.length ? div({ class: cfg.wrapper }, cfg.list(list, filter, params)) : renderTribeEmpty(i18n[cfg.empty] || i18n.tribeMediaEmpty)
+    list.length ? div({ class: cfg.wrapper }, cfg.list(paged(list), filter, params)) : renderTribeEmpty(i18n[cfg.empty] || i18n.tribeMediaEmpty)
   );
 };
 
@@ -1421,7 +1423,7 @@ const renderStandaloneSection = (tribe, sectionKey, items, query, cfg) => {
     header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, sectionKey, filter, q, cfg.stats ? cfg.stats(shown) : renderModuleStats(shown.length), cfg.placeholder),
-    shown.length ? cfg.render(shown, member) : renderTribeEmpty(cfg.empty)
+    shown.length ? cfg.render(paged(shown), member) : renderTribeEmpty(cfg.empty)
   );
 };
 
@@ -1556,7 +1558,7 @@ const renderInhabitantsSection = (tribe, members, query = {}) => {
     renderTribeSectionHeader(i18n.tribeSectionInhabitants, i18n.discoverPeople),
     resolved.length ? renderTribeSearchRow(tribe, 'inhabitants', null, search, renderModuleStats(shown.length), i18n.searchInhabitantsPlaceholder, 'search') : null,
     shown.length
-      ? div({ class: 'inhabitants-list' }, ...shown.map(u => renderInhabitantCard(u, 'all', userId, false)))
+      ? div({ class: 'inhabitants-list' }, ...paged(shown).map(u => renderInhabitantCard(u, 'all', userId, false)))
       : renderTribeEmpty(i18n.tribeInhabitantsEmpty || i18n.noInhabitantsFound)
   );
 };
@@ -1623,7 +1625,7 @@ const renderSubTribesSection = (tribe, items, query) => {
     subTribes.length === 0
       ? null
       : div({ class: 'tribe-thumb-grid' },
-          subTribes.map(st => {
+          paged(subTribes).map(st => {
             return a({ href: `/tribe/${encodeURIComponent(st.id)}`, class: 'tribe-thumb-link', title: st.title },
               img({ src: toImageUrl(st.image, '/assets/images/default-tribe.png'), class: 'tribe-thumb-img', alt: st.title })
             );
@@ -1845,7 +1847,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1 })
   const t = tribe || {};
   const list = (Array.isArray(items) ? items : []).filter(it => it && it.contentType !== 'forum-reply');
   const paged = paginateClearnet(list, page);
-  const pager = renderClearnetPager({ base: `/c/tribe/${encodeURIComponent(slug || '')}`, page: paged.page, pages: paged.pages });
+  const pager = renderClearnetPager({ base: `/c/tribe/${encodeURIComponent(slug || '')}`, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
   const name = t.title || i18n.cnUntitled || 'Untitled';
   const cover = cnBlobUrl(t.image);
   const desc = renderRichText(t.description || '');

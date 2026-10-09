@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, span, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderModuleStats } = require("./main_views");
+const { template, i18n, userLink, renderModuleStats, paged } = require("./main_views");
 
 const KIND_LABEL = {
   inhabitants: () => i18n.dataKindInhabitants,
@@ -223,9 +223,9 @@ exports.dataView = async (payload = {}) => {
             div({ class: "data-list" }, renderMatchRow(best, true))
           )
         : null,
-      ...groups.map(g =>
+      ...groupByKind(paged(groups.flatMap(g => g.items))).map(g =>
         div({ id: sectionId(g.kind), class: "data-section" },
-          h2({ class: "data-section-title" }, `${String(kindLabel(g.kind)).toUpperCase()} (${g.items.length})`),
+          h2({ class: "data-section-title" }, `${String(kindLabel(g.kind)).toUpperCase()} (${(groups.find(x => x.kind === g.kind) || g).items.length})`),
           div({ class: "data-list" }, ...g.items.map((m, idx) => renderMatchRow(m, idx === 0)))
         )
       ),

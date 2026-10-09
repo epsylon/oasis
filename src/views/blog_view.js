@@ -2,7 +2,7 @@ const { div, h2, p, section, button, form, a, input, label, span, textarea, br, 
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { TEXT_CAP } = require('../backend/long_text');
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -160,7 +160,7 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
       ? renderCreateForm(params.draft || null)
       : section(
           blogs.length
-            ? div({ class: "blogs-grid" }, ...blogs.map(b => renderBlogCard(b, filter, spreadMap.get(b.id))))
+            ? div({ class: "blogs-grid" }, ...paged(blogs).map(b => renderBlogCard(b, filter, spreadMap.get(b.id))))
             : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.blogNoItems))
         )
   );

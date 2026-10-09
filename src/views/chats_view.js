@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, paged } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -366,7 +366,7 @@ exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
         ? renderChatForm(filter, filter === "edit" ? (chatToEdit || {}) : {}, params)
         : div({ class: "tribe-grid" },
             list.length
-              ? list.map(chat => renderChatCard(chat, filter, { q, spread: params.spreadMap && params.spreadMap.get(chat.key) }))
+              ? paged(list).map(chat => renderChatCard(chat, filter, { q, spread: params.spreadMap && params.spreadMap.get(chat.key) }))
               : p(i18n.chatNoItems)
           )
     )

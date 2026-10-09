@@ -66,7 +66,7 @@ What the tests cover and how to add a new module suite are documented in [`test/
 - `src/AI/` — the local LLM service (`ai_service.mjs` on port 4001), the context assembler and its own `package.json`; `src/AI/node_modules` is installed only when AI features are chosen.
 - `src/backend/` — Koa HTTP entry (`backend.js`), middleware, blob handler, URL renderer, sanitizer.
 - `src/models/` — per-module data access. Factory functions that receive `cooler` (and sometimes `tribeCrypto`, `tribesModel`) and return query/publish methods.
-- `src/views/` — hyperaxe view functions. Pure HTML builders.
+- `src/views/` — hyperaxe view functions. Pure HTML builders. Any list that grows with use goes through `paged()` from `main_views.js`, which serves it one page at a time and adds the shared pager with its page sizes; the public clearnet pages use the same sizes.
 - `src/configs/` — the application's own configuration: `server-config.json` (sbot), `snh-invite-code.json`, and the `*.js` helpers. The node's settings (module toggles, themes, language, wallet) live in `~/.ssb/oasis/oasis-config.json`, created on first start, and its own sbot choices in `~/.ssb/oasis/oasis-server-config.json`, merged over `server-config.json`. No personal data is kept here: everything an inhabitant accumulates lives under `~/.ssb/oasis/` (see [`inventory.md`](./inventory.md)), and `state-manager.js` is what resolves those paths.
 - `src/client/assets/` — CSS, theme files, translations (one `oasis_<lang>.js` file per language), static images.
 - `docs/` — documentation for inhabitants and developers (this folder). [`inventory.md`](./inventory.md) explains every file in `~/.ssb`.

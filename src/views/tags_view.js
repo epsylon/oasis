@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, table, thead, tr, th, td, a, tbody, input } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderModuleStats } = require('./main_views');
+const { template, i18n, renderModuleStats, paged } = require('./main_views');
 
 const getFilteredTags = (filter, tags) => {
   const filteredTags = Array.isArray(tags) ? [...tags] : [];
@@ -75,8 +75,8 @@ exports.tagsView = async (tags, filter, search = '') => {
         filteredTags.length === 0
           ? p(query ? i18n.noResultsFound : i18n.tagsNoItems)
           : filter !== 'cloud'
-            ? renderTagsTable(filteredTags)
-            : renderTagsCloud(filteredTags)
+            ? renderTagsTable(paged(filteredTags))
+            : renderTagsCloud(paged(filteredTags))
       )
     )
   );

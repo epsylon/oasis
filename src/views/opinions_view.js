@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, CONTENT_FAV_KIND, CONTENT_TORRENTABLE } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText, renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
@@ -521,7 +521,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
       ),
       section(
         cards.length
-          ? div({ class: 'opinions-container' }, ...cards)
+          ? div({ class: 'opinions-container' }, ...paged(cards))
           : div({ class: 'no-results' }, p(i18n.noOpinionsFound))
       )
     )

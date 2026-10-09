@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderTribeOriginChip } = require("./clearnet_view");
@@ -361,7 +361,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
         : mode === "detail" && voteId
           ? renderVoteDetail(filtered[0] || list.find(v => v.id === voteId) || {}, voteOptions, firstRow, secondRow, mode, activeFilter, { ...params, comments })
           : filtered.length > 0
-            ? div({ class: "jobs-grid" }, filtered.map((v) => renderVoteListItem(v, voteOptions, activeFilter, params.spreadMap && params.spreadMap.get(v.id))))
+            ? div({ class: "jobs-grid" }, paged(filtered).map((v) => renderVoteListItem(v, voteOptions, activeFilter, params.spreadMap && params.spreadMap.get(v.id))))
             : div({ class: "no-content-box" }, p(i18n.novotes)),
     )
   );
