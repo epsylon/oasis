@@ -969,6 +969,7 @@ const clearnetBlobSet = async (force = false) => {
   };
   for (const entry of index || []) {
     collect(entry.items);
+    for (const b of (entry.items && entry.items.blobs) || []) set.add(b);
     try { collect(await about.image(entry.feedId)); } catch (_) {}
   }
   try { collect(await getOpenTribeItems()); } catch (_) {}
@@ -1010,7 +1011,15 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
   const decisions = await clearnetDecisions();
   const decidedKinds = decisions.kindsByAuthor.get(feedId) || new Set();
   const wants = (kind) => (prefs && prefs[CLEARNET_KIND_PREF[kind]] === true) || decidedKinds.has(kind);
-  const on = (kind, d = decisions) => (x) => clearnetPublicSync(kind, x, feedId, prefs, d);
+  const publicBlobs = new Set();
+  const notePublic = (x) => {
+    let text = '';
+    try { text = JSON.stringify(x) || ''; } catch (_) {}
+    let decoded = text;
+    try { decoded = decodeURIComponent(text); } catch (_) {}
+    for (const t of [text, decoded]) for (const m of t.matchAll(CLEARNET_BLOB_RE)) publicBlobs.add(m[0]);
+  };
+  const on = (kind, d = decisions) => (x) => { const ok = clearnetPublicSync(kind, x, feedId, prefs, d); if (ok) notePublic(x); return ok; };
   const items = { shops: [], jobs: [], events: [], projects: [], posts: [], audios: [], videos: [], images: [], documents: [], torrents: [], files: [], podcasts: [], school: [], market: [], feed: [], wiki: [], bookmarks: [], emergencies: [], campaigns: [], housing: [], rooms: [], maps: [], calendars: [] };
   const tagsOf =(x) => (Array.isArray(x && x.tags) ? x.tags : []).map(t => String(t || '').trim()).filter(Boolean).slice(0, 12);
   const dated = (item, ts) => ({ ...item, ts, meta: item.meta || dayOf(ts) });
@@ -1098,7 +1107,7 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
             pull.filter(m => m && m.value && m.value.content && m.value.content.type === 'post' && !m.value.content.root),
             pull.collect((err, arr) => {
               if (err || !Array.isArray(arr)) return resolve([]);
-              resolve(arr.filter(m => on('posts')({ key: m.key, ts: m.value && m.value.timestamp })).slice(0, MAX_PER_SECTION).map(m => {
+              resolve(arr.filter(m => { const ok = on('posts')({ key: m.key, ts: m.value && m.value.timestamp }); if (ok) notePublic(m.value.content); return ok; }).slice(0, MAX_PER_SECTION).map(m => {
                 const c = m.value.content;
                 const cleanText = String(c.text || '').replace(/<[^>]+>/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '');
                 const firstLine = cleanText.split('\n').find(l => l.trim()) || '';
@@ -1328,6 +1337,7 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
     }
   } catch (_) {}
   for (const k of Object.keys(items)) for (const it of items[k]) it.author = feedId;
+  Object.defineProperty(items, 'blobs', { value: publicBlobs, enumerable: false });
   return items;
 };
 const QR_ACTION_BASE = 'http://localhost:3000';
