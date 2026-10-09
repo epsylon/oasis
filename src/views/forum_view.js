@@ -2,6 +2,7 @@ const {
   div, a, span, form, button, section, p, ul, li,
   input, label, br, select, option, h2, textarea
 } = require("../server/node_modules/hyperaxe");
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip } = require('./clearnet_view');
@@ -378,7 +379,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
             : null,
 	  div({
 	    class: 'forum-body',
-	    innerHTML: sanitizeHtml(renderStyledHtml(forum.text || ''))
+	    [RAW_HTML]: sanitizeHtml(renderStyledHtml(forum.text || ''))
 	  }),
           div({ class: 'forum-meta' },
             span({ class: 'forum-positive-votes' },

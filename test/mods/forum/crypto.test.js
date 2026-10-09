@@ -21,6 +21,25 @@ describe('forum: crypto', (t) => {
     eq(f.isPrivate, true);
   });
 
+  t('a key slipped in by someone who is not the forum creator is ignored', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const S = makePeer(net);
+    A.setActor();
+    const r = await A.use('forum').createForum('GENERAL', 'Kept', 'private text', true);
+    const forumKeys = () => require('../../../src/models/crypto')(A.configDir, 'forum');
+    const original = forumKeys().getKey(r.key);
+    ok(original, 'the creator holds the forum key');
+    const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
+    const planted = require('crypto').randomBytes(32).toString('hex');
+    S.setActor();
+    const ssbS = await S.cooler.open();
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: r.key, generation: 9, memberKeys: { [A.keypair.id]: S.tribeCrypto.boxKeyForMember(planted, A.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
+    A.setActor();
+    await A.use('forum').ingestKeys();
+    eq(forumKeys().getKey(r.key), original, 'the creator keeps sealing with the real key');
+    ok(!forumKeys().getKeys(r.key).includes(planted), 'and never stores the planted one');
+  });
+
   t('outsider without key cannot decrypt private forum', async () => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net);

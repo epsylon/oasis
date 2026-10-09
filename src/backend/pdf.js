@@ -76,10 +76,11 @@ const decodePng = (buf) => {
     pos += 12 + len;
   }
   if (!w || !h || depth !== 8 || interlace !== 0 || !idat.length) return null;
+  if (w > 8192 || h > 8192 || w * h > 20 * 1024 * 1024) return null;
   const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[colorType];
   if (!channels) return null;
   let raw;
-  try { raw = zlib.inflateSync(Buffer.concat(idat)); } catch (_) { return null; }
+  try { raw = zlib.inflateSync(Buffer.concat(idat), { maxOutputLength: (w * channels + 1) * h }); } catch (_) { return null; }
   const stride = w * channels;
   const out = Buffer.alloc(w * h * 3);
   let prev = Buffer.alloc(stride);

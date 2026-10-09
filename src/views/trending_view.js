@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
@@ -32,7 +33,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     const { url, description, lastVisit } = c;
     contentHtml = div({ class: 'trending-bookmark' },
       div({ class: 'card-section bookmark' },
-        url ? h2(p(a({ href: safeExternalHref(url), target: '_blank', class: "bookmark-url" }, url))) : "",
+        url ? h2(p(a({ href: safeExternalHref(url), target: '_blank', rel: 'noopener noreferrer', class: "bookmark-url" }, url))) : "",
         lastVisit
           ? div(
               { class: 'card-field' },
@@ -195,8 +196,8 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : '')),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)),
         div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
-        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.from + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(from)}`, target: '_blank' }, from))),
-        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.to + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(to)}`, target: '_blank' }, to))),
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.from + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(from)}`, target: '_blank', rel: 'noopener noreferrer' }, from))),
+        div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.to + ':'), span({ class: 'card-value' }, a({ href: `/author/${encodeURIComponent(to)}`, target: '_blank', rel: 'noopener noreferrer' }, to))),
         h2({ class: 'card-field' }, span({ class: 'card-label' }, i18n.transfersConfirmations + ': '), span({ class: 'card-value' }, `${confirmedBy.length}/2`))
       )
     );
@@ -205,7 +206,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       div({ class: 'card-section styled-text-content' },
         div(
           { class: 'card-field' },
-          span({ class: 'card-value', innerHTML: sanitizeHtml(renderStyledHtml(c.title || c.name || c.text || c.description || '[no content]')) })
+          span({ class: 'card-value', [RAW_HTML]: sanitizeHtml(renderStyledHtml(c.title || c.name || c.text || c.description || '[no content]')) })
         )
       )
     );

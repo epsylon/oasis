@@ -1,6 +1,8 @@
 const { eq, ok, notOk } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
+const joinPub = (peer, pub) => new Promise((res, rej) => peer.node.publish({ type: 'contact', contact: pub.keypair.id, following: true, autofollow: true }, (e) => e ? rej(e) : peer.node.publish({ type: 'pub', address: { host: 'pub.example', port: 8008, key: pub.keypair.id } }, (e2) => e2 ? rej(e2) : res())));
+
 describe('banking: address management (no RPC)', (t) => {
   t('A adds own ECO address', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
@@ -230,11 +232,34 @@ describe('banking: UBI rules (no RPC)', (t) => {
 
   t('PUB discovery prefers an available PUB over a fresher unavailable one', async () => {
     const net = makeNetwork(); const P1 = makePeer(net); const P2 = makePeer(net); const A = makePeer(net); A.setActor();
+    await joinPub(A, P1); await joinPub(A, P2);
     P2.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, timestamp: Date.now() - 60000 }, () => {});
     P1.node.publish({ type: 'pubAvailability', coin: 'ECO', available: false, timestamp: Date.now() }, () => {});
     const found = await A.use('banking').discoverUbiPub();
     eq(found.pubId, P2.keypair.id);
     eq(found.available, true);
+  });
+
+  t('a peer that only announces itself as a PUB is never offered, listed or used for the UBI', async () => {
+    const net = makeNetwork(); const M = makePeer(net); const A = makePeer(net); A.setActor();
+    M.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 900, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42J', timestamp: Date.now() }, () => {});
+    const found = await A.use('banking').discoverUbiPub();
+    ok(found.pubId !== M.keypair.id, 'the self-announced PUB is not discovered');
+    eq(found.available, false);
+    ok(!(await A.use('banking').listUbiPubs()).some(p => p.pubId === M.keypair.id), 'nor listed to be funded');
+    await A.use('banking').claimUBI(A.keypair.id).catch(() => null);
+    const claims = net.log.filter(m => m.value.author === A.keypair.id && m.value.content.type === 'ubiClaim');
+    ok(claims.every(m => m.value.content.pubId !== M.keypair.id), 'nor addressed by a claim');
+  });
+
+  t('a PUB the inhabitant left is no longer trusted', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const A = makePeer(net); A.setActor();
+    await joinPub(A, P);
+    P.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 900, timestamp: Date.now() }, () => {});
+    eq((await A.use('banking').discoverUbiPub()).pubId, P.keypair.id, 'a joined PUB is used');
+    A.node.publish({ type: 'contact', contact: P.keypair.id, following: false, blocking: true }, () => {});
+    const B = makePeer(net, A.keypair); B.setActor();
+    ok((await B.use('banking').discoverUbiPub()).pubId !== P.keypair.id, 'once left, it is not');
   });
 
   t('with nobody announcing, the default PUB from the invite file is used, marked unavailable', async () => {
@@ -248,6 +273,7 @@ describe('banking: UBI rules (no RPC)', (t) => {
 
   t('the UBI tab reports each PUB\'s last payment from its UBI transfers', async () => {
     const net = makeNetwork(); const P = makePeer(net); const A = makePeer(net); A.setActor();
+    await joinPub(A, P);
     P.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 300, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A', timestamp: Date.now() }, () => {});
     const now = new Date().toISOString();
     P.node.publish({ type: 'transfer', from: P.keypair.id, to: A.keypair.id, concept: 'OASIS UBI Payment · 2026-09', amount: '2.500000', createdAt: now, updatedAt: now, deadline: null, confirmedBy: [P.keypair.id], status: 'UNCONFIRMED', tags: ['UBI'], opinions: {}, opinions_inhabitants: [], txid: 'a'.repeat(64) }, () => {});
@@ -262,6 +288,7 @@ describe('banking: UBI rules (no RPC)', (t) => {
 
   t('the UBI tab only lists PUBs that publish their ECOin address', async () => {
     const net = makeNetwork(); const P1 = makePeer(net); const P2 = makePeer(net); const A = makePeer(net); A.setActor();
+    await joinPub(A, P1); await joinPub(A, P2);
     P1.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 50, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A', timestamp: Date.now() }, () => {});
     P2.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 50, timestamp: Date.now() }, () => {});
     const ids = (await A.use('banking').listUbiPubsDetailed()).map(p => p.pubId);
@@ -270,6 +297,39 @@ describe('banking: UBI rules (no RPC)', (t) => {
   });
 });
 
+describe('banking: the age of a feed counts from when this node received it', (t) => {
+  const publish = (peer, content) => new Promise((res, rej) => peer.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const backdated = async (ms, fn) => {
+    const realNow = Date.now;
+    Date.now = () => realNow() - ms;
+    try { return await fn(); } finally { Date.now = realNow; }
+  };
+  const arrivesNow = (receiver, author, claimedAgeMs, content) => new Promise((res, rej) => receiver.node.add({ previous: null, sequence: 1, author: author.keypair.id, timestamp: Date.now() - claimedAgeMs, hash: 'sha256', content, signature: 'mock-sig' }, (e, m) => e ? rej(e) : res(m)));
+
+  t('a feed whose first message only claims to be old is not eligible to be paid', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const P = makePeer(net); P.setActor();
+    await arrivesNow(P, A, 40 * 86400000, { type: 'post', text: 'an old hello, or so it says' });
+    for (let i = 0; i < 3; i++) await publish(A, { type: 'post', text: `still here ${i}` });
+    await publish(A, { type: 'wallet', coin: 'ECO', address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42H' });
+    const el = await P.use('banking').isEligibleClaimant(A.keypair.id);
+    eq(el.ok, false);
+    ok(/30 days/.test(el.reason), el.reason);
+  });
+
+  t('votes from a feed that only claims to be old do not raise karma, votes from a feed received long ago do', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const post = await publish(A, { type: 'post', text: 'content by A' });
+    const scoreSeenByNewcomer = async () => { const V = makePeer(net); V.setActor(); return V.use('banking').getUserEngagementScore(A.keypair.id); };
+    const base = await scoreSeenByNewcomer();
+    await arrivesNow(C, B, 40 * 86400000, { type: 'post', text: 'an old hello, or so it says' });
+    await publish(B, { type: 'vote', vote: { link: post.key, value: 1 } });
+    await publish(B, { type: 'contact', contact: A.keypair.id, following: true });
+    eq(await scoreSeenByNewcomer(), base, 'a forged clock does not make the voter old enough');
+    await backdated(40 * 86400000, () => publish(C, { type: 'post', text: 'a really old hello' }));
+    await publish(C, { type: 'vote', vote: { link: post.key, value: 1 } });
+    ok(await scoreSeenByNewcomer() > base, 'a voter this node has known for long does count');
+  });
+});
 
 describe('banking: the UBI is claimed once per epoch', (t) => {
   const countClaims = (peer) => new Promise((resolve) => {
@@ -311,14 +371,25 @@ describe('banking: only a PUB can say that the UBI was paid', (t) => {
     eq((await A.use('banking').getUbiClaimHistory(A.keypair.id)).claimCount, 0, 'nor count as income');
   });
 
-  t('a payment result published by an announcing PUB is honoured', async () => {
+  t('a payment result published by a PUB the inhabitant joined is honoured', async () => {
     const net = makeNetwork(); const A = makePeer(net); const P = makePeer(net);
+    await joinPub(A, P);
     P.setActor();
     await publish(P, { type: 'pubAvailability', coin: 'ECO', available: true, balance: 100, timestamp: Date.now() });
     await publish(P, { type: 'ubiClaimResult', allocationId: 'a', epochId: epochNow(), txid: 'a'.repeat(64), userId: A.keypair.id, amount: 50, processedAt: new Date().toISOString() });
     A.setActor();
     ok(await A.use('banking').hasClaimedThisMonth(A.keypair.id), 'the PUB result counts');
     eq((await A.use('banking').getUbiClaimHistory(A.keypair.id)).claimCount, 1, 'and shows up as income');
+  });
+
+  t('a payment result published by a peer that only announces itself as a PUB is ignored', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const M = makePeer(net);
+    M.setActor();
+    await publish(M, { type: 'pubAvailability', coin: 'ECO', available: true, balance: 100, timestamp: Date.now() });
+    await publish(M, { type: 'ubiClaimResult', allocationId: 'm', epochId: epochNow(), txid: 'e'.repeat(64), userId: A.keypair.id, amount: 50, processedAt: new Date().toISOString() });
+    A.setActor();
+    notOk(await A.use('banking').hasClaimedThisMonth(A.keypair.id), 'announcing is not enough to block the claim');
+    eq((await A.use('banking').getUbiClaimHistory(A.keypair.id)).claimCount, 0, 'nor to count as income');
   });
 });
 
@@ -354,6 +425,7 @@ describe('banking: a wallet counts as configured only with its credentials', (t)
 
   t('a published address without credentials does not offer the UBI', async () => {
     const net = makeNetwork(); const A = makePeer(net); const P = makePeer(net);
+    await joinPub(A, P);
     P.setActor();
     await new Promise((res, rej) => P.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 100, timestamp: Date.now() }, (e) => e ? rej(e) : res()));
     A.setActor();
@@ -464,6 +536,24 @@ describe('banking: a PUB pays each UBI claim once, and only its own', (t) => {
     } finally { await wallet.close(); }
   });
 
+  t('a claim for the previous month is paid once, even repeated with a new address', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const { A, address } = await makeClaimant(net);
+    const [y, mo] = epochNow().split('-').map(Number);
+    const prev = mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`;
+    const claimFor = (epochId) => publish(A, { type: 'ubiClaim', pubId: P.keypair.id, epochId, claimedAt: new Date().toISOString() });
+    await claimFor(prev);
+    const wallet = await fakeWallet();
+    try {
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      const second = randomAddress();
+      await publish(A, { type: 'wallet', coin: 'ECO', address: second });
+      await claimFor(prev);
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sends.filter(s => s.address === address || s.address === second).length, 1, 'that month is paid only once');
+    } finally { await wallet.close(); }
+  });
+
   t('a PUB leaves alone a fresh claim addressed to another PUB', async () => {
     const net = makeNetwork(); const P = makePeer(net); const Other = makePeer(net);
     const { A, address } = await makeClaimant(net);
@@ -563,5 +653,222 @@ describe('banking: a PUB pays each UBI claim once, and only its own', (t) => {
       eq(wallet.state.sends.filter(s => s.address === fresh.address).length, 0, 'a fresh claim stays with its PUB');
       eq(wallet.state.sends.filter(s => s.address === stale.address).length, 1, 'an old unpaid one is paid by the default PUB');
     } finally { fs.readFileSync = realRead; await wallet.close(); }
+  });
+
+  t('the default PUB does not pay again a claim that the PUB it was addressed to already paid', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const Other = makePeer(net);
+    const stale = await makeClaimant(net);
+    await claim(stale.A, Other.keypair.id, 4 * 86400000);
+    await publish(Other, { type: 'ubiClaimResult', allocationId: 'o', epochId: epochNow(), txid: 'd'.repeat(64), userId: stale.A.keypair.id, amount: 5, processedAt: new Date().toISOString() });
+    const realRead = fs.readFileSync;
+    fs.readFileSync = function (p, ...rest) {
+      if (String(p).endsWith('snh-invite-code.json')) return JSON.stringify({ code: `pub.example:8008:${P.keypair.id}~invite` });
+      return realRead.call(this, p, ...rest);
+    };
+    const wallet = await fakeWallet();
+    try {
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sendCalls, 0, 'the result of the addressed PUB is enough');
+    } finally { fs.readFileSync = realRead; await wallet.close(); }
+  });
+
+  t('a PUB still pays a claimant when a peer that only announces itself as a PUB says it already did', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const M = makePeer(net);
+    const { A, address } = await makeClaimant(net);
+    await claim(A, P.keypair.id);
+    await publish(M, { type: 'pubAvailability', coin: 'ECO', available: true, balance: 900, timestamp: Date.now() });
+    await publish(M, { type: 'ubiClaimResult', allocationId: 'm', epochId: epochNow(), txid: 'e'.repeat(64), userId: A.keypair.id, amount: 50, processedAt: new Date().toISOString() });
+    const wallet = await fakeWallet();
+    try {
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sends.filter(s => s.address === address).length, 1, 'the forged result does not stop the payment');
+    } finally { await wallet.close(); }
+  });
+
+  t('a self-announced PUB that this PUB follows only because it used one of its invites gets no rebalance and no say', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const Q = makePeer(net);
+    const qAddress = randomAddress();
+    await publish(Q, { type: 'pubAvailability', coin: 'ECO', available: false, balance: 0, address: qAddress, timestamp: Date.now() });
+    await publish(P, { type: 'contact', contact: Q.keypair.id, following: true, pub: true });
+    const { A, address } = await makeClaimant(net);
+    await claim(A, P.keypair.id);
+    await publish(Q, { type: 'ubiClaimResult', allocationId: 'q', epochId: epochNow(), txid: 'c'.repeat(64), userId: A.keypair.id, amount: 50, processedAt: new Date().toISOString() });
+    for (let i = 0; i < 3; i++) { const c = await makeClaimant(net); await claim(c.A, Q.keypair.id); }
+    const wallet = await fakeWallet({ balance: 100000 });
+    try {
+      await runAsPub(P, wallet, (bank) => bank.rebalanceUbiPools());
+      eq(wallet.state.sends.filter(s => s.address === qAddress).length, 0, 'nothing is sent to it');
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sends.filter(s => s.address === address).length, 1, 'and its result does not stop a payment');
+    } finally { await wallet.close(); }
+  });
+
+  t('a PUB does not pay a feed whose first message only claims to be old', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const A = makePeer(net);
+    const address = randomAddress();
+    await new Promise((res, rej) => P.node.add({ previous: null, sequence: 1, author: A.keypair.id, timestamp: Date.now() - 40 * 86400000, hash: 'sha256', content: { type: 'post', text: 'an old hello, or so it says' }, signature: 'mock-sig' }, (e) => e ? rej(e) : res()));
+    for (let i = 0; i < 3; i++) await publish(A, { type: 'post', text: `still here ${i}` });
+    await publish(A, { type: 'wallet', coin: 'ECO', address });
+    await claim(A, P.keypair.id);
+    const wallet = await fakeWallet();
+    try {
+      await runAsPub(P, wallet, (bank) => bank.processPendingClaims());
+      eq(wallet.state.sendCalls, 0, 'the feed is as young as its arrival');
+    } finally { await wallet.close(); }
+  });
+
+  t('a PUB whose wallet is down to its reserve pays nothing and does not announce itself as available', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const { A } = await makeClaimant(net);
+    await claim(A, P.keypair.id);
+    const wallet = await fakeWallet({ balance: P.use('banking').DEFAULT_RULES.reserveMin });
+    try {
+      await runAsPub(P, wallet, async (bank) => { await bank.processPendingClaims(); await bank.publishPubAvailability(); });
+      eq(wallet.state.sendCalls, 0, 'the reserve is not spent');
+      eq((await results(P, A.keypair.id)).length, 0);
+      const announced = net.log.filter(m => m.value.author === P.keypair.id && m.value.content.type === 'pubAvailability').pop();
+      eq(announced.value.content.available, false);
+    } finally { await wallet.close(); }
+  });
+
+  t('two inhabitants sharing one address are paid once in the epoch', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const shared = randomAddress();
+    const one = await makeClaimant(net, shared);
+    const two = await makeClaimant(net, shared);
+    await claim(one.A, P.keypair.id);
+    await claim(two.A, P.keypair.id);
+    const wallet = await fakeWallet();
+    try {
+      await runAsPub(P, wallet, async (bank) => { await bank.processPendingClaims(); await bank.processPendingClaims(); });
+      eq(wallet.state.sends.filter(s => s.address === shared).length, 1, 'the shared address is paid once');
+    } finally { await wallet.close(); }
+  });
+
+  t('an address another trusted PUB already paid this epoch is not paid again elsewhere', async () => {
+    const net = makeNetwork(); const P1 = makePeer(net); const P2 = makePeer(net);
+    const shared = randomAddress();
+    const one = await makeClaimant(net, shared);
+    const two = await makeClaimant(net, shared);
+    await publish(P2, { type: 'contact', contact: P1.keypair.id, following: true });
+    await claim(one.A, P1.keypair.id);
+    await claim(two.A, P2.keypair.id);
+    const w1 = await fakeWallet();
+    const w2 = await fakeWallet();
+    try {
+      await runAsPub(P1, w1, async (bank) => { await bank.processPendingClaims(); });
+      eq(w1.state.sends.filter(s => s.address === shared).length, 1, 'the first PUB pays');
+      try { fs.unlinkSync(ledgerPath()); } catch (_) {}
+      await runAsPub(P2, w2, async (bank) => { await bank.processPendingClaims(); });
+      eq(w2.state.sends.filter(s => s.address === shared).length, 0, 'the second PUB sees the published payment to that address');
+    } finally { await w1.close(); await w2.close(); }
+  });
+
+  t('an allocation is not paid out of the reserve, nor twice to one address in an epoch', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const shared = randomAddress();
+    const one = await makeClaimant(net, shared);
+    const two = await makeClaimant(net, shared);
+    const opts = { balance: P.use('banking').DEFAULT_RULES.reserveMin };
+    const wallet = await fakeWallet(opts);
+    const refused = async (fn) => { try { await fn(); return false; } catch (_) { return true; } };
+    try {
+      await runAsPub(P, wallet, async (bank) => {
+        await bank.executeEpoch({ epochId: '2099-01' });
+        ok(await refused(() => bank.claimAllocation({ transferId: `alloc:2099-01:${one.A.keypair.id}` })), 'at the reserve the allocation is refused');
+        eq(wallet.state.sendCalls, 0, 'and nothing is sent');
+        opts.balance = 100000;
+        await bank.claimAllocation({ transferId: `alloc:2099-01:${one.A.keypair.id}` });
+        ok(await refused(() => bank.claimAllocation({ transferId: `alloc:2099-01:${two.A.keypair.id}` })), 'a second inhabitant with the same address is refused');
+      });
+      eq(wallet.state.sends.filter(s => s.address === shared).length, 1, 'the address is paid once');
+    } finally { await wallet.close(); }
+  });
+});
+
+describe('banking: an incoming transfer is confirmed only by a real receive in the wallet', (t) => {
+  const http = require('http');
+  const { setTestWallet } = require('../../helpers/setup');
+  const publish = (peer, content) => new Promise((res, rej) => peer.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const future = () => new Date(Date.now() + 30 * 86400000).toISOString();
+  const tx = (ch) => ch.repeat(64);
+  const receive = (amount, address = 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A') => ({ confirmations: 3, details: [{ category: 'receive', amount, address }] });
+
+  const wallet = (txs) => new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => { body += c; });
+      req.on('end', () => {
+        const { method, params } = JSON.parse(body || '{}');
+        const found = method === 'gettransaction' ? txs[params[0]] : null;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(found ? { result: found, error: null, id: 'oasis' } : { result: null, error: { code: -5, message: 'Invalid or non-wallet transaction id' }, id: 'oasis' }));
+      });
+    });
+    server.listen(0, '127.0.0.1', () => resolve({ url: `http://127.0.0.1:${server.address().port}`, close: () => new Promise(r => server.close(r)) }));
+  });
+
+  const confirmAs = async (B, txs) => {
+    const w = await wallet(txs);
+    setTestWallet({ url: w.url, user: 'u', pass: 'p', fee: '5' });
+    B.setActor();
+    try { return await require('../../../src/models/banking_model')({ services: { cooler: B.cooler, transfers: B.use('transfers') } }).confirmIncomingTransfers(); }
+    finally { setTestWallet(null); await w.close(); }
+  };
+
+  const statusOf = async (B, key) => (await B.use('transfers').getTransferById(key)).status;
+
+  t('a payment that reached the wallet confirms the transfer', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('transfers').createTransfer(B.keypair.id, `paid · tx ${tx('a')}`, '10', future(), ['WALLET']);
+    eq((await confirmAs(B, { [tx('a')]: receive(10) })).length, 1);
+    eq(await statusOf(B, r.key), 'CLOSED');
+  });
+
+  t('a send, a smaller receive or an unconfirmed tx does not confirm it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const send = await A.use('transfers').createTransfer(B.keypair.id, `send · tx ${tx('b')}`, '10', future(), []);
+    const small = await A.use('transfers').createTransfer(B.keypair.id, `small · tx ${tx('c')}`, '10', future(), []);
+    const fresh = await A.use('transfers').createTransfer(B.keypair.id, `fresh · tx ${tx('d')}`, '10', future(), []);
+    const txs = { [tx('b')]: { confirmations: 3, details: [{ category: 'send', amount: -10, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A' }] }, [tx('c')]: receive(1), [tx('d')]: { ...receive(10), confirmations: 0 } };
+    eq((await confirmAs(B, txs)).length, 0);
+    for (const r of [send, small, fresh]) eq(await statusOf(B, r.key), 'UNCONFIRMED');
+  });
+
+  t('a transfer naming another destination address is not confirmed by a receive elsewhere', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const now = new Date().toISOString();
+    const r = await publish(A, { type: 'transfer', from: A.keypair.id, to: B.keypair.id, concept: `addr · tx ${tx('e')}`, amount: '10.000000', category: 'ECONOMIC', createdAt: now, updatedAt: now, deadline: future(), confirmedBy: [A.keypair.id], status: 'UNCONFIRMED', tags: [], opinions: {}, opinions_inhabitants: [], address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42Z' });
+    eq((await confirmAs(B, { [tx('e')]: receive(10) })).length, 0);
+    eq(await statusOf(B, r.key), 'UNCONFIRMED');
+  });
+
+  t('a transfer published in the payer name by someone else is never confirmed', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const now = new Date().toISOString();
+    await publish(C, { type: 'transfer', from: A.keypair.id, to: B.keypair.id, concept: `forged · tx ${tx('f')}`, amount: '10.000000', category: 'ECONOMIC', createdAt: now, updatedAt: now, deadline: future(), confirmedBy: [A.keypair.id], status: 'UNCONFIRMED', tags: [], opinions: {}, opinions_inhabitants: [] });
+    eq((await confirmAs(B, { [tx('f')]: receive(10) })).length, 0);
+    eq(net.log.filter(m => m.value.content.type === 'transferConfirm').length, 0, 'nothing is published');
+  });
+
+  t('one txid never confirms two different transfers', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const first = await A.use('transfers').createTransfer(B.keypair.id, `rent · tx ${tx('1')}`, '10', future(), []);
+    eq((await confirmAs(B, { [tx('1')]: receive(10) })).length, 1);
+    C.setActor();
+    const copy = await C.use('transfers').createTransfer(B.keypair.id, `me too · tx ${tx('1')}`, '10', future(), []);
+    eq((await confirmAs(B, { [tx('1')]: receive(10) })).length, 0, 'an already used txid is not reused');
+    eq(await statusOf(B, first.key), 'CLOSED');
+    eq(await statusOf(B, copy.key), 'UNCONFIRMED');
+    A.setActor();
+    const p1 = await A.use('transfers').createTransfer(B.keypair.id, `twin · tx ${tx('2')}`, '5', future(), []);
+    C.setActor();
+    const p2 = await C.use('transfers').createTransfer(B.keypair.id, `twin too · tx ${tx('2')}`, '5', future(), []);
+    eq((await confirmAs(B, { [tx('2')]: receive(5) })).length, 0, 'a txid claimed by two pending transfers confirms neither');
+    eq(await statusOf(B, p1.key), 'UNCONFIRMED');
+    eq(await statusOf(B, p2.key), 'UNCONFIRMED');
   });
 });

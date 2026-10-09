@@ -2,8 +2,6 @@ let _inboxCount = 0;
 let _phoneCount = 0;
 let _phoneCall = null;
 let _phoneRoom = null;
-let _liveRooms = [];
-const _dismissedLiveRooms = new Set();
 let _pubIds = new Set();
 let _inboxPmCount = 0;
 let _inboxNotifCount = 0;
@@ -28,6 +26,7 @@ let _matchPool = [];
 let _matchIdx = -1;
 let _sectionMatches = new Map();
 const _dismissedSuggestions = new Set();
+let _suggestionsQuiet = false;
 let _featuredEmergency = null;
 let _dismissedEmergency = null;
 
@@ -40,12 +39,6 @@ module.exports = {
   setPhoneCall: (st) => { _phoneCall = st || null; },
   getPhoneRoom: () => _phoneRoom,
   setPhoneRoom: (st) => { _phoneRoom = st || null; },
-  getLiveRooms: () => _liveRooms.filter(r => !_dismissedLiveRooms.has(r.ref)),
-  setLiveRooms: (list, emptyRefs) => {
-    _liveRooms = Array.isArray(list) ? list : [];
-    for (const ref of (Array.isArray(emptyRefs) ? emptyRefs : [])) _dismissedLiveRooms.delete(String(ref));
-  },
-  dismissLiveRoom: (ref) => { if (ref) _dismissedLiveRooms.add(String(ref)); },
   getPubIds: () => _pubIds,
   setPubIds: (set) => { _pubIds = set instanceof Set ? set : new Set(); },
   isPubId: (id) => _pubIds.has(String(id || '')),
@@ -91,7 +84,11 @@ module.exports = {
   setDismissedEmergency: (id) => { _dismissedEmergency = id || null; },
   getBestMatch: () => _bestMatch,
   setBestMatch: (m) => { _bestMatch = m || null; },
-  setMatchPool: (pool) => { _matchPool = Array.isArray(pool) ? pool.filter(m => m && m.href) : []; },
+  setMatchPool: (pool) => {
+    const before = new Set(_matchPool.map(m => m.href));
+    _matchPool = Array.isArray(pool) ? pool.filter(m => m && m.href) : [];
+    if (_matchPool.some(m => !before.has(m.href) && !_dismissedSuggestions.has(m.href))) _suggestionsQuiet = false;
+  },
   nextBestMatch: () => {
     const avail = _matchPool.filter(m => !_dismissedSuggestions.has(m.href));
     if (!avail.length) { _bestMatch = null; return null; }
@@ -102,6 +99,7 @@ module.exports = {
   setSectionMatches: (map) => { _sectionMatches = map instanceof Map ? map : new Map(); },
   getSectionMatch: (section) => (_sectionMatches.get(String(section || '')) || []).find(m => !_dismissedSuggestions.has(m.href)) || null,
   isKnownSuggestion: (href) => !!href && (_matchPool.some(m => m.href === href) || [..._sectionMatches.values()].some(list => list.some(m => m.href === href))),
-  dismissSuggestion: (href) => { if (href) _dismissedSuggestions.add(href); },
+  dismissSuggestion: (href) => { if (href) { _dismissedSuggestions.add(href); _suggestionsQuiet = true; } },
+  areSuggestionsQuiet: () => _suggestionsQuiet,
   isSuggestionDismissed: (href) => _dismissedSuggestions.has(href)
 };

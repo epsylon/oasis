@@ -66,6 +66,29 @@ describe('calendars: open (multi-use) invitation', (t) => {
     ok(await C.use('calendars').joinByInvite(code), 'C also joins via the same open invite (multi-use)');
   });
 
+  t('on a closed calendar a bare join does not make anyone a participant; an invited join does', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const S = makePeer(net);
+    A.setActor();
+    const r = await mk(A, 'Private plans');
+    const code = await A.use('calendars').generateInvite(r.key);
+    S.setActor();
+    const ssbS = await S.cooler.open();
+    await new Promise((res, rej) => ssbS.publish({ type: 'calendarParticipant', target: r.key, on: true, createdAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    B.setActor();
+    await B.use('calendars').joinByInvite(code);
+    A.setActor();
+    const cal = await A.use('calendars').getCalendarById(r.key);
+    ok(cal.participants.includes(B.keypair.id), 'the invited inhabitant is a participant');
+    ok(!cal.participants.includes(S.keypair.id), 'the stranger is not');
+    const C = makePeer(net);
+    C.setActor();
+    let reused = false;
+    try { await C.use('calendars').joinByInvite(code); } catch (_) { reused = true; }
+    ok(reused, 'a private code works only once');
+    const raw = net.log.filter(m => m.value.content && m.value.content.type === 'calendar').map(m => JSON.stringify(m.value.content)).join(' ');
+    ok(!raw.includes(code), 'the private code itself is never published');
+  });
+
   t('author can remove the open invitation', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
@@ -77,6 +100,55 @@ describe('calendars: open (multi-use) invitation', (t) => {
     let threw = false;
     try { await B.use('calendars').joinByInvite(code); } catch (_) { threw = true; }
     ok(threw, 'removed open invite no longer works');
+  });
+});
+
+describe('calendars: who may hand out the key', (t) => {
+  const mk = (A, title) => A.use('calendars').createCalendar({
+    title, status: 'CLOSED', deadline: DEADLINE, tags: [],
+    firstDate: FIRST_DATE, firstDateLabel: '', firstNote: '', tribeId: null
+  });
+  const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'calendars');
+  const pause = () => new Promise(r => setTimeout(r, 5));
+
+  t('a key planted by a stranger is ignored', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const S = makePeer(net);
+    A.setActor();
+    const r = await mk(A, 'Planted');
+    const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
+    const planted = require('crypto').randomBytes(32).toString('hex');
+    S.setActor();
+    const ssbS = await S.cooler.open();
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: r.key, generation: 9, memberKeys: { [B.keypair.id]: S.tribeCrypto.boxKeyForMember(planted, B.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
+    B.setActor();
+    await B.use('calendars').ingestKeys();
+    ok(!keysOf(B).getKeys(r.key).includes(planted), 'the planted key is not stored');
+  });
+
+  t('when a participant leaves, the author changes the key and only those who stay receive it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await mk(A, 'Rotating');
+    const codeB = await A.use('calendars').generateInvite(r.key);
+    const codeC = await A.use('calendars').generateInvite(r.key);
+    B.setActor(); await B.use('calendars').joinByInvite(codeB);
+    C.setActor(); await C.use('calendars').joinByInvite(codeC);
+    await pause();
+    const before = net.log.length;
+    C.setActor(); await C.use('calendars').leaveCalendar(r.key);
+    ok(!net.log.slice(before).some(m => m.value.content.type === 'tribe-keys'), 'the one who leaves does not hand out a key');
+    await pause();
+    A.setActor();
+    await A.use('calendars').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const fresh = keysOf(A).getKey(r.key);
+    ok(!keysOf(C).getKeys(r.key).includes(fresh), 'the new key is not the one the leaver had');
+    const settled = net.log.length;
+    await A.use('calendars').listAll({ filter: 'all', viewerId: A.keypair.id });
+    eq(net.log.length, settled, 'the key changes once, not on every visit');
+    B.setActor(); await B.use('calendars').ingestKeys();
+    C.setActor(); await C.use('calendars').ingestKeys();
+    ok(keysOf(B).getKeys(r.key).includes(fresh), 'the participant who stays gets the new key');
+    ok(!keysOf(C).getKeys(r.key).includes(fresh), 'the participant who left does not');
   });
 });
 
@@ -198,14 +270,32 @@ describe('calendars: open calendars are readable without joining', (t) => {
     const root = await A.use('calendars').resolveRootId(cal.key);
     B.setActor();
     const ssbB = await B.cooler.open();
-    await new Promise((res, rej) => ssbB.publish({ type: 'calendarDate', calendarId: root, date: new Date(MID_DATE).toISOString(), label: 'Claimed', author: A.keypair.id, createdAt: new Date().toISOString() }, e => e ? rej(e) : res()));
-    const dates = await B.use('calendars').getDatesForCalendar(root);
+    const claim = (label) => new Promise((res, rej) => ssbB.publish({ type: 'calendarDate', calendarId: root, date: new Date(MID_DATE).toISOString(), label, author: A.keypair.id, createdAt: new Date().toISOString() }, e => e ? rej(e) : res()));
+    await claim('Outsider');
+    let dates = await B.use('calendars').getDatesForCalendar(root);
     const opening = dates.find(d => d.label === 'Opening');
     ok(opening && opening.date, 'the date of the author is decrypted for a non-member');
     eq(opening.author, A.keypair.id);
+    ok(!dates.some(d => d.label === 'Outsider'), 'a date from someone outside the calendar is not listed');
+    await B.use('calendars').joinCalendar(root);
+    await claim('Claimed');
+    dates = await B.use('calendars').getDatesForCalendar(root);
     eq((dates.find(d => d.label === 'Claimed') || {}).author, B.keypair.id, 'a date claiming another author is credited to its signer');
     const notes = await B.use('calendars').getNotesForDate(root, opening.key);
     ok(notes.some(n => n.text === 'bring seeds'), 'the note of the author is readable too');
+  });
+
+  t('adding a date to an open calendar makes you one of its participants', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const cal = await A.use('calendars').createCalendar({ title: 'Garden', status: 'OPEN', deadline: DEADLINE, tags: [], firstDate: FIRST_DATE, firstDateLabel: 'Sowing', firstNote: '' });
+    const root = await A.use('calendars').resolveRootId(cal.key);
+    B.setActor();
+    await B.use('calendars').addDate(root, MID_DATE, 'Harvest', null, null, null, null);
+    const got = await B.use('calendars').getCalendarById(root);
+    ok(got.participants.includes(B.keypair.id), 'B joined the calendar');
+    const dates = await A.use('calendars').getDatesForCalendar(root);
+    eq((dates.find(d => d.label === 'Harvest') || {}).author, B.keypair.id, 'and the date is listed for everybody');
   });
 
   t('a closed calendar stays unreadable for a non-member', async () => {
@@ -268,6 +358,36 @@ describe('calendars: recurrence', (t) => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const dates = await occurrences(A, { deadline: day(60), intervalWeekly: true });
     ok(dates.length >= 8);
+  });
+
+  const rawDate = (peer, root, label, until) => new Promise((res, rej) => peer.node.publish({
+    type: 'calendarDate', calendarId: root, date: day(1), label, author: peer.keypair.id,
+    createdAt: new Date().toISOString(), intervalWeekly: true, intervalMonthly: true, intervalYearly: true, intervalDeadline: until
+  }, e => e ? rej(e) : res()));
+
+  t('a recurring date never expands without limit', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const cal = await A.use('calendars').createCalendar({ title: 'Forever', status: 'OPEN', tags: [], firstDate: day(1), firstDateLabel: 'first' });
+    const root = await A.use('calendars').resolveRootId(cal.key || cal.id);
+    await rawDate(A, root, 'endless', new Date(Date.now() + 300 * 365 * 86400000).toISOString());
+    const endless = (await A.use('calendars').getDatesForCalendar(root)).filter(d => d.label === 'endless');
+    ok(endless.length > 1, 'the date still repeats');
+    ok(endless.length < 300 * 12, `but fewer times than once a month for three centuries (${endless.length})`);
+  });
+
+  t('the dates of the owner are never crowded out by the recurring dates of others', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const cal = await A.use('calendars').createCalendar({ title: 'Crowded', status: 'OPEN', tags: [], firstDate: day(1), firstDateLabel: 'owner' });
+    const root = await A.use('calendars').resolveRootId(cal.key || cal.id);
+    B.setActor();
+    await B.use('calendars').joinCalendar(root);
+    const until = new Date(Date.now() + 300 * 365 * 86400000).toISOString();
+    for (let i = 0; i < 12; i++) await rawDate(B, root, `flood${i}`, until);
+    A.setActor();
+    const dates = await A.use('calendars').getDatesForCalendar(root);
+    ok(dates.some(d => d.label === 'owner' && d.author === A.keypair.id), 'the date of the owner is still there');
+    ok(dates.length < 12 * 300 * 12, `and the view stays bounded (${dates.length})`);
   });
 });
 

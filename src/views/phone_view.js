@@ -139,7 +139,7 @@ const renderCompose = (compose) => {
         ) : null
       ),
       div({ class: 'phone-dial-call' },
-        button({ type: 'submit', form: 'phone-dialer', formaction: '/phone/call', formmethod: 'post', name: 'compose', value: '1', class: 'pm-btn' }, `✆ ${String(i18n.phoneCallButton).toUpperCase()}`)
+        button({ type: 'submit', form: 'phone-dialer', formaction: '/phone/call', attrs: { formmethod: 'post' }, name: 'compose', value: '1', class: 'pm-btn' }, `✆ ${String(i18n.phoneCallButton).toUpperCase()}`)
       )
     )
   );

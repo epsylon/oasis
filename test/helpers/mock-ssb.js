@@ -131,6 +131,19 @@ function makeNode(network, keypair, opts = {}) {
         network.publish(msg);
         if (cb) cb(null, { key, value: msg.value });
       },
+      read(opts = {}) {
+        const out = [];
+        for (const m of network.log) {
+          const c = m.value && m.value.content;
+          if (typeof c !== 'string' || !c.endsWith('.box')) continue;
+          let decoded = null;
+          try { decoded = ssbKeys.unbox(c, keypair); } catch (_) { decoded = null; }
+          if (!decoded) continue;
+          out.push({ key: m.key, value: { ...m.value, content: decoded, private: true }, timestamp: m.timestamp });
+        }
+        if (opts.reverse) out.reverse();
+        return pull.values(opts.limit ? out.slice(0, opts.limit) : out);
+      },
       unbox(arg) {
         const c = arg && arg.value ? arg.value.content : arg;
         if (typeof c !== 'string' || !c.endsWith('.box')) return null;
@@ -176,8 +189,11 @@ function makeNode(network, keypair, opts = {}) {
       for (const m of network.log) {
         const c = m.value && m.value.content;
         if (!c) continue;
-        if (opts.dest && c.target !== opts.dest && c.root !== opts.dest && (!c.branch || (Array.isArray(c.branch) ? !c.branch.includes(opts.dest) : c.branch !== opts.dest))) continue;
+        const votesDest = !!(c.vote && c.vote.link === opts.dest);
+        if (opts.dest && !votesDest && c.target !== opts.dest && c.root !== opts.dest && (!c.branch || (Array.isArray(c.branch) ? !c.branch.includes(opts.dest) : c.branch !== opts.dest))) continue;
         if (opts.rel === 'target' && c.target !== opts.dest) continue;
+        if (opts.rel === 'vote' && !votesDest) continue;
+        if (opts.source && m.value.author !== opts.source) continue;
         if (opts.values) out.push(m);
         else out.push({ source: m.value.author, dest: opts.dest, key: m.key });
       }

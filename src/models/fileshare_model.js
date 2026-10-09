@@ -5,6 +5,22 @@ const { Readable } = require('stream');
 const fsc = require('../backend/fileshare_crypto');
 
 const MAX_CHUNK_SIZE = 5 * 1024 * 1024;
+const MAX_PREFETCH_CHUNKS = 64;
+const BLOB_REF = /^&[A-Za-z0-9+/]{43}=\.sha256$/;
+const DEFAULT_MAX_SHARE_BYTES = 1024 * 1024 * 1024;
+const maxShareBytes = () => {
+  try { return Number(require('../configs/config-manager.js').getConfig().fileShare.maxSize) || DEFAULT_MAX_SHARE_BYTES; } catch (_) { return DEFAULT_MAX_SHARE_BYTES; }
+};
+const checkManifest = (manifest) => {
+  const size = Number(manifest && manifest.size);
+  const chunkSize = Number(manifest && manifest.chunkSize);
+  const chunks = manifest && manifest.chunks;
+  if (!Number.isInteger(size) || size < 0 || size > maxShareBytes()) throw new Error('fileshare manifest invalid');
+  if (!Number.isInteger(chunkSize) || chunkSize <= 0 || chunkSize > MAX_CHUNK_SIZE) throw new Error('fileshare manifest invalid');
+  if (!Array.isArray(chunks) || chunks.length !== Math.max(1, Math.ceil(size / chunkSize)) || chunks.some(ref => !BLOB_REF.test(String(ref)))) throw new Error('fileshare manifest invalid');
+  if (manifest.plainSha256 !== null && manifest.plainSha256 !== undefined && !/^[0-9a-f]{64}$/.test(String(manifest.plainSha256))) throw new Error('fileshare manifest invalid');
+  return manifest;
+};
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -117,7 +133,7 @@ module.exports = ({ cooler }) => {
     const key = fsc.keyFromHex(pointer.key);
     await wantBlob(client, pointer.manifestBlobId);
     const payload = await getBlob(client, pointer.manifestBlobId);
-    return fsc.decryptManifest(payload, key);
+    return checkManifest(fsc.decryptManifest(payload, key));
   };
 
   const CHUNK_WANT_TIMEOUT = 30000;
@@ -128,11 +144,19 @@ module.exports = ({ cooler }) => {
     async function* gen() {
       const client = await openSsb();
       if (!(await wantBlob(client, pointer.manifestBlobId, CHUNK_WANT_TIMEOUT))) throw new Error('fileshare blob unavailable');
-      const manifest = fsc.decryptManifest(await getBlob(client, pointer.manifestBlobId), key);
+      const manifest = checkManifest(fsc.decryptManifest(await getBlob(client, pointer.manifestBlobId), key));
+      const hash = crypto.createHash('sha256');
+      let total = 0;
       for (const ref of manifest.chunks) {
         if (!(await wantBlob(client, ref, CHUNK_WANT_TIMEOUT))) throw new Error('fileshare blob unavailable');
-        yield fsc.decryptChunk(await getBlob(client, ref), key);
+        const plain = fsc.decryptChunk(await getBlob(client, ref), key);
+        total += plain.length;
+        if (total > manifest.size) throw new Error('fileshare size mismatch');
+        hash.update(plain);
+        yield plain;
       }
+      if (total !== manifest.size) throw new Error('fileshare size mismatch');
+      if (manifest.plainSha256 && hash.digest('hex') !== manifest.plainSha256) throw new Error('fileshare content mismatch');
     }
     return Readable.from(gen());
   };
@@ -174,6 +198,7 @@ module.exports = ({ cooler }) => {
       const client = await openSsb();
       if (!(await hasBlob(client, pointer.manifestBlobId))) { wantBlob(client, pointer.manifestBlobId, 0); return; }
       const manifest = fsc.decryptManifest(await getBlob(client, pointer.manifestBlobId), fsc.keyFromHex(pointer.key));
+      if (!Array.isArray(manifest.chunks) || manifest.chunks.length > MAX_PREFETCH_CHUNKS || manifest.chunks.some(ref => !BLOB_REF.test(String(ref)))) return;
       for (const ref of manifest.chunks) if (!(await hasBlob(client, ref))) wantBlob(client, ref, 0);
     } catch (_) {}
   };

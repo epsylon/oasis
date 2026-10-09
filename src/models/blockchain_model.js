@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const config = require('../server/ssb_config');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { readContentWindow } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
@@ -19,7 +20,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   ]);
 
   const isHiddenBoxedContent = (rawContent) =>
-    typeof rawContent === 'string' && rawContent.endsWith('.box');
+    typeof rawContent === 'string' && /\.box\d*$/.test(rawContent);
 
   const buildAccessibleTribeIds = async () => {
     const set = new Set();
@@ -131,12 +132,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     async listBlockchain(filter = 'all', userId, search = {}) {
       const ssbClient = await openSsb();
 
-      const results = await new Promise((resolve, reject) =>
-        pull(
-          ssbClient.createLogStream({ reverse: true, limit: logLimit }),
-          pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-        )
-      );
+      const results = await readContentWindow(ssbClient, logLimit);
 
       const tombstoned = buildValidatedTombstoneSet(results);
       const idToBlock = new Map();
@@ -152,7 +148,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         const k = msg.key;
         let c = msg.value?.content;
         const author = msg.value?.author;
-        if (isHiddenBoxedContent(c)) continue;
+        if (isHiddenBoxedContent(c) || msg.value?.private === true) continue;
         if (showLogs && typeof c === 'string' && author === me) {
           try {
             const dec = ssbClient.private.unbox({ key: k, value: msg.value, timestamp: msg.timestamp || msg.value?.timestamp || 0 });
@@ -293,12 +289,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
     async getBlockById(id, userId) {
       const ssbClient = await openSsb();
-      const results = await new Promise((resolve, reject) =>
-        pull(
-          ssbClient.createLogStream({ reverse: true, limit: logLimit }),
-          pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
-        )
-      );
+      const results = await readContentWindow(ssbClient, logLimit);
 
       const me = userId || config.keys.id;
       const tombstoned = buildValidatedTombstoneSet(results);
@@ -311,7 +302,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         const k = msg.key;
         let c = msg.value?.content;
         const author = msg.value?.author;
-        if (isHiddenBoxedContent(c)) continue;
+        if (isHiddenBoxedContent(c) || msg.value?.private === true) continue;
         if (typeof c === 'string' && author === me) {
           try {
             const dec = ssbClient.private.unbox({ key: k, value: msg.value, timestamp: msg.timestamp || msg.value?.timestamp || 0 });

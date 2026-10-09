@@ -545,15 +545,15 @@ const renderTribeActivitySection = (tribe, sectionData) => {
       const blobUrl = item.contentType === 'media' ? toBlobUrl(item.image) : null;
       const mediaContent =
         item.contentType === 'media' && item.mediaType === 'image' && blobUrl
-          ? a({ href: blobUrl, target: '_blank' }, img({ src: blobUrl, alt: item.title || '', class: 'tribe-media-thumb' }))
+          ? a({ href: blobUrl, target: '_blank', rel: 'noopener noreferrer' }, img({ src: blobUrl, alt: item.title || '', class: 'tribe-media-thumb' }))
         : item.contentType === 'media' && item.mediaType === 'audio' && blobUrl
           ? audio({ src: blobUrl, controls: true, class: 'tribe-media-audio' })
         : item.contentType === 'media' && item.mediaType === 'video' && blobUrl
           ? video({ src: blobUrl, controls: true, class: 'tribe-media-thumb', preload: 'metadata' })
         : item.contentType === 'media' && item.mediaType === 'document' && blobUrl
-          ? a({ href: blobUrl, target: '_blank', class: 'tribe-action-btn' }, i18n.readDocument || 'Read Document')
+          ? a({ href: blobUrl, target: '_blank', rel: 'noopener noreferrer', class: 'tribe-action-btn' }, i18n.readDocument || 'Read Document')
         : item.contentType === 'media' && item.mediaType === 'bookmark' && (item.url || item.description)
-          ? a({ href: safeExternalHref(item.url || item.description), target: '_blank', class: 'tribe-action-btn' }, item.url || item.description)
+          ? a({ href: safeExternalHref(item.url || item.description), target: '_blank', rel: 'noopener noreferrer', class: 'tribe-action-btn' }, item.url || item.description)
         : null;
       return div({ class: 'card card-rpg tribe-card-padded' },
         div({ class: 'card-header' },

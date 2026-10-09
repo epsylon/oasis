@@ -1,5 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
-const util = require('../server/node_modules/util');
+const util = require('util');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 
@@ -393,7 +393,7 @@ module.exports = ({ cooler }) => {
     const sealedOnly = ssbClient.private && typeof ssbClient.private.read === 'function';
     const raw = await new Promise((resolve, reject) =>
       pull(
-        sealedOnly ? ssbClient.private.read({ reverse: false }) : ssbClient.createLogStream({ reverse: false, limit: logLimit }),
+        sealedOnly ? ssbClient.private.read({ reverse: true, limit: logLimit }) : ssbClient.createLogStream({ reverse: true, limit: logLimit }),
         pull.collect((err, arr) => err ? reject(err) : resolve(arr))
       )
     );

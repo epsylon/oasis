@@ -15,11 +15,25 @@ const normalizeTags = (raw) => {
   return String(raw).split(",").map(t => t.trim()).filter(Boolean)
 }
 const hasAnyInterval = (w, m, y) => !!(w || m || y)
-const { expandRecurrence } = require('./recurrence')
+const { expandRecurrence, truthy } = require('./recurrence')
+const MAX_OCCURRENCES_PER_DATE = 520
+const MAX_DATES_PER_VIEW = 5000
 
 const ts = (v) => {
   const t = new Date(v).getTime()
   return Number.isFinite(t) ? t : null
+}
+
+const boundedOccurrences = (date, until, weekly, monthly, yearly) => {
+  const start = ts(date)
+  const end = ts(until)
+  if (start === null || end === null) return expandRecurrence(date, until, weekly, monthly, yearly).slice(0, MAX_OCCURRENCES_PER_DATE)
+  const limit = new Date(start)
+  if (truthy(weekly)) limit.setUTCDate(limit.getUTCDate() + 7 * MAX_OCCURRENCES_PER_DATE)
+  else if (truthy(monthly)) limit.setUTCMonth(limit.getUTCMonth() + MAX_OCCURRENCES_PER_DATE)
+  else limit.setUTCFullYear(limit.getUTCFullYear() + MAX_OCCURRENCES_PER_DATE)
+  const stop = Number.isFinite(limit.getTime()) ? Math.min(end, limit.getTime()) : end
+  return expandRecurrence(date, new Date(stop).toISOString(), weekly, monthly, yearly).slice(0, MAX_OCCURRENCES_PER_DATE)
 }
 
 const assertCalendarDates = ({ deadline, date, until }) => {
@@ -49,6 +63,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
   }
   const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
+  const keyProofFor = (keyHex, id) => { try { return crypto.createHmac("sha256", Buffer.from(keyHex, "hex")).update(String(id), "utf8").digest("hex") } catch (_) { return null } }
 
   const rotateCalendarKey = async (rootId, remainingMembers) => {
     if (!ownCrypto || !tribeCrypto || !rootId) return
@@ -56,11 +71,10 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     if (!existing) return
     const newKey = ownCrypto.generateTribeKey()
     const newGen = ownCrypto.addNewKey(rootId, newKey)
-    if (!Array.isArray(remainingMembers) || !remainingMembers.length) return
     const ssbClient = await openSsb()
     const ssbKeys = require("../server/node_modules/ssb-keys")
     const memberKeys = {}
-    for (const m of remainingMembers) {
+    for (const m of new Set([ssbClient.id, ...(Array.isArray(remainingMembers) ? remainingMembers : [])])) {
       try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
     }
     if (Object.keys(memberKeys).length) {
@@ -77,9 +91,12 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const ssbKeys = require("../server/node_modules/ssb-keys")
       const config = require("../server/ssb_config")
       const msgs = await readAll(ssbClient)
+      const authorOf = new Map()
+      for (const m of msgs) if (m && m.key && m.value) authorOf.set(m.key, m.value.author)
       for (const m of msgs) {
         const c = m.value && m.value.content
         if (!c || c.type !== "tribe-keys") continue
+        if (!c.tribeId || !authorOf.has(c.tribeId) || (m.value.author !== authorOf.get(c.tribeId) && m.value.author !== ssbClient.id)) continue
         const memberKeys = c.memberKeys
         if (!memberKeys || typeof memberKeys !== "object") continue
         const boxed = memberKeys[ssbClient.id]
@@ -96,6 +113,39 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
   const CALENDAR_TYPES = ["calendar", "calendarDate", "calendarNote", "calendarParticipant", "calendarReminderSent", "tribe-keys", "tombstone"]
 
   const readAll = async (ssbClient) => unwrapForIndex(await readTyped(ssbClient, CALENDAR_TYPES, { limit: logLimit, withWindow: true }))
+
+  const ensureMemberKeys = async (ssbClient, messages, cals) => {
+    if (!tribeCrypto || !ownCrypto) return
+    const leavesByRoot = new Map()
+    for (const m of messages) {
+      const c = m.value && m.value.content
+      if (!c || c.type !== "calendarParticipant" || c.on !== false || !c.target) continue
+      if (!leavesByRoot.has(c.target)) leavesByRoot.set(c.target, [])
+      leavesByRoot.get(c.target).push({ member: m.value.author, ts: Number(m.timestamp || m.value.timestamp || 0) })
+    }
+    const ssbKeys = require("../server/node_modules/ssb-keys")
+    for (const cal of (Array.isArray(cals) ? cals : [])) {
+      if (!cal || cal.tribeId || cal.encrypted || cal.author !== ssbClient.id) continue
+      const rootId = cal.rootId
+      if (!rootId || !lookupKey(rootId)) continue
+      const members = Array.isArray(cal.participants) ? cal.participants : []
+      const plan = ownCrypto.keyPlan({ rootId, ownerId: cal.author, gen: lookupGen(rootId), members, messages, leaves: leavesByRoot.get(rootId) || [] })
+      if (plan.rotate) {
+        await rotateCalendarKey(rootId, members)
+        continue
+      }
+      if (!plan.missing.length) continue
+      const key = lookupKey(rootId)
+      const memberKeys = {}
+      for (const m of plan.missing) {
+        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
+      }
+      if (!Object.keys(memberKeys).length) continue
+      await new Promise((resolve) => {
+        ssbClient.publish({ type: "tribe-keys", tribeId: rootId, generation: lookupGen(rootId) || 1, memberKeys }, () => resolve())
+      })
+    }
+  }
 
   const tribeHelpers = tribeCrypto ? tribeCrypto.createHelpers(tribesModel) : null
   const unwrapForIndex = (msgs) => tribeHelpers ? tribeHelpers.unwrapMessagesForKind(msgs, CALENDAR_TYPES) : msgs
@@ -186,9 +236,9 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const c = v.content
       if (!c) continue
       if (c.type === "tombstone" && c.target) { tombRequests.push({ target: c.target, author: v.author }); continue }
-      if (c.type === "calendarParticipant" && c.target) { participantMsgs.push({ target: c.target, author: v.author, on: c.on !== false, ts: v.timestamp || m.timestamp || 0 }); continue }
+      if (c.type === "calendarParticipant" && c.target) { participantMsgs.push({ target: c.target, author: v.author, on: c.on !== false, keyProof: typeof c.keyProof === "string" ? c.keyProof : "", code: typeof c.code === "string" ? c.code : "", ts: v.timestamp || m.timestamp || 0 }); continue }
       if (c.type === "calendar") {
-        nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
+        nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, seq: v.sequence || 0, c, author: v.author })
         authorByKey.set(k, v.author)
         if (c.replaces) { parent.set(k, c.replaces); child.set(c.replaces, k) }
       }
@@ -208,30 +258,31 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
 
     const rootOf = (id) => { let cur = id; while (parent.has(cur)) cur = parent.get(cur); return cur }
     const tipOf = (id) => { let cur = id; while (child.has(cur)) cur = child.get(cur); return cur }
-    const contentTipOf = (root) => {
-      const rn = nodes.get(root)
-      if (!rn) return root
-      let cur = root
-      let best = root
-      const seen = new Set()
-      while (child.has(cur) && !seen.has(cur)) {
-        seen.add(cur)
-        const next = child.get(cur)
-        const n = nodes.get(next)
-        if (!n) break
-        if (n.author === rn.author && !tomb.has(next)) best = next
-        cur = next
-      }
-      return best
+    const ownerTip = new Map()
+    for (const [k, n] of nodes.entries()) {
+      const r = rootOf(k)
+      const rn = nodes.get(r)
+      if (!rn || n.author !== rn.author || tomb.has(k)) continue
+      const prev = ownerTip.has(r) ? nodes.get(ownerTip.get(r)) : null
+      if (!prev || n.seq > prev.seq || (n.seq === prev.seq && n.ts >= prev.ts)) ownerTip.set(r, k)
     }
+    const contentTipOf = (root) => ownerTip.get(root) || root
 
     const roots = new Set()
     for (const id of nodes.keys()) roots.add(rootOf(id))
 
+    const joinAllowed = (root, pm) => {
+      const rn = nodes.get(root)
+      if (!rn) return false
+      if (pm.author === rn.author || rn.c.tribeId) return true
+      if (!rn.c.encryptedPayload && String(rn.c.status || "OPEN").toUpperCase() === "OPEN") return true
+      return !!pm.keyProof && lookupKeys(root).some(k => keyProofFor(k, pm.author) === pm.keyProof)
+    }
     const participantsByRoot = new Map()
     for (const pm of participantMsgs) {
       if (!nodes.has(pm.target)) continue
       const r = rootOf(pm.target)
+      if (pm.on && !joinAllowed(r, pm)) continue
       if (!participantsByRoot.has(r)) participantsByRoot.set(r, new Map())
       const m2 = participantsByRoot.get(r)
       const prev = m2.get(pm.author)
@@ -268,7 +319,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       deadline: undec ? "" : (c.deadline || ""),
       tags: Array.isArray(c.tags) ? c.tags : [],
       mapUrl: typeof c.mapUrl === "string" ? c.mapUrl : "",
-      author: c.author || node.author,
+      author: node.author || c.author,
       participants: Array.isArray(participants) ? participants : (Array.isArray(c.participants) ? c.participants : []),
       invites: Array.isArray(c.invites) ? c.invites : [],
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
@@ -279,6 +330,17 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     }
   }
 
+
+  const calendarMembers = async (cal) => {
+    const set = new Set([cal.author, ...(Array.isArray(cal.participants) ? cal.participants : [])].filter(Boolean))
+    if (cal.tribeId && tribesModel) {
+      try {
+        const t = await tribesModel.getTribeById(cal.tribeId)
+        for (const m of (t && Array.isArray(t.members) ? t.members : [])) set.add(m)
+      } catch (_) {}
+    }
+    return set
+  }
 
   const isClosed = (calendar) => {
     if (calendar.status === "CLOSED") return true
@@ -554,9 +616,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const participants = Array.isArray(cal.participants) ? cal.participants : []
       if (!participants.includes(userId)) return
       const content = { type: "calendarParticipant", target: rootId, on: false, createdAt: new Date().toISOString() }
-      const result = await new Promise((resolve, reject) => ssbClient.publish(content, (e, res) => e ? reject(e) : resolve(res)))
-      try { await rotateCalendarKey(rootId, participants.filter(p => p !== userId)) } catch (_) {}
-      return result
+      return new Promise((resolve, reject) => ssbClient.publish(content, (e, res) => e ? reject(e) : resolve(res)))
     },
 
     async findCalendarByLinkText(linkSubstring) {
@@ -596,6 +656,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const ssbClient = await openSsb()
       const uid = viewerId || ssbClient.id
       let list = calCollab.visibleThenCollapsed(await collectCalendars(), uid)
+      try { await ensureMemberKeys(ssbClient, await readAll(ssbClient), list) } catch (_) {}
       if (filter === "mine") list = list.filter(c => c.author === uid)
       else if (filter === "recent") {
         const now = Date.now()
@@ -622,6 +683,10 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       })
 
       const ruleDeadline = hasInterval ? (intervalDeadline || cal.deadline || "") : ""
+      if (!(await calendarMembers(cal)).has(userId)) {
+        if (cal.tribeId || cal.status !== "OPEN") throw new Error("Only participants can add dates")
+        await this.joinCalendar(rootId)
+      }
       let dateContent = {
         type: "calendarDate",
         calendarId: rootId,
@@ -648,6 +713,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const cal = await this.getCalendarById(rootId)
       const calDeadline = cal && cal.deadline ? cal.deadline : ""
       const pubKey = cal ? tryDecryptPublicInviteKey(cal.invites) : null
+      const members = cal ? await calendarMembers(cal) : new Set()
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const authorByKey = new Map()
@@ -667,6 +733,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         const c = v.content
         if (!c || c.type !== "calendarDate") continue
         if (c.calendarId !== rootId) continue
+        if (!members.has(v.author)) continue
         let dec = c
         if (c.encryptedPayload && tribeCrypto) {
           if (c.tribeId && tribesModel) {
@@ -691,7 +758,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         const hasInterval = !!(dec.intervalWeekly || dec.intervalMonthly || dec.intervalYearly)
         const ruleDeadline = dec.intervalDeadline || calDeadline
         if (hasInterval && ruleDeadline) {
-          const occurrences = expandRecurrence(dec.date, ruleDeadline, dec.intervalWeekly, dec.intervalMonthly, dec.intervalYearly)
+          const occurrences = boundedOccurrences(dec.date, ruleDeadline, dec.intervalWeekly, dec.intervalMonthly, dec.intervalYearly)
           for (const occ of occurrences) {
             dates.push({ ...baseEntry, date: occ.toISOString() })
           }
@@ -699,8 +766,10 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
           dates.push({ ...baseEntry, date: dec.date })
         }
       }
-      dates.sort((a, b) => new Date(a.date) - new Date(b.date))
-      return dates
+      const owner = cal ? cal.author : null
+      const kept = [...dates.filter(d => d.author === owner), ...dates.filter(d => d.author !== owner)].slice(0, MAX_DATES_PER_VIEW)
+      kept.sort((a, b) => new Date(a.date) - new Date(b.date))
+      return kept
     },
 
     async deleteDate(dateId, calendarId) {
@@ -807,7 +876,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         const c = v.content
         if (!c || c.type !== "calendarNote") continue
         if (tombstoned.has(m.key)) continue
-        if (c.calendarId !== rootId || c.dateId !== dateId) continue
+        if (c.calendarId !== rootId || (dateId != null && c.dateId !== dateId)) continue
         let dec = c
         if (c.encryptedPayload) {
           let r = await decryptScoped(c, rootId)
@@ -859,7 +928,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         }
       }
 
-      const calendarDeadlines = new Map()
+      const calendarInfo = new Map()
       const dueByCalendar = new Map()
       for (const m of messages) {
         if (tombstoned.has(m.key)) continue
@@ -874,18 +943,20 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         }
         if (!dec.date) continue
         const calId = c.calendarId
-        let calDeadline = calendarDeadlines.get(calId)
-        if (calDeadline === undefined) {
+        let info = calendarInfo.get(calId)
+        if (info === undefined) {
           try {
             const cc = await this.getCalendarById(calId)
-            calDeadline = (cc && cc.deadline) || ""
-          } catch (_) { calDeadline = "" }
-          calendarDeadlines.set(calId, calDeadline)
+            info = cc ? { deadline: cc.deadline || "", members: await calendarMembers(cc) } : null
+          } catch (_) { info = null }
+          calendarInfo.set(calId, info)
         }
+        if (!info || !info.members.has(v.author)) continue
+        const calDeadline = info.deadline
         const hasInterval = !!(dec.intervalWeekly || dec.intervalMonthly || dec.intervalYearly)
         const ruleDeadline = dec.intervalDeadline || calDeadline
         const occurrences = (hasInterval && ruleDeadline)
-          ? expandRecurrence(dec.date, ruleDeadline, dec.intervalWeekly, dec.intervalMonthly, dec.intervalYearly)
+          ? boundedOccurrences(dec.date, ruleDeadline, dec.intervalWeekly, dec.intervalMonthly, dec.intervalYearly)
           : [new Date(dec.date)]
         for (const occ of occurrences) {
           if (occ.getTime() > now) continue
@@ -949,11 +1020,13 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       if (cal.author !== userId) throw new Error("Only the author can generate invites")
       const code = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex")
       let invite = code
-      const pubFlag = opts.public ? { public: true } : {}
-      if (tribeCrypto && !cal.tribeId) {
+      const calKey = !cal.tribeId ? lookupKey(cal.rootId) : null
+      if (tribeCrypto && calKey) {
         const inviteSalt = tribeCrypto.generateInviteSalt()
-        const ekChain = tribeCrypto.encryptChainForInvite([cal.rootId], code, inviteSalt)
-        if (ekChain) invite = { code, ekChain, salt: inviteSalt, gen: lookupGen(cal.rootId), ...pubFlag }
+        const ek = tribeCrypto.encryptForInvite(calKey, code, inviteSalt)
+        invite = opts.public
+          ? { code, ek, salt: inviteSalt, gen: lookupGen(cal.rootId), public: true }
+          : { ch: tribeCrypto.hashInviteCode(code, inviteSalt), ek, salt: inviteSalt, gen: lookupGen(cal.rootId) }
       }
       if (opts.public && typeof invite !== "object") invite = { code, public: true }
       const tipId = await this.resolveCurrentId(calendarId)
@@ -1029,6 +1102,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
       await new Promise((resolve, reject) => ssbClient.publish(tombstone, e => e ? reject(e) : resolve()))
+      if (!item.content.tribeId) await rotateCalendarKey(cal.rootId, Array.isArray(cal.participants) ? cal.participants : [])
     },
 
     async joinByInvite(code) {
@@ -1041,12 +1115,22 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         const invs = Array.isArray(cal.invites) ? cal.invites : []
         for (const inv of invs) {
           if (typeof inv === "string" && inv === code) { matched = cal; matchedInvite = inv; break }
-          if (typeof inv === "object" && inv.code === code) { matched = cal; matchedInvite = inv; break }
+          if (typeof inv === "object" && inv && (inv.code === code || (inv.ch && tribeCrypto && inv.ch === tribeCrypto.hashInviteCode(code, inv.salt)))) { matched = cal; matchedInvite = inv; break }
         }
         if (matched) break
       }
       if (!matched) throw new Error("Invalid or expired invite code")
       if (matched.participants.includes(userId)) throw new Error("Already a participant")
+      if (typeof matchedInvite === "object" && matchedInvite.ch && tribeCrypto && matchedInvite.ek) {
+        let probeKey = null
+        try { probeKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt) } catch (_) {}
+        const messages = await readAll(await openSsb())
+        const spent = messages.some(m => {
+          const c = m.value && m.value.content
+          return c && c.type === "calendarParticipant" && c.on !== false && c.target === matched.rootId && c.code === matchedInvite.ch && m.value.author !== userId && (!probeKey || keyProofFor(probeKey, m.value.author) === c.keyProof)
+        })
+        if (spent) throw new Error("Invite already used")
+      }
       let calKey = null
       if (tribeCrypto && typeof matchedInvite === "object") {
         if (matchedInvite.ekChain) {
@@ -1113,7 +1197,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
           }
         } catch (_) {}
       }
-      await new Promise((resolve, reject) => ssbClient.publish({ type: "calendarParticipant", target: matched.rootId, on: true, createdAt: new Date().toISOString() }, (e, res) => e ? reject(e) : resolve(res)))
+      await new Promise((resolve, reject) => ssbClient.publish({ type: "calendarParticipant", target: matched.rootId, on: true, ...(calKey ? { keyProof: keyProofFor(calKey, userId) } : {}), ...(matchedInvite && typeof matchedInvite === "object" && matchedInvite.ch ? { code: matchedInvite.ch } : {}), createdAt: new Date().toISOString() }, (e, res) => e ? reject(e) : resolve(res)))
       return matched.rootId
     }
   }

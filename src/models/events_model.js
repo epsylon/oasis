@@ -24,8 +24,53 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
   const ownCrypto = eventCrypto || tribeCrypto;
   const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null;
 
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0);
+
   const readAll = async (ssbClient) =>
     readTyped(ssbClient, EVENT_TYPES, { limit: logLimit });
+
+  const rotateEventKey = async (rid, attendees) => {
+    if (!ownCrypto || !tribeCrypto || !rid || !lookupKey(rid)) return;
+    const ssbClient = await openSsb();
+    const ssbKeys = require("../server/node_modules/ssb-keys");
+    const newKey = ownCrypto.generateTribeKey();
+    const newGen = ownCrypto.addNewKey(rid, newKey);
+    const memberKeys = {};
+    for (const m of new Set([ssbClient.id, ...(Array.isArray(attendees) ? attendees : [])])) {
+      try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys); } catch (_) {}
+    }
+    await new Promise((resolve) => {
+      ssbClient.publish({ type: "tribe-keys", tribeId: rid, generation: newGen, memberKeys }, () => resolve());
+    });
+  };
+
+  const ensureAttendeeKeys = async (ssbClient, messages, events) => {
+    if (!tribeCrypto || !ownCrypto) return;
+    const leavesByRoot = new Map();
+    for (const m of messages) {
+      const c = m.value && m.value.content;
+      if (!c || c.type !== 'eventAttend' || c.on !== false || typeof c.target !== 'string') continue;
+      if (!leavesByRoot.has(c.target)) leavesByRoot.set(c.target, []);
+      leavesByRoot.get(c.target).push({ member: m.value.author, ts: Number(m.timestamp || m.value.timestamp || 0) });
+    }
+    const ssbKeys = require("../server/node_modules/ssb-keys");
+    for (const ev of events) {
+      if (!ev || !ev.rid || ev.organizer !== ssbClient.id || !lookupKey(ev.rid)) continue;
+      const members = Array.isArray(ev.attendees) ? ev.attendees : [];
+      const plan = ownCrypto.keyPlan({ rootId: ev.rid, ownerId: ev.organizer, gen: lookupGen(ev.rid), members, messages, leaves: leavesByRoot.get(ev.rid) || [] });
+      if (plan.rotate) { await rotateEventKey(ev.rid, members); continue; }
+      if (!plan.missing.length) continue;
+      const key = lookupKey(ev.rid);
+      const memberKeys = {};
+      for (const m of plan.missing) {
+        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys); } catch (_) {}
+      }
+      if (!Object.keys(memberKeys).length) continue;
+      await new Promise((resolve) => {
+        ssbClient.publish({ type: "tribe-keys", tribeId: ev.rid, generation: lookupGen(ev.rid) || 1, memberKeys }, () => resolve());
+      });
+    }
+  };
 
   const ingestOwnTribeKeys = async () => {
     if (!ownCrypto) return;
@@ -34,9 +79,11 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       const ssbKeys = require("../server/node_modules/ssb-keys");
       const cfg = require("../server/ssb_config");
       const msgs = await readAll(ssbClient);
+      const idx = buildEventIndex(msgs);
       for (const m of msgs) {
         const c = m.value && m.value.content;
         if (!c || c.type !== "tribe-keys") continue;
+        if (!c.tribeId || (m.value.author !== idx.eventAuthor.get(c.tribeId) && m.value.author !== ssbClient.id)) continue;
         const memberKeys = c.memberKeys;
         if (!memberKeys || typeof memberKeys !== "object") continue;
         const boxed = memberKeys[ssbClient.id];
@@ -291,23 +338,28 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       const ssbClient = await openSsb();
       const rid = await this.resolveRootId(eventId).catch(() => eventId);
       const messages = await readAll(ssbClient);
+      const authorOf = new Map();
+      for (const m of messages) if (m && m.key && m.value) authorOf.set(m.key, m.value.author);
+      const eventAuthor = authorOf.get(rid);
+      if (!eventAuthor) return null;
       const markerTomb = new Set();
       const invTomb = new Set();
       for (const m of messages) {
         const c = m.value && m.value.content;
-        if (!c) continue;
-        if (c.type === 'event-open-invite-tombstone' && typeof c.target === 'string') markerTomb.add(c.target);
-        if (c.type === 'event-invite-tombstone' && typeof c.target === 'string') invTomb.add(c.target);
+        if (!c || typeof c.target !== 'string' || authorOf.get(c.target) !== m.value.author) continue;
+        if (c.type === 'event-open-invite-tombstone') markerTomb.add(c.target);
+        if (c.type === 'event-invite-tombstone') invTomb.add(c.target);
       }
       let best = null;
       for (const m of messages) {
         const c = m.value && m.value.content;
         if (!c || c.type !== 'event-open-invite' || c.v !== 1) continue;
         if (c.target !== rid || typeof c.code !== 'string') continue;
+        if (m.value.author !== eventAuthor) continue;
         if (markerTomb.has(m.key)) continue;
         if (c.inviteKey && invTomb.has(c.inviteKey)) continue;
         const ts = (m.value && m.value.timestamp) || 0;
-        if (!best || ts > best.ts) best = { code: c.code, by: c.by || m.value.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts };
+        if (!best || ts > best.ts) best = { code: c.code, by: m.value.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts };
       }
       return best ? { code: best.code, by: best.by, markerKey: best.markerKey, inviteKey: best.inviteKey } : null;
     },
@@ -352,6 +404,15 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       if (rec.by !== userId && organizer !== userId) throw new Error("Not allowed to remove this invitation");
       await new Promise((resolve, reject) => ssbClient.publish({ type: 'event-open-invite-tombstone', target: rec.markerKey, ts: new Date().toISOString() }, (err) => err ? reject(err) : resolve()));
       if (rec.inviteKey) await new Promise((resolve, reject) => ssbClient.publish({ type: 'event-invite-tombstone', target: rec.inviteKey, ts: new Date().toISOString() }, (err) => err ? reject(err) : resolve()));
+      if (organizer === userId) {
+        const rid = await this.resolveRootId(eventId);
+        const messages = await readAll(ssbClient);
+        const tip = buildEventIndex(messages).contentTipOf(rid);
+        const raw = messages.find(x => x.key === tip);
+        const rc = raw && raw.value && raw.value.content;
+        const dec = rc && rc.encryptedPayload ? decryptEventContent(rc, rid) : rc;
+        if (dec && !dec._undecryptable) await rotateEventKey(rid, aggregateCollab(dec, rid, collectCollab(messages)).attendees);
+      }
     },
 
     async joinByInvite(code) {
@@ -403,7 +464,6 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       const on = !isAttending;
 
       const isPrivate = normalizePrivacy(c.isPublic) === 'private';
-      const isOrganizer = c.organizer === userId;
 
       const result = await new Promise((resolve, reject) => {
         ssbClient.publish({ type: 'eventAttend', target: rid, on, createdAt: new Date().toISOString() }, (err2, res2) => err2 ? reject(err2) : resolve(res2));
@@ -421,24 +481,6 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
                 ssbClient.publish({ type: "tribe-keys", tribeId: rid, generation: 1, memberKeys }, () => resolve());
               });
             }
-          }
-        } catch (_) {}
-      }
-
-      if (isPrivate && isLeaving && !isOrganizer && ownCrypto && tribeCrypto) {
-        try {
-          const remaining = agg.attendees.filter(a => a !== userId);
-          const newKey = ownCrypto.generateTribeKey();
-          const newGen = ownCrypto.addNewKey(rid, newKey);
-          const ssbKeys = require("../server/node_modules/ssb-keys");
-          const memberKeys = {};
-          for (const m of remaining) {
-            try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys); } catch (_) {}
-          }
-          if (Object.keys(memberKeys).length) {
-            await new Promise((resolve) => {
-              ssbClient.publish({ type: "tribe-keys", tribeId: rid, generation: newGen, memberKeys }, () => resolve());
-            });
           }
         } catch (_) {}
       }
@@ -662,6 +704,8 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
           opinions_inhabitants: agg.opinions_inhabitants
         });
       }
+
+      try { await ensureAttendeeKeys(ssbClient, results, [...byRoot].filter(([rid, e]) => e.encrypted && idx.eventAuthor.get(rid) === userId).map(([rid, e]) => ({ rid, organizer: userId, attendees: e.attendees }))); } catch (_) {}
 
       let out = Array.from(byRoot.values());
       out = dedupeBy(out, e => e.title ? [norm(e.organizer), norm(e.title), norm(e.date)].join('|') : null);

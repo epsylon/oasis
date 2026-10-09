@@ -50,6 +50,18 @@ describe('blob cache: a quota on downloaded media', (t) => {
     eq(res.after, 2000);
   });
 
+  t('a file sent in a private message is kept like my own files', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    const cache = A.use('blobcache');
+    const attached = await addBlob(A, 1000);
+    await publish(A, { type: 'post', text: `[photo](${attached})`, recps: [A.keypair.id, B.keypair.id] });
+    const other = await addBlob(A, 1000);
+    const res = await cache.collect({ maxBytes: 1500, now: Date.now() + 3 * 86400000, protectMs: 0 });
+    ok(await has(A, attached), 'the private attachment stays');
+    notOk(await has(A, other), 'an unrelated cached blob is the one removed');
+    eq(res.deleted, 1);
+  });
+
   t('blobs added in the last day are protected even when the cache is over the quota', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const cache = A.use('blobcache');

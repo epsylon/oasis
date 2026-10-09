@@ -5,14 +5,17 @@ const ssb = require("../client/gui");
 const config = require("../server/SSB_server").config;
 const cooler = ssb({ offline: config.offline });
 
-let sharp;
-try {
-  sharp = require("sharp");
-} catch (e) {
-}
+let sharpLib;
+const getSharp = () => {
+  if (sharpLib === undefined) {
+    try { sharpLib = require('../server/node_modules/sharp'); } catch (_) { sharpLib = null; }
+  }
+  return sharpLib;
+};
 
 const stripImageMetadata = async (buffer) => {
-  if (typeof sharp !== "function") return buffer;
+  const sharp = getSharp();
+  if (!sharp) return buffer;
   try {
     return await sharp(buffer).rotate().toBuffer();
   } catch {
@@ -47,7 +50,7 @@ const stripPdfMetadata = (buffer) => {
   }
 };
 
-const MAX_BLOB_SIZE = 50 * 1024 * 1024;
+const MAX_BLOB_SIZE = 75 * 1024 * 1024;
 
 class FileTooLargeError extends Error {
   constructor(fileName, fileSize) {
@@ -317,5 +320,5 @@ const serveBlob = async function (ctx) {
   sendBlobBuffer(ctx, buffer);
 };
 
-module.exports = { handleBlobUpload, handleBlobUploads, serveBlob, sendBlobBuffer, contentDisposition, oggMime, FileTooLargeError };
+module.exports = { handleBlobUpload, handleBlobUploads, serveBlob, sendBlobBuffer, contentDisposition, oggMime, FileTooLargeError, stripImageMetadata };
 

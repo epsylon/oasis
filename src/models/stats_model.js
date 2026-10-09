@@ -7,11 +7,11 @@ const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-const STORAGE_DIR = path.join(__dirname, "..", "configs");
-const ADDR_FILE = path.join(STORAGE_DIR, "wallet_addresses.json");
+const addrFile = () => process.env.OASIS_BANKING_DIR ? path.join(process.env.OASIS_BANKING_DIR, "wallet-addresses.json") : require('../configs/state-manager').statePath("wallet-addresses.json");
 
 function readAddrMap() {
   try {
+    const ADDR_FILE = addrFile();
     if (!fs.existsSync(ADDR_FILE)) return {};
     const raw = fs.readFileSync(ADDR_FILE, 'utf8');
     const obj = JSON.parse(raw || '{}');

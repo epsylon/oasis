@@ -16,6 +16,20 @@ const collectStream = (stream) =>
     pull(stream, pull.collect((err, msgs) => (err ? reject(err) : resolve(msgs))));
   });
 
+const isDeletion = (m) => {
+  const c = m && m.value && m.value.content;
+  return !!c && typeof c === 'object' && c.type === 'tombstone';
+};
+
+const readContentWindow = (ssb, limit) => {
+  if (!limit) return collectStream(ssb.createLogStream({ reverse: true }));
+  let kept = 0;
+  return collectStream(pull(
+    ssb.createLogStream({ reverse: true }),
+    pull.take((m) => { if (!isDeletion(m)) kept++; return kept <= limit; })
+  ));
+};
+
 const caches = new WeakMap();
 
 const cacheFor = (ssb) => {
@@ -34,7 +48,9 @@ const insert = (entry, msgs) => {
   }
 };
 
-const syncType = async (ssb, cache, type, limit) => {
+const UNCAPPED_TYPES = new Set(['tombstone']);
+const syncType = async (ssb, cache, type, requestedLimit) => {
+  const limit = UNCAPPED_TYPES.has(type) ? 0 : requestedLimit;
   let entry = cache.types.get(type);
   if (!entry) {
     entry = { byKey: new Map(), warming: null, warm: false };
@@ -64,7 +80,7 @@ const syncWindow = async (ssb, cache, limit) => {
   if (!entry) {
     entry = { byKey: new Map(), warming: null, warm: false };
     cache.window = entry;
-    entry.warming = collectStream(ssb.createLogStream(limit ? { reverse: true, limit } : { reverse: true }))
+    entry.warming = readContentWindow(ssb, limit)
       .then((msgs) => { insert(entry, msgs); entry.warm = true; })
       .catch(() => { cache.window = null; });
     await entry.warming;
@@ -75,7 +91,7 @@ const syncWindow = async (ssb, cache, limit) => {
   const tail = await collectStream(ssb.createLogStream({ reverse: true, limit: TAIL_PROBE }));
   const fresh = tail.filter((m) => m && m.key && !entry.byKey.has(m.key));
   if (fresh.length === tail.length && tail.length === TAIL_PROBE) {
-    const all = await collectStream(ssb.createLogStream(limit ? { reverse: true, limit } : { reverse: true }));
+    const all = await readContentWindow(ssb, limit);
     insert(entry, all);
   } else {
     insert(entry, fresh);
@@ -202,4 +218,4 @@ const discoverContentTypes = () => {
 
 const CONTENT_TYPES = discoverContentTypes();
 
-module.exports = { readTyped, collectStream, CONTENT_TYPES, discoverContentTypes, requestScope };
+module.exports = { readTyped, collectStream, readContentWindow, CONTENT_TYPES, discoverContentTypes, requestScope };

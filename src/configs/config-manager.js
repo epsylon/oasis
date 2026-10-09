@@ -1,7 +1,50 @@
 const fs = require('fs');
 const path = require('path');
 
-const configFilePath = path.join(__dirname, 'oasis-config.json');
+const os = require('os');
+const legacyConfigPath = path.join(__dirname, 'oasis-config.json');
+const stateDir = process.env.OASIS_STATE_DIR || process.env.ssb_path || path.join(os.homedir(), '.ssb');
+const oasisDir = path.join(stateDir, 'oasis');
+const configFilePath = path.join(oasisDir, 'oasis-config.json');
+const defaultServerConfigPath = path.join(__dirname, 'server-config.json');
+const serverConfigFilePath = path.join(oasisDir, 'oasis-server-config.json');
+for (const [from, to] of [[path.join(stateDir, 'oasis-config.json'), configFilePath], [path.join(stateDir, 'oasis-server-config.json'), serverConfigFilePath]]) {
+  try {
+    if (!fs.existsSync(to) && fs.existsSync(from)) {
+      fs.mkdirSync(oasisDir, { recursive: true, mode: 0o700 });
+      fs.renameSync(from, to);
+    }
+  } catch (_) {}
+}
+const writeStateFile = (file, data) => {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, data, { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(tmp, file);
+  try { fs.chmodSync(file, 0o600); } catch (_) {}
+};
+const writeConfigFile = (data) => writeStateFile(configFilePath, data);
+const readJsonFile = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; } };
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const mergeDeep = (base, over) => {
+  if (!isPlainObject(base) || !isPlainObject(over)) return over === undefined ? base : over;
+  const out = { ...base };
+  for (const [k, v] of Object.entries(over)) out[k] = isPlainObject(v) && isPlainObject(base[k]) ? mergeDeep(base[k], v) : v;
+  return out;
+};
+if (!fs.existsSync(serverConfigFilePath)) {
+  const shipped = readJsonFile(defaultServerConfigPath);
+  const hops = shipped && shipped.friends ? shipped.friends.hops : undefined;
+  try {
+    if (shipped && shipped.pub === true) writeStateFile(serverConfigFilePath, JSON.stringify(shipped, null, 2));
+    else if (Number.isFinite(hops) && hops !== 2) writeStateFile(serverConfigFilePath, JSON.stringify({ friends: { hops } }, null, 2));
+  } catch (_) {}
+}
+const readServerConfig = () => mergeDeep(readJsonFile(defaultServerConfigPath) || {}, readJsonFile(serverConfigFilePath) || {});
+const saveServerConfig = (patch) => writeStateFile(serverConfigFilePath, JSON.stringify(mergeDeep(readJsonFile(serverConfigFilePath) || {}, patch), null, 2));
+if (!fs.existsSync(configFilePath) && fs.existsSync(legacyConfigPath)) {
+  try { writeConfigFile(fs.readFileSync(legacyConfigPath, 'utf8')); } catch (_) {}
+}
 
 if (!fs.existsSync(configFilePath)) {
   const defaultConfig = {
@@ -87,10 +130,10 @@ if (!fs.existsSync(configFilePath)) {
     "language": "en",
     "wish": "whole",
     "pmVisibility": "whole",
-    "phone": { "visibility": "whole", "dnd": false, "relay": true },
+    "phone": { "visibility": "mutuals", "dnd": false, "relay": true },
     "lanBroadcasting": true
   };
-  fs.writeFileSync(configFilePath, JSON.stringify(defaultConfig, null, 2));
+  writeConfigFile(JSON.stringify(defaultConfig, null, 2));
 }
 
 const getConfig = () => {
@@ -99,7 +142,7 @@ const getConfig = () => {
   if (!['whole', 'mutuals', 'only-lan', 'local'].includes(cfg.wish)) cfg.wish = 'whole';
   if (cfg.pmVisibility !== 'whole' && cfg.pmVisibility !== 'mutuals') cfg.pmVisibility = 'whole';
   if (!cfg.phone || typeof cfg.phone !== 'object') cfg.phone = {};
-  cfg.phone = { visibility: cfg.phone.visibility === 'mutuals' ? 'mutuals' : 'whole', dnd: cfg.phone.dnd === true, relay: cfg.phone.relay !== false };
+  cfg.phone = { visibility: cfg.phone.visibility === 'whole' ? 'whole' : 'mutuals', dnd: cfg.phone.dnd === true, relay: cfg.phone.relay !== false };
   if (typeof cfg.ux === 'string') cfg.ux = { current: cfg.ux };
   if (!cfg.ux || typeof cfg.ux !== 'object') cfg.ux = { current: 'blocks' };
   if (cfg.ux.current === 'menus') cfg.ux.current = 'blocks';
@@ -120,10 +163,14 @@ const getConfig = () => {
 };
 
 const saveConfig = (newConfig) => {
-  fs.writeFileSync(configFilePath, JSON.stringify(newConfig, null, 2));
+  writeConfigFile(JSON.stringify(newConfig, null, 2));
 };
 
 module.exports = {
+  configFilePath,
+  serverConfigFilePath,
   getConfig,
   saveConfig,
+  readServerConfig,
+  saveServerConfig,
 };

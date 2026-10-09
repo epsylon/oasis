@@ -117,6 +117,35 @@ describe('ssb-db2: the legacy surface the models rely on', (t) => {
     } finally { await closeSbot(sbot); }
   });
 
+  t('a flood of junk deletions cannot push a real deletion out of a typed read', async () => {
+    const sbot = makeSbot();
+    try {
+      const { readTyped } = require('../../../src/models/typed_log');
+      const post = await publish(sbot, { type: 'post', text: 'to be deleted' });
+      const real = await publish(sbot, { type: 'tombstone', target: post.key, deletedAt: new Date().toISOString() });
+      for (let i = 0; i < 12; i++) await publish(sbot, { type: 'tombstone', target: '%junk' + i, deletedAt: new Date().toISOString() });
+      const seen = await readTyped(sbot, ['tombstone'], { limit: 5 });
+      ok(seen.some(m => m.key === real.key), 'the real deletion is still read');
+    } finally { await closeSbot(sbot); }
+  });
+
+  t('deletions do not use up the window of recent content', async () => {
+    const sbot = makeSbot();
+    try {
+      const { readContentWindow } = require('../../../src/models/typed_log');
+      const posts = [];
+      for (let i = 0; i < 3; i++) posts.push(await publish(sbot, { type: 'post', text: 'kept ' + i }));
+      for (let i = 0; i < 12; i++) await publish(sbot, { type: 'tombstone', target: '%junk' + i, deletedAt: new Date().toISOString() });
+      const win = await readContentWindow(sbot, 3);
+      ok(posts.every(p => win.some(m => m.key === p.key)), 'every recent post is still in the window');
+      eq(win.filter(m => m.value.content.type === 'tombstone').length, 12, 'the deletions met on the way are kept too');
+      const newest = await publish(sbot, { type: 'post', text: 'newest' });
+      const next = await readContentWindow(sbot, 3);
+      ok(next.some(m => m.key === newest.key), 'the newest post enters the window');
+      notOk(next.some(m => m.key === posts[0].key), 'the oldest post leaves it once the limit is full');
+    } finally { await closeSbot(sbot); }
+  });
+
   t('links: backlinks by destination, votes, replies, tangle heads and self-about', async () => {
     const sbot = makeSbot();
     try {

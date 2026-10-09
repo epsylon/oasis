@@ -88,11 +88,21 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         continue;
       }
       if (b.k === 'tc-collab') {
-        collabMsgs.push({ sub: b.sub, target: b.target, author: m.value.author, ts: m.value.timestamp || 0, option: b.option, on: b.on, category: b.category });
+        collabMsgs.push({ sub: b.sub, target: b.target, author: m.value.author, ts: m.value.timestamp || 0, seq: m.value.sequence || 0, option: b.option, on: b.on, category: b.category });
         continue;
       }
       if (b.k !== 'tribe-content') continue;
-      content.set(m.key, { author: m.value.author, body: b, ts: m.value.timestamp });
+      content.set(m.key, { author: m.value.author, body: b, ts: m.value.timestamp, seq: m.value.sequence || 0 });
+    }
+
+    if (targetRootId && tribesModel && typeof tribesModel.departures === 'function') {
+      const gone = await tribesModel.departures(targetRootId).catch(() => new Map());
+      const afterLeaving = (author, ts, seq) => {
+        const d = gone.get(author);
+        return !!d && ((d.seq !== undefined && seq > d.seq) || (d.ts !== undefined && (Number(ts) || 0) > d.ts));
+      };
+      for (const [key, node] of [...content]) if (afterLeaving(node.author, node.ts, node.seq)) content.delete(key);
+      for (let i = collabMsgs.length - 1; i >= 0; i--) if (afterLeaving(collabMsgs[i].author, collabMsgs[i].ts, collabMsgs[i].seq)) collabMsgs.splice(i, 1);
     }
 
     const naiveNext = new Map();

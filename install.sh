@@ -8,6 +8,7 @@ printf "|| OASIS Installer v0.6 ||\n"
 printf "==========================\n"
 
 NODE_MIN=22
+NODESOURCE_FPR="6F71F525282841EEDAF851B42F59B5F99B1BE0B4"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -48,7 +49,19 @@ install_base() {
 install_node() {
     case "$PM" in
         apt)
-            curl -fsSL "https://deb.nodesource.com/setup_${NODE_MIN}.x" | $SUDO bash -
+            $SUDO apt-get install -y ca-certificates curl gnupg
+            NS_KEY="$(mktemp)"
+            curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key -o "$NS_KEY"
+            if [ "$(gpg --show-keys --with-colons "$NS_KEY" 2>/dev/null | awk -F: '/^fpr/{print $10; exit}')" != "$NODESOURCE_FPR" ]; then
+                rm -f "$NS_KEY"
+                echo "The NodeSource signing key does not match the expected one. Install Node.js ${NODE_MIN}+ yourself, then run: OASIS_NO_SYSTEM_DEPS=1 ./install.sh"
+                exit 1
+            fi
+            $SUDO mkdir -p /etc/apt/keyrings
+            gpg --dearmor < "$NS_KEY" | $SUDO tee /etc/apt/keyrings/nodesource.gpg >/dev/null
+            rm -f "$NS_KEY"
+            echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_MIN}.x nodistro main" | $SUDO tee /etc/apt/sources.list.d/nodesource.list >/dev/null
+            $SUDO apt-get update
             $SUDO apt-get install -y nodejs
             ;;
         pacman) $SUDO pacman -S --needed --noconfirm nodejs npm ;;
@@ -129,18 +142,36 @@ echo ""
 MODEL_DIR="../AI"
 LLM_FILE="oasis-42-1-chat.Q4_K_M.gguf"
 LLM_TAR="$LLM_FILE.tar.gz"
+LLM_SHA256="52c018928a6aef272b7e97a8fd49d930200b942487683ff4963e67e74c7ec14e"
 EMB_DIR="$MODEL_DIR/embeddings"
 EMB_TAR="oasis-embeddings.tar.gz"
+EMB_SHA256="128f3526695b4af1320facc601eac2428ced39e3cd18e5ee829a1c54eea9fa41"
 EMB_FILE="$EMB_DIR/onnx/model_quantized.onnx"
-CONFIG_PATH="../configs/oasis-config.json"
+CONFIG_PATH="${OASIS_STATE_DIR:-${ssb_path:-$HOME/.ssb}}/oasis/oasis-config.json"
+[ -f "$CONFIG_PATH" ] || node -e "require('../configs/config-manager.js')" >/dev/null 2>&1
 MODEL_MIRRORS="${OASIS_MODEL_MIRRORS:-} https://solarnethub.com/code/models https://4ndr0m3d4.xyz"
 
+tar_is_safe() {
+    local file="$1" pattern="$2" listing
+    listing=$(tar -tvzf "$file" 2>/dev/null) || return 1
+    printf '%s\n' "$listing" | grep -q '^[lhcbp]' && return 1
+    tar -tzf "$file" 2>/dev/null | while IFS= read -r entry; do
+        case "$entry" in /*|..|../*|*/..|*/../*) exit 1 ;; esac
+        [ "$entry" = "./" ] && continue
+        printf '%s\n' "$entry" | grep -Eq "$pattern" || exit 1
+    done
+}
+
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
 download_package() {
-    local name="$1" out="$2" base url
+    local name="$1" out="$2" pattern="$3" digest="$4" base url
     for base in $MODEL_MIRRORS; do
         url="${base%/}/$name"
         echo "  trying $url"
-        if curl -fL --progress-bar --retry 2 --connect-timeout 20 -o "$out.part" "$url" && tar -tzf "$out.part" >/dev/null 2>&1; then
+        if curl -fL --progress-bar --retry 2 --connect-timeout 20 -o "$out.part" "$url" && [ "$(sha256_of "$out.part")" = "$digest" ] && tar_is_safe "$out.part" "$pattern"; then
             mv "$out.part" "$out"
             return 0
         fi
@@ -189,8 +220,8 @@ esac
 
 if [ "$WANT_LLM" = "1" ] && [ ! -f "$MODEL_DIR/$LLM_FILE" ]; then
     echo ""
-    echo "downloading AI model [size: 3,8 GiB (4.081.004.224 bytes)] ..."
-    if download_package "$LLM_TAR" "$MODEL_DIR/$LLM_TAR"; then
+    echo "downloading AI model [size: 1,9 GiB (2.051.410.266 bytes)] ..."
+    if download_package "$LLM_TAR" "$MODEL_DIR/$LLM_TAR" '^(\./)?oasis-42-1-chat\.Q4_K_M\.gguf$' "$LLM_SHA256"; then
         echo ""
         echo "extracting package: $LLM_TAR..."
         echo ""
@@ -204,8 +235,8 @@ fi
 
 if [ "$WANT_EMB" = "1" ] && [ ! -f "$EMB_FILE" ]; then
     echo ""
-    echo "downloading embeddings model [size: ~60 MiB] ..."
-    if download_package "$EMB_TAR" "$MODEL_DIR/$EMB_TAR"; then
+    echo "downloading embeddings model [size: ~74 MiB] ..."
+    if download_package "$EMB_TAR" "$MODEL_DIR/$EMB_TAR" '^(\./)?embeddings(/.*)?$' "$EMB_SHA256"; then
         echo ""
         echo "extracting package: $EMB_TAR..."
         echo ""

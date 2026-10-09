@@ -42,6 +42,8 @@ In **Settings → Phone**:
 - **Only mutual-support**: the inhabitants you support who support you back;
 - **Do not disturb**: nobody.
 
+A new node starts with **Only mutual-support**.
+
 Inhabitants you block can never call you.
 
 ### Do not disturb
@@ -69,9 +71,11 @@ Tribes and sub-tribes have rooms of their own, in their **ROOMS** section, reada
 
 Click a room's title in the list to enter it: you are in the room and hear whoever is talking. Entering another room leaves the one you were in. **Leave** to go, whenever you want; joining needs the same devices as a call. **Mute** yourself at any moment; the others see that you are muted. **Silence** next to someone's name stops their voice for you alone, without anyone else noticing; **Hear again** brings it back.
 
-While you are in a room, the bar at the top of every page shows its name, how many are inside, how long you have been there, **Mute** and **Leave**.
+While you are in a room, the bar at the top of every page shows its name, how many are inside, how long you have been there, **Mute**, **Raise hand** and **Leave**. If the room is already busy when you enter, you come in muted, so the newcomers do not interrupt; **Unmute** when you want to speak.
 
-A chime tells you when someone enters, and a different one when someone leaves. On the room page, above the participants, the bell turns those chimes and the list of what happened (who entered, who left, who recorded) on or off for you, and **Clear** empties that list. It is never stored anywhere: it lives only while you are inside.
+A chime tells you when someone enters, and a different one when someone leaves, mutes or unmutes. On the room page, above the participants, the bell turns those chimes and the list of what happened (who entered, who left, who muted, who recorded) on or off for you, and **Clear** empties that list. It is never stored anywhere: it lives only while you are inside. On a desktop, each of those notices also appears as a system notification, so you can follow the room without reloading the page; what you do yourself is not notified.
+
+**Raise hand** asks for a turn to speak. The others hear a signal and get a notice, and your hand appears next to your name with your place in the queue: the first hand raised is the first turn. Raised hands are listed first among the participants, in that order, and the bar at the top shows your own place. **Lower hand** takes you out of the queue.
 
 Any participant can **Record** the room. Everyone inside hears a signal when a recording starts and another when it stops, and sees a **REC** mark next to whoever is recording. The recording stays on the device of the one who made it, under **Recordings** on the room page, to download or delete.
 

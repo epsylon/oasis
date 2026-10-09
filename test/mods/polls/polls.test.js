@@ -21,6 +21,28 @@ describe('polls: asking and answering', (t) => {
     deepEq(poll.options, ['Yes', 'No'], 'kept two distinct options');
   });
 
+  t('a ballot published after the deadline is not counted', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const deadline = new Date(Date.now() + 60000).toISOString();
+    const p = await A.use('polls').createPoll({ ...basePoll, deadline });
+    B.setActor();
+    await B.use('polls').vote(p.key, ['Plaza']);
+    const realNow = Date.now;
+    Date.now = () => realNow() + 120000;
+    try {
+      const ssbC = await C.cooler.open();
+      await new Promise((res, rej) => ssbC.publish({ type: 'pollVote', target: p.key, choices: ['Park'] }, (e) => e ? rej(e) : res()));
+      const ssbB = await B.cooler.open();
+      await new Promise((res, rej) => ssbB.publish({ type: 'pollVote', target: p.key, choices: ['Park'] }, (e) => e ? rej(e) : res()));
+    } finally { Date.now = realNow; }
+    A.setActor();
+    const poll = await A.use('polls').getPollById(p.key);
+    eq(poll.totalVoters, 1, 'only the ballot inside the window counts');
+    eq(poll.counts.Plaza, 1, 'and it keeps its original choice');
+    eq(poll.counts.Park || 0, 0, 'late changes and late voters are ignored');
+  });
+
   t('a single-choice poll refuses two answers, a multiple one accepts them', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();

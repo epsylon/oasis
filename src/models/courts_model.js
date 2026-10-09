@@ -3,6 +3,7 @@ const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
+const { buildVoteResults } = require('../backend/vote_tally');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const CASE_ANSWER_DAYS = 7;
@@ -23,6 +24,7 @@ const COURTS_TYPES = [
   'courtsSettlementAccepted', 'courtsSupport', 'courtsNomination', 'courtsNominationVote',
   'courts-key', 'tombstone'
 ];
+const VOTE_LOG_TYPES = ['votes', 'votesVote', 'tombstone'];
 
 module.exports = ({ cooler, services = {}, tribeCrypto }) => {
   let ssb;
@@ -88,13 +90,19 @@ module.exports = ({ cooler, services = {}, tribeCrypto }) => {
     const tomb = buildValidatedTombstoneSet(msgs);
     const rep = new Map();
     const map = new Map();
+    const authorOf = new Map();
+    for (const m of msgs) {
+      const c = m.value?.content || m.content;
+      if (c && c.type === type) authorOf.set(m.key || m.id, m.value?.author);
+    }
     for (const m of msgs) {
       const k = m.key || m.id;
       const c = m.value?.content || m.content;
       if (!c) continue;
 if (c.type === type) {
+        if (c.replaces && authorOf.has(c.replaces) && authorOf.get(c.replaces) !== m.value?.author) continue;
         if (c.replaces) rep.set(c.replaces, k);
-        map.set(k, { id: k, ...c });
+        map.set(k, { ...c, id: k });
       }
     }
     for (const oldId of rep.keys()) map.delete(oldId);
@@ -254,7 +262,7 @@ if (c.type === type) {
         myPublicPreference = c.publicPrefRespondent;
       }
       const rootId = c.rootCaseId || c.id;
-      const tally = c.voteId ? await voteTally(c.voteId) : null;
+      const tally = c.voteId ? await voteTally(c.voteId, [c.accuser, c.respondentId]) : null;
       rows.push({
         ...c,
         respondent: c.respondentId || c.respondent,
@@ -331,6 +339,7 @@ if (c.type === type) {
     let medATs = 0, medRTs = 0, judgeId = '', judgeTs = 0, voteId = String(base.voteId || ''), voteTs = 0;
     let prefA = base.publicPrefAccuser, prefATs = 0, prefR = base.publicPrefRespondent, prefRTs = 0;
     let answered = false, settled = false, verdict = null, verdictTs = 0, verdictAt = null, settledAt = null;
+    const verdictClaims = [];
 
     for (const m of msgs) {
       const c = m.value?.content || m.content; if (!c) continue;
@@ -353,20 +362,20 @@ if (c.type === type) {
         answered = true;
       } else if (c.type === 'courtsSettlementAccepted' && matchC(c) && isParty(author)) {
         settled = true; settledAt = c.createdAt || new Date(ts).toISOString();
-      } else if (c.type === 'courtsVerdict' && matchC(c) && ts >= verdictTs) {
-        verdict = author; verdictTs = ts; verdictAt = c.createdAt || new Date(ts).toISOString();
+      } else if (c.type === 'courtsVerdict' && matchC(c)) {
+        verdictClaims.push({ author, ts, at: c.createdAt || new Date(ts).toISOString() });
       }
     }
 
-    let verdictValid = false;
-    if (verdict) {
-      if (method === 'JUDGE') verdictValid = (verdict === judgeId);
-      else if (method === 'MEDIATION') verdictValid = (medA.includes(verdict) || medR.includes(verdict));
-      else if (method === 'DICTATOR') verdictValid = (verdict === dictatorId);
+    const legit = await verdictAuthors({ method, judgeId, medA, medR, dictatorId, openedAt: base.openedAt || base.createdAt, accuser, respondentId });
+    for (const v of verdictClaims) {
+      if (!legit.has(v.author) || v.ts < verdictTs) continue;
+      verdict = v.author; verdictTs = v.ts; verdictAt = v.at;
     }
+    const verdictValid = !!verdict;
     let voteDecided = false;
     if ((method === 'POPULAR' || method === 'KARMATOCRACY') && voteId) {
-      try { const t = await voteTally(voteId); if (t && t.closed && t.total > 0) voteDecided = true; } catch (_) {}
+      try { const t = await voteTally(voteId, [accuser, respondentId]); if (t && t.closed && t.total > 0 && (t.yes >= t.needed || t.no >= t.needed)) voteDecided = true; } catch (_) {}
     }
 
     base.mediatorsAccuser = medA;
@@ -380,6 +389,33 @@ if (c.type === type) {
     else if (voteDecided) { base.decidedAt = base.decidedAt || nowISO(); }
     else if (settled) { base.closedAt = settledAt; base.decidedAt = settledAt; }
     return base;
+  }
+
+  async function isRulingDictator(feedId, at) {
+    if (!feedId || !services.parliament || !services.parliament.listTerms) return false;
+    const atMs = new Date(at).getTime();
+    if (!Number.isFinite(atMs)) return false;
+    try {
+      const terms = await services.parliament.listTerms('all');
+      return (terms || []).some(t =>
+        String(t.method || '').toUpperCase() === 'DICTATORSHIP' &&
+        t.powerType === 'inhabitant' &&
+        String(t.powerId || '') === String(feedId) &&
+        new Date(t.startAt).getTime() <= atMs &&
+        atMs < new Date(t.endAt).getTime()
+      );
+    } catch (_) { return false; }
+  }
+
+  async function verdictAuthors({ method, judgeId, medA, medR, dictatorId, openedAt, accuser, respondentId }) {
+    const out = new Set();
+    if (method === 'JUDGE' && judgeId) out.add(String(judgeId));
+    else if (method === 'MEDIATION') for (const x of [...ensureArray(medA), ...ensureArray(medR)]) out.add(String(x));
+    else if (method === 'DICTATOR' && dictatorId && await isRulingDictator(dictatorId, openedAt)) out.add(String(dictatorId));
+    out.delete(String(accuser || ''));
+    out.delete(String(respondentId || ''));
+    out.delete('');
+    return out;
   }
 
   async function getCaseById(caseId) {
@@ -651,17 +687,22 @@ if (c.type === type) {
     return map;
   }
 
-  async function voteTally(voteId) {
-    if (!voteId || !services.votes || !services.votes.getVoteById) return null;
+  async function voteTally(voteId, parties) {
+    if (!voteId) return null;
     try {
-      const v = await services.votes.getVoteById(voteId);
-      const vm = v && v.votes ? v.votes : {};
+      const ssbClient = await openSsb();
+      const msgs = await readTyped(ssbClient, VOTE_LOG_TYPES, { limit: logLimit });
+      const r = buildVoteResults(msgs).get(voteId);
+      if (!r) return null;
+      const tomb = buildValidatedTombstoneSet(msgs);
+      if (tomb.has(r.rootId) || tomb.has(voteId)) return null;
+      if (Array.isArray(parties) && !parties.map(x => String(x || '')).includes(String(r.creator || ''))) return null;
+      const vm = r.votes || {};
       const yes = Number(vm.YES ?? vm.Yes ?? vm.yes ?? 0);
       const no = Number(vm.NO ?? vm.No ?? vm.no ?? 0);
-      const sum = Object.values(vm).reduce((s, n) => s + Number(n || 0), 0);
-      const total = Number(v.totalVotes ?? v.total ?? sum);
-      const deadline = v.deadline || v.endAt || v.expiresAt || null;
-      const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
+      const total = Number(r.totalVotes || 0);
+      const deadline = r.deadline || null;
+      const closed = !!(deadline && moment(deadline).isBefore(moment()));
       const needed = Math.floor(total / 2) + 1;
       return { yes, no, total, needed, closed, deadline };
     } catch { return null; }
@@ -870,8 +911,24 @@ if (c.type === type) {
       .filter(matchCase)
       .map(tryDecrypt)
       .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+    const legit = await verdictAuthors({
+      method: String(base.method || '').toUpperCase(),
+      judgeId,
+      medA: ma,
+      medR: mr,
+      dictatorId,
+      openedAt: base.openedAt || base.createdAt,
+      accuser: accuserId,
+      respondentId
+    });
+    const legitVerdictKeys = new Set();
+    for (const m of await readLog()) {
+      const c = m.value?.content;
+      if (c && c.type === 'courtsVerdict' && legit.has(String(m.value?.author || ''))) legitVerdictKeys.add(m.key || m.id);
+    }
     const verdicts = verdictsAll
       .filter(matchCase)
+      .filter(v => legitVerdictKeys.has(v.id))
       .map(tryDecrypt)
       .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
     const verdict = verdicts.length ? verdicts[verdicts.length - 1] : null;
@@ -886,7 +943,7 @@ if (c.type === type) {
     const hasVerdict = !!verdict;
     const supportsMap = await countSupportsByCase();
     const supportCount = supportsMap.get(String(caseRootId)) || supportsMap.get(String(id)) || 0;
-    const tally = base.voteId ? await voteTally(base.voteId) : null;
+    const tally = base.voteId ? await voteTally(base.voteId, [accuserId, respondentId]) : null;
     return {
       ...base,
       id,

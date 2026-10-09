@@ -70,25 +70,20 @@ describe('parliament: which government prevails when two peers elected apart', (
     startAt: '2026-07-28T00:00:00.000Z', endAt: '2026-09-26T00:00:00.000Z', ...over
   });
 
-  t('a lone inhabitant cannot impose a government where there are more', () => {
-    const alone = term({ id: '%alone.sha256', method: 'DICTATORSHIP', population: 1, totalVotes: 1, winnerVotes: 1 });
-    const crowd = term({ id: '%crowd.sha256', method: 'ANARCHY', population: 12, totalVotes: 0, winnerVotes: 0 });
-    const [winner] = collapseOverlappingTerms([alone, crowd]);
-    eq(winner.id, '%crowd.sha256', 'the side with more inhabitants behind it prevails');
+  const supportFrom = (table) => (t) => table[t.id] || 0;
+
+  t('the side with more signed support prevails, whatever the terms say about themselves', () => {
+    const boastful = term({ id: '%aaa.sha256', method: 'DICTATORSHIP', population: 1e9, totalVotes: 1e9, winnerVotes: 1e9 });
+    const backed = term({ id: '%zzz.sha256', population: 3, totalVotes: 3, winnerVotes: 3 });
+    const [winner] = collapseOverlappingTerms([boastful, backed], supportFrom({ '%aaa.sha256': 2, '%zzz.sha256': 7 }));
+    eq(winner.id, '%zzz.sha256', 'the support counted from signed votes decides');
   });
 
-  t('with the same population, the election with more participation wins', () => {
-    const quiet = term({ id: '%quiet.sha256', population: 10, totalVotes: 2, winnerVotes: 2 });
-    const busy = term({ id: '%busy.sha256', population: 10, totalVotes: 9, winnerVotes: 5 });
-    const [winner] = collapseOverlappingTerms([quiet, busy]);
-    eq(winner.id, '%busy.sha256', 'more votes cast means a better founded result');
-  });
-
-  t('with the same turnout, the clearer winner wins', () => {
-    const narrow = term({ id: '%narrow.sha256', population: 10, totalVotes: 9, winnerVotes: 4 });
-    const clear = term({ id: '%clear.sha256', population: 10, totalVotes: 9, winnerVotes: 7 });
-    const [winner] = collapseOverlappingTerms([narrow, clear]);
-    eq(winner.id, '%clear.sha256', 'the candidature with more support');
+  t('the counters written inside a term never rank it', () => {
+    const loud = term({ id: '%zzz.sha256', population: 500, totalVotes: 400, winnerVotes: 300 });
+    const quiet = term({ id: '%aaa.sha256', population: 1, totalVotes: 1, winnerVotes: 1 });
+    eq(collapseOverlappingTerms([loud, quiet])[0].id, '%aaa.sha256', 'without counted support they weigh the same');
+    ok(compareTermsForWindow(loud, quiet) > 0, 'population, turnout and declared votes are ignored');
   });
 
   t('all else equal, a government beats an absence of government', () => {
@@ -146,49 +141,64 @@ describe('parliament: there is always exactly one government in force', (t) => {
     ...over
   });
 
+  const elect = async (proposer, candidate, method, voters) => {
+    const cand = await publish(proposer, {
+      type: 'parliamentCandidature', targetType: 'inhabitant', targetId: candidate.keypair.id, targetTitle: 'x',
+      method, votes: 0, voters: [], proposer: proposer.keypair.id, status: 'OPEN', createdAt: new Date().toISOString()
+    });
+    for (const v of voters) await publish(v, { type: 'parliamentCandidatureVote', target: cand.key, createdAt: new Date().toISOString() });
+    return cand;
+  };
+
   t('two peers that elected apart end up under a single government', async () => {
-    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const net = makeNetwork();
+    const [A, B, C, D, E, F, G] = Array.from({ length: 7 }, () => makePeer(net));
     const window = termWindowFor(Date.now());
 
-    A.setActor();
+    await elect(C, A, 'DICTATORSHIP', [C, D]);
+    await elect(E, B, 'DEMOCRACY', [E, F, G]);
+
     await publish(A, termFor(window, {
       method: 'DICTATORSHIP', powerType: 'inhabitant', powerId: A.keypair.id, powerTitle: 'A',
-      population: 1, totalVotes: 1, winnerVotes: 1
+      population: 1e9, totalVotes: 1e9, winnerVotes: 1e9, createdBy: A.keypair.id
     }));
-
-    B.setActor();
-    await publish(B, termFor(window, { population: 12 }));
+    await publish(B, termFor(window, {
+      method: 'DEMOCRACY', powerType: 'inhabitant', powerId: B.keypair.id, powerTitle: 'B',
+      population: 1, totalVotes: 1, winnerVotes: 1, createdBy: B.keypair.id
+    }));
 
     for (const peer of [A, B]) {
       peer.setActor();
       const active = await peer.use('parliament').listTerms('active');
       eq(active.length, 1, 'exactly one government is in force');
-      eq(Number(active[0].population), 12, 'the one backed by more inhabitants');
+      eq(active[0].powerId, B.keypair.id, 'the one with more signed votes behind it');
+      eq(Number(active[0].winnerVotes), 3, 'and its support is counted, not read from the term');
 
       const current = await peer.use('parliament').getCurrentTerm();
       eq(current.startAt, window.startAt, 'and it is the one of the running cycle');
-      eq(Number(current.population), 12, 'both peers read the same government');
+      eq(current.powerId, B.keypair.id, 'both peers read the same government');
     }
   });
 
   t('the government that loses stops applying, on both sides', async () => {
-    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const net = makeNetwork();
+    const [A, B, C, D, E, F, G] = Array.from({ length: 7 }, () => makePeer(net));
     const window = termWindowFor(Date.now());
 
-    A.setActor();
+    await elect(C, A, 'DEMOCRACY', [C, D]);
+    await elect(E, B, 'MAJORITY', [E, F, G]);
     await publish(A, termFor(window, {
       method: 'DEMOCRACY', powerType: 'inhabitant', powerId: A.keypair.id, powerTitle: 'A',
-      population: 2, totalVotes: 2, winnerVotes: 2
+      population: 90, totalVotes: 60, winnerVotes: 50
     }));
-    B.setActor();
     await publish(B, termFor(window, {
       method: 'MAJORITY', powerType: 'inhabitant', powerId: B.keypair.id, powerTitle: 'B',
-      population: 9, totalVotes: 6, winnerVotes: 5
+      population: 2, totalVotes: 2, winnerVotes: 2
     }));
 
     A.setActor();
     const card = await A.use('parliament').getLatestGovernmentCard();
-    eq(card.method, 'MAJORITY', 'the smaller government no longer governs its own author');
+    eq(card.method, 'MAJORITY', 'the less supported government no longer governs its own author');
     notOk(card.powerId === A.keypair.id, 'not even for the peer that published it');
   });
 });

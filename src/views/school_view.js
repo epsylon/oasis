@@ -1,4 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
 const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction } = require("./main_views")
 const opinionCategories = require("../backend/opinion_categories")
@@ -7,7 +8,7 @@ const { renderStyledText, renderStyledHtml } = require("../backend/renderStyledT
 const nameCache = require("../backend/nameCache")
 const { sanitizeHtml } = require("../backend/sanitizeHtml")
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
-const renderMd = (text) => div({ class: "styled-text", innerHTML: sanitizeHtml(renderStyledHtml(String(text || ""))) })
+const renderMd = (text) => div({ class: "styled-text", [RAW_HTML]: sanitizeHtml(renderStyledHtml(String(text || ""))) })
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])

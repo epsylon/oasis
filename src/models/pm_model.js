@@ -1,5 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
-const util = require('../server/node_modules/util');
+const util = require('util');
 const longText = require('../backend/long_text');
 
 const fs = require('fs');

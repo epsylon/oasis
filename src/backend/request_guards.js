@@ -49,11 +49,13 @@ const isTrustedRequest = (request, validHosts) => {
   if (isClearnetPath(request)) return request.method === 'GET';
   if (!Array.isArray(validHosts) || !validHosts.includes(request.hostname)) return false;
   if (request.method === 'GET') return true;
-  const referer = request.header && request.header.referer;
-  if (referer == null) return false;
+  const origin = request.header && request.header.origin;
+  const source = origin && origin !== 'null' ? origin : (request.header && request.header.referer);
+  if (source == null) return false;
   try {
-    const u = new URL(referer);
-    if (!validHosts.includes(u.hostname)) return false;
+    const u = new URL(source);
+    if ((u.protocol !== 'http:' && u.protocol !== 'https:') || !validHosts.includes(u.hostname)) return false;
+    if (u.host !== String(request.host || '')) return false;
     if (u.pathname.startsWith('/blob/')) return false;
   } catch (_) {
     return false;

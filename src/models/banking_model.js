@@ -216,6 +216,18 @@ function settleUbiPayment(key, patch) {
   writeJson(UBI_PAID_PATH, ledger);
 }
 
+function releaseUbiPayment(key) {
+  const ledger = readUbiPaidLedger();
+  delete ledger[key];
+  writeJson(UBI_PAID_PATH, ledger);
+}
+
+function ubiAddressTaken(epochId, address, claimantId) {
+  const ledger = readUbiPaidLedger();
+  const own = ubiPaidKey(epochId, claimantId);
+  return Object.keys(ledger).some(k => k !== own && k.startsWith(`${epochId}:`) && ledger[k] && ledger[k].address === address);
+}
+
 const rpcFailureLog = new Map();
 function logRpcFailure(method, kind, reason) {
   const key = `${kind}:${method}:${reason}`;
@@ -684,7 +696,8 @@ module.exports = ({ services } = {}) => {
         author: v.author,
         type: (c.type || "").toLowerCase(),
         value: v,
-        content: c
+        content: c,
+        receivedAt: Number(m.timestamp) || 0
       };
     });
     actionsCache = { ts: Date.now(), ownSeq, value };
@@ -847,7 +860,7 @@ function receivedScoreFor(userId, actions) {
   const firstTs = new Map();
   for (const a of actions) {
     if (!a.author) continue;
-    const ts = Number(a.value?.timestamp) || 0;
+    const ts = Number(a.receivedAt) || 0;
     if (ts && (!firstTs.has(a.author) || ts < firstTs.get(a.author))) firstTs.set(a.author, ts);
     if (a.author === userId && a.id) mine.add(a.id);
   }
@@ -1028,7 +1041,7 @@ async function getUserFirstBlockTs(userId) {
     pull(
       ssb.createUserStream({ id: userId, limit: 1 }),
       pull.drain(
-        (m) => { if (m && m.value && m.value.timestamp && !first) first = Number(m.value.timestamp); },
+        (m) => { if (m && m.value && !first) first = Number(m.timestamp) || 0; },
         () => resolve(first || 0)
       )
     );
@@ -1285,12 +1298,24 @@ async function getLastPublishedTimestamp(userId) {
     if (claimerId && allocation.to !== claimerId) throw new Error("This allocation is not for you.");
     const addr = await getUserAddress(allocation.to);
     if (!addr || !isValidEcoinAddress(addr)) throw new Error("No valid ECOin address registered.");
-    const { txid } = await sendVerified(addr, allocation.amount, UBI_SEND_COMMENT, "pub");
-    if (!txid) throw new Error("RPC sendtoaddress failed. Check PUB wallet configuration.");
-    await transfersRepo.markClosed(transferId, txid);
     const epochId = String((allocation.tags || []).find(t => String(t).startsWith("epoch:")) || "").replace(/^epoch:/, "") || epochIdNow();
+    const paidKey = ubiPaidKey(epochId, allocation.to);
+    const pubBal = await safeGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
+    if (computePoolVars(pubBal, DEFAULT_RULES).available < Number(allocation.amount)) throw new Error("The PUB wallet is at its reserve.");
+    if (ubiAddressTaken(epochId, addr, allocation.to)) throw new Error("This ECOin address was already paid this epoch.");
+    if (!reserveUbiPayment(paidKey)) throw new Error("Invalid allocation or already claimed.");
+    settleUbiPayment(paidKey, { attempts: 1, lastAttemptAt: new Date().toISOString(), amount: allocation.amount, address: addr });
+    const sent = await sendVerified(addr, allocation.amount, UBI_SEND_COMMENT, "pub");
+    const txid = sent.txid;
+    if (!txid) {
+      if (sent.unknown) settleUbiPayment(paidKey, { error: "the wallet did not answer" });
+      else releaseUbiPayment(paidKey);
+      throw new Error("RPC sendtoaddress failed. Check PUB wallet configuration.");
+    }
+    settleUbiPayment(paidKey, { txid, paidAt: new Date().toISOString() });
+    await transfersRepo.markClosed(transferId, txid);
     console.log(`[UBI] paid ${allocation.amount} ECO to ${String(allocation.to).slice(0, 12)}… (${epochId}) tx ${txid}`);
-    try { await publishUbiClaimResult(transferId, epochId, txid, allocation.to, allocation.amount); } catch (_) {}
+    try { await publishUbiClaimResult(transferId, epochId, txid, allocation.to, allocation.amount, addr); } catch (_) {}
     try { await publishUbiTransfer({ to: allocation.to, amount: allocation.amount, epochId, txid }); } catch (_) {}
     return { txid };
   }
@@ -1407,20 +1432,62 @@ async function getLastPublishedTimestamp(userId) {
     return ids;
   }
 
+  async function trustedPubIds() {
+    const ids = pubIdsFrom([]);
+    const me = config.keys && config.keys.id;
+    const ssb = await openSsb();
+    if (!ssb || !me) return ids;
+    const msgs = await readTyped(ssb, ["pub"], { limit: Math.max(getLogLimit(), 20000) }).catch(() => []);
+    for (const m of msgs) {
+      const v = m.value || {};
+      const c = v.content || {};
+      const key = c.address && typeof c.address.key === "string" ? c.address.key : "";
+      if (c.type !== "pub" || v.author !== me || !/^@[A-Za-z0-9+/]+={0,2}\.ed25519$/.test(key) || ids.has(key)) continue;
+      if (await isFollowing(ssb, me, key)) ids.add(key);
+    }
+    if (!isPubNode()) return ids;
+    const announcers = await scanUbiAnnouncements().catch(() => new Map());
+    const contacts = await readTyped(ssb, ["contact"], { limit: Math.max(getLogLimit(), 20000) }).catch(() => []);
+    const latest = new Map();
+    for (const m of contacts) {
+      const v = m.value || {};
+      const c = v.content || {};
+      if (c.type !== "contact" || v.author !== me || !announcers.has(c.contact)) continue;
+      const prev = latest.get(c.contact);
+      if (!prev || (Number(v.sequence) || 0) > prev.seq) latest.set(c.contact, { seq: Number(v.sequence) || 0, c });
+    }
+    for (const [id, { c }] of latest) if (c.following === true && c.pub !== true && c.blocking !== true) ids.add(id);
+    return ids;
+  }
+
+  function claimAddressees(msgs) {
+    const addressed = new Set();
+    for (const m of msgs || []) {
+      const v = m.value || {};
+      const c = v.content || {};
+      if (c.type === "ubiClaim" && v.author && c.pubId) addressed.add(`${c.epochId}:${v.author}:${c.pubId}`);
+    }
+    return addressed;
+  }
+
+  const resultHonoured = (v, c, trusted, addressed) => !!v.author && (trusted.has(v.author) || addressed.has(`${c.epochId}:${c.userId}:${v.author}`));
+
   async function knownPubIds() {
     const ids = pubIdsFrom([]);
     try { for (const id of (await scanUbiAnnouncements()).keys()) ids.add(id); } catch (_) {}
+    try { for (const id of await trustedPubIds()) ids.add(id); } catch (_) {}
     return ids;
   }
 
   async function hasClaimedThisMonth(userId) {
     const epochId = epochIdNow();
     const msgs = await scanLogStream();
-    const pubIds = pubIdsFrom(msgs);
+    const trusted = await trustedPubIds();
+    const addressed = claimAddressees(msgs);
     for (const m of msgs) {
       const v = m.value || {};
       const c = v.content || {};
-      if (c.type === "ubiClaimResult" && c.userId === userId && c.epochId === epochId && pubIds.has(v.author)) return true;
+      if (c.type === "ubiClaimResult" && c.userId === userId && c.epochId === epochId && resultHonoured(v, c, trusted, addressed)) return true;
       if (c.type === "ubiClaim" && v.author === userId && c.epochId === epochId) return true;
     }
     return false;
@@ -1428,14 +1495,15 @@ async function getLastPublishedTimestamp(userId) {
 
   async function getUbiClaimHistory(userId) {
     const msgs = await scanLogStream();
-    const pubIds = pubIdsFrom(msgs);
+    const trusted = await trustedPubIds();
+    const addressed = claimAddressees(msgs);
     let lastClaimedDate = null;
     let totalClaimed = 0;
     let claimCount = 0;
     for (const m of msgs) {
       const v = m.value || {};
       const c = v.content || {};
-      if (c.type === "ubiClaimResult" && c.userId === userId && pubIds.has(v.author)) {
+      if (c.type === "ubiClaimResult" && c.userId === userId && resultHonoured(v, c, trusted, addressed)) {
         totalClaimed += Number(c.amount) || 0;
         claimCount += 1;
         const d = c.processedAt || null;
@@ -1450,11 +1518,13 @@ async function getLastPublishedTimestamp(userId) {
     if (!pubId) return [];
     const msgs = await scanLogStream();
     const pubIds = pubIdsFrom(msgs);
+    const trusted = await trustedPubIds();
+    const addressed = claimAddressees(msgs);
     const paid = new Map();
     for (const m of msgs) {
       const v = m.value || {};
       const c = v.content || {};
-      if (c.type === "ubiClaimResult" && c.txid && c.epochId && c.userId && pubIds.has(v.author)) paid.set(ubiPaidKey(c.epochId, c.userId), c.txid);
+      if (c.type === "ubiClaimResult" && c.txid && c.epochId && c.userId && resultHonoured(v, c, trusted, addressed)) paid.set(ubiPaidKey(c.epochId, c.userId), c.txid);
     }
     const out = [];
     const seen = new Map();
@@ -1550,8 +1620,9 @@ async function getLastPublishedTimestamp(userId) {
     }
     const monthly = Array.from(byMonth.values()).sort((a, b) => a.month.localeCompare(b.month)).map(m => ({ ...m, amount: Number(m.amount.toFixed(6)) }));
     const msgs = await readTyped(ssb, ["pubAvailability"], { limit: Math.max(getLogLimit(), 5000) });
+    const trusted = await trustedPubIds();
     const events = msgs
-      .filter(m => m.value && m.value.content && m.value.content.type === "pubAvailability" && m.value.content.coin === "ECO" && Number.isFinite(Number(m.value.content.balance)))
+      .filter(m => m.value && m.value.content && m.value.content.type === "pubAvailability" && m.value.content.coin === "ECO" && trusted.has(m.value.author) && Number.isFinite(Number(m.value.content.balance)))
       .map(m => ({ ts: Number(m.value.content.timestamp) || Number(m.value.timestamp) || 0, pubId: m.value.author, balance: Number(m.value.content.balance) }))
       .filter(x => x.ts > 0)
       .sort((a, b) => a.ts - b.ts);
@@ -1709,9 +1780,10 @@ async function getLastPublishedTimestamp(userId) {
 
   async function listUbiPubs() {
     const latestByPub = await scanUbiAnnouncements();
+    const trusted = await trustedPubIds();
     const out = [];
     for (const cand of latestByPub.values()) {
-      if (Date.now() - cand.timestamp > PUB_ANNOUNCE_MAX_AGE_MS) continue;
+      if (!trusted.has(cand.pubId) || Date.now() - cand.timestamp > PUB_ANNOUNCE_MAX_AGE_MS) continue;
       out.push(cand);
     }
     return out.sort((a, b) => b.timestamp - a.timestamp);
@@ -1721,12 +1793,12 @@ async function getLastPublishedTimestamp(userId) {
     if (!isPubNode()) return;
     const balance = await safeGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
     const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user ?? 1);
-    const available = Number(balance) >= floor;
+    const pv = computePoolVars(Number(balance) || 0, DEFAULT_RULES);
+    const available = pv.available >= floor;
     const ssb = await openSsb();
     if (!ssb || !ssb.publish) return;
     const last = await loadLastAnnounce(ssb);
     const stale = Date.now() - last.timestamp > PUB_ANNOUNCE_REFRESH_MS;
-    const pv = computePoolVars(Number(balance) || 0, DEFAULT_RULES);
     const announcedBalance = Number(pv.available.toFixed(6));
     const balanceMoved = Math.abs(announcedBalance - (Number(last.balance) || 0)) > Math.max(1, (Number(last.balance) || 0) * 0.2);
     if (last.available === available && !stale && !balanceMoved) return available;
@@ -1742,6 +1814,7 @@ async function getLastPublishedTimestamp(userId) {
   async function discoverUbiPub() {
     if (Date.now() - discoveredPub.checkedAt < PUB_DISCOVERY_TTL_MS) return discoveredPub;
     const latestByPub = await scanUbiAnnouncements();
+    const trusted = await trustedPubIds();
     const defaultPubId = getDefaultPubId();
     const fresh = (cand) => cand && Date.now() - cand.timestamp <= PUB_ANNOUNCE_MAX_AGE_MS;
     const defaultCand = latestByPub.get(defaultPubId) || null;
@@ -1749,7 +1822,7 @@ async function getLastPublishedTimestamp(userId) {
     if (fresh(defaultCand) && defaultCand.available) best = defaultCand;
     else {
       for (const cand of latestByPub.values()) {
-        if (!fresh(cand) || !cand.available) continue;
+        if (!trusted.has(cand.pubId) || !fresh(cand) || !cand.available) continue;
         if (!best || cand.timestamp > best.timestamp) best = cand;
       }
     }
@@ -1779,7 +1852,7 @@ async function getLastPublishedTimestamp(userId) {
     if (isPubNode()) {
       pubBalance = await safeGetBalance("pub");
       const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user ?? 1);
-      ubiAvailable = Number(pubBalance) >= floor;
+      ubiAvailable = computePoolVars(Number(pubBalance) || 0, DEFAULT_RULES).available >= floor;
       const all = await transfersRepo.listByTag("UBI");
       allocations = all.map(t => ({
         id: t.id, concept: t.concept, from: t.from, to: t.to, amount: t.amount, status: t.status,
@@ -2135,10 +2208,10 @@ async function getLastPublishedTimestamp(userId) {
     return new Promise((resolve, reject) => ssb.publish(content, (err, res) => err ? reject(err) : resolve(res)));
   }
 
-  async function publishUbiClaimResult(allocationId, epochId, txid, userId, amount) {
+  async function publishUbiClaimResult(allocationId, epochId, txid, userId, amount, address) {
     const ssb = await openSsb();
     if (!ssb) return;
-    const content = { type: "ubiClaimResult", allocationId, epochId, txid, userId, amount, processedAt: new Date().toISOString() };
+    const content = { type: "ubiClaimResult", allocationId, epochId, txid, userId, amount, ...(address ? { address: String(address) } : {}), processedAt: new Date().toISOString() };
     return new Promise((resolve, reject) => ssb.publish(content, (err, res) => err ? reject(err) : resolve(res)));
   }
 
@@ -2190,11 +2263,14 @@ async function getLastPublishedTimestamp(userId) {
     const claims = [];
     const results = [];
     const pubIds = await knownPubIds();
+    const trusted = await trustedPubIds();
+    const addressed = new Set();
     const seenClaims = new Set();
     await new Promise((resolve, reject) => {
       pull(ssb.messagesByType({ type: "ubiClaim", reverse: false }),
         pull.drain(msg => {
           if (msg.value?.content?.type === "ubiClaim") {
+            if (msg.value.content.pubId) addressed.add(`${msg.value.content.epochId}:${msg.value.author}:${msg.value.content.pubId}`);
             const key = ubiPaidKey(msg.value.content.epochId || "", msg.value.author);
             if (seenClaims.has(key)) return;
             seenClaims.add(key);
@@ -2205,10 +2281,12 @@ async function getLastPublishedTimestamp(userId) {
     });
     await new Promise((resolve, reject) => {
       pull(ssb.messagesByType({ type: "ubiClaimResult", reverse: false }),
-        pull.drain(msg => { if (msg.value?.content?.type === "ubiClaimResult" && pubIds.has(msg.value.author)) results.push(msg.value.content); },
+        pull.drain(msg => { if (msg.value?.content?.type === "ubiClaimResult" && resultHonoured(msg.value, msg.value.content, trusted, addressed)) results.push(msg.value.content); },
           err => err ? reject(err) : resolve()));
     });
     const processedEpochUser = new Set(results.map(r => `${r.epochId}:${r.userId}`));
+    const paidAddressBy = new Map();
+    for (const r of results) if (r.address && r.epochId && r.userId) paidAddressBy.set(`${r.epochId}:${r.address}`, r.userId);
     const refused = new Set();
     await new Promise((resolve, reject) => {
       pull(ssb.messagesByType({ type: "ubiRefuse", reverse: false }),
@@ -2235,7 +2313,7 @@ async function getLastPublishedTimestamp(userId) {
       } catch (_) {}
       console.log(`[UBI] ${recovered ? "found payment of" : "paid"} ${amount} ECO to ${claimantId.slice(0, 12)}… (${claimEpoch}) tx ${txid}`);
       const allocationId = claim.allocationId || `claim:${claimEpoch}:${claimantId}`;
-      await publishUbiClaimResult(allocationId, claimEpoch, txid, claimantId, amount);
+      await publishUbiClaimResult(allocationId, claimEpoch, txid, claimantId, amount, address);
       await publishBankClaim({ amount, epochId: claimEpoch, allocationId, txid });
       await publishUbiTransfer({ to: claimantId, amount, epochId: claimEpoch, txid });
     };
@@ -2244,6 +2322,7 @@ async function getLastPublishedTimestamp(userId) {
       const claimantId = claim._author;
       if (!claimantId || claimantId === me || pubIds.has(claimantId)) continue;
       const claimEpoch = claim.epochId || epochId;
+      if (!/^\d{4}-\d{2}$/.test(String(claimEpoch)) || (claimEpoch !== epochIdNow() && claimEpoch !== previousEpochId())) continue;
       const paidKey = ubiPaidKey(claimEpoch, claimantId);
       if (processedEpochUser.has(paidKey)) continue;
       if (!claimPaidByMe(claim, me, defaultPubId, nowMs)) continue;
@@ -2286,6 +2365,8 @@ async function getLastPublishedTimestamp(userId) {
         if (!list) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… waiting: the wallet does not answer`); continue; }
         const earlier = await findWalletSend({ address: addr, comment: UBI_SEND_COMMENT, amountIfNoComment: amount, sinceMs: epochStartMs(claimEpoch), exclude: attributed }, "pub", list);
         if (earlier) { await settlePaid({ claim, claimantId, claimEpoch, paidKey, txid: earlier, amount, address: addr, recovered: true }); continue; }
+        if (pv.available < amount) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… skipped: the PUB wallet is down to its reserve`); continue; }
+        if (ubiAddressTaken(claimEpoch, addr, claimantId) || (paidAddressBy.has(`${claimEpoch}:${addr}`) && paidAddressBy.get(`${claimEpoch}:${addr}`) !== claimantId)) { console.warn(`[UBI] claim ${claimEpoch} by ${claimantId.slice(0, 12)}… skipped: this ECOin address was already paid this epoch`); continue; }
         if (ledgerEntry) settleUbiPayment(paidKey, { attempts: attempts + 1, lastAttemptAt: new Date().toISOString(), amount, address: addr, error: undefined });
         else {
           if (!reserveUbiPayment(paidKey)) continue;
@@ -2398,7 +2479,7 @@ async function getLastPublishedTimestamp(userId) {
   }
 
   async function confirmIncomingTransfers() {
-    if (!services || !services.transfers || typeof services.transfers.confirmTransferById !== "function") return [];
+    if (!services || !services.transfers || typeof services.transfers.confirmTransferById !== "function" || typeof services.transfers.listAll !== "function") return [];
     const kind = isPubNode() ? "pub" : "user";
     const cfg = getWalletCfg(kind) || {};
     if (!cfg.url) return [];
@@ -2406,25 +2487,42 @@ async function getLastPublishedTimestamp(userId) {
     if (!ssb) return [];
     const me = config.keys.id;
     const msgs = await readTyped(ssb, ["transfer", "transferConfirm"], { limit: Math.max(getLogLimit(), 20000) });
-    const confirms = new Map();
-    const incoming = [];
+    const txidOf = (t) => (String(t.txid || "").match(TXID_RE) ? String(t.txid) : (String(t.concept || "").match(TXID_RE) || [])[1] || "").toLowerCase();
+    const signed = new Map();
+    const confirmedByMe = new Set();
     for (const m of msgs) {
       const v = m.value || {};
       const c = v.content || {};
-      if (c.type === "transferConfirm" && c.target) { if (!confirms.has(c.target)) confirms.set(c.target, new Set()); confirms.get(c.target).add(v.author); }
-      else if (c.type === "transfer" && c.to === me && v.author !== me && String(c.status || "").toUpperCase() === "UNCONFIRMED") incoming.push({ key: m.key, ...c });
+      if (c.type === "transferConfirm" && c.target && v.author === me) confirmedByMe.add(c.target);
+      else if (c.type === "transfer" && c.to === me && c.from === v.author) signed.set(m.key, c);
+    }
+    const used = new Set();
+    for (const k of confirmedByMe) { const txid = signed.has(k) ? txidOf(signed.get(k)) : ""; if (txid) used.add(txid); }
+    const claimed = new Map();
+    const incoming = [];
+    for (const t of (await services.transfers.listAll("all")) || []) {
+      if (t.to !== me || t.from === me || t.from !== t.author) continue;
+      const txid = txidOf(t);
+      if (!txid) continue;
+      if (t.status === "CLOSED" || (Array.isArray(t.confirmedBy) && t.confirmedBy.includes(me))) { used.add(txid); continue; }
+      if (t.status !== "UNCONFIRMED") continue;
+      claimed.set(txid, (claimed.get(txid) || 0) + 1);
+      incoming.push({ ...t, txid });
     }
     const done = [];
     for (const t of incoming) {
-      if ((confirms.get(t.key) || new Set()).has(me)) continue;
-      const txid = String(t.txid || "").match(TXID_RE) ? String(t.txid) : (String(t.concept || "").match(TXID_RE) || [])[1];
-      if (!txid) continue;
-      const tx = await rpcCall("gettransaction", [txid], kind);
-      if (!tx || !(Number(tx.confirmations) >= 1)) continue;
+      if (claimed.get(t.txid) !== 1 || used.has(t.txid)) continue;
+      const amount = Number(t.amount);
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      const tx = await rpcCall("gettransaction", [t.txid], kind);
+      if (!tx || !(Number(tx.confirmations) >= 1) || !Array.isArray(tx.details)) continue;
+      const address = signed.has(t.id) && typeof signed.get(t.id).address === "string" ? signed.get(t.id).address : "";
+      if (!tx.details.some(d => d && d.category === "receive" && Number(d.amount) >= amount - 0.000001 && (!address || d.address === address))) continue;
       try {
-        await services.transfers.confirmTransferById(t.key);
-        console.log(`[WALLET] confirmed incoming ${Number(t.amount).toFixed(6)} ECO from ${String(t.from).slice(0, 12)}… (${t.concept}) tx ${txid}`);
-        done.push(t.key);
+        await services.transfers.confirmTransferById(t.id);
+        used.add(t.txid);
+        console.log(`[WALLET] confirmed incoming ${amount.toFixed(6)} ECO from ${String(t.from).slice(0, 12)}… (${t.concept}) tx ${t.txid}`);
+        done.push(t.id);
       } catch (_) {}
     }
     return done;

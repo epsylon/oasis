@@ -1,4 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, input, span, pre, table, thead, tbody, tr, td, th, br, strong, label, ul, li } = require("../server/node_modules/hyperaxe");
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { template, i18n, userLink, formatCarbon, renderStateChip, renderModuleStats, renderWalletChip } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
@@ -167,11 +168,11 @@ const renderChartBlock = (id, title, svg) =>
   div({ class: "bank-eco-chart-block" },
     h2({ class: "bank-eco-chart-title" }, title),
     a({ href: `#${id}`, id: `${id}-src`, class: "bank-eco-chart-zoom-link", title: i18n.bankChartZoomHint },
-      div({ class: "bank-eco-chart-canvas", innerHTML: svg })
+      div({ class: "bank-eco-chart-canvas", [RAW_HTML]: svg })
     ),
     div({ id, class: "lightbox bank-eco-chart-lightbox" },
       a({ href: `#${id}-src`, class: "lightbox-close" }, "\u00d7"),
-      div({ class: "bank-eco-chart-canvas-zoom", innerHTML: svg })
+      div({ class: "bank-eco-chart-canvas-zoom", [RAW_HTML]: svg })
     )
   );
 
@@ -180,8 +181,8 @@ const renderRangedChart = (id, title, filterName, range, hasAnyData, svg) => {
   return div({ class: "bank-eco-chart-block", id: `${id}-block` },
     h2({ class: "bank-eco-chart-title" }, title),
     renderRangeTabs(filterName, range, `${id}-block`),
-    svg ? a({ href: `#${id}`, id: `${id}-src`, class: "bank-eco-chart-zoom-link", title: i18n.bankChartZoomHint }, div({ class: "bank-eco-chart-canvas", innerHTML: svg })) : p({ class: "bank-chart-empty-note" }, i18n.bankChartNoDataYet),
-    svg ? div({ id, class: "lightbox bank-eco-chart-lightbox" }, a({ href: `#${id}-src`, class: "lightbox-close" }, "\u00d7"), div({ class: "bank-eco-chart-canvas-zoom", innerHTML: svg })) : null
+    svg ? a({ href: `#${id}`, id: `${id}-src`, class: "bank-eco-chart-zoom-link", title: i18n.bankChartZoomHint }, div({ class: "bank-eco-chart-canvas", [RAW_HTML]: svg })) : p({ class: "bank-chart-empty-note" }, i18n.bankChartNoDataYet),
+    svg ? div({ id, class: "lightbox bank-eco-chart-lightbox" }, a({ href: `#${id}-src`, class: "lightbox-close" }, "\u00d7"), div({ class: "bank-eco-chart-canvas-zoom", [RAW_HTML]: svg })) : null
   );
 };
 
@@ -283,8 +284,8 @@ const renderWealthChart = (wealth, range) => {
   return div({ class: "bank-eco-chart-block", id: "wealth-chart-block" },
     h2({ class: "bank-eco-chart-title" }, i18n.bankChartWealthTitle),
     renderRangeTabs("exchange", range, "wealth-chart-block"),
-    enough ? a({ href: "#wealth-chart", id: "wealth-chart-src", class: "bank-eco-chart-zoom-link", title: i18n.bankChartZoomHint }, div({ class: "bank-eco-chart-canvas", innerHTML: svg })) : p({ class: "bank-chart-empty-note" }, i18n.bankChartNoDataRange),
-    enough ? div({ id: "wealth-chart", class: "lightbox bank-eco-chart-lightbox" }, a({ href: "#wealth-chart-src", class: "lightbox-close" }, "\u00d7"), div({ class: "bank-eco-chart-canvas-zoom", innerHTML: svg })) : null
+    enough ? a({ href: "#wealth-chart", id: "wealth-chart-src", class: "bank-eco-chart-zoom-link", title: i18n.bankChartZoomHint }, div({ class: "bank-eco-chart-canvas", [RAW_HTML]: svg })) : p({ class: "bank-chart-empty-note" }, i18n.bankChartNoDataRange),
+    enough ? div({ id: "wealth-chart", class: "lightbox bank-eco-chart-lightbox" }, a({ href: "#wealth-chart-src", class: "lightbox-close" }, "\u00d7"), div({ class: "bank-eco-chart-canvas-zoom", [RAW_HTML]: svg })) : null
   );
 };
 

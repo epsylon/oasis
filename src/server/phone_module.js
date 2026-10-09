@@ -19,9 +19,15 @@ const FRAME_BYTES = 320;
 const FRAME_MS = 20;
 const MAX_BACKLOG = 4000;
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
+const RING_WINDOW_MS = 60 * 1000;
+const RING_PER_WINDOW = 20;
+const SEEN_MAX = 5000;
+const HUB_ROOMS_MAX = 256;
+const HUB_RIDS_PER_ROOM = 4;
 const GROUP_MAX = 7;
 const MIX_QUEUE = 10;
 const ROOM_MAX = 50;
+const ROOM_QUIET_AT = 10;
 const ROOM_JOIN_MS = 10000;
 const ROOM_PEEK_MS = 1500;
 const ROOM_FRAME_MAX = 2048;
@@ -32,12 +38,17 @@ const ROUTES_MAX = 4096;
 const MUTE_BEACON_MS = 2000;
 const MUTE_TTL_MS = 6000;
 const ROOM_EVENTS_MAX = 50;
+const REC_TOGGLE_MIN_MS = 250;
+const CHIMES_AT_ONCE = 3;
 const ROOM_REC_MAX_BYTES = 4 * 3600 * 8000 * 2;
 const CHIMES = {
   join: [[660, 90], [0, 20], [990, 140]],
   leave: [[990, 90], [0, 20], [660, 190]],
   recStart: [[880, 70], [0, 60], [880, 70], [0, 60], [1320, 160]],
-  recStop: [[1320, 70], [0, 60], [660, 200]]
+  recStop: [[1320, 70], [0, 60], [660, 200]],
+  mute: [[523, 80], [0, 30], [392, 160]],
+  unmute: [[392, 80], [0, 30], [523, 180]],
+  hand: [[784, 60], [0, 40], [988, 60], [0, 40], [1175, 110]]
 };
 const chimeMs = (kind) => (CHIMES[kind] || []).reduce((n, [, ms]) => n + ms, 0);
 const K_CTRL = 0;
@@ -174,9 +185,15 @@ const playBeep = (audio, count = 1) => {
   else setTimeout(() => player.stop(), pcm.length / (RATE * 2) * 1000 + 300);
 };
 
+const chimeBusy = new WeakMap();
 const playChime = (audio, kind) => {
   const notes = CHIMES[kind];
   if (!audio || !notes) return;
+  const now = Date.now();
+  const playing = (chimeBusy.get(audio) || []).filter(t => t > now);
+  if (playing.length >= CHIMES_AT_ONCE) return;
+  playing.push(now + chimeMs(kind));
+  chimeBusy.set(audio, playing);
   const pcm = Buffer.alloc(Math.round(chimeMs(kind) * RATE / 1000) * 2);
   let at = 0, phase = 0;
   for (const [freq, ms] of notes) {
@@ -317,7 +334,7 @@ module.exports = {
     ring: 'async', answer: 'async', hangup: 'async', audio: 'duplex', relay: 'async', relayAudio: 'duplex',
     call: 'async', accept: 'async', reject: 'async', end: 'async', mute: 'async', silence: 'async', dismiss: 'async',
     recordStop: 'async', recordCancel: 'async',
-    roomHub: 'duplex', roomInfo: 'async', roomAdmits: 'async', roomJoin: 'async', roomLeave: 'async', roomMute: 'async', roomCount: 'async',
+    roomHub: 'duplex', roomInfo: 'async', roomAdmits: 'async', roomJoin: 'async', roomLeave: 'async', roomMute: 'async', roomHand: 'async', roomCount: 'async',
     roomRecStart: 'async', roomRecStop: 'async', roomNotify: 'async', roomClearEvents: 'async',
     roomState: 'sync', roomToken: 'sync', roomHubFor: 'async',
     state: 'sync', available: 'sync', pubs: 'sync', events: 'source'
@@ -326,7 +343,9 @@ module.exports = {
   init(server, config) {
     const keys = config.keys;
     const audio = audioFactory(server);
-    const recDir = path.join(String((config && config.path) || os.tmpdir()), 'rooms-recordings');
+    const recBase = String((config && config.path) || os.tmpdir());
+    const recDir = path.join(recBase, 'oasis', 'rooms');
+    try { if (!fs.existsSync(recDir) && fs.existsSync(path.join(recBase, 'rooms-recordings'))) { fs.mkdirSync(path.dirname(recDir), { recursive: true }); fs.renameSync(path.join(recBase, 'rooms-recordings'), recDir); } } catch (_) {}
     const subscribers = new Set();
     const seenCalls = new Map();
     const routes = new Map();
@@ -346,6 +365,7 @@ module.exports = {
     const voicemailMaxMs = Number(policy().voicemailMaxMs) > 0 ? Number(policy().voicemailMaxMs) : VOICEMAIL_MAX_MS;
     const pamWarnMs = Number(policy().pamWarnMs) > 0 ? Number(policy().pamWarnMs) : PAM_WARN_MS;
     const roomMax = Number(policy().roomMax) > 0 ? Math.min(ROOM_MAX, Number(policy().roomMax)) : ROOM_MAX;
+    const roomQuietAt = Number(policy().roomQuietAt) > 0 ? Number(policy().roomQuietAt) : ROOM_QUIET_AT;
     const codecsOffered = () => (OpusScript && policy().opus !== false ? ['opus'] : []);
     const pickCodec = (offer) => (codecsOffered().includes('opus') && Array.isArray(offer) && offer.includes('opus') ? 'opus' : 'ulaw');
     const relation = (method, source, dest, done) => {
@@ -409,15 +429,29 @@ module.exports = {
     };
     let seenPrunedAt = 0;
     const directRings = new Map();
+    const ringBudget = new Map();
+    const trimOldest = (map, max) => { while (map.size > max) map.delete(map.keys().next().value); };
     const firstSeen = (callId) => {
       const now = Date.now();
       if (now - seenPrunedAt > 1000) {
         seenPrunedAt = now;
         for (const [k, t] of seenCalls) if (now - t > CLOCK_SKEW_MS * 2) seenCalls.delete(k);
         for (const [k, t] of directRings) if (now - t > CLOCK_SKEW_MS * 2) directRings.delete(k);
+        for (const [k, list] of ringBudget) { const live = list.filter(t => now - t < RING_WINDOW_MS); if (live.length) ringBudget.set(k, live); else ringBudget.delete(k); }
       }
       if (seenCalls.has(callId)) return false;
       seenCalls.set(callId, now);
+      trimOldest(seenCalls, SEEN_MAX);
+      trimOldest(directRings, SEEN_MAX);
+      return true;
+    };
+    const callerAllowed = (from) => {
+      const now = Date.now();
+      const list = (ringBudget.get(from) || []).filter(t => now - t < RING_WINDOW_MS);
+      if (list.length >= RING_PER_WINDOW) { ringBudget.set(from, list); return false; }
+      list.push(now);
+      ringBudget.set(from, list);
+      trimOldest(ringBudget, SEEN_MAX);
       return true;
     };
 
@@ -755,9 +789,15 @@ module.exports = {
         if (slot !== from) deliver(m, frame, droppable);
       }
     };
-    const hubAttach = (rid, id, out) => {
+    const hubAttach = (rid, id, out, scope = null) => {
       let r = hubRooms.get(rid);
-      if (!r) { r = { members: new Map() }; hubRooms.set(rid, r); }
+      if (!r) {
+        if (hubRooms.size >= HUB_ROOMS_MAX) return null;
+        if (scope && [...hubRooms.values()].filter(h => h.scope === scope).length >= HUB_RIDS_PER_ROOM) return null;
+        r = { members: new Map(), scope };
+        hubRooms.set(rid, r);
+      }
+      if (scope && r.scope !== scope) return null;
       for (const old of [...r.members.values()]) if (old.id === id) old.kick();
       if (!hubRooms.has(rid)) hubRooms.set(rid, r);
       if (r.members.size >= roomMax) return null;
@@ -815,7 +855,7 @@ module.exports = {
       }
       const admit = () => {
         if (closed) return;
-        member = hubAttach(rid, from, out);
+        member = hubAttach(rid, from, out, roomId ? `${opts.owner}|${roomId}` : null);
         if (!member) refuse('full');
       };
       if (opts.owner === server.id || from === server.id) admit();
@@ -828,11 +868,11 @@ module.exports = {
       if (!r) return null;
       const now = Date.now();
       return {
-        rid: r.rid, ref: r.ref, title: r.title, phase: r.phase, joinedAt: r.joinedAt, muted: !!r.muted,
+        rid: r.rid, ref: r.ref, title: r.title, phase: r.phase, joinedAt: r.joinedAt, muted: !!r.muted, hand: !!r.hand, handSince: r.hand ? r.handAt : 0,
         secure: !!r.kid, count: r.peers.size + 1, max: r.max, speaking: now - r.sentAt < 1000,
         notify: !!r.notify, recording: !!r.rec, recordingSince: r.rec ? r.rec.at : 0, recordingBy: [...r.recPeers],
         events: r.notify ? r.events.slice(-ROOM_EVENTS_MAX) : [],
-        peers: [...r.peers.values()].map(p => ({ id: p.id, speaking: now - p.heardAt < 1000, muted: now - p.mutedAt < MUTE_TTL_MS, silenced: silenced.has(p.id), recording: r.recPeers.has(p.id) }))
+        peers: [...r.peers.values()].map(p => ({ id: p.id, speaking: now - p.heardAt < 1000, muted: now - p.mutedAt < MUTE_TTL_MS, hand: now - (p.handBeat || 0) < MUTE_TTL_MS, handSince: p.handSince || 0, silenced: silenced.has(p.id), recording: r.recPeers.has(p.id) }))
       };
     };
     const roomChanged = () => emit({ type: 'room', room: roomSnapshot() });
@@ -844,9 +884,10 @@ module.exports = {
     const startRoomRec = (r) => {
       if (!r || r.rec || r.phase !== 'live') return false;
       try {
-        fs.mkdirSync(recDir, { recursive: true });
+        fs.mkdirSync(recDir, { recursive: true, mode: 0o700 });
+        try { fs.chmodSync(recDir, 0o700); } catch (_) {}
         const file = path.join(recDir, `${recordingPrefix(r.ref)}-${Date.now()}.wav`);
-        const fd = fs.openSync(file, 'w');
+        const fd = fs.openSync(file, 'w', 0o600);
         fs.writeSync(fd, wavFile(Buffer.alloc(0)));
         r.rec = { fd, file, bytes: 0, at: Date.now() };
       } catch (_) { return false; }
@@ -906,6 +947,7 @@ module.exports = {
           r.order.push(Number(p.slot));
         }
         r.order.push(r.slot);
+        if (r.peers.size >= roomQuietAt) r.muted = true;
         if (!r.static && keeperSlot(r) === r.slot) newRoomKey(r);
         r.phase = 'live';
         if (r.ready) return r.ready(null);
@@ -971,6 +1013,30 @@ module.exports = {
       if (p.queue.length > MIX_QUEUE) p.queue.shift();
       p.heardAt = Date.now();
       p.mutedAt = 0;
+      noteMute(r, p, false);
+    };
+    const noteMute = (r, p, on, quiet = false) => {
+      if (!!p.muted === on) return;
+      p.muted = on;
+      if (quiet) return roomChanged();
+      const now = Date.now();
+      const announce = now - (p.muteToggleAt || 0) >= REC_TOGGLE_MIN_MS;
+      p.muteToggleAt = now;
+      if (!announce) return roomChanged();
+      if (r.notify) playChime(audio, on ? 'mute' : 'unmute');
+      pushEvent(r, on ? 'mute' : 'unmute', p.id);
+    };
+    const noteHand = (r, p, on, at, quiet = false) => {
+      if (!!p.hand === on) return;
+      p.hand = on;
+      const now = Date.now();
+      p.handSince = on ? (quiet && Number.isFinite(at) && at > 0 ? Math.min(at, now) : now) : 0;
+      if (!on || quiet) return roomChanged();
+      const announce = now - (p.handToggleAt || 0) >= REC_TOGGLE_MIN_MS;
+      p.handToggleAt = now;
+      if (!announce) return roomChanged();
+      if (r.notify) playChime(audio, 'hand');
+      pushEvent(r, 'hand', p.id);
     };
     const onRoomData = (r, slot, payload) => {
       const p = r.peers.get(slot);
@@ -985,12 +1051,23 @@ module.exports = {
       }
       if (msg && msg.t === 'rec') {
         const was = r.recPeers.has(p.id);
-        if (msg.on && !was) { r.recPeers.add(p.id); playChime(audio, 'recStart'); pushEvent(r, 'recStart', p.id); }
-        else if (!msg.on && was) { r.recPeers.delete(p.id); playChime(audio, 'recStop'); pushEvent(r, 'recStop', p.id); }
+        if (!!msg.on === was) return;
+        const now = Date.now();
+        const announce = now - (p.recToggleAt || 0) >= REC_TOGGLE_MIN_MS;
+        p.recToggleAt = now;
+        if (msg.on) r.recPeers.add(p.id); else r.recPeers.delete(p.id);
+        if (announce) { playChime(audio, msg.on ? 'recStart' : 'recStop'); pushEvent(r, msg.on ? 'recStart' : 'recStop', p.id); }
+        else roomChanged();
+        return;
+      }
+      if (msg && msg.t === 'hand') {
+        p.handBeat = msg.on ? Date.now() : 0;
+        noteHand(r, p, !!msg.on, Number(msg.at), msg.beacon === true);
         return;
       }
       if (!msg || msg.t !== 'mute') return;
       p.mutedAt = msg.on ? Date.now() : 0;
+      noteMute(r, p, !!msg.on, msg.beacon === true);
     };
     const onRoomFrame = (r, frame) => {
       if (room !== r) return;
@@ -1032,7 +1109,8 @@ module.exports = {
             if (r.rec && r.sealer && Date.now() - (r.recBeaconAt || 0) >= MUTE_BEACON_MS) { sendRoomData(r, { t: 'rec', on: true }); r.recBeaconAt = Date.now(); }
           }
           const voiced = gate(mic);
-          if (r.muted && r.sealer && Date.now() - (r.beaconAt || 0) >= MUTE_BEACON_MS) sendRoomData(r, { t: 'mute', on: true });
+          if (r.muted && r.sealer && Date.now() - (r.beaconAt || 0) >= MUTE_BEACON_MS) sendRoomData(r, { t: 'mute', on: true, beacon: true });
+          if (r.hand && r.sealer && Date.now() - (r.handBeaconAt || 0) >= MUTE_BEACON_MS) { sendRoomData(r, { t: 'hand', on: true, at: r.handAt, beacon: true }); r.handBeaconAt = Date.now(); }
           if (r.muted || !r.sealer || !voiced) continue;
           r.sentAt = Date.now();
           const opus = r.peers.size > 0 && [...r.peers.values()].every(p => p.opus);
@@ -1082,6 +1160,7 @@ module.exports = {
         if (!/^[0-9a-f]{32}$/.test(String(callId)) || to !== server.id || Math.abs(Date.now() - Number(ts)) > CLOCK_SKEW_MS) return;
         const remotePk = ephKey(ephPk);
         if (!remotePk || !verifyParts(from, ['ring', callId, ephPk, to, ts], sig)) return;
+        if (!seenCalls.has(callId) && !callerAllowed(from)) return;
         if (!via) directRings.set(callId, Date.now());
         if (call && call.id === callId && call.dir === 'in') {
           if (!via && call.phase === 'incoming' && call.peer === from) call.via = null;
@@ -1291,7 +1370,7 @@ module.exports = {
         c.rec = null;
         if (pcm.length < RATE * 2 * PAM_MIN_MS / 1000) { finish('noanswer'); return cb(new Error('empty')); }
         const file = path.join(os.tmpdir(), `oasis-voice-${c.id}.wav`);
-        try { fs.writeFileSync(file, wavFile(pcm)); } catch (err) { return cb(err); }
+        try { fs.writeFileSync(file, wavFile(pcm), { mode: 0o600 }); } catch (err) { return cb(err); }
         const out = { file, durationMs: Math.round(pcm.length / (RATE * 2) * 1000), peer: c.peer, callId: c.id };
         finish('pam');
         cb(null, out);
@@ -1325,7 +1404,7 @@ module.exports = {
           rid, ref: String(opts.ref || ''), title: String(opts.title || '').slice(0, 200), hub: opts.hub,
           phase: 'joining', joinedAt: Date.now(), muted: false, slot: null, max: ROOM_MAX, peers: new Map(), order: [],
           keys: new Map(), kid: null, sealer: null, static: secrets.length > 0, sentAt: 0,
-          events: [], notify: true, rec: null, recPeers: new Set()
+          events: [], notify: true, rec: null, recPeers: new Set(), hand: false, handAt: 0
         };
         if (r.static) {
           for (const secret of secrets.slice().reverse()) { const k = staticKey(rid, secret); r.keys.set(k.kid, k.key); }
@@ -1381,6 +1460,16 @@ module.exports = {
       },
       roomClearEvents(cb) {
         if (room) { room.events = []; roomChanged(); }
+        cb(null, roomSnapshot());
+      },
+      roomHand(flag, cb) {
+        if (room) {
+          room.hand = !!flag;
+          room.handAt = room.hand ? Date.now() : 0;
+          sendRoomData(room, { t: 'hand', on: room.hand, at: room.handAt });
+          room.handBeaconAt = Date.now();
+          roomChanged();
+        }
         cb(null, roomSnapshot());
       },
       roomMute(flag, cb) {
@@ -1447,6 +1536,7 @@ module.exports.ulawDecode = ulawDecode;
 module.exports.RING_MS = RING_MS;
 module.exports.GROUP_MAX = GROUP_MAX;
 module.exports.ROOM_MAX = ROOM_MAX;
+module.exports.RING_PER_WINDOW = RING_PER_WINDOW;
 module.exports.chimeMs = chimeMs;
 module.exports.recordingPrefix = recordingPrefix;
 module.exports.VOICEMAIL_MAX_MS = VOICEMAIL_MAX_MS;

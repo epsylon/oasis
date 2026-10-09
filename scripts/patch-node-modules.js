@@ -135,45 +135,6 @@ if (fs.existsSync(xenovaTensorPath)) {
   log('@xenova/transformers patch skipped: file not found');
 }
 
-// === Patch ssb-gossip (forgotten pubs stay forgotten; a bad gossip.json entry no longer stops the server) ===
-const ssbGossipPath = path.resolve(__dirname, '../src/server/node_modules/ssb-gossip/index.js');
-if (fs.existsSync(ssbGossipPath)) {
-  const data = fs.readFileSync(ssbGossipPath, 'utf8');
-  if (!data.includes('function isForgotten (key)')) {
-    const forgottenBlock = `    var stateFile = AtomicFile(gossipJsonPath)
-    var forgottenPath = (function () {
-      try { return require(path.join(__dirname, '..', '..', '..', 'configs', 'state-manager')).statePath('gossip_unfollowed.json') }
-      catch (e) { return path.join(config.path, 'oasis', 'peers', 'gossip_unfollowed.json') }
-    })()
-    var forgotten = { at: -1, keys: new Set() }
-    function isForgotten (key) {
-      try {
-        var st = fs.statSync(forgottenPath)
-        if (st.mtimeMs !== forgotten.at) {
-          forgotten.at = st.mtimeMs
-          var list = JSON.parse(fs.readFileSync(forgottenPath, 'utf8') || '[]')
-          forgotten.keys = new Set((Array.isArray(list) ? list : []).map(function (e) { return e && e.key }).filter(Boolean))
-        }
-      } catch (e) { forgotten.at = -1; forgotten.keys = new Set() }
-      return !!key && forgotten.keys.has(key)
-    }`;
-    const patched = data
-      .replace('    var stateFile = AtomicFile(gossipJsonPath)', forgottenBlock)
-      .replace("        if(addr.key === server.id) return\n", "        if(addr.key === server.id) return\n        if(isForgotten(addr.key)) return\n")
-      .replace("          if(v.source !== 'local') {\n            gossip.add(v, 'stored')\n          }", "          if(v.source !== 'local' && !isForgotten(v.key)) {\n            try { gossip.add(v, 'stored') } catch (e) {}\n          }")
-      .replace("    var int = setInterval(function () {\n      var copy = peers.filter(", "    var int = setInterval(function () {\n      for (var i = peers.length - 1; i >= 0; i--) {\n        if (peers[i] && isForgotten(peers[i].key)) peers.splice(i, 1)\n      }\n      var copy = peers.filter(");
-    const applied = ['function isForgotten (key)', 'if(isForgotten(addr.key)) return', "try { gossip.add(v, 'stored') } catch (e) {}", 'if (peers[i] && isForgotten(peers[i].key)) peers.splice(i, 1)'].every(m => patched.includes(m));
-    if (applied) {
-      fs.writeFileSync(ssbGossipPath, patched);
-      log('Patched ssb-gossip so forgotten pubs are not re-added and bad gossip.json entries are skipped');
-    } else {
-      log('ssb-gossip patch skipped: unexpected index.js format');
-    }
-  }
-} else {
-  log('ssb-gossip patch skipped: file not found');
-}
-
 // === Patch ssb-conn (the scheduler prefers up-to-date peers that replicate what we follow) ===
 const connSchedulerPath = path.resolve(__dirname, '../src/server/node_modules/ssb-conn/lib/conn-scheduler.js');
 if (fs.existsSync(connSchedulerPath)) {
@@ -196,36 +157,26 @@ if (fs.existsSync(connSchedulerPath)) {
   log('ssb-conn scheduler patch skipped: file not found');
 }
 
-// === Patch ssb-gossip (a pub known by an onion address and a normal one is kept on the normal one) ===
-if (fs.existsSync(ssbGossipPath)) {
-  const data = fs.readFileSync(ssbGossipPath, 'utf8');
-  const marker = "if (/^onion:/.test(String(f.address || '')) && /^net:/.test(String(addr.address || '')))";
-  const anchor = "        return f\n      }, 'string|object', 'string?'),";
-  if (data.includes(marker)) {
-    log('ssb-gossip address preference already patched');
-  } else if (data.includes(anchor)) {
-    fs.writeFileSync(ssbGossipPath, data.replace(anchor, `        ${marker} {\n          f.address = addr.address\n          f.host = addr.host\n          f.port = addr.port\n          f.failure = 0\n        }\n${anchor}`));
-    log('Patched ssb-gossip to prefer a normal address over an onion one for the same pub');
+// === Patch ssb-conn (connection limits apply to the connections we open, never to the ones others open to us) ===
+const connHubPath = path.resolve(__dirname, '../src/server/node_modules/ssb-conn-hub/lib/index.js');
+if (fs.existsSync(connHubPath) && fs.existsSync(connSchedulerPath)) {
+  const hub = fs.readFileSync(connHubPath, 'utf8');
+  const sched = fs.readFileSync(connSchedulerPath, 'utf8');
+  const hubFrom = 'this._setPeer(address, { ...data, state, disconnect });';
+  const hubTo = 'this._setPeer(address, { ...data, state, disconnect, inbound: !isClient });';
+  const schedFrom = 'const peersUp = query.peersConnected().filter(isDesiredPeer);';
+  const schedTo = 'const peersUp = query.peersConnected().filter(isDesiredPeer).filter((p) => !p[1].inbound);';
+  if (hub.includes(hubTo) && sched.includes(schedTo)) {
+    log('ssb-conn inbound limits already patched');
+  } else if ((hub.includes(hubFrom) || hub.includes(hubTo)) && (sched.includes(schedFrom) || sched.includes(schedTo))) {
+    fs.writeFileSync(connHubPath, hub.replace(hubFrom, hubTo));
+    fs.writeFileSync(connSchedulerPath, sched.replace(schedFrom, schedTo));
+    log('Patched ssb-conn so its connection limits only apply to the connections it opens');
   } else {
-    log('ssb-gossip address preference patch skipped: unexpected index.js format');
-  }
-}
-
-// === Patch ssb-gossip scheduler (no connection attempts while Oasis is paused) ===
-const ssbGossipSchedulePath = path.resolve(__dirname, '../src/server/node_modules/ssb-gossip/schedule.js');
-if (fs.existsSync(ssbGossipSchedulePath)) {
-  const data = fs.readFileSync(ssbGossipSchedulePath, 'utf8');
-  if (!data.includes('server.oasisNetworkPaused')) {
-    const patched = data.replace('    if(connecting || closed) return\n', '    if(connecting || closed || server.oasisNetworkPaused) return\n');
-    if (patched !== data) {
-      fs.writeFileSync(ssbGossipSchedulePath, patched);
-      log('Patched ssb-gossip scheduler to stay quiet while Oasis is paused');
-    } else {
-      log('ssb-gossip scheduler patch skipped: unexpected schedule.js format');
-    }
+    log('ssb-conn inbound patch skipped: unexpected format');
   }
 } else {
-  log('ssb-gossip scheduler patch skipped: file not found');
+  log('ssb-conn inbound patch skipped: file not found');
 }
 
 // === Patch ssb-lan (broadcast address detection throws without a private IPv4) ===
@@ -305,4 +256,96 @@ if (fs.existsSync(msNetPath)) {
   }
 } else {
   log('multiserver patch skipped: file not found');
+}
+
+// === Patch hyperaxe (only strings and nodes become children; raw HTML only through a private symbol) ===
+const hyperaxePath = path.resolve(__dirname, '../src/server/node_modules/hyperaxe/factory.js');
+if (fs.existsSync(hyperaxePath)) {
+  let data = fs.readFileSync(hyperaxePath, 'utf8');
+  if (data.includes('oasis.rawHtml')) {
+    log('hyperaxe already patched');
+  } else {
+    const target = `    return function (props) {
+      return isObject(props)
+        ? fn(tag, props, sliceKids(arguments, 1))
+        : fn(tag, sliceKids(arguments))
+    }`;
+    if (data.includes(target)) {
+      data = data.replace(target, `    return function (props) {
+      return isObject(props)
+        ? fn(tag, cleanProps(props), scrubKids(sliceKids(arguments, 1)))
+        : fn(tag, scrubKids(sliceKids(arguments)))
+    }`);
+      data += `
+const RAW_HTML = Symbol.for('oasis.rawHtml')
+function isNodeLike (v) {
+  return !!(v && v.nodeName && v.nodeType)
+}
+function scrubKids (arr) {
+  return arr.map(function (v) {
+    if (Array.isArray(v)) return scrubKids(v)
+    if (v !== null && typeof v === 'object' && !isNodeLike(v) && !(v instanceof Date) && !(v instanceof RegExp)) return null
+    return v
+  })
+}
+function cleanProps (props) {
+  if (isNodeLike(props)) return props
+  const out = {}
+  for (const k of Object.keys(props)) if (k !== 'innerHTML') out[k] = props[k]
+  if (typeof props[RAW_HTML] === 'string') out.innerHTML = props[RAW_HTML]
+  return out
+}
+`;
+      fs.writeFileSync(hyperaxePath, data);
+      log('Patched hyperaxe so peer objects never become attributes or raw HTML');
+    } else {
+      log('hyperaxe patch skipped: unexpected factory layout');
+    }
+  }
+} else {
+  log('hyperaxe patch skipped: file not found');
+}
+
+// === Patch html-element (standard attributes missing from its list are written instead of dropped) ===
+const htmlAttributesPath = path.resolve(__dirname, '../src/server/node_modules/html-element/html-attributes.js');
+if (fs.existsSync(htmlAttributesPath)) {
+  const data = fs.readFileSync(htmlAttributesPath, 'utf8');
+  const anchor = 'function isStandardAttribute(attrName, tagName) {';
+  const marker = 'OASIS_EXTRA_ATTRIBUTES';
+  if (data.includes(marker)) {
+    log('html-element attributes already patched');
+  } else if (data.includes(anchor)) {
+    const extra = `var OASIS_EXTRA_ATTRIBUTES = {
+  'formmethod': ['input', 'button'],
+  'formenctype': ['input', 'button'],
+  'formnovalidate': ['input', 'button'],
+  'formtarget': ['input', 'button'],
+  'minlength': ['input', 'textarea'],
+  'inputmode': 'GLOBAL',
+  'capture': ['input'],
+  'loading': ['img', 'iframe'],
+  'decoding': ['img'],
+  'crossorigin': ['audio', 'img', 'link', 'script', 'video'],
+  'referrerpolicy': ['a', 'area', 'iframe', 'img', 'link', 'script'],
+  'playsinline': ['video'],
+  'role': 'GLOBAL',
+  'label': ['option', 'optgroup', 'track']
+};
+Object.keys(OASIS_EXTRA_ATTRIBUTES).forEach(function (name) {
+  var tags = OASIS_EXTRA_ATTRIBUTES[name];
+  var current = HTML_ATTRIBUTES[name];
+  if (tags === 'GLOBAL' || current === 'GLOBAL') { HTML_ATTRIBUTES[name] = 'GLOBAL'; return; }
+  var set = current instanceof Set ? current : new Set();
+  tags.forEach(function (t) { set.add(t); });
+  HTML_ATTRIBUTES[name] = set;
+});
+
+`;
+    fs.writeFileSync(htmlAttributesPath, data.replace(anchor, extra + anchor));
+    log('Patched html-element so standard attributes such as formmethod, minlength and loading are written');
+  } else {
+    log('html-element attributes patch skipped: unexpected html-attributes.js format');
+  }
+} else {
+  log('html-element attributes patch skipped: file not found');
 }

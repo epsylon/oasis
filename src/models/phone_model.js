@@ -72,6 +72,28 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile, isAvailable,
     });
   };
 
+  const ROOM_EVENT_TEXT = { join: 'roomEventJoined', leave: 'roomEventLeft', recStart: 'roomEventRecStart', recStop: 'roomEventRecStop', mute: 'roomEventMuted', unmute: 'roomEventUnmuted', hand: 'roomEventHand' };
+  const roomNotices = { rid: null, since: 0, seen: new Set() };
+  const announceRoom = async (room) => {
+    if (!room || !room.rid) { roomNotices.rid = null; roomNotices.seen = new Set(); return; }
+    if (roomNotices.rid !== room.rid) { roomNotices.rid = room.rid; roomNotices.since = Number(room.joinedAt) || Date.now(); roomNotices.seen = new Set(); }
+    if (!room.notify) { roomNotices.since = Date.now() + 1; return; }
+    const events = Array.isArray(room.events) ? room.events : [];
+    const keyOf = (e) => `${e.ts}:${e.t}:${e.id}`;
+    const fresh = events.filter(e => e && ROOM_EVENT_TEXT[e.t] && !roomNotices.seen.has(keyOf(e)) && Number(e.ts) >= roomNotices.since);
+    roomNotices.seen = new Set(events.filter(Boolean).map(keyOf));
+    if (!fresh.length) return;
+    let me = null;
+    try { me = (await open()).id; } catch (_) {}
+    const i18n = i18nNow();
+    for (const e of fresh) {
+      if (e.id === me) continue;
+      let name = '';
+      try { name = await nameOf(e.id); } catch (_) {}
+      desktopNotify(i18n.roomsTitle, String(i18n[ROOM_EVENT_TEXT[e.t]] || '{name}').replace('{name}', displayName(e.id, name)));
+    }
+  };
+
   const subscribe = async () => {
     if (subscribed) return;
     const ph = await phone();
@@ -84,6 +106,7 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile, isAvailable,
         refreshCount();
       } else if (ev.type === 'room') {
         sharedState.setPhoneRoom(ev.room || null);
+        announceRoom(ev.room).catch(() => {});
       } else if (ev.type === 'recordLimit') {
         finishPam().catch(() => {});
       } else if (ev.type === 'incoming') {
@@ -165,7 +188,7 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile, isAvailable,
       if (force || Date.now() - pubsAt >= PUBS_TTL_MS) {
         pubsAt = Date.now();
         const found = new Set();
-        for (const m of await byType(s, 'pub')) { const k = m && m.value && m.value.content && m.value.content.address && m.value.content.address.key; if (FEED_ID.test(String(k || ''))) found.add(String(k)); }
+        for (const m of await byType(s, 'pub')) { const v = m && m.value; const k = v && v.content && v.content.address && v.content.address.key; if (FEED_ID.test(String(k || '')) && (v.author === k || v.author === s.id)) found.add(String(k)); }
         for (const m of await byType(s, 'pubAvailability')) { const k = m && m.value && m.value.author; if (FEED_ID.test(String(k || ''))) found.add(String(k)); }
         announcedPubs = found;
       }
@@ -245,8 +268,9 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile, isAvailable,
     async pams() {
       const me = (await open()).id;
       const heard = new Set(seen().heard);
+      const validShare = (s) => !!s && typeof s === 'object' && typeof s.key === 'string' && typeof s.manifestBlobId === 'string';
       const list = (await pmModel.listPams())
-        .filter(m => m.value.author !== me)
+        .filter(m => m.value.author !== me && validShare(m.value.content && m.value.content.share))
         .map(m => ({ key: m.key, from: m.value.author, sentAt: m.value.content.sentAt || new Date(m.timestamp || 0).toISOString(), durationSec: Number(m.value.content.durationSec) || 0, heard: heard.has(m.key), share: m.value.content.share, ready: true }))
         .sort((a, b) => String(b.sentAt).localeCompare(String(a.sentAt)));
       if (typeof isAvailable === 'function') {

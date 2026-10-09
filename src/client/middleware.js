@@ -8,10 +8,11 @@ const mount = require(path.join(__dirname, "../server/node_modules/koa-mount"));
 function obfuscateClearnetHtml(html) {
   if (typeof html !== 'string' || html.length === 0) return html;
   const preserve = [];
+  const tag = require('crypto').randomBytes(12).toString('hex');
   const stash = (re) => {
     html = html.replace(re, (m) => {
       preserve.push(m);
-      return `${preserve.length - 1}`;
+      return `\u0001${tag}:${preserve.length - 1}\u0001`;
     });
   };
   stash(/<pre[\s\S]*?<\/pre>/gi);
@@ -21,7 +22,7 @@ function obfuscateClearnetHtml(html) {
   html = html.replace(/>[ \t]*[\r\n][\s]*</g, '><');
   html = html.replace(/[ \t]{2,}/g, ' ');
   html = html.replace(/[\r\n]+/g, '');
-  html = html.replace(/(\d+)/g, (_, i) => preserve[Number(i)] || '');
+  html = html.replace(new RegExp(`\\u0001${tag}:(\\d+)\\u0001`, 'g'), (_, i) => preserve[Number(i)] || '');
   return html;
 }
 
@@ -42,6 +43,10 @@ const collectLocalIPs = () => {
 
 module.exports = ({ host, port, middleware, allowHost }) => {
   const assets = new Koa()
+  assets.use(async (ctx, next) => {
+    ctx.set("Cache-Control", ctx.query && ctx.query.v ? "public, max-age=31536000, immutable" : "public, max-age=3600");
+    await next();
+  });
   assets.use(koaStatic(join(__dirname, "..", "client", "assets")));
 
   const app = new Koa();
@@ -77,6 +82,13 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   app.use(mount("/c/maptiles", mapTiles));
 
   const gamesStatic = new Koa();
+  gamesStatic.use(async (ctx, next) => {
+    ctx.set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob: mediastream:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-ancestors 'self'");
+    ctx.set("X-Content-Type-Options", "nosniff");
+    ctx.set("X-Frame-Options", "SAMEORIGIN");
+    ctx.set("Referrer-Policy", "same-origin");
+    await next();
+  });
   gamesStatic.use(koaStatic(join(__dirname, "..", "games")));
   app.use(mount("/game-assets", gamesStatic));
 
@@ -96,12 +108,10 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     ctx.set("Referrer-Policy", "same-origin");
     ctx.set("Permissions-Policy", "speaker=(self)");
 
-    const validHostsString = validHosts.join(" or ");
-
     ctx.assert(
       isValidRequest(ctx.request),
       400,
-      `Request must be addressed to ${validHostsString} and non-GET requests must contain non-blob referer.`
+      "Request must be addressed to this node and non-GET requests must come from its own pages."
     );
 
     await next();
@@ -114,14 +124,10 @@ module.exports = ({ host, port, middleware, allowHost }) => {
     }
   });
   
-  const pdfjsPath = path.join(__dirname, '../server/node_modules/pdfjs-dist/build/pdf.min.js');
-  app.use(koaStatic(pdfjsPath));
-
   middleware.forEach((m) => app.use(m));
 
   const server = require("http").createServer({ maxHeaderSize: 256 * 1024 }, app.callback()).listen({ host, port });
 
-  try { require("../backend/updater.js").getRemoteVersion().catch(() => {}); } catch (_) {}
 
   server.on("listening", () => {
     const address = server.address();

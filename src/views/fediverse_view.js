@@ -1,4 +1,5 @@
 const { div, h2, h3, h4, p, section, button, form, a, span, strong, input, label, img, textarea, br, hr, select, option, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { template, i18n } = require("./main_views");
 const { renderZoomableImage } = require("./gallery_view");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
@@ -68,7 +69,7 @@ const renderPost = (post, returnTo, opts = {}) => {
       ),
       span({ class: "fediverse-date" }, fmtDate(post.createdAt))
     ),
-    div({ class: "feed-text", innerHTML: sanitizeHtml(post.html) }),
+    div({ class: "feed-text", [RAW_HTML]: sanitizeHtml(post.html) }),
     post.media && post.media.length ? div({ class: "fediverse-media" }, post.media.map(renderMedia)) : "",
     opts.noActions ? "" : renderActions(post, returnTo)
   );
@@ -91,7 +92,7 @@ const mastodonBox = (account, stats, actions, showLabel) => {
         ),
         actions && actions.length ? div({ class: "fediverse-compact-actions" }, actions) : ""
       ),
-      (stats && stats.bio) ? div({ class: "fediverse-bio", innerHTML: sanitizeHtml(stats.bio) }) : "",
+      (stats && stats.bio) ? div({ class: "fediverse-bio", [RAW_HTML]: sanitizeHtml(stats.bio) }) : "",
       stats
         ? div({ class: "fediverse-stats" },
             stat(i18n.fediverseFollowers, stats.followers),
@@ -103,7 +104,7 @@ const mastodonBox = (account, stats, actions, showLabel) => {
       (stats && Array.isArray(stats.fields) && stats.fields.length)
         ? div({ class: "fediverse-fields" }, stats.fields.map(f => div({ class: "fediverse-field" },
             span({ class: "fediverse-field-name" }, f.name, f.verified ? span({ class: "fediverse-field-verified", title: "verified" }, " ✓") : ""),
-            span({ class: "fediverse-field-value", innerHTML: sanitizeHtml(f.value) })
+            span({ class: "fediverse-field-value", [RAW_HTML]: sanitizeHtml(f.value) })
           )))
         : ""
     )
@@ -340,7 +341,7 @@ const renderPeertubeComment = (c) => {
       ),
       span({ class: "fediverse-date" }, fmtDate(c.createdAt))
     ),
-    div({ class: "feed-text", innerHTML: sanitizeHtml(c.html) })
+    div({ class: "feed-text", [RAW_HTML]: sanitizeHtml(c.html) })
   );
 };
 

@@ -1,3 +1,5 @@
+const fs = require("fs")
+const path = require("path")
 const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
@@ -20,6 +22,14 @@ const normalizeTags = (raw) => {
   if (raw === undefined || raw === null) return []
   if (Array.isArray(raw)) return raw.map(t => String(t || "").trim()).filter(Boolean)
   return String(raw).split(",").map(t => t.trim()).filter(Boolean)
+}
+
+const defaultPubId = () => {
+  try {
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "configs", "snh-invite-code.json"), "utf8"))
+    const m = String(raw.code || "").match(/(@[A-Za-z0-9+/]+={0,2}\.ed25519)/)
+    return m ? m[1] : ""
+  } catch (_) { return "" }
 }
 
 const CATEGORIES = ["ECONOMIC", "TIME", "TRUST"]
@@ -48,7 +58,7 @@ module.exports = ({ cooler }) => {
     })
 
   const buildIndex = (messages) => {
-    const tomb = new Set()
+    const tomb = buildValidatedTombstoneSet(messages)
     const nodes = new Map()
     const parent = new Map()
     const child = new Map()
@@ -56,7 +66,7 @@ module.exports = ({ cooler }) => {
     const confirms = []
     const opinionMsgs = []
     const ubiByPub = new Map()
-    const ubiByUser = new Map()
+    const claimedPubs = new Map()
     const ubiClaimNodes = []
 
     for (const m of messages) {
@@ -65,14 +75,12 @@ module.exports = ({ cooler }) => {
       const c = v.content
       if (!c) continue
 
-      if (c.type === "tombstone" && c.target) {
-        tomb.add(c.target)
-        continue
-      }
-      if (c.type === "transferConfirm") { confirms.push({ target: c.target, author: v.author, ts: v.timestamp || 0 }); continue }
+      if (c.type === "tombstone") continue
+      if (c.type === "transferConfirm") { confirms.push({ target: c.target, tip: typeof c.tip === "string" ? c.tip : null, author: v.author, ts: v.timestamp || 0 }); continue }
       if (c.type === "transferOpinion") { opinionMsgs.push({ target: c.target, author: v.author, category: c.category, ts: v.timestamp || 0 }); continue }
 
       if (c.type === "transfer") {
+        if (c.from !== v.author) continue
         nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
         if (c.replaces) {
           parent.set(k, c.replaces)
@@ -81,27 +89,29 @@ module.exports = ({ cooler }) => {
         const tags = Array.isArray(c.tags) ? c.tags.map(t => String(t).toUpperCase()) : []
         if (tags.includes("UBI") && !tags.includes("REBALANCE") && c.to && c.concept) {
           const key = `${c.to}::${ubiEpochOf(c) || c.concept}`
-          if (v.author === c.from) ubiByPub.set(key, k)
-          else ubiByUser.set(key, k)
+          if (!ubiByPub.has(key)) ubiByPub.set(key, new Set())
+          ubiByPub.get(key).add(v.author)
         }
       }
 
       if (c.type === "ubiClaim") {
         ubiClaimNodes.push({ k, v, c, ts: v.timestamp || m.timestamp || 0 })
+        if (c.pubId) {
+          if (!claimedPubs.has(v.author)) claimedPubs.set(v.author, new Set())
+          claimedPubs.get(v.author).add(c.pubId)
+        }
       }
     }
 
-    for (const [key, userMsgKey] of ubiByUser.entries()) {
-      if (ubiByPub.has(key)) tomb.add(userMsgKey)
-    }
-
+    const defaultPub = defaultPubId()
     for (const { k, v, c, ts } of ubiClaimNodes) {
       if (tomb.has(k)) continue
       const claimantId = v.author
       const epochId = c.epochId || ""
       const concept = `UBI - ${epochId}`.trim()
       const key = `${claimantId}::${epochId || concept}`
-      if (ubiByPub.has(key) || ubiByUser.has(key)) continue
+      const payers = ubiByPub.get(key)
+      if (payers && ((c.pubId && payers.has(c.pubId)) || (defaultPub && payers.has(defaultPub)))) continue
       const synthetic = {
         type: "transfer",
         from: c.pubId || "",
@@ -111,7 +121,7 @@ module.exports = ({ cooler }) => {
         createdAt: c.claimedAt || new Date(ts).toISOString(),
         updatedAt: c.claimedAt || new Date(ts).toISOString(),
         deadline: null,
-        confirmedBy: [c.pubId || ""].filter(Boolean),
+        confirmedBy: [],
         status: "UNCONFIRMED",
         tags: ["UBI", "PENDING"],
         opinions: {},
@@ -158,22 +168,19 @@ module.exports = ({ cooler }) => {
 
     const resolveGroup = (root) => {
       const contentTip = contentTipOf(root)
-      const best = nodes.get(contentTip) || nodes.get(root)
-      if (!best) return null
+      const latest = nodes.get(contentTip) || nodes.get(root)
+      if (!latest) return null
       const rootAuthor = nodes.get(root) ? nodes.get(root).author : null
-      const groupKeys = []; { let x = root, g = 0; groupKeys.push(x); while (child.has(x) && g++ < 100000) { x = child.get(x); groupKeys.push(x) } }
+      const rootConfirms = confirmsByRoot.get(root) || []
+      const seal = rootConfirms.filter(cf => { const n = cf.tip ? nodes.get(cf.tip) : null; return n && n.author === rootAuthor && rootOf(cf.tip) === root && cf.author === n.c.to }).sort((a, b) => a.ts - b.ts)[0]
+      const best = seal ? nodes.get(seal.tip) : latest
       const confirmedBy = new Set()
       const opinions = {}; const opinionSet = new Set()
-      for (const k of groupKeys) {
-        const n = nodes.get(k); if (!n) continue; if (n.author !== rootAuthor) continue; const c = n.c
-        for (const cb of (Array.isArray(c.confirmedBy) ? c.confirmedBy : [])) confirmedBy.add(cb)
-        for (const v of (Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])) opinionSet.add(v)
-        if (c.opinions && typeof c.opinions === "object") for (const kk of Object.keys(c.opinions)) opinions[kk] = Math.max(opinions[kk] || 0, Number(c.opinions[kk]) || 0)
-      }
-      if (best.c.from) confirmedBy.add(best.c.from)
-      for (const cf of (confirmsByRoot.get(root) || [])) confirmedBy.add(cf.author)
+      if (best.c.from && best.c.from === best.author) confirmedBy.add(best.c.from)
+      for (const cf of rootConfirms) { if (cf.author === best.c.to) confirmedBy.add(cf.author) }
       for (const op of (opinionsByRoot.get(root) || [])) { if (!opinionSet.has(op.author)) { opinionSet.add(op.author); opinions[op.category] = (opinions[op.category] || 0) + 1 } }
-      return { contentTip, best, confirmedBy: [...confirmedBy], opinions, opinions_inhabitants: [...opinionSet], tombstoned: tomb.has(contentTip) }
+      const ubiPayerTrusted = !!best.author && (best.author === defaultPub || !!(claimedPubs.get(best.c.to) && claimedPubs.get(best.c.to).has(best.author)))
+      return { contentTip, best, confirmedBy: [...confirmedBy], opinions, opinions_inhabitants: [...opinionSet], tombstoned: tomb.has(contentTip) || tomb.has(best.key), ubiPayerTrusted }
     }
 
     return { tomb, nodes, parent, child, rootOf, tipByRoot, resolveGroup }
@@ -184,22 +191,20 @@ module.exports = ({ cooler }) => {
     return tags.includes("UBI") && !tags.includes("PENDING") && /^[0-9a-f]{64}$/i.test(String(t.txid || ""))
   }
 
-  const deriveStatus = (t) => {
-    const status = String(t.status || "").toUpperCase()
+  const deriveStatus = (t, ubiPayerTrusted = false) => {
     const required = t.from === t.to ? 1 : 2
     const confirmedCount = Array.isArray(t.confirmedBy) ? t.confirmedBy.length : 0
 
-    if (status === "DISCARDED") return "DISCARDED"
-    if (isSettledUbi(t)) return "CLOSED"
+    if (ubiPayerTrusted && isSettledUbi(t)) return "CLOSED"
     if (confirmedCount >= required) return "CLOSED"
     const dl = t.deadline ? moment(t.deadline) : null
     if (dl && dl.isValid() && dl.isBefore(moment())) return "DISCARDED"
-    return status === "CLOSED" ? "CLOSED" : "UNCONFIRMED"
+    return "UNCONFIRMED"
   }
 
   const buildTransfer = (node, agg) => {
     const c = node.c || {}
-    const confirmedBy = agg ? agg.confirmedBy : (Array.isArray(c.confirmedBy) ? c.confirmedBy : [])
+    const confirmedBy = agg ? agg.confirmedBy : (c.from && c.from === node.author ? [c.from] : [])
     const opinions = agg ? agg.opinions : (c.opinions || {})
     const opinions_inhabitants = agg ? agg.opinions_inhabitants : (Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])
     return {
@@ -214,7 +219,7 @@ module.exports = ({ cooler }) => {
       updatedAt: c.updatedAt || null,
       deadline: c.deadline,
       confirmedBy,
-      status: deriveStatus({ ...c, confirmedBy }),
+      status: deriveStatus({ ...c, confirmedBy }, !!(agg && agg.ubiPayerTrusted)),
       tags: Array.isArray(c.tags) ? c.tags : [],
       txid: typeof c.txid === "string" ? c.txid : null,
       opinions,
@@ -281,6 +286,7 @@ module.exports = ({ cooler }) => {
       const old = await getMsg(ssbClient, tipId)
 
       if (!old?.content || old.content.type !== "transfer") throw new Error("Transfer not found")
+      if (old.author !== old.content.from) throw new Error("Not the author")
 
       const current = old.content
       const idxU = buildIndex(await getAllMessages(ssbClient))
@@ -343,6 +349,7 @@ module.exports = ({ cooler }) => {
       if (!msg?.content) throw new Error("Not found")
 
       if (msg.content.type !== "transfer") throw new Error("Not found")
+      if (msg.author !== msg.content.from) throw new Error("Not found")
 
       const idx = buildIndex(await getAllMessages(ssbClient))
       const root = idx.rootOf(tipId)
@@ -357,7 +364,7 @@ module.exports = ({ cooler }) => {
 
       if ((Array.isArray(t.confirmedBy) ? t.confirmedBy : []).includes(userId)) throw new Error("Already confirmed")
 
-      const content = { type: "transferConfirm", target: root, createdAt: new Date().toISOString() }
+      const content = { type: "transferConfirm", target: root, tip: tipId, createdAt: new Date().toISOString() }
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (e2, result) => e2 ? reject(e2) : resolve(result))
       })
@@ -370,6 +377,7 @@ module.exports = ({ cooler }) => {
       const msg = await getMsg(ssbClient, tipId)
 
       if (!msg?.content || msg.content.type !== "transfer") throw new Error("Not found")
+      if (msg.author !== msg.content.from) throw new Error("Not the author")
 
       const idxD = buildIndex(await getAllMessages(ssbClient))
       const gD = idxD.resolveGroup(idxD.rootOf(tipId))
@@ -417,6 +425,7 @@ module.exports = ({ cooler }) => {
 
       const msg = await getMsg(ssbClient, id)
       if (!msg?.content || msg.content.type !== "transfer") throw new Error("Not found")
+      if (msg.author !== msg.content.from) throw new Error("Not found")
 
       const tmpNode = { key: id, ts: msg.timestamp || 0, c: msg.content, author: msg.author }
       return buildTransfer(tmpNode)

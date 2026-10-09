@@ -1,4 +1,5 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink} = require('./main_views');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -121,7 +122,7 @@ const renderHemicycle = (data, { mode = 'election', baseHref = '/parliament?filt
   const unit = Math.max(1, Number(data.seatUnit) || 1);
   return div({ class: 'hemicycle' },
     toggle,
-    div({ class: 'hemicycle-canvas', innerHTML: hemicycleSvg(data, seatsMode) }),
+    div({ class: 'hemicycle-canvas', [RAW_HTML]: hemicycleSvg(data, seatsMode) }),
     unit > 1 ? p({ class: 'hemi-note' }, `1 ${i18n.parliamentSeatsSeat} = ${unit}`) : null,
     seatsMode === 'houses' ? legendHouses(data, houseNames) : legendElection(data),
     data.leaderId ? p({ class: 'hemi-note' }, `${i18n.parliamentSeatsLeader}: `, a({ href: `/author/${encodeURIComponent(data.leaderId)}`, class: 'hemi-legend-link' }, (data.seats.find(s => s.id === data.leaderId) || {}).name || data.leaderId)) : null

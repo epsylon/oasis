@@ -6830,8 +6830,9 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .phone-banner-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#2ecc71;box-shadow:0 0 6px #2ecc71;flex:0 0 auto}
 .phone-banner-chip{white-space:nowrap}
 .phone-banner-chip .live-clock{line-height:1.2em}
-.phone-banner .phone-action-form{margin:0}
+.phone-banner .phone-action-form{margin:0;display:inline-flex;align-items:center}
 .phone-banner .tribe-action-btn{padding:4px 12px;font-size:11px}
+.phone-banner button{margin:0}
 .live-clock{display:inline-flex;align-items:flex-end;white-space:nowrap;line-height:1.2em}
 .live-clock-win{display:inline-block;height:1.2em;line-height:1.2em;overflow:hidden;vertical-align:bottom;font-variant-numeric:tabular-nums;padding:0}
 .live-clock-roll{display:block;animation:live-clock-roll 60s steps(60) infinite;padding:0}
@@ -8712,8 +8713,6 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .feed-preview{margin:14px 0}
 .feed-preview-title{font-size:1em;margin:0 0 8px;text-transform:uppercase;letter-spacing:1px;opacity:.85}
 .feed-compose-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
-.room-peer-speaking .phone-call-icon{color:#7fff7f}
-.room-waiting{color:#ffa500;margin:8px 0}
 .peer-tor-no{color:#888;font-weight:700}
 .room-join-form{display:inline-flex;margin:0;padding:0;background:transparent !important;border:0 !important;box-shadow:none}
 .room-join-btn,.room-join-form .room-join-btn{display:inline-flex;align-items:center;gap:4px;border-radius:10px;font-size:12px;font-weight:700;line-height:1.4;padding:2px 10px;margin:0;width:auto;height:auto;min-height:0;border:1px solid #ffa500;background:transparent;color:#ffa500;box-shadow:none;cursor:pointer;text-decoration:none}
@@ -8726,6 +8725,9 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .room-peer .user-link{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .room-peer-you{flex:0 0 auto;color:#888;font-size:12px;background:transparent;border:0;padding:0}
 .room-peer-muted{flex:0 0 auto;color:#ff6b6b;font-size:11px;font-weight:700;border:1px solid #ff6b6b;border-radius:10px;padding:0 8px;line-height:1.5}
+.room-peer-hand{flex:0 0 auto;color:#FFA500;font-size:11px;font-weight:700;border:1px solid #FFA500;border-radius:10px;padding:0 5px;line-height:1.5;white-space:nowrap}
+.room-peer-raised{border-left:3px solid #FFA500}
+.tribe-action-btn.room-hand-btn-on{border-color:#FFA500;color:#FFA500}
 .room-peer .phone-action-form{flex:0 0 auto;margin-left:auto}
 .room-live-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;margin:0;padding:0;border:none;background:transparent;flex:1 0 100%;min-width:0}
 .room-live-controls>form,.room-live-controls>a,.room-live-controls>span{display:inline-flex;align-items:center;margin:0;padding:0;flex:0 0 auto}

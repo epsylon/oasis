@@ -19,7 +19,7 @@ The backend restarts automatically (via [nodemon](https://nodemon.io)) whenever 
 An Oasis node runs in one Node process, `backend.js` (the AI service, when AI is on, runs apart):
 
 - **`backend.js`** — Koa HTTP server that renders pages with hyperaxe and serves `http://localhost:3000`.
-- **`SSB_server.js`** — the local Secure Scuttlebutt sbot on ssb-db2 (gossip, EBT, friends, blobs, conn, LAN, invites) plus `db2_legacy.js`, which gives the models the classic `createLogStream` / `messagesByType` / `backlinks` / `private` surface over db2. The backend runs it in the same process. It owns `~/.ssb`; a `flume/` log left by an older install is migrated into `db2/` once, before the sbot starts.
+- **`SSB_server.js`** — the local Secure Scuttlebutt sbot on ssb-db2 (EBT, friends, blobs, conn, LAN, invites) plus `db2_legacy.js`, which gives the models the classic `createLogStream` / `messagesByType` / `backlinks` / `private` surface over db2. The backend runs it in the same process. It owns `~/.ssb`; a `flume/` log left by an older install is migrated into `db2/` once, before the sbot starts.
 
 The sbot also listens on a local Unix socket (`~/.ssb/socket`), which is how the PUB admin commands (`./oasis.sh whoami`, `invite`, …) reach a running node. Only one process can hold a `~/.ssb` open at a time. Because the sbot lives inside the backend, every restart of the backend restarts it too; nodemon does not watch `src/server/`, so restart `npm run dev` by hand after changing it.
 
@@ -67,7 +67,7 @@ What the tests cover and how to add a new module suite are documented in [`test/
 - `src/backend/` — Koa HTTP entry (`backend.js`), middleware, blob handler, URL renderer, sanitizer.
 - `src/models/` — per-module data access. Factory functions that receive `cooler` (and sometimes `tribeCrypto`, `tribesModel`) and return query/publish methods.
 - `src/views/` — hyperaxe view functions. Pure HTML builders.
-- `src/configs/` — the application's own configuration: `oasis-config.json` (module toggles, themes, language), `server-config.json` (sbot), `snh-invite-code.json`, and the `*.js` helpers. No personal data is kept here: everything an inhabitant accumulates lives under `~/.ssb/oasis/` (see [`inventory.md`](./inventory.md)), and `state-manager.js` is what resolves those paths.
+- `src/configs/` — the application's own configuration: `server-config.json` (sbot), `snh-invite-code.json`, and the `*.js` helpers. The node's settings (module toggles, themes, language, wallet) live in `~/.ssb/oasis/oasis-config.json`, created on first start, and its own sbot choices in `~/.ssb/oasis/oasis-server-config.json`, merged over `server-config.json`. No personal data is kept here: everything an inhabitant accumulates lives under `~/.ssb/oasis/` (see [`inventory.md`](./inventory.md)), and `state-manager.js` is what resolves those paths.
 - `src/client/assets/` — CSS, theme files, translations (one `oasis_<lang>.js` file per language), static images.
 - `docs/` — documentation for inhabitants and developers (this folder). [`inventory.md`](./inventory.md) explains every file in `~/.ssb`.
 - `test/` — test harness (`run.sh`, `run.js`, `seed.js`, `helpers/`) and per-module test suites in `mods/`.

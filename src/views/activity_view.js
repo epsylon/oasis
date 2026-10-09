@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { template, i18n, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 const { roomNumberOf } = require('../models/phone_number');
@@ -722,7 +723,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.date + ':'), span({ class: 'card-value' }, moment(date).format("YYYY/MM/DD HH:mm"))) : "",
           location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.location || 'Location') + ':'), span({ class: 'card-value' }, location)) : "",
           typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
-          price ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
+          Number(price) > 0 ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
           br(),
           Array.isArray(attendees) ? h2({ class: 'card-label' }, (i18n.attendees || 'Attendees') + ': ' + attendees.length) : ""
         )
@@ -807,7 +808,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               (url) =>
                 `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
             );
-       bodyNode = div({ class: 'feed-text post-text post-text-clamped', innerHTML: sanitizeHtml(linkified) });
+       bodyNode = div({ class: 'feed-text post-text post-text-clamped', [RAW_HTML]: sanitizeHtml(linkified) });
       } else {
         bodyNode = div({ class: 'feed-text' },
           p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderStyledText(displayText))
@@ -1533,7 +1534,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             )
           ),
           div(
-            p({ innerHTML: sanitizeHtml(msgHtml) })
+            p({ [RAW_HTML]: sanitizeHtml(msgHtml) })
           ),
           p({ class: 'card-footer' },
             span({ class: 'date-link' }, `${action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : ''}`),

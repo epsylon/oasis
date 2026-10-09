@@ -30,22 +30,34 @@ describe('crypto: keyring', (t) => {
 
   t('addNewKey for multi-gen', () => {
     const tc = tribeCryptoFactory(fresh());
-    tc.setKey('%x.sha256', 'k1', 1);
-    eq(tc.addNewKey('%x.sha256', 'k2'), 2);
-    deepEq(tc.getKeys('%x.sha256'), ['k2', 'k1']);
+    const k1 = '1'.repeat(64), k2 = '2'.repeat(64);
+    tc.setKey('%x.sha256', k1, 1);
+    eq(tc.addNewKey('%x.sha256', k2), 2);
+    deepEq(tc.getKeys('%x.sha256'), [k2, k1]);
   });
 
-  t('mergeKeys deduplicates', () => {
+  t('mergeKeys deduplicates and puts the newer keys it learns first', () => {
     const tc = tribeCryptoFactory(fresh());
-    tc.setKey('%x.sha256', 'a', 1);
-    tc.mergeKeys('%x.sha256', ['a', 'b', 'c'], 3);
-    deepEq(tc.getKeys('%x.sha256'), ['a', 'b', 'c']);
+    const a = 'a'.repeat(64), b = 'b'.repeat(64), c = 'c'.repeat(64);
+    tc.setKey('%x.sha256', a, 1);
+    tc.mergeKeys('%x.sha256', [c, b, a], 3);
+    deepEq(tc.getKeys('%x.sha256'), [c, b, a]);
+    tc.mergeKeys('%x.sha256', [a], 1);
+    eq(tc.getKey('%x.sha256'), c, 'an older key received later never takes the lead again');
+  });
+
+  t('keys that are not 64 hex characters are refused', () => {
+    const tc = tribeCryptoFactory(fresh());
+    tc.setKey('%x.sha256', 'k1', 1);
+    eq(tc.getKey('%x.sha256'), null);
+    tc.mergeKeys('%x.sha256', ['<script>', 'z'.repeat(64)], 2);
+    eq(tc.getKeys('%x.sha256').length, 0);
   });
 
   t('keyring file is mode 0600', () => {
     const dir = fresh();
     const tc = tribeCryptoFactory(dir);
-    tc.setKey('%x.sha256', 'k', 1);
+    tc.setKey('%x.sha256', 'f'.repeat(64), 1);
     const stat = fs.statSync(path.join(dir, 'keys', 'tribes-keys.json'));
     eq(stat.mode & 0o777, 0o600);
   });
@@ -78,7 +90,7 @@ describe('crypto: keyring', (t) => {
     const dir = fresh();
     for (const ns of ['tribes', 'chats', 'pads', 'maps', 'calendars']) {
       const inst = tribeCryptoFactory(dir, ns);
-      inst.setKey(`%${ns}.sha256`, ns.charAt(0).repeat(64), 1);
+      inst.setKey(`%${ns}.sha256`, require('crypto').createHash('sha256').update(ns).digest('hex'), 1);
     }
     for (const ns of ['tribes', 'chats', 'pads', 'maps', 'calendars']) {
       ok(fs.existsSync(path.join(dir, 'keys', `${ns}-keys.json`)), `${ns}-keys.json exists`);

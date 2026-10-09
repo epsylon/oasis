@@ -46,12 +46,12 @@ Apache, when the HUB shares a domain with another site:
   ServerName example.org
   AllowEncodedSlashes NoDecode
   ProxyPreserveHost On
-  ProxyPass        /c       http://127.0.0.1:3000/c nocanon
-  ProxyPassReverse /c       http://127.0.0.1:3000/c
-  ProxyPass        /assets  http://127.0.0.1:3000/assets
-  ProxyPassReverse /assets  http://127.0.0.1:3000/assets
-  ProxyPass        /qr      http://127.0.0.1:3000/qr nocanon
-  ProxyPassReverse /qr      http://127.0.0.1:3000/qr
+  ProxyPassMatch   "^/c(/.*)?$"  "http://127.0.0.1:3000/c$1" nocanon
+  ProxyPassReverse /c        http://127.0.0.1:3000/c
+  ProxyPass        /assets/  http://127.0.0.1:3000/assets/
+  ProxyPassReverse /assets/  http://127.0.0.1:3000/assets/
+  ProxyPass        /qr/      http://127.0.0.1:3000/qr/ nocanon
+  ProxyPassReverse /qr/      http://127.0.0.1:3000/qr/
 </VirtualHost>
 ```
 
@@ -61,15 +61,22 @@ nginx, on the same footing:
 server {
   listen 443 ssl;
   server_name example.org;
-  location /c {
+  location = /c {
     proxy_pass http://127.0.0.1:3000;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Proto https;
   }
-  location /assets { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; }
-  location /qr     { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; }
+  location ^~ /c/ {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+  }
+  location ^~ /assets/ { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; }
+  location ^~ /qr/     { proxy_pass http://127.0.0.1:3000; proxy_set_header Host $host; }
 }
 ```
+
+Match these paths exactly as written. A plain prefix such as `/c` or `/qr` also matches `/chats`, `/campaigns` or `/qr-action/…`, and would publish the private interface of the node. Never forward the whole backend port to the web, nor through a Tor hidden service.
 
 Then launch the PUB allowing your domain (with the systemd unit of the [deploy guide](./deploy.md), add these options to its `ExecStart` line):
 

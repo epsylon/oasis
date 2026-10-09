@@ -86,6 +86,47 @@ describe('fileshare: A shares an encrypted file, B reassembles', (t) => {
     ok(threw, 'a wrong key throws instead of yielding plaintext');
   });
 
+  t('prefetch only asks the network for the chunks of a sane manifest', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    B.setActor();
+    const ssbB = await B.cooler.open();
+    const asked = [];
+    ssbB.blobs.want = (ref, cb) => { asked.push(ref); if (cb) cb(null); };
+    ssbB.blobs.has = (ref, cb) => cb(null, net.blobs.has(ref));
+    const fakeRef = () => '&' + require('crypto').randomBytes(32).toString('base64') + '.sha256';
+    const share = async (chunks) => {
+      const key = fsc.generateFileKey();
+      const manifestBlobId = await new Promise((resolve, reject) => pull(pull.values([fsc.encryptManifest({ v: 1, filename: 'x', mime: 'application/octet-stream', size: 1, chunkSize: 1, chunks }, key)]), ssbB.blobs.add((err, ref) => err ? reject(err) : resolve(ref))));
+      return { manifestBlobId, key: fsc.keyToHex(key), chunkCount: chunks.length };
+    };
+    await B.use('fileshare').prefetch(await share([fakeRef(), fakeRef(), fakeRef()]));
+    eq(asked.length, 3, 'a small manifest gets its chunks requested');
+    asked.length = 0;
+    await B.use('fileshare').prefetch(await share(Array.from({ length: 500 }, fakeRef)));
+    eq(asked.length, 0, 'a manifest listing hundreds of chunks is not fetched blindly');
+    await B.use('fileshare').prefetch(await share(['../../etc/passwd', 'not a blob']));
+    eq(asked.length, 0, 'malformed chunk references are never requested');
+  });
+
+  t('a manifest that lies about its content or chunk count is refused when reassembling', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    A.setActor();
+    const ssbA = await A.cooler.open();
+    const add = (buf) => new Promise((resolve, reject) => pull(pull.values([buf]), ssbA.blobs.add((err, ref) => err ? reject(err) : resolve(ref))));
+    const key = fsc.generateFileKey();
+    const data = Buffer.from('the real content');
+    const chunkRef = await add(fsc.encryptChunk(data, key));
+    const share = async (manifest) => ({ manifestBlobId: await add(fsc.encryptManifest({ v: 1, filename: 'x', mime: 'text/plain', ...manifest }, key)), key: fsc.keyToHex(key) });
+    const good = await share({ size: data.length, chunkSize: 1024, chunks: [chunkRef], plainSha256: fsc.sha256Hex(data) });
+    ok((await A.use('fileshare').reassembleToBuffer(good)).equals(data), 'an honest manifest reassembles');
+    const refused = async (pointer) => { try { await A.use('fileshare').reassembleToBuffer(pointer); return false; } catch (_) { return true; } };
+    ok(await refused(await share({ size: data.length, chunkSize: 1024, chunks: [chunkRef], plainSha256: 'a'.repeat(64) })), 'a wrong content hash is refused');
+    ok(await refused(await share({ size: data.length, chunkSize: 1024, chunks: Array(500).fill(chunkRef), plainSha256: null })), 'more chunks than the size needs is refused');
+    ok(await refused(await share({ size: 3, chunkSize: 1024, chunks: [chunkRef], plainSha256: null })), 'more bytes than declared is refused');
+  });
+
   t('availability check and local cleanup', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();

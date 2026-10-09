@@ -1,16 +1,19 @@
-const {
-    RequestManager,
-    HTTPTransport,
-    Client
-} = require("../server/node_modules/@open-rpc/client-js");
+const RPC_TIMEOUT_MS = 30000;
 
 async function makeClient(url, user, pass) {
-    const headers = {};
+    const headers = { 'Content-Type': 'application/json' };
     if (user !== undefined || pass !== undefined) {
         headers['Authorization'] = 'Basic ' + Buffer.from(`${user || ''}:${pass || ''}`).toString('base64');
     }
-    const transport = new HTTPTransport(url, { headers });
-    return new Client(new RequestManager([transport]));
+    let nextId = 0;
+    return {
+        request: async ({ method, params = [] }) => {
+            const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ jsonrpc: '1.0', id: ++nextId, method, params }), signal: AbortSignal.timeout(RPC_TIMEOUT_MS) });
+            const body = await res.json();
+            if (!body || body.error) throw new Error((body && body.error && body.error.message) || `RPC ${res.status}`);
+            return body.result;
+        }
+    };
 }
 
 module.exports = {
@@ -50,8 +53,8 @@ module.exports = {
         const errors = [];
         const addrInfo = await module.exports.execute(url, user, pass, "validateaddress", [address]);
         const addressValid = !!addrInfo?.isvalid;
-        const amountValid = Number(amount) > 0;
-        const feeValid = Number(fee) >= 0;
+        const amountValid = Number.isFinite(Number(amount)) && Number(amount) > 0;
+        const feeValid = Number.isFinite(Number(fee)) && Number(fee) >= 0;
         if (!addressValid) errors.push("invalid_dest");
         if (!amountValid) errors.push("invalid_amount");
         if (!feeValid) errors.push("invalid_fee");

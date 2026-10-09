@@ -1,14 +1,13 @@
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
-const archiver = require('../server/node_modules/archiver');
 
 module.exports = {
   exportSSB: async (outputPath) => {
     try {
       const ssbPath = require('../configs/state-manager').ssbDir();
-      const output = fs.createWriteStream(outputPath);
-      const archive = archiver('zip', {
+      const output = fs.createWriteStream(outputPath, { mode: 0o600 });
+      const archive = require('../server/node_modules/archiver')('zip', {
         zlib: { level: 9 }
       });
       archive.pipe(output);
@@ -21,7 +20,8 @@ module.exports = {
           const filePath = path.join(dirPath, file);
           const stat = fs.statSync(filePath);
 
-          if (file === 'secret') {
+          const rel = path.relative(ssbPath, filePath);
+          if (file === 'secret' || file.startsWith('secret.') || file === 'oasis-config.json' || rel === path.join('oasis', 'keys') || rel.startsWith(path.join('oasis', 'keys') + path.sep)) {
             return;
           }
 

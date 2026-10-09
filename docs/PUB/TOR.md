@@ -30,7 +30,7 @@ sudo systemctl restart tor
 sudo cat /var/lib/tor/oasis-pub/hostname
 ```
 
-Oasis needs no change to accept these connections: Tor delivers them to the normal listener. If the PUB must be reachable **only** over Tor, make that listener listen on the machine itself, give it the onion address as its public one, and close the port in the firewall, in `src/configs/server-config.json`:
+Oasis needs no change to accept these connections: Tor delivers them to the normal listener. If the PUB must be reachable **only** over Tor, make that listener listen on the machine itself, give it the onion address as its public one, and close the port in the firewall, in `~/.ssb/oasis/oasis-server-config.json`:
 
 ```json
 "incoming": {
@@ -62,7 +62,7 @@ Inhabitants who connect over Tor without an invite code are followed from the PU
 
 Run Tor locally: the Tor service (SOCKS on `127.0.0.1:9050`) or Tor Browser while it is open (`127.0.0.1:9150`).
 
-Oasis uses a local Tor for onion addresses when one is running; nobody needs Tor to use Oasis, and without it nothing changes. `src/configs/server-config.json` needs the `onion` outgoing entry below; if it is missing or empty, set it and restart Oasis.
+Oasis uses a local Tor for onion addresses when one is running; nobody needs Tor to use Oasis, and without it nothing changes. The server config needs the `onion` outgoing entry below (the default in `src/configs/server-config.json` has it); if a node's own `~/.ssb/oasis/oasis-server-config.json` leaves it missing or empty, set it there and restart Oasis.
 
 ```json
 "outgoing": {

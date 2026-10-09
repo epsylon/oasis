@@ -217,6 +217,29 @@ describe('phone: the caller always sees the same thing', (t) => {
     } finally { await closeNode(a); await closeNode(b); await closeNode(c); }
   });
 
+  t('a caller who keeps ringing is ignored once the budget for the minute is spent', async () => {
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, b);
+      const rpc = a.peers[b.id][0];
+      const chloride = require('../../../src/server/node_modules/chloride');
+      const ring = async () => {
+        const callId = crypto.randomBytes(16).toString('hex');
+        const ephPk = crypto.randomBytes(32).toString('base64');
+        const ts = Date.now();
+        const sig = chloride.crypto_sign_detached(Buffer.from(['ring', callId, ephPk, b.id, ts].join('|')), Buffer.from(a.__keys.private.replace('.ed25519', ''), 'base64')).toString('base64');
+        await asP(rpc.phone.ring, { callId, to: b.id, ephPk, ts, sig });
+      };
+      for (let i = 0; i < phone.RING_PER_WINDOW; i++) await ring();
+      ok(await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming'), 'the first ring of the burst arrives');
+      await asP(b.phone.end);
+      await sleep(200);
+      await ring();
+      await sleep(300);
+      eq(b.phone.state(), null, 'one more ring from the same caller is dropped');
+    } finally { await closeNode(a); await closeNode(b); }
+  });
+
   t('a forged ring signed by someone else is ignored', async () => {
     const a = makeNode(); const b = makeNode();
     try {
@@ -641,6 +664,52 @@ describe('phone: answering from the desktop notification', (t) => {
       ok(args.includes('10000'), 'and it lasts as long as the ringing');
     } finally {
       process.env.PATH = oldPath;
+      fs.rmSync(bin, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('phone: room notices on the desktop', (t) => {
+  t('what others do in your room reaches the desktop once, and only with the notices on', async () => {
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-notify-'));
+    const log = path.join(bin, 'shown');
+    fs.writeFileSync(path.join(bin, 'notify-send'), `#!/bin/sh\nfor a in "$@"; do last="$a"; done\nprintf '%s\\n' "$last" >> '${log}'\n`, { mode: 0o755 });
+    const oldPath = process.env.PATH;
+    process.env.PATH = `${bin}${path.delimiter}${oldPath}`;
+    const sharedState = require('../../../src/configs/shared-state');
+    try {
+      const events = require('../../../src/server/node_modules/pull-pushable')();
+      const me = ssbKeys.generate().id; const other = ssbKeys.generate().id;
+      const model = require('../../../src/models/phone_model')({
+        cooler: { open: async () => ({ id: me, phone: { events: () => events, state: (cb) => cb(null, null), roomState: (cb) => cb(null, null) } }) },
+        pmModel: { listPams: async () => [] }, nameOf: async (id) => id === other ? 'Nadia' : '', isPublic: false
+      });
+      await model.state();
+      const shown = () => { try { return fs.readFileSync(log, 'utf8').split('\n').filter(Boolean); } catch (_) { return []; } };
+      const room = { rid: crypto.randomBytes(16).toString('hex'), joinedAt: Date.now() - 1000, notify: true, events: [] };
+      const push = (patch) => { events.push({ type: 'room', room: { ...room, ...patch } }); return sleep(150); };
+      const t0 = Date.now();
+      const joined = { t: 'join', id: other, ts: t0 };
+      await push({ events: [joined] });
+      await push({ events: [joined] });
+      eq(shown().length, 1, 'someone entering is shown once, however often the room is redrawn');
+      ok(shown()[0].includes('@Nadia'), 'with the name of who did it');
+      await push({ events: [joined, { t: 'recStart', id: me, ts: t0 + 1 }] });
+      eq(shown().length, 1, 'what I do myself is not shown');
+      const whileOff = { t: 'mute', id: other, ts: Date.now() };
+      await push({ notify: false, events: [] });
+      await push({ notify: true, events: [joined, whileOff] });
+      eq(shown().length, 1, 'nothing from while the notices were off');
+      await sleep(5);
+      await push({ events: [joined, whileOff, { t: 'leave', id: other, ts: Date.now() }] });
+      eq(shown().length, 2, 'and new things show again');
+      await sleep(5);
+      await push({ events: [joined, whileOff, { t: 'hand', id: other, ts: Date.now() }] });
+      eq(shown().length, 3, 'a raised hand is shown too');
+      ok(shown()[2].includes('@Nadia'), 'with who raised it');
+    } finally {
+      process.env.PATH = oldPath;
+      sharedState.setPhoneRoom(null);
       fs.rmSync(bin, { recursive: true, force: true });
     }
   });

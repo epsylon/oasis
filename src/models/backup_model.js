@@ -18,16 +18,19 @@ const REC_META = 1;
 const REC_MSG = 2;
 const REC_BLOB = 3;
 const REC_FILE = 4;
+const REC_MAX_LEN = 256 * 1024 * 1024;
 
 const stateRoot = () => {
   try { return path.join(require('../configs/state-manager').ssbDir(), 'oasis'); } catch (_) { return null; }
 };
 
+const NOT_BACKED_UP = new Set(['oasis-config.json', 'oasis-server-config.json', 'rooms']);
 const listStateFiles = (dir, base = dir) => {
   const out = [];
   let entries = [];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return out; }
   for (const entry of entries) {
+    if (dir === base && NOT_BACKED_UP.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...listStateFiles(full, base));
     else if (entry.isFile() && !entry.name.endsWith('.migrated') && !/^snapshot(-recent)?\.oasissn/.test(entry.name)) out.push({ rel: path.relative(base, full), full });
@@ -243,10 +246,25 @@ module.exports = ({ cooler }) => {
       if (!fs.existsSync(filePath)) throw new Error('Encrypted file not found.');
       let decrypted;
       try { decrypted = decryptBuffer(fs.readFileSync(filePath), pw); } catch (_) { throw new Error('Wrong password or corrupt backup file.'); }
+      let keys = null;
+      try { keys = JSON.parse(decrypted.toString('utf8').split('\n').filter(l => !l.trim().startsWith('#')).join('\n')); } catch (_) { keys = null; }
+      const ssbKeys = require('../server/node_modules/ssb-keys');
+      const probe = Buffer.from('oasis-keys-check');
+      const valid = (() => {
+        try {
+          if (!keys || keys.curve !== 'ed25519' || typeof keys.public !== 'string' || typeof keys.private !== 'string' || keys.id !== '@' + keys.public) return false;
+          return ssbKeys.verify(keys, ssbKeys.sign(keys, probe), probe) === true;
+        } catch (_) { return false; }
+      })();
+      if (!valid) throw new Error('The file does not contain a valid Oasis identity.');
       const ssbDir = ssbDirOf();
       fs.mkdirSync(ssbDir, { recursive: true });
       const secretPath = path.join(ssbDir, 'secret');
-      if (fs.existsSync(secretPath)) fs.copyFileSync(secretPath, path.join(ssbDir, 'secret.bak-' + new Date().toISOString().replace(/[:.]/g, '-')));
+      if (fs.existsSync(secretPath)) {
+        const bakPath = path.join(ssbDir, 'secret.bak-' + new Date().toISOString().replace(/[:.]/g, '-'));
+        fs.copyFileSync(secretPath, bakPath);
+        try { fs.chmodSync(bakPath, 0o600); } catch (_) {}
+      }
       const tmpPath = path.join(ssbDir, 'secret.tmp-' + process.pid);
       fs.writeFileSync(tmpPath, decrypted, { mode: 0o600 });
       fs.renameSync(tmpPath, secretPath);
@@ -413,7 +431,7 @@ module.exports = ({ cooler }) => {
             const got = await this.fetchSnapshot({ address, connect, tier }, tmp);
             if (!got) continue;
             job.phase = 'restore';
-            const res = await this.restoreBackup({ filePath: tmp, password: '', onProgress: (p) => { job.progress = { ...total, ...p, messages: total.messages + p.messages, skipped: total.skipped + p.skipped, failed: total.failed + p.failed, forked: total.forked + p.forked }; } });
+            const res = await this.restoreBackup({ filePath: tmp, password: '', stateFiles: false, onProgress: (p) => { job.progress = { ...total, ...p, messages: total.messages + p.messages, skipped: total.skipped + p.skipped, failed: total.failed + p.failed, forked: total.forked + p.forked }; } });
             for (const k of ['messages', 'skipped', 'failed', 'forked', 'blobs', 'blobsSkipped', 'files']) total[k] += Number(res[k]) || 0;
             total.forks.push(...(res.forks || []));
             total.errors.push(...(res.errors || []));
@@ -473,6 +491,7 @@ module.exports = ({ cooler }) => {
         if (chunks[0].length < 5) compact();
         const type = chunks[0].readUInt8(0);
         const len = chunks[0].readUInt32BE(1);
+        if (len > REC_MAX_LEN) throw new Error('Backup record too large.');
         if (pendingLen < 5 + len) return null;
         compact();
         const all = chunks[0];
@@ -512,7 +531,7 @@ module.exports = ({ cooler }) => {
       return meta;
     },
 
-    async restoreBackup({ filePath, password, onProgress }) {
+    async restoreBackup({ filePath, password, onProgress, stateFiles = true }) {
       const ssbClient = await openSsb();
       let validate = null;
       try { validate = require('../server/node_modules/ssb-validate'); } catch (_) {}
@@ -582,10 +601,15 @@ module.exports = ({ cooler }) => {
           return;
         }
         if (rec.type === 'file') {
+          if (!stateFiles) { stats.skipped += 1; report(); return; }
           const root = stateRoot();
-          if (!root || !rec.rel || rec.rel.includes('..')) { stats.failed += 1; noteError('state file rejected'); report(); return; }
+          const rel = typeof rec.rel === 'string' ? rec.rel.replace(/\\/g, '/') : '';
+          const parts = rel.split('/').filter(Boolean);
+          const safe = !!root && parts.length > 0 && !NOT_BACKED_UP.has(parts[0]) && !path.isAbsolute(rel) && parts.every(p => p !== '.' && p !== '..' && !/[\0]/.test(p));
+          const rootAbs = root ? path.resolve(root) : '';
+          const target = safe ? path.resolve(rootAbs, ...parts) : '';
+          if (!safe || !target.startsWith(rootAbs + path.sep)) { stats.failed += 1; noteError('state file rejected'); report(); return; }
           try {
-            const target = path.join(root, ...String(rec.rel).split('/'));
             fs.mkdirSync(path.dirname(target), { recursive: true });
             if (fs.existsSync(target)) { try { fs.copyFileSync(target, `${target}.before-restore`); } catch (_) {} }
             fs.writeFileSync(target, rec.data);

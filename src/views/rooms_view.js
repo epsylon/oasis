@@ -184,7 +184,7 @@ exports.roomsView = async (rooms, filter, roomToEdit, params = {}) => {
 }
 
 const eventLine = (ev) => {
-  const key = ev.t === "join" ? "roomEventJoined" : ev.t === "leave" ? "roomEventLeft" : ev.t === "recStart" ? "roomEventRecStart" : "roomEventRecStop"
+  const key = ev.t === "join" ? "roomEventJoined" : ev.t === "leave" ? "roomEventLeft" : ev.t === "recStart" ? "roomEventRecStart" : ev.t === "mute" ? "roomEventMuted" : ev.t === "unmute" ? "roomEventUnmuted" : ev.t === "hand" ? "roomEventHand" : "roomEventRecStop"
   const [before, after] = String(i18n[key] || "{name}").split("{name}")
   return [before, userLink(ev.id), after]
 }
@@ -195,6 +195,11 @@ const renderLiveControls = (room, live) => div({ class: "room-live-controls" },
   form({ method: "POST", action: "/rooms/notify", class: "phone-action-form" },
     input({ type: "hidden", name: "on", value: live.notify ? "0" : "1" }),
     button({ type: "submit", class: live.notify ? "tribe-action-btn" : "tribe-action-btn room-notify-off" }, "🔔 " + String(live.notify ? i18n.roomNotificationsOn : i18n.roomNotificationsOff).toUpperCase())
+  ),
+  form({ method: "POST", action: "/rooms/hand", class: "phone-action-form" },
+    input({ type: "hidden", name: "hand", value: live.hand ? "0" : "1" }),
+    input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
+    button({ type: "submit", class: live.hand ? "tribe-action-btn room-hand-btn-on" : "tribe-action-btn" }, "✋ " + String(live.hand ? i18n.roomLowerHand : i18n.roomRaiseHand).toUpperCase())
   ),
   live.notify && safeArr(live.events).length
     ? form({ method: "POST", action: "/rooms/notify/clear", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.roomClearNotices).toUpperCase()))
@@ -214,6 +219,12 @@ const renderLiveControls = (room, live) => div({ class: "room-live-controls" },
     button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.roomLeave).toUpperCase())
   )
 )
+const handOrder = (live) => {
+  const all = [{ you: true, hand: !!live.hand, since: Number(live.handSince) || 0 }, ...safeArr(live.peers).map(peer => ({ peer, hand: !!peer.hand, since: Number(peer.handSince) || 0 }))]
+  const raised = all.filter(e => e.hand).sort((a, b) => a.since - b.since)
+  raised.forEach((e, i) => { e.turn = i + 1 })
+  return [...raised, ...all.filter(e => !e.hand)]
+}
 const renderRoomEvents = (live) => live.notify && safeArr(live.events).length
   ? ul({ class: "room-events" }, ...safeArr(live.events).slice().reverse().map(ev => li({ class: "room-event" }, span({ class: "date-link" }, moment(ev.ts).format("HH:mm:ss")), span({ class: "room-event-text" }, ...eventLine(ev)))))
   : null
@@ -240,8 +251,8 @@ const renderLivePanel = (room, live, occ, canJoin = false) => {
       input({ type: "hidden", name: "on", value: on ? "0" : "1" }),
       button({ type: "submit", class: on ? "tribe-action-btn danger-btn" : "tribe-action-btn" }, String(on ? i18n.phoneUnsilence : i18n.phoneSilence).toUpperCase())
     )
-    const who = (id, speaking, muted, you, silenced = false, recording = false) => div({ class: "phone-contact room-peer" + (speaking ? " room-peer-speaking" : "") },
-      speaking ? span({ class: "phone-call-icon" }, "●") : null,
+    const who = (id, muted, you, silenced = false, recording = false, turn = 0) => div({ class: "phone-contact room-peer" + (turn ? " room-peer-raised" : "") },
+      turn ? span({ class: "room-peer-hand" }, `✋ ${turn}`) : null,
       userLink(id),
       you ? span({ class: "room-peer-you" }, i18n.roomYou) : null,
       muted ? span({ class: "room-peer-muted" }, String(i18n.roomMuted).toUpperCase()) : null,
@@ -250,11 +261,9 @@ const renderLivePanel = (room, live, occ, canJoin = false) => {
     )
     return div({ class: "phone-call-panel room-live-panel" },
       head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null), renderLiveControls(room, live)),
-      live.secure ? null : p({ class: "room-waiting" }, i18n.roomWaitingKey),
-      div({ class: "phone-contacts" },
-        who(userId, live.speaking && !live.muted, live.muted, true, false, !!live.recording),
-        ...safeArr(live.peers).map(pr => who(pr.id, pr.speaking && !pr.muted && !pr.silenced, pr.muted, false, !!pr.silenced, !!pr.recording))
-      ),
+      div({ class: "phone-contacts" }, ...handOrder(live).map(e => e.you
+        ? who(userId, live.muted, true, false, !!live.recording, e.turn)
+        : who(e.peer.id, e.peer.muted, false, !!e.peer.silenced, !!e.peer.recording, e.turn))),
       renderRoomEvents(live)
     )
   }

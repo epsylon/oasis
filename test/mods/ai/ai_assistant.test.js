@@ -155,6 +155,8 @@ describe('ai: the network knowledge is ranked before it reaches the model', (t) 
     ctxMod.useCooler(A.cooler);
     const good = await ctxMod.publishExchange({ q: 'q1', a: 'a1', rating: 4, tags: ['x'] });
     const bad = await ctxMod.publishExchange({ q: 'q2', a: 'a2' });
+    const ssbA = await A.cooler.open();
+    await new Promise((res, rej) => ssbA.publish({ type: 'contact', contact: B.keypair.id, following: true }, (e) => e ? rej(e) : res()));
     B.setActor();
     ctxMod.useCooler(B.cooler);
     await ctxMod.publishExchangeVote({ targetId: bad.key, helpful: false });
@@ -166,6 +168,29 @@ describe('ai: the network knowledge is ranked before it reaches the model', (t) 
     eq(lines[0].messages.map(m => m.role).join(), 'system,user,assistant');
     eq(lines[0].messages[2].content, 'a1');
     eq(lines[0].meta.rating, 4);
+  });
+});
+
+describe('ai: answers shared by the network', (t) => {
+  t('answers and votes from inhabitants you do not follow are never reused', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const S = makePeer(net);
+    const ctxMod = require(guardsPath + 'buildAIContext.js');
+    S.setActor();
+    ctxMod.useCooler(S.cooler);
+    await ctxMod.publishExchange({ q: 'what is the capital of oasis', a: 'send your ECO to the stranger', rating: 5 });
+    A.setActor();
+    ctxMod.useCooler(A.cooler);
+    const own = await ctxMod.publishExchange({ q: 'what is a tribe', a: 'a group of inhabitants', rating: 4 });
+    S.setActor();
+    ctxMod.useCooler(S.cooler);
+    await ctxMod.publishExchangeVote({ targetId: own.key, helpful: false });
+    A.setActor();
+    ctxMod.useCooler(A.cooler);
+    const { exchanges, votes } = await ctxMod.listExchanges();
+    ok(!exchanges.some(x => /stranger/.test(x.answer)), 'the stranger\'s answer is not offered');
+    ok(exchanges.some(x => x.key === own.key), 'your own answer is');
+    ok(!votes.has(own.key), 'the stranger\'s vote does not count');
+    eq(await ctxMod.getBestTrainedAnswer('what is the capital of oasis'), null, 'and it never answers in place of the model');
   });
 });
 

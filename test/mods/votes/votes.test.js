@@ -22,6 +22,20 @@ describe('votes: create + cast + list', (t) => {
     ok(Number(v.totalVotes) === 0, 'no votes counted');
   });
 
+  t('a deleted or unknown vote is not found, and no declared counts are shown for it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const S = makePeer(net); A.setActor();
+    const r = await A.use('votes').createVote('Gone?', '2026-12-31', ['YES', 'NO']);
+    await A.use('votes').deleteVoteById(r.key);
+    let missing = false;
+    try { await A.use('votes').getVoteById(r.key); } catch (_) { missing = true; }
+    ok(missing, 'a deleted vote is not returned');
+    const ssbS = await S.cooler.open();
+    const forged = await new Promise((res, rej) => ssbS.publish({ type: 'tombstone', target: '%' + 'x'.repeat(43) + '=.sha256', deletedAt: new Date().toISOString() }, (e, m) => e ? rej(e) : res(m)));
+    let unknown = false;
+    try { await A.use('votes').getVoteById(forged.key); } catch (_) { unknown = true; }
+    ok(unknown, 'an id that is not a vote is not returned as one');
+  });
+
   t('A casts opinion on vote', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('votes').createVote('Q?', '2026-12-31', ['YES', 'NO']);

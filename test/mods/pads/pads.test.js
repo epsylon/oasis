@@ -130,3 +130,103 @@ describe('pads: cross-author replaces does not hide entries (regression)', (t) =
     eq(viaVersion.length, viaRoot.length, 'same entry count regardless of which chain version id is used');
   });
 });
+
+const publishAs = async (P, content) => {
+  const ssb = await P.cooler.open();
+  return new Promise((res, rej) => ssb.publish(content, (e, m) => e ? rej(e) : res(m)));
+};
+
+const visibleTokenOf = (net) => {
+  let token = null;
+  for (const m of net.log) {
+    const c = m.value && m.value.content;
+    if (c && c.type === 'pad' && Array.isArray(c.invites)) for (const inv of c.invites) if (inv && typeof inv.ch === 'string') token = inv.ch;
+  }
+  return token;
+};
+
+describe('pads: the signed author is the author', (t) => {
+  t('an entry claiming somebody else as author shows who really wrote it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const pad = await A.use('pads').createPad('Board', 'OPEN', '2026-12-31', [], null);
+    B.setActor();
+    await publishAs(B, { type: 'padEntry', padId: pad.key, text: 'impostor', author: A.keypair.id, createdAt: new Date().toISOString() });
+    A.setActor();
+    const entry = (await A.use('pads').getEntries(pad.key)).find(e => e.text === 'impostor');
+    ok(entry, 'the entry is listed');
+    eq(entry.author, B.keypair.id);
+  });
+
+  t('a pad claiming somebody else as author cannot be edited, closed or deleted by them', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    B.setActor();
+    const fake = await publishAs(B, { type: 'pad', title: 'Fake', status: 'OPEN', deadline: '2026-12-31', tags: [], encrypted: false, author: A.keypair.id, members: [B.keypair.id], invites: [], createdAt: new Date().toISOString() });
+    A.setActor();
+    eq((await A.use('pads').getPadById(fake.key)).author, B.keypair.id);
+    for (const attempt of [() => A.use('pads').updatePadById(fake.key, { title: 'Taken' }), () => A.use('pads').closePadById(fake.key), () => A.use('pads').deletePadById(fake.key)]) {
+      let threw = false;
+      try { await attempt(); } catch (_) { threw = true; }
+      ok(threw, 'the named author is refused');
+    }
+    eq((await A.use('pads').getPadById(fake.key)).title, 'Fake');
+  });
+});
+
+describe('pads: keys reach members and nobody else', (t) => {
+  t('a member added by the author receives the key on the next listing', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const pad = await A.use('pads').createPad('Inner', 'INVITE-ONLY', '2026-12-31', [], null);
+    await A.use('pads').addMemberToPad(pad.key, B.keypair.id);
+    await A.use('pads').listAll({ filter: 'all', viewerId: A.keypair.id });
+    ok(net.log.some(m => m.value.author === A.keypair.id && m.value.content.type === 'tribe-keys' && m.value.content.memberKeys && m.value.content.memberKeys[B.keypair.id]), 'the key is boxed for the member');
+    B.setActor();
+    await B.use('pads').ingestKeys();
+    ok((await B.use('pads').listAll({ filter: 'all', viewerId: B.keypair.id })).some(p => p.title === 'Inner'), 'the member reads the pad');
+  });
+
+  t('a stranger who copies the visible invitation token gets neither a seat nor the key', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const pad = await A.use('pads').createPad('Locked', 'INVITE-ONLY', '2026-12-31', [], null);
+    await A.use('pads').generateInvite(pad.key);
+    const token = visibleTokenOf(net);
+    ok(token, 'the token is readable by anybody');
+    C.setActor();
+    await publishAs(C, { type: 'padMember', target: pad.key, member: C.keypair.id, on: true, code: token, createdAt: new Date().toISOString() });
+    A.setActor();
+    await A.use('pads').listAll({ filter: 'all', viewerId: A.keypair.id });
+    ok(!(await A.use('pads').getPadById(pad.key)).members.includes(C.keypair.id), 'the stranger is not a member');
+    C.setActor();
+    await C.use('pads').ingestKeys();
+    ok(!(await C.use('pads').listAll({ filter: 'all', viewerId: C.keypair.id })).some(p => p.title === 'Locked'), 'the stranger cannot read');
+  });
+});
+
+describe('pads: changing the key when someone leaves', (t) => {
+  t('the owner changes the key and only those who stay receive it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const pause = () => new Promise(r => setTimeout(r, 5));
+    const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'pads');
+    A.setActor();
+    const r = await A.use('pads').createPad('Rotating', 'INVITE-ONLY', '2030-12-31', [], null);
+    const codeB = await A.use('pads').generateInvite(r.key);
+    const codeC = await A.use('pads').generateInvite(r.key);
+    B.setActor(); await B.use('pads').joinByInvite(codeB);
+    C.setActor(); await C.use('pads').joinByInvite(codeC);
+    A.setActor(); await A.use('pads').listAll({ filter: 'all', viewerId: A.keypair.id });
+    await pause();
+    const before = net.log.length;
+    C.setActor(); await C.use('pads').leavePad(r.key);
+    ok(!net.log.slice(before).some(m => m.value.content.type === 'tribe-keys'), 'the one who leaves does not hand out a key');
+    await pause();
+    A.setActor(); await A.use('pads').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const fresh = keysOf(A).getKey(r.key);
+    ok(!keysOf(C).getKeys(r.key).includes(fresh), 'the new key is not the one the leaver had');
+    B.setActor(); await B.use('pads').ingestKeys();
+    C.setActor(); await C.use('pads').ingestKeys();
+    ok(keysOf(B).getKeys(r.key).includes(fresh), 'the member who stays gets the new key');
+    ok(!keysOf(C).getKeys(r.key).includes(fresh), 'the member who left does not');
+  });
+});

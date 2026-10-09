@@ -2,14 +2,18 @@ const fs = require('fs');
 const path = require('path');
 
 const readOasisConfig = () => {
-  try { return JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'configs', 'oasis-config.json'), 'utf8')) || {}; } catch (_) { return {}; }
+  try {
+    const dir = process.env.OASIS_STATE_DIR || process.env.ssb_path || path.join(require('os').homedir(), '.ssb');
+    const p = [path.join(dir, 'oasis', 'oasis-config.json'), path.join(dir, 'oasis-config.json')].find(f => fs.existsSync(f));
+    return JSON.parse(fs.readFileSync(p || path.join(__dirname, '..', 'configs', 'oasis-config.json'), 'utf8')) || {};
+  } catch (_) { return {}; }
 };
 
 module.exports = {
   name: 'networkPause',
   version: '1.0.0',
   manifest: { pause: 'sync', resume: 'sync', paused: 'sync', lastErrors: 'sync' },
-  init(server) {
+  init(server, config) {
     server.oasisNetworkPaused = readOasisConfig().networkPaused === true || process.env.OASIS_NETWORK_PAUSED === '1';
     const refused = () => new Error('network paused');
 
@@ -126,6 +130,64 @@ module.exports = {
     };
     const listenTimer = setInterval(() => { listen(); if (listening) clearInterval(listenTimer); }, 1000);
     if (listenTimer.unref) listenTimer.unref();
+
+    const readList = (file) => { try { const a = JSON.parse(fs.readFileSync(file, 'utf8')); return Array.isArray(a) ? a : []; } catch (_) { return []; } };
+    const syncPeerBook = () => {
+      if (!server.conn || typeof server.conn.dbPeers !== 'function' || !config || !config.path) return;
+      const { canonicalKey } = require('../models/peer_health');
+      let forgottenFile = null;
+      try { forgottenFile = require('../configs/state-manager').statePath('gossip_unfollowed.json'); } catch (_) {}
+      const forgotten = new Set((forgottenFile ? readList(forgottenFile) : []).map(e => e && canonicalKey(e.key)).filter(Boolean));
+      let entries = [];
+      try { entries = server.conn.dbPeers(); } catch (_) { return; }
+      for (const [addr, data] of entries) {
+        const m = String(addr).match(/^(.*~shs:)([A-Za-z0-9+/]{43})$/);
+        if (!m) continue;
+        const padded = `${m[1]}${m[2]}=`;
+        try {
+          if (!server.conn.db().has(padded)) server.conn.remember(padded, { ...(data || {}) });
+          else if (data && data.autoconnect === true && typeof server.conn.db().update === 'function') server.conn.db().update(padded, { autoconnect: true });
+          server.conn.forget(addr);
+        } catch (_) {}
+      }
+      try { entries = server.conn.dbPeers(); } catch (_) { return; }
+      for (const [addr, data] of entries) {
+        const key = data && canonicalKey(data.key);
+        if (key && forgotten.has(key)) { try { server.conn.forget(addr); } catch (_) {} }
+      }
+      const chosen = new Map();
+      for (const p of readList(path.join(config.path, 'gossip.json'))) {
+        const key = p && canonicalKey(p.key);
+        const host = p ? String(p.host || '').trim() : '';
+        if (!key || key === server.id || forgotten.has(key) || !host) continue;
+        const onion = /\.onion$/i.test(host);
+        const prev = chosen.get(key);
+        if (!prev || (prev.onion && !onion)) chosen.set(key, { host, port: Number(p.port) || 8008, onion });
+      }
+      for (const [key, p] of chosen) {
+        const addr = `${p.onion ? 'onion' : 'net'}:${p.host}:${p.port}~shs:${key.slice(1, -8)}`;
+        try { if (!server.conn.db().has(addr)) server.conn.remember(addr, { key, type: 'pub', autoconnect: true }); } catch (_) {}
+      }
+      const seeds = [].concat(config.seeds || [], (config.connections && config.connections.seeds) || []);
+      for (const seed of seeds) {
+        const addr = String(seed || '').trim();
+        const m = addr.match(/~shs:([A-Za-z0-9+/]{43}=?)$/);
+        const key = m && canonicalKey(m[1]);
+        if (!key || key === server.id || forgotten.has(key)) continue;
+        try { if (!server.conn.db().has(addr)) server.conn.remember(addr, { key, type: 'pub', autoconnect: true }); } catch (_) {}
+      }
+      if (config.pub && typeof server.conn.db().update === 'function') {
+        try { entries = server.conn.dbPeers(); } catch (_) { return; }
+        for (const [addr, data] of entries) {
+          const key = data && canonicalKey(data.key);
+          if (!key || key === server.id || forgotten.has(key) || data.type !== 'pub' || data.autoconnect !== false) continue;
+          try { server.conn.db().update(addr, { autoconnect: true }); } catch (_) {}
+        }
+      }
+    };
+    for (const ms of [5000, 30000]) { const t = setTimeout(syncPeerBook, ms); if (t.unref) t.unref(); }
+    const bookTimer = setInterval(syncPeerBook, 10 * 60 * 1000);
+    if (bookTimer.unref) bookTimer.unref();
 
     return {
       lastErrors() { return Object.fromEntries(lastErrors); },

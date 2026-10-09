@@ -426,3 +426,99 @@ describe('security: LAN broadcasting switched off stays off', (t) => {
     ok(node.lan.running);
   });
 });
+
+describe('security: hostile text cannot stall the node', (t) => {
+  t('long runs of half-open mentions and embeds render quickly', () => {
+    const { renderStyledText } = require('../../../src/backend/renderStyledText');
+    for (const hostile of ['[@'.repeat(100000), '!['.repeat(100000), '[video:'.repeat(30000), '[pdf:'.repeat(40000)]) {
+      const started = Date.now();
+      renderStyledText(hostile);
+      ok(Date.now() - started < 2000, `rendered ${hostile.slice(0, 7)}… in time`);
+    }
+  });
+});
+
+describe('security: uploads do not leak where a photo was taken', (t) => {
+  t('camera and GPS data are removed from an uploaded photo', async () => {
+    const sharp = require('../../../src/server/node_modules/sharp');
+    const { stripImageMetadata } = require('../../../src/backend/blobHandler');
+    const exif = { IFD0: { Make: 'TestCam' }, IFD3: { GPSLatitudeRef: 'N', GPSLatitude: '40/1 25/1 0/1', GPSLongitudeRef: 'E', GPSLongitude: '0/1 21/1 0/1' } };
+    const photo = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#f80' } }).jpeg().withExifMerge(exif).toBuffer();
+    ok((await sharp(photo).metadata()).exif, 'the original carries EXIF');
+    const cleaned = await stripImageMetadata(photo);
+    notOk((await sharp(cleaned).metadata()).exif, 'the uploaded copy carries none');
+    notOk(cleaned.includes(Buffer.from('TestCam')), 'not even the camera name');
+  });
+});
+
+describe('security: node settings live in the data folder, never in the application folder', (t) => {
+  t('settings and server choices are written under the data folder, privately, and updates cannot overwrite them', () => {
+    const fs = require('fs'); const path = require('path');
+    const cm = require('../../../src/configs/config-manager.js');
+    const appDir = path.resolve(__dirname, '../../../src');
+    ok(!cm.configFilePath.startsWith(appDir), 'the settings file is outside the application folder');
+    ok(!cm.serverConfigFilePath.startsWith(appDir), 'so are the node\'s server choices');
+    const had = fs.existsSync(cm.serverConfigFilePath) ? fs.readFileSync(cm.serverConfigFilePath) : null;
+    try {
+      const before = cm.readServerConfig();
+      cm.saveServerConfig({ friends: { hops: 4 } });
+      const after = cm.readServerConfig();
+      eq(after.friends.hops, 4, 'the choice is kept');
+      eq(after.friends.dunbar, before.friends.dunbar, 'the defaults around it are kept');
+      eq(JSON.stringify(after.caps), JSON.stringify(before.caps), 'the network key always comes from the shipped default');
+      eq(fs.statSync(cm.serverConfigFilePath).mode & 0o777, 0o600, 'only the owner can read it');
+    } finally {
+      if (had) fs.writeFileSync(cm.serverConfigFilePath, had); else fs.rmSync(cm.serverConfigFilePath, { force: true });
+    }
+  });
+});
+
+describe('security: the data folder keeps the SSB layout and Oasis inside its own folder', (t) => {
+  const fs = require('fs'); const path = require('path'); const os = require('os'); const { spawnSync } = require('child_process');
+  const run = (dir, code) => spawnSync(process.execPath, ['-e', code], { env: { ...process.env, OASIS_STATE_DIR: dir, ssb_path: dir }, encoding: 'utf8' });
+
+  t('settings left at the top of the data folder move into the Oasis folder, keeping what they said', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-layout-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'oasis-config.json'), JSON.stringify({ themes: { current: 'Clear-SNH' }, language: 'eu', modules: {} }));
+      fs.writeFileSync(path.join(dir, 'oasis-server-config.json'), JSON.stringify({ friends: { hops: 3 } }));
+      const out = run(dir, `const cm = require(${JSON.stringify(path.resolve(__dirname, '../../../src/configs/config-manager.js'))}); console.log(JSON.stringify({ lang: cm.getConfig().language, hops: cm.readServerConfig().friends.hops, file: cm.configFilePath }))`);
+      const res = JSON.parse(out.stdout.trim().split('\n').pop());
+      eq(res.lang, 'eu', 'the settings are kept');
+      eq(res.hops, 3, 'and so are the server choices');
+      eq(res.file, path.join(dir, 'oasis', 'oasis-config.json'), 'they now live inside the Oasis folder');
+      notOk(fs.existsSync(path.join(dir, 'oasis-config.json')), 'nothing is left at the top');
+      notOk(fs.existsSync(path.join(dir, 'oasis-server-config.json')));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  t('a stale copy at the top never changes the one Oasis uses, and empty leftovers go away', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-layout-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'oasis', 'flags'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'oasis', 'flags', 'oasis-first-contact'), '@me\nwelcome=done\n');
+      fs.writeFileSync(path.join(dir, 'oasis-first-contact'), '@me\nwelcome=pending\n');
+      fs.mkdirSync(path.join(dir, 'keys'));
+      fs.mkdirSync(path.join(dir, 'node_modules'));
+      fs.mkdirSync(path.join(dir, 'blobs'));
+      fs.writeFileSync(path.join(dir, 'secret'), 'x');
+      const out = run(dir, `require(${JSON.stringify(path.resolve(__dirname, '../../../src/configs/state-manager.js'))}).migrateAll()`);
+      eq(out.status, 0);
+      eq(fs.readFileSync(path.join(dir, 'oasis', 'flags', 'oasis-first-contact'), 'utf8'), '@me\nwelcome=done\n', 'the record Oasis uses is left exactly as it was');
+      notOk(fs.existsSync(path.join(dir, 'oasis-first-contact')), 'the stale copy at the top is gone');
+      notOk(fs.existsSync(path.join(dir, 'keys')), 'an empty leftover folder is removed');
+      notOk(fs.existsSync(path.join(dir, 'node_modules')));
+      ok(fs.existsSync(path.join(dir, 'blobs')) && fs.existsSync(path.join(dir, 'secret')), 'what belongs to SSB stays where it is');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe('security: browser code shipped with Oasis is the published release', (t) => {
+  t('pdf.js matches the official pdfjs-dist 5.3.31 build byte for byte', () => {
+    const fs = require('fs'); const path = require('path'); const crypto = require('crypto');
+    const dir = path.join(__dirname, '../../../src/client/public/js');
+    const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f))).digest('hex');
+    eq(sha('pdf.min.mjs'), 'd52477eb9df74c4541686dc8f93b7b70d011d118ee5a336d7ff109867994a548');
+    eq(sha('pdf.worker.min.mjs'), 'b53a18c9bc0b7296fa96297fc47a09678fa46b4bce38ca469d978653af1d7bd6');
+  });
+});

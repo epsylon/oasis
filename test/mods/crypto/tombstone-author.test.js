@@ -21,14 +21,14 @@ describe('tombstone validation: author check', (t) => {
     eq(tomb.size, 0, 'Eve\'s forged tombstone targeting Alice\'s event must be ignored');
   });
 
-  t('latest tombstone wins when same author rebroadcasts', () => {
+  t('a stranger\'s later tombstone cannot undo the author\'s deletion', () => {
     const messages = [
       { key: '%post.sha256', value: { author: '@a.ed25519', timestamp: 1, content: { type: 'post', text: 'hi' } } },
       { key: '%t1.sha256',  value: { author: '@a.ed25519', timestamp: 2, content: { type: 'tombstone', target: '%post.sha256' } } },
       { key: '%t2.sha256',  value: { author: '@eve.ed25519', timestamp: 3, content: { type: 'tombstone', target: '%post.sha256' } } }
     ];
     const tomb = buildValidatedTombstoneSet(messages);
-    notOk(tomb.has('%post.sha256'), 'Eve\'s later tombstone replaces in the claim map but is rejected at validation');
+    ok(tomb.has('%post.sha256'), 'the author\'s tombstone still holds');
   });
 
   t('encrypted-tribe tombstone only honored when target was in the same tribe', () => {

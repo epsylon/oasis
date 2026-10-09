@@ -158,6 +158,83 @@ describe('rooms: meeting on a pub', (t) => {
     } finally { await closeAll(a, b, c, pub); }
   });
 
+  t('when someone mutes or unmutes, the others hear a tone and see it once', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    const bytesOf = (kind) => Math.round(phone.chimeMs(kind) * 8000 / 1000) * 2;
+    const heardChime = (n, kind) => devices.get(n.id).played.some(buf => buf.length === bytesOf(kind));
+    const noticesOf = (n, t, id) => n.phone.roomState().events.filter(e => e.t === t && e.id === id).length;
+    try {
+      await link(a, pub); await link(b, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b)));
+      await asP(b.phone.roomMute, true);
+      ok(await waitFor(() => heardChime(a, 'mute')), 'A hears B go silent');
+      ok(await waitFor(() => noticesOf(a, 'mute', b.id) === 1), 'and sees it in the notices');
+      await sleep(4500);
+      eq(noticesOf(a, 'mute', b.id), 1, 'the signal that keeps repeating while muted is not announced again');
+      await asP(b.phone.roomMute, false);
+      ok(await waitFor(() => heardChime(a, 'unmute')), 'A hears B come back');
+      ok(await waitFor(() => noticesOf(a, 'unmute', b.id) === 1), 'and sees that too');
+      eq(noticesOf(b, 'mute', b.id), 0, 'B is not told about itself');
+    } finally { await closeAll(a, b, pub); }
+  });
+
+  t('raised hands are announced once and kept in the order they were raised', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode(); const c = makeNode(); const d = makeNode();
+    const bytesOf = (kind) => Math.round(phone.chimeMs(kind) * 8000 / 1000) * 2;
+    const heardChime = (n, kind) => devices.get(n.id).played.some(buf => buf.length === bytesOf(kind));
+    const peerOf = (n, id) => (n.phone.roomState().peers || []).find(p => p.id === id) || {};
+    const queue = (n) => (n.phone.roomState().peers || []).filter(p => p.hand).sort((x, y) => x.handSince - y.handSince).map(p => p.id);
+    try {
+      await link(a, pub); await link(b, pub); await link(c, pub); await link(d, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room); await asP(c.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b) && secure(c)));
+      ok((await asP(b.phone.roomHand, true)).hand, 'B sees its own hand up');
+      ok(await waitFor(() => peerOf(a, b.id).hand), 'A sees it');
+      await sleep(20);
+      await asP(c.phone.roomHand, true);
+      ok(await waitFor(() => queue(a).length === 2), 'A sees both hands');
+      eq(queue(a).join(','), [b.id, c.id].join(','), 'first raised, first in the queue');
+      ok(heardChime(a, 'hand'), 'with a tone of its own');
+      eq(a.phone.roomState().events.filter(e => e.t === 'hand').length, 2, 'and one notice per hand');
+      await listen(b.id, 4); await listen(c.id, 4);
+      eq(a.phone.roomState().events.filter(e => e.t === 'hand').length, 2, 'repeating the signal is not announced again');
+      await sleep(200);
+      await asP(d.phone.roomJoin, room);
+      ok(await waitFor(() => secure(d)));
+      ok(await waitFor(async () => { await listen(c.id, 2); await listen(b.id, 2); return queue(d).length === 2; }), 'someone arriving later sees the hands that are up');
+      eq(queue(d).join(','), [b.id, c.id].join(','), 'in the order they were raised, not the order the signals arrived');
+      eq(d.phone.roomState().events.filter(e => e.t === 'hand').length, 0, 'without notices for hands raised before they came');
+      await asP(b.phone.roomHand, false);
+      ok(await waitFor(() => !peerOf(a, b.id).hand), 'B lowers it');
+      eq(queue(a).join(','), c.id, 'and C moves up');
+    } finally { await closeAll(a, b, c, d, pub); }
+  });
+
+  t('in a busy room newcomers come in muted, without a notice for it', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode({ roomQuietAt: 2 }); const b = makeNode({ roomQuietAt: 2 }); const c = makeNode({ roomQuietAt: 2 });
+    const peerOf = (n, id) => (n.phone.roomState().peers || []).find(p => p.id === id) || {};
+    try {
+      await link(a, pub); await link(b, pub); await link(c, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room);
+      notOk(b.phone.roomState().muted, 'with few inside, you come in able to speak');
+      await asP(c.phone.roomJoin, room);
+      ok(c.phone.roomState().muted, 'once the room is busy, you come in muted');
+      ok(await waitFor(() => secure(a) && secure(c)));
+      ok(await waitFor(async () => { await listen(c.id, 2); return !!peerOf(a, c.id).muted; }), 'the others see it');
+      eq(a.phone.roomState().events.filter(e => e.t === 'mute').length, 0, 'but are not notified, it is not something C did');
+      await asP(c.phone.roomMute, false);
+      notOk(c.phone.roomState().muted, 'C can unmute');
+      ok(await waitFor(() => a.phone.roomState().events.some(e => e.t === 'unmute' && e.id === c.id)), 'and that is announced');
+    } finally { await closeAll(a, b, c, pub); }
+  });
+
   t('any participant can record the room; everyone hears it start and stop and sees who records', async () => {
     const pub = makeNode({ relayOpen: true });
     const a = makeNode(); const b = makeNode();
@@ -180,7 +257,7 @@ describe('rooms: meeting on a pub', (t) => {
       notOk(b.phone.roomState().recording);
       ok(await waitFor(() => !a.phone.roomState().recordingBy.length), 'A sees it is over');
       ok(heardChime(b, 'recStop') && await waitFor(() => heardChime(a, 'recStop')), 'both hear it stop');
-      const dir = path.join(b.__dir, 'rooms-recordings');
+      const dir = path.join(b.__dir, 'oasis', 'rooms');
       const files = fs.readdirSync(dir).filter(f => f.startsWith(phone.recordingPrefix(room.ref) + '-') && f.endsWith('.wav'));
       eq(files.length, 1, 'the recording is kept on the recorder\'s device');
       const wav = fs.readFileSync(path.join(dir, files[0]));

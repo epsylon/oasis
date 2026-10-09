@@ -521,6 +521,16 @@ async function checkLocalBlob(blobId) {
 }
 
 models.blob = {
+  getLocal: async ({ blobId }) => {
+    const local = await checkLocalBlob(blobId);
+    if (local) return local;
+    const ssb = await cooler.open();
+    const has = await new Promise((resolve) => ssb.blobs.has(blobId, (err, v) => resolve(!err && !!v)));
+    if (!has) return null;
+    return new Promise((resolve) => {
+      pull(ssb.blobs.get(blobId), pull.collect((err, bufs) => resolve(err || !bufs || !bufs.length ? null : Buffer.concat(bufs))));
+    });
+  },
   getCached: async ({ blobId }) => {
     const local = await checkLocalBlob(blobId);
     if (local) return local;
@@ -1241,25 +1251,6 @@ const post = {
     return { messages, myFeedId };
   },
 
-  fromHashtag: async (hashtag, customOptions = {}) => {
-   const ssb = await cooler.open();
-   const myFeedId = ssb.id;
-   const query = [
-    {
-      $filter: {
-        dest: `#${hashtag}`,
-      },
-    },
-  ];
-  const messages = await getMessages({
-    myFeedId,
-    customOptions,
-    ssb,
-    query,
-   });
-
-   return messages;
-  },  
   topicComments: async (rootId, customOptions = {}) => {
     const ssb = await cooler.open();
     const myFeedId = ssb.id;
@@ -1386,356 +1377,6 @@ const post = {
               resolve(transform(ssb, collectedMessages, myFeedId));
             }
           })
-        );
-      });
-
-      return messages;
-    },
-    latest: async () => {
-      const ssb = await cooler.open();
-
-      const myFeedId = ssb.id;
-
-      const source = ssb.query.read(
-        configure({
-          query: [
-            {
-              $filter: {
-                value: {
-                  timestamp: { $lte: Date.now() },
-                  content: {
-                    type: { $in: ["post", "blog"] },
-                  },
-                },
-              },
-            },
-          ],
-        })
-      );
-      const followingFilter = await socialFilter({ following: true });
-
-      const messages = await new Promise((resolve, reject) => {
-        pull(
-          source,
-          followingFilter,
-          publicOnlyFilter,
-          pull.take(maxMessages),
-          pull.collect((err, collectedMessages) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(transform(ssb, collectedMessages, myFeedId));
-            }
-          })
-        );
-      });
-
-      return messages;
-    },
-    latestExtended: async () => {
-      const ssb = await cooler.open();
-
-      const myFeedId = ssb.id;
-
-      const source = ssb.query.read(
-        configure({
-          query: [
-            {
-              $filter: {
-                value: {
-                  timestamp: { $lte: Date.now() },
-                  content: {
-                    type: { $in: ["post", "blog"] },
-                  },
-                },
-              },
-            },
-          ],
-        })
-      );
-
-      const extendedFilter = await socialFilter({
-        following: false,
-        me: false,
-      });
-
-      const messages = await new Promise((resolve, reject) => {
-        pull(
-          source,
-          publicOnlyFilter,
-          extendedFilter,
-          pull.take(maxMessages),
-          pull.collect((err, collectedMessages) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(transform(ssb, collectedMessages, myFeedId));
-            }
-          })
-        );
-      });
-
-      return messages;
-    },
-    latestTopics: async () => {
-      const ssb = await cooler.open();
-
-      const myFeedId = ssb.id;
-
-      const source = ssb.query.read(
-        configure({
-          query: [
-            {
-              $filter: {
-                value: {
-                  timestamp: { $lte: Date.now() },
-                  content: {
-                    type: { $in: ["post", "blog"] },
-                  },
-                },
-              },
-            },
-          ],
-        })
-      );
-
-      const extendedFilter = await socialFilter({
-        following: true,
-      });
-
-      const messages = await new Promise((resolve, reject) => {
-        pull(
-          source,
-          publicOnlyFilter,
-          pull.filter(hasNoRoot),
-          extendedFilter,
-          pull.take(maxMessages),
-          pull.collect((err, collectedMessages) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(transform(ssb, collectedMessages, myFeedId));
-            }
-          })
-        );
-      });
-
-      return messages;
-    },
-    latestSummaries: async () => {
-      const ssb = await cooler.open();
-
-      const myFeedId = ssb.id;
-
-      const options = configure({
-        type: "post",
-        private: false,
-      });
-
-      const source = ssb.messagesByType(options);
-
-      const extendedFilter = await socialFilter({
-        following: true,
-      });
-
-      const messages = await new Promise((resolve, reject) => {
-        pull(
-          source,
-          pull.filter((message) => isNotPrivate(message) && hasNoRoot(message)),
-          extendedFilter,
-          pull.take(maxMessages),
-          pullParallelMap(async (message, cb) => {
-            const thread = await post.fromThread(message.key);
-            lodash.set(
-              message,
-              "value.meta.thread",
-              await transform(ssb, thread, myFeedId)
-            );
-            cb(null, message);
-          }),
-          pull.collect((err, collectedMessages) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(transform(ssb, collectedMessages, myFeedId));
-            }
-          })
-        );
-      });
-
-      return messages;
-    },
-    latestThreads: async () => {
-      const ssb = await cooler.open();
-
-      const myFeedId = ssb.id;
-
-      const source = ssb.query.read(
-        configure({
-          query: [
-            {
-              $filter: {
-                value: {
-                  timestamp: { $lte: Date.now() },
-                  content: {
-                    type: { $in: ["post", "blog"] },
-                  },
-                },
-              },
-            },
-          ],
-        })
-      );
-      const basicSocialFilter = await socialFilter();
-
-      const messages = await new Promise((resolve, reject) => {
-        pull(
-          source,
-          basicSocialFilter,
-          pull.filter((message) => isNotPrivate(message) && hasNoRoot(message)),
-          pull.take(maxMessages),
-          pullParallelMap(async (message, cb) => {
-            const thread = await post.fromThread(message.key);
-            lodash.set(
-              message,
-              "value.meta.thread",
-              await transform(ssb, thread, myFeedId)
-            );
-            cb(null, message);
-          }),
-          pull.filter((message) => message.value.meta.thread.length > 1),
-          pull.collect((err, collectedMessages) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve(transform(ssb, collectedMessages, myFeedId));
-            }
-          })
-        );
-      });
-
-      return messages;
-    },
-
-    popular: async ({ period }) => {
-      const ssb = await cooler.open();
-
-      const periodDict = {
-        day: 1,
-        week: 7,
-        month: 30.42,
-        year: 365,
-      };
-
-      if (period in periodDict === false) {
-        throw new Error("invalid period");
-      }
-
-      const myFeedId = ssb.id;
-
-      const now = new Date();
-      const earliest = Number(now) - 1000 * 60 * 60 * 24 * periodDict[period];
-      const source = ssb.query.read(
-        configure({
-          query: [
-            {
-              $filter: {
-                value: {
-                  timestamp: { $gte: earliest },
-                  content: {
-                    type: "vote",
-                  },
-                },
-              },
-            },
-          ],
-        })
-      );
-      const basicSocialFilter = await socialFilter();
-
-      const messages = await new Promise((resolve, reject) => {
-        pull(
-          source,
-          publicOnlyFilter,
-          pull.filter((msg) => {
-            return (
-              isNotEncrypted(msg) &&
-              typeof msg.value.content.vote === "object" &&
-              typeof msg.value.content.vote.link === "string" &&
-              typeof msg.value.content.vote.value === "number"
-            );
-          }),
-          pull.reduce(
-            (acc, cur) => {
-              const author = cur.value.author;
-              const target = cur.value.content.vote.link;
-              const value = cur.value.content.vote.value;
-
-              if (acc[author] == null) {
-                acc[author] = {};
-              }
-              acc[author][target] = Math.max(-1, Math.min(1, value));
-
-              return acc;
-            },
-            {},
-            (err, obj) => {
-              if (err) {
-                return reject(err);
-              }
-              const adjustedObj = Object.entries(obj).reduce(
-                (acc, [author, values]) => {
-                  if (author === myFeedId) {
-                    return acc;
-                  }
-                  const entries = Object.entries(values);
-                  const total = 1 + Math.log(entries.length);
-
-                  entries.forEach(([link, value]) => {
-                    if (acc[link] == null) {
-                      acc[link] = 0;
-                    }
-                    acc[link] += value / total;
-                  });
-                  return acc;
-                },
-                []
-              );
-
-              const arr = Object.entries(adjustedObj);
-              const length = arr.length;
-
-              pull(
-                pull.values(arr),
-                pullSort(([, aVal], [, bVal]) => bVal - aVal),
-                pull.take(Math.min(length, maxMessages)),
-                pull.map(([key]) => key),
-                pullParallelMap(async (key, cb) => {
-                  try {
-                    const msg = await post.get(key);
-                    cb(null, msg);
-                  } catch (e) {
-                    cb(null, null);
-                  }
-                }),
-                pull.filter(
-                  (message) =>
-                    message &&
-                    isNotPrivate(message) &&
-                    (message.value.content.type === "post" ||
-                      message.value.content.type === "blog")
-                ),
-                basicSocialFilter,
-                pull.collect((collectErr, collectedMessages) => {
-                  if (collectErr) {
-                    reject(collectErr);
-                  } else {
-                    resolve(collectedMessages);
-                  }
-                })
-              );
-            }
-          )
         );
       });
 
@@ -1887,7 +1528,7 @@ const post = {
       const ssb = await cooler.open();
       const current = (await models.about.visibilityPrefs(ssb.id).catch(() => null)) || {};
       const h = String(handle || '');
-      const prefs = { ...current, fediverseHandle: h };
+      const prefs = { ...current, fediverseHandle: current.fediverse === true ? h : '' };
       if (h === '') prefs.fediverse = false;
       return new Promise((resolve, reject) => {
         ssb.publish({ type: "about", about: ssb.id, visibilityPrefs: prefs }, (err, msg) => err ? reject(err) : resolve(msg));
@@ -1966,9 +1607,9 @@ const post = {
       if (resolvedBlobId !== undefined) baseFields.gpgBlobId = String(resolvedBlobId || "");
       if (image && image.length > 0) {
         const megabyte = Math.pow(2, 20);
-        const maxSize = 50 * megabyte;
+        const maxSize = 75 * megabyte;
         if (image.length > maxSize) {
-          throw new Error("File is too big, maximum size is 50 megabytes");
+          throw new Error("File is too big, maximum size is 75 megabytes");
         }
         return new Promise((resolve, reject) => {
           pull(

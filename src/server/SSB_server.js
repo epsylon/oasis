@@ -52,8 +52,6 @@ const { printMetadata } = require('./ssb_metadata');
   };
 })();
 
-require('ssb-plugins').loadUserPlugins(SecretStack({ caps }), config);
-
 try {
   if (require('../configs/config-manager.js').getConfig().networkPaused === true || process.env.OASIS_NETWORK_PAUSED === '1') config.conn = { ...(config.conn || {}), autostart: false };
 } catch (_) {}
@@ -71,17 +69,13 @@ const Server = SecretStack({ caps })
   .use(require('ssb-db2/compat/feedstate'))
   .use(require('./db2_legacy'))
   .use(require('ssb-master'))
-  .use(require('ssb-gossip'))
   .use(require('ssb-ebt'))
   .use(require('ssb-friends'))
   .use(require('ssb-blobs'))
-  .use(require('ssb-plugins'))
   .use(require('ssb-conn'))
-  .use(require('ssb-friend-pub'))
   .use(config.pub ? require('ssb-invite') : require('ssb-invite-client'))
   .use(require('ssb-logging'))
   .use(require('ssb-replication-scheduler'))
-  .use(require('ssb-partial-replication'))
   .use(require('ssb-onion'))
   .use(require('ssb-unix-socket'))
   .use(require('ssb-no-auth'))
@@ -230,13 +224,22 @@ const handleFatal = (err) => {
     if (isDebug()) console.log(`Technical detail: ${String((err && err.message) || err)}`);
     process.exit(1);
   }
+  if (server) {
+    console.error('[oasis] unexpected error, still running:', (err && err.stack) || err);
+    return;
+  }
   throw err;
 };
 
 process.on('uncaughtException', handleFatal);
 
+const tightenStateDir = () => {
+  try { if (config.path && fs.existsSync(config.path)) fs.chmodSync(config.path, 0o700); } catch (_) {}
+};
+
 const startServerOnly = () => {
   try {
+    tightenStateDir();
     server = Server(config);
   } catch (err) {
     handleFatal(err);
@@ -252,7 +255,7 @@ const startServerOnly = () => {
 
   manifest.config = 'sync';
   server.config = cb => {
-    console.log(JSON.stringify(config, null, 2));
+    console.log(JSON.stringify(config, (k, v) => (k === 'keys' || k === 'private' || k === 'secret') ? undefined : v, 2));
     cb();
   };
 
@@ -353,7 +356,7 @@ module.exports = {
   migrationStatus: () => ({ ...migration }),
   open: async () => {
     await migrateFlume();
-    if (!server) server = Server(config);
+    if (!server) { tightenStateDir(); server = Server(config); }
     return server;
   }
 };

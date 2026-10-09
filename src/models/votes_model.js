@@ -346,19 +346,7 @@ module.exports = ({ cooler }) => {
         return candidate;
       }
 
-      const msg = await new Promise((res, rej) =>
-        ssbClient.get(id, (err, vote) => (err || !vote ? rej(new Error('Vote not found')) : res(vote)))
-      );
-
-      const content = msg.content || {};
-      const status = statusFromContent(content, moment());
-
-      return {
-        id,
-        latestId: id,
-        ...content,
-        status
-      };
+      throw new Error('Vote not found');
     },
 
     async listAll(filter = 'all') {

@@ -95,6 +95,16 @@ const migrateAll = () => {
       if (legacy) statePath(name);
     } catch (_) {}
   }
+  for (const name of Object.keys(FOLDERS)) {
+    if (FOLDERS[name] !== 'flags' || name.endsWith('.json')) continue;
+    const legacy = path.join(ssbDir(), name);
+    const target = path.join(stateDir(name), name);
+    try { if (fs.existsSync(legacy) && fs.existsSync(target)) fs.unlinkSync(legacy); } catch (_) {}
+  }
+  for (const leftover of ['keys', 'node_modules']) {
+    const dir = path.join(ssbDir(), leftover);
+    try { if (fs.statSync(dir).isDirectory() && fs.readdirSync(dir).length === 0) fs.rmdirSync(dir); } catch (_) {}
+  }
 };
 
 module.exports = { statePath, stateDir, ssbDir, keysDir, migrateAll };

@@ -66,6 +66,103 @@ describe('tribes: invite + join', (t) => {
     ok(tribeA.members.includes(B.keypair.id));
   });
 
+  t('when a member leaves, only the creator renews the key and the one who left does not get it', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const tmA = A.use('tribes');
+    const r = await tmA.createTribe('Circle', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const codeB = await tmA.generateInvite(r.key);
+    const codeC = await tmA.generateInvite(r.key);
+    B.setActor(); await B.use('tribes').joinByInvite(codeB);
+    C.setActor(); await C.use('tribes').joinByInvite(codeC);
+    A.setActor(); await tmA.ensureTribeKeyDistribution(r.key);
+    const rootId = await tmA.getRootId(r.key);
+    const genBefore = A.tribeCrypto.getGen(rootId);
+    B.setActor(); await B.use('tribes').processIncomingKeys();
+    const keyB = B.tribeCrypto.getKey(rootId);
+    await B.use('tribes').leaveTribe(r.key);
+    eq(B.tribeCrypto.getKey(rootId), keyB, 'leaving does not mint a key the leaver would know');
+    A.setActor();
+    await tmA.forceSync();
+    await tmA.ensureTribeKeyDistribution(r.key);
+    ok(A.tribeCrypto.getGen(rootId) > genBefore, 'the creator renews the key once it sees someone left');
+    const fresh = A.tribeCrypto.getKey(rootId);
+    ok(fresh && fresh !== keyB, 'with a key the leaver never had');
+    C.setActor(); await C.use('tribes').processIncomingKeys();
+    eq(C.tribeCrypto.getKey(rootId), fresh, 'the members who stay receive it');
+    B.setActor(); await B.use('tribes').processIncomingKeys();
+    ok(!B.tribeCrypto.getKeys(rootId).includes(fresh), 'the one who left does not');
+    A.setActor();
+    const genAfter = A.tribeCrypto.getGen(rootId);
+    await tmA.forceSync();
+    await tmA.ensureTribeKeyDistribution(r.key);
+    eq(A.tribeCrypto.getGen(rootId), genAfter, 'and it is renewed only once');
+  });
+
+  t('what a member posts after leaving no longer shows to the tribe; what they posted before does', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tmA = A.use('tribes');
+    const r = await tmA.createTribe('Garden', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const code = await tmA.generateInvite(r.key);
+    B.setActor();
+    await B.use('tribes').joinByInvite(code);
+    await B.use('tribesContent').create(r.key, 'feed', { description: 'while a member' });
+    await B.use('tribes').leaveTribe(r.key);
+    await B.use('tribesContent').create(r.key, 'feed', { description: 'after leaving' });
+    A.setActor();
+    await tmA.forceSync();
+    const items = await A.use('tribesContent').listByTribe(r.key, 'feed');
+    ok(items.some(i => String(i.description).includes('while a member')), 'earlier posts stay');
+    ok(!items.some(i => String(i.description).includes('after leaving')), 'later posts with the old key are dropped');
+  });
+
+  t('a removed member cannot slip content in by backdating it before the removal', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tmA = A.use('tribes');
+    const r = await tmA.createTribe('Orchard', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const code = await tmA.generateInvite(r.key);
+    B.setActor();
+    await B.use('tribes').joinByInvite(code);
+    await B.use('tribesContent').create(r.key, 'feed', { description: 'before removal' });
+    A.setActor();
+    await tmA.forceSync();
+    await tmA.updateTribeMembers(r.key, [A.keypair.id]);
+    B.setActor();
+    const realNow = Date.now;
+    Date.now = () => realNow() - 30 * 86400000;
+    try { await B.use('tribesContent').create(r.key, 'feed', { description: 'backdated after removal' }); } finally { Date.now = realNow; }
+    A.setActor();
+    await tmA.forceSync();
+    const items = await A.use('tribesContent').listByTribe(r.key, 'feed');
+    ok(items.some(i => String(i.description).includes('before removal')), 'what was posted while a member stays');
+    ok(!items.some(i => String(i.description).includes('backdated after removal')), 'a backdated post after the removal is dropped');
+  });
+
+  t('in an open tribe nobody becomes a member by adding themselves without an invitation', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net); const S = makePeer(net);
+    A.setActor();
+    const tmA = A.use('tribes');
+    const r = await tmA.createTribe('Commons', '', null, '', [], false, 'open', null, 'OPEN', '');
+    const tip = net.log.filter(m => m.value.author === A.keypair.id && m.value.content && m.value.content.type === 'tribe').pop();
+    const ssbS = await S.cooler.open();
+    const forged = { ...tip.value.content, replaces: tip.key, members: [...(tip.value.content.members || []), S.keypair.id], updatedAt: new Date().toISOString() };
+    await new Promise((res, rej) => ssbS.publish(forged, (e) => e ? rej(e) : res()));
+    await tmA.forceSync();
+    ok(!(await tmA.getTribeById(r.key)).members.includes(S.keypair.id), 'the self-added stranger is not a member');
+    const code = await tmA.generateInvite(r.key);
+    B.setActor();
+    await B.use('tribes').joinByInvite(code);
+    A.setActor();
+    await tmA.forceSync();
+    ok((await tmA.getTribeById(r.key)).members.includes(B.keypair.id), 'an invited inhabitant joins as usual');
+  });
+
   t('B cannot join with wrong code', async () => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net);
@@ -249,5 +346,35 @@ describe('tribes: content stays in the tribe unless a member opens it', (t) => {
     A.setActor();
     await A.use('tribesContent').publishExposure(item, 'clearnet');
     eq((await seenBy(X, tribeId)).length, 0);
+  });
+});
+
+describe('tribes: a tribe with a long history', (t) => {
+  t('a tribe edited many times resolves to its latest version, and deleting it hides its sub-tribes', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const tm = A.use('tribes');
+    const r = await tm.createTribe('Long', 'v0', null, '', [], true, 'strict', null, 'OPEN', '');
+    const EDITS = 120;
+    let current = r.key;
+    for (let i = 1; i <= EDITS; i++) {
+      await tm.forceSync();
+      await tm.updateTribeById(current, { description: `v${i}` });
+      await tm.forceSync();
+      current = (await tm.getTribeById(r.key)).id;
+    }
+    await tm.forceSync();
+    const tribe = await tm.getTribeById(r.key);
+    eq(tribe.description, `v${EDITS}`, 'the latest edit is the one shown');
+    eq((await tm.listAll()).filter(x => x.title === 'Long').length, 1, 'and it is listed once');
+    const sub = await tm.createTribe('Child', '', null, '', [], true, 'strict', r.key, 'OPEN', '');
+    await tm.forceSync();
+    ok((await tm.listAll()).some(x => x.title === 'Child'), 'a sub-tribe is listed');
+    await tm.deleteTribeById(r.key);
+    await tm.forceSync();
+    const after = await tm.listAll();
+    notOk(after.some(x => x.title === 'Long'), 'the deleted tribe is gone');
+    notOk(after.some(x => x.title === 'Child'), 'and its sub-tribe with it');
+    void sub;
   });
 });

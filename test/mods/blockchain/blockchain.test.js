@@ -23,6 +23,18 @@ describe('blockchain (blockexplorer)', (t) => {
     notOk(leaked);
   });
 
+  t('a private message never shows in the explorer, whoever is looking', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const V = makePeer(net); A.setActor();
+    const ssbA = await A.cooler.open();
+    const pm = await new Promise((res, rej) => ssbA.publish({ type: 'post', text: 'only for B', recps: [A.keypair.id, B.keypair.id] }, (e, m) => e ? rej(e) : res(m)));
+    for (const viewer of [V.keypair.id, A.keypair.id]) {
+      const blocks = await A.use('blockchain').listBlockchain('all', viewer, {});
+      notOk(blocks.some(b => b.id === pm.key || JSON.stringify(b).includes('only for B')), 'the private message is not listed');
+      const one = await A.use('blockchain').getBlockById(pm.key, viewer).catch(() => null);
+      notOk(one && JSON.stringify(one).includes('only for B'), 'nor shown when asked for directly');
+    }
+  });
+
   t('hidden envelope types do not appear in blockexplorer', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('tribes').createTribe('T', '', null, '', [], true, 'strict', null, 'OPEN', '');

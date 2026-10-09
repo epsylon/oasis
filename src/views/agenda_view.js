@@ -83,7 +83,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
 
   if (item.type === 'event') {
     body.push(timeChip(item.date), metaLine(item.location), parseFloat(item.price || 0) > 0 ? priceChip(`${item.price} ECO`) : null,
-      item.url ? p({ class: 'job-meta-line' }, a({ href: safeExternalHref(item.url), target: "_blank" }, item.url)) : null);
+      item.url ? p({ class: 'job-meta-line' }, a({ href: safeExternalHref(item.url), target: "_blank", rel: "noopener noreferrer" }, item.url)) : null);
     if (filter !== 'discarded') extraActions.push(form({ method: 'POST', action: `/events/attend/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
       button({ type: 'submit', class: 'tribe-action-btn' }, String(i18n.eventAttendButton).toUpperCase())));
   }

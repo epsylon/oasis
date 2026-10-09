@@ -11,13 +11,6 @@
     "dunbar": 300,
     "hops": 2
   },
-  "gossip": {
-    "connections": 50,
-    "local": false,
-    "friends": true,
-    "seed": true,
-    "global": true
-  },
   "replicationScheduler": {
     "autostart": true,
     "partialReplication": null
@@ -30,6 +23,7 @@
   },
   "connections": {
     "seeds": [
+      "net:pub.solarnethub.com:8008~shs:0qSCyK3xyL71X4qKkmf84Cb2riP6OeUqxCvbP2Z6HWs="
     ],
   "incoming": {
     "net": [

@@ -20,6 +20,9 @@ const ENVELOPE_PRESERVE = new Set([
 const INVITE_SALT_LEGACY = 'SolarNET.HuB';
 const INVITE_SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 const INVITE_SCRYPT_LEGACY = { N: 131072, r: 8, p: 1, maxmem: 512 * 1024 * 1024 };
+const INVITE_CACHE_MAX = 512;
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const INVITE_FAIL_TTL_MS = 10 * 60 * 1000;
 
 const FP_INFO = Buffer.from('v1-fp', 'utf8');
 const ENVELOPE_TYPE = 'tribe-msg';
@@ -63,6 +66,8 @@ module.exports = (configPath, namespace = 'tribes') => {
   };
 
   const generateTribeKey = () => crypto.randomBytes(32).toString('hex');
+  const HEX_KEY = /^[0-9a-f]{64}$/i;
+  const validKey = (k) => typeof k === 'string' && HEX_KEY.test(k);
 
   const getKey = (rid) => {
     const e = keyring[rid];
@@ -82,15 +87,17 @@ module.exports = (configPath, namespace = 'tribes') => {
   const getAllRootIds = () => Object.keys(keyring);
 
   const setKey = (rid, kHex, gen) => {
+    if (!validKey(kHex)) return;
     keyring[rid] = { keys: [kHex], gen: gen || 1 };
     saveKeyring();
   };
 
   const setKeys = (rid, ks, topGen) => {
-    if (!Array.isArray(ks) || !ks.length) return;
+    if (!Array.isArray(ks)) return;
     const seen = new Set();
     const dedup = [];
-    for (const k of ks) if (k && !seen.has(k)) { seen.add(k); dedup.push(k); }
+    for (const k of ks) if (validKey(k) && !seen.has(k)) { seen.add(k); dedup.push(k); }
+    if (!dedup.length) return;
     keyring[rid] = { keys: dedup, gen: topGen || dedup.length };
     saveKeyring();
   };
@@ -98,8 +105,9 @@ module.exports = (configPath, namespace = 'tribes') => {
   const mergeKeys = (rid, incoming, topGen) => {
     const e = keyring[rid] || { keys: [], gen: 0 };
     const seen = new Set(e.keys);
-    const merged = [...e.keys];
-    for (const k of incoming) if (k && !seen.has(k)) { seen.add(k); merged.push(k); }
+    const fresh = [];
+    for (const k of (Array.isArray(incoming) ? incoming : [])) if (validKey(k) && !seen.has(k)) { seen.add(k); fresh.push(k); }
+    const merged = [...fresh, ...e.keys];
     keyring[rid] = { keys: merged, gen: Math.max(e.gen || 0, topGen || merged.length) };
     saveKeyring();
     return keyring[rid].gen;
@@ -107,12 +115,34 @@ module.exports = (configPath, namespace = 'tribes') => {
 
   const addNewKey = (rid, kHex) => {
     const e = keyring[rid] || { keys: [], gen: 0 };
+    if (!validKey(kHex)) return e.gen;
     if (e.keys.includes(kHex)) return e.gen;
     e.keys.unshift(kHex);
     e.gen = (e.gen || 0) + 1;
     keyring[rid] = e;
     saveKeyring();
     return e.gen;
+  };
+
+  const keyPlan = ({ rootId, ownerId, gen, members, messages, leaves }) => {
+    const stamp = (m) => Number(m.timestamp || (m.value && m.value.timestamp) || 0);
+    const g = Number(gen) || 0;
+    let genStart = g > 1 ? null : 0;
+    const lastGot = new Map();
+    for (const m of (Array.isArray(messages) ? messages : [])) {
+      const c = m && m.value && m.value.content;
+      if (!c || c.type !== 'tribe-keys' || c.tribeId !== rootId || m.value.author !== ownerId) continue;
+      if (!c.memberKeys || typeof c.memberKeys !== 'object') continue;
+      const t = stamp(m);
+      for (const id of Object.keys(c.memberKeys)) lastGot.set(id, Math.max(lastGot.get(id) || 0, t));
+      if (g > 1 && Number(c.generation) === g) genStart = genStart === null ? t : Math.min(genStart, t);
+    }
+    if (genStart === null) genStart = 0;
+    const current = new Set((Array.isArray(members) ? members : []).filter(Boolean));
+    const gone = (Array.isArray(leaves) ? leaves : []).filter((l) => l && l.member && l.member !== ownerId);
+    const rotate = g > 0 && gone.some((l) => !current.has(l.member) && l.ts > genStart);
+    const missing = rotate ? [] : [...current].filter((id) => id !== ownerId && (!lastGot.has(id) || gone.some((l) => l.member === id && l.ts > lastGot.get(id))));
+    return { rotate, missing };
   };
 
   const dropKey = (rid) => {
@@ -219,18 +249,43 @@ module.exports = (configPath, namespace = 'tribes') => {
     return encryptWithKey(tribeKeyHex, derived.toString('hex'), inviteAad(inviteCode, salt));
   };
 
+  const derivedCache = new Map();
+  const failedCache = new Map();
+  const remember = (map, k, v, max) => {
+    map.delete(k);
+    map.set(k, v);
+    while (map.size > max) map.delete(map.keys().next().value);
+  };
+  const derivedKeyName = (code, salt, params) => `${params.N}|${salt == null ? '' : salt}|${code}`;
+  const openWithDerived = (payload, code, salt, params, aad) => {
+    const name = derivedKeyName(code, salt, params);
+    const cached = derivedCache.get(name);
+    const derived = cached || deriveInviteKey(code, salt, params);
+    const out = decryptWithKey(payload, derived.toString('hex'), aad);
+    if (out && !cached) remember(derivedCache, name, derived, INVITE_CACHE_MAX);
+    return out;
+  };
+  const failureName = (payload, code, salt) => crypto.createHash('sha256').update(`${String(payload)}|${code}|${salt == null ? '' : salt}`).digest('hex');
+  const recentlyFailed = (name) => {
+    const at = failedCache.get(name);
+    return !!at && Date.now() - at < INVITE_FAIL_TTL_MS;
+  };
+
   const decryptFromInvite = (encryptedKey, inviteCode, salt) => {
+    const failure = failureName(encryptedKey, inviteCode, salt);
+    if (recentlyFailed(failure)) throw new Error('Unsupported state or unable to authenticate data');
     const aad = inviteAad(inviteCode, salt);
     try {
-      const derived = deriveInviteKey(inviteCode, salt);
-      return decryptWithKey(encryptedKey, derived.toString('hex'), aad);
+      const out = openWithDerived(encryptedKey, inviteCode, salt, INVITE_SCRYPT, aad);
+      if (out) return out;
     } catch (_) {}
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const derived = deriveInviteKey(inviteCode, salt, INVITE_SCRYPT_LEGACY);
-        return decryptWithKey(encryptedKey, derived.toString('hex'), aad);
+        const out = openWithDerived(encryptedKey, inviteCode, salt, INVITE_SCRYPT_LEGACY, aad);
+        if (out) return out;
       } catch (_) {}
     }
+    remember(failedCache, failure, Date.now(), INVITE_CACHE_MAX);
     throw new Error('Unsupported state or unable to authenticate data');
   };
 
@@ -257,12 +312,10 @@ module.exports = (configPath, namespace = 'tribes') => {
   const decryptChainOnce = (encryptedPayload, code, salt) => {
     let json = null
     try {
-      const k = deriveInviteKey(code, salt);
-      json = decryptWithKey(encryptedPayload, k.toString('hex'), inviteAad(code, salt));
+      json = openWithDerived(encryptedPayload, code, salt, INVITE_SCRYPT, inviteAad(code, salt));
     } catch (_) {
       try {
-        const k = deriveInviteKey(code, salt, INVITE_SCRYPT_LEGACY);
-        json = decryptWithKey(encryptedPayload, k.toString('hex'), inviteAad(code, salt));
+        json = openWithDerived(encryptedPayload, code, salt, INVITE_SCRYPT_LEGACY, inviteAad(code, salt));
       } catch (_) { return null; }
     }
     try {
@@ -280,11 +333,14 @@ module.exports = (configPath, namespace = 'tribes') => {
   };
 
   const decryptChainFromInvite = (encryptedPayload, code, salt, attempts = 1) => {
+    const failure = failureName(encryptedPayload, code, salt);
+    if (recentlyFailed(failure)) return null;
     const tries = Math.max(1, Number(attempts) || 1);
     for (let i = 0; i < tries; i++) {
       const chain = decryptChainOnce(encryptedPayload, code, salt);
       if (chain) return chain;
     }
+    remember(failedCache, failure, Date.now(), INVITE_CACHE_MAX);
     return null;
   };
 
@@ -384,7 +440,9 @@ module.exports = (configPath, namespace = 'tribes') => {
         const payload = JSON.parse(plaintext);
         const result = { ...content };
         delete result.encryptedPayload;
-        Object.assign(result, payload);
+        if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+          for (const [k, v] of Object.entries(payload)) if (!UNSAFE_KEYS.has(k) && !(k in envelope)) result[k] = v;
+        }
         return result;
       } catch (_) {}
     }
@@ -553,7 +611,7 @@ module.exports = (configPath, namespace = 'tribes') => {
     ENVELOPE_TYPE, ENVELOPE_VERSION, KEY_DISTRIB_TYPE, KEY_DISTRIB_BATCH,
     loadKeyring, saveKeyring,
     generateTribeKey, getKey, getKeys, getGen, getAllRootIds,
-    setKey, setKeys, mergeKeys, addNewKey, dropKey,
+    setKey, setKeys, mergeKeys, addNewKey, dropKey, keyPlan,
     fingerprint, buildFingerprintIndex,
     isTribeMsg, wrapMsg, unwrapMsg,
     encryptWithKey, decryptWithKey,

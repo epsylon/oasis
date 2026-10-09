@@ -168,7 +168,7 @@ const renderForm = (page, params = {}) => {
       canLicense ? renderLicenseSelect(licenseValue, i18n) : null,
       !tribeId && canLicense ? renderClearnetSelector(draft ? draft.clearnet === true : !!(page && page.clearnet), i18n) : null,
       br(),
-      button({ type: "submit", class: "filter-btn", formaction: "/wiki/preview", formmethod: "POST" }, i18n.wikiPreview),
+      button({ type: "submit", class: "filter-btn", formaction: "/wiki/preview", attrs: { formmethod: "POST" } }, i18n.wikiPreview),
       " ",
       button({ type: "submit", class: "create-button" }, page ? i18n.wikiUpdate : i18n.wikiCreate)
     )

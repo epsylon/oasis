@@ -82,15 +82,13 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
       }
       if (c.type === VOTE_TYPE && typeof c.target === 'string') {
         const entry = votesByRoot.get(c.target) || new Map();
-        const prev = entry.get(v.author);
-        const ts = v.timestamp || m.timestamp || 0;
-        if (!prev || ts >= prev.ts) {
-          entry.set(v.author, {
-            ts,
-            choices: Array.isArray(c.choices) ? c.choices : [],
-            encryptedChoices: typeof c.encryptedChoices === 'string' ? c.encryptedChoices : null
-          });
-        }
+        const list = entry.get(v.author) || [];
+        list.push({
+          ts: v.timestamp || m.timestamp || 0,
+          choices: Array.isArray(c.choices) ? c.choices : [],
+          encryptedChoices: typeof c.encryptedChoices === 'string' ? c.encryptedChoices : null
+        });
+        entry.set(v.author, list);
         votesByRoot.set(c.target, entry);
         continue;
       }
@@ -162,7 +160,13 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
       try { rawOptions = o ? JSON.parse(o) : []; } catch (_) { rawOptions = []; }
     }
     const options = normalizeOptions(rawOptions);
-    const voteMap = idx.votesByRoot.get(rootId) || new Map();
+    const opensAt = (idx.nodes.get(rootId) || {}).ts || 0;
+    const closesAt = c.deadline ? Date.parse(c.deadline) : NaN;
+    const voteMap = new Map();
+    for (const [author, list] of (idx.votesByRoot.get(rootId) || new Map()).entries()) {
+      const inWindow = list.filter(b => b.ts >= opensAt && (!Number.isFinite(closesAt) || b.ts <= closesAt));
+      if (inWindow.length) voteMap.set(author, inWindow.reduce((a, b) => (b.ts >= a.ts ? b : a)));
+    }
 
     const counts = {};
     for (const o of options) counts[o] = 0;

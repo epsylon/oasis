@@ -1,4 +1,4 @@
-const { eq, ok } = require('../../helpers/assert');
+const { eq, ok, throwsAsync } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
 describe('shops: create + list + product + buy', (t) => {
@@ -458,5 +458,142 @@ describe('shops: CLOSED shop survives keyring prune (persistence)', (t) => {
     const shop = after.find(s => s.title === 'SecretShop');
     ok(shop, 'closed shop still present after pruneOrphanKeys');
     ok(!shop.undecryptable, 'closed shop still decryptable after pruneOrphanKeys (key not pruned)');
+  });
+});
+
+describe('shops: orders are decided only by their signed parties', (t) => {
+  const box = (peer, content, recps) => new Promise((res, rej) => peer.node.private.publish(content, recps, (e, m) => e ? rej(e) : res(m)));
+  const publish = (peer, content) => new Promise((res, rej) => peer.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const pause = () => new Promise(r => setTimeout(r, 5));
+  const setupShopWithProduct = async (A) => {
+    A.setActor();
+    const shop = await A.use('shops').createShop('Alice Shop', '', '', null, '', '', [], 'OPEN', '');
+    const prod = await A.use('shops').createProduct(shop.key, 'Widget', 'd', null, 10, 5, false);
+    return { shop, prod };
+  };
+  const statusOf = async (peer, shop, orderId) => {
+    peer.setActor();
+    const list = shop ? await peer.use('shops').listShopOrders(shop.key) : await peer.use('shops').listMyPurchases();
+    const o = list.find(x => x.id === orderId);
+    return o ? o.status : null;
+  };
+
+  t('a buyer cannot mark their own order as paid', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const { shop, prod } = await setupShopWithProduct(A);
+    B.setActor();
+    const order = await B.use('shops').createPurchaseOrder(prod.key, { deliveryAddress: '1 St' });
+    await throwsAsync(() => B.use('shops').setOrderStatus(order.key, 'PAID'), 'Only the seller');
+    for (const status of ['ACCEPTED', 'PAID']) await box(B, { type: 'shop-purchase-status', orderId: order.key, shopId: shop.key, status, updatedAt: new Date().toISOString() }, [B.keypair.id, A.keypair.id]);
+    eq(await statusOf(A, shop, order.key), 'PENDING', 'the seller does not see it as paid');
+    eq(await statusOf(B, null, order.key), 'PENDING', 'nor does the buyer');
+  });
+
+  t('a status published by a third party is ignored', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const { shop, prod } = await setupShopWithProduct(A);
+    B.setActor();
+    const order = await B.use('shops').createPurchaseOrder(prod.key, { deliveryAddress: '1 St' });
+    await box(C, { type: 'shop-purchase-status', orderId: order.key, shopId: shop.key, status: 'ACCEPTED', updatedAt: new Date().toISOString() }, [A.keypair.id, B.keypair.id]);
+    eq(await statusOf(A, shop, order.key), 'PENDING');
+    eq(await statusOf(B, null, order.key), 'PENDING');
+  });
+
+  t('price, title and seller come from the shop, not from the buyer order', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const { shop, prod } = await setupShopWithProduct(A);
+    const forged = await box(B, { type: 'shop-purchase', productId: prod.key, productTipId: prod.key, shopId: shop.key, seller: B.keypair.id, title: 'Free stuff', price: '0.000001', deliveryAddress: '1 St', createdAt: new Date().toISOString() }, [B.keypair.id, A.keypair.id]);
+    A.setActor();
+    const seen = (await A.use('shops').listShopOrders(shop.key)).find(o => o.id === forged.key);
+    ok(seen, 'the seller still sees the order');
+    eq(Number(seen.price), 10);
+    eq(seen.title, 'Widget');
+    eq(seen.seller, A.keypair.id);
+    B.setActor();
+    const mine = (await B.use('shops').listMyPurchases()).find(o => o.id === forged.key);
+    eq(mine.seller, A.keypair.id);
+    await throwsAsync(() => B.use('shops').setOrderStatus(forged.key, 'ACCEPTED'), 'Only the seller');
+  });
+
+  t('the price the seller accepted is kept when the product is edited later; pending orders show the current price', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const { shop, prod } = await setupShopWithProduct(A);
+    B.setActor();
+    const first = await B.use('shops').createPurchaseOrder(prod.key, { deliveryAddress: '1 St' });
+    await pause();
+    A.setActor();
+    await A.use('shops').setOrderStatus(first.key, 'ACCEPTED');
+    await pause();
+    await A.use('shops').updateProductById(prod.key, { price: 20 });
+    await pause();
+    B.setActor();
+    const second = await B.use('shops').createPurchaseOrder(prod.key, { deliveryAddress: '1 St' });
+    A.setActor();
+    const orders = await A.use('shops').listShopOrders(shop.key);
+    eq(Number(orders.find(o => o.id === first.key).price), 10, 'the accepted order keeps its price');
+    eq(Number(orders.find(o => o.id === second.key).price), 20, 'a pending order shows the current price');
+    B.setActor();
+    const mine = await B.use('shops').listMyPurchases();
+    eq(Number(mine.find(o => o.id === first.key).price), 10, 'the buyer sees the same accepted price');
+  });
+
+  t('stock only drops when the seller accepts an order, never because of someone else\'s markers', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const S = makePeer(net);
+    const { prod } = await setupShopWithProduct(A);
+    A.setActor();
+    const before = (await A.use('shops').getProductById(prod.key)).stock;
+    S.setActor();
+    const ssbS = await S.cooler.open();
+    for (let i = 0; i < 5; i++) await new Promise((res, rej) => ssbS.publish({ type: 'shopPurchase', target: prod.key, createdAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    A.setActor();
+    eq((await A.use('shops').getProductById(prod.key)).stock, before, 'a stranger cannot drain the stock');
+    B.setActor();
+    const order = await B.use('shops').createPurchaseOrder(prod.key, { deliveryAddress: '1 St' });
+    await pause();
+    A.setActor();
+    await A.use('shops').setOrderStatus(order.key, 'ACCEPTED');
+    eq((await A.use('shops').getProductById(prod.key)).stock, before - 1, 'accepting an order takes one unit');
+    await pause();
+    await A.use('shops').setOrderStatus(order.key, 'REJECTED');
+    eq((await A.use('shops').getProductById(prod.key)).stock, before, 'rejecting it after accepting gives the unit back');
+  });
+
+  t('statuses follow the order flow', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const { shop, prod } = await setupShopWithProduct(A);
+    B.setActor();
+    const order = await B.use('shops').createPurchaseOrder(prod.key, { deliveryAddress: '1 St' });
+    await throwsAsync(() => B.use('shops').setOrderStatus(order.key, 'RECEIVED'), 'Invalid status transition');
+    await box(B, { type: 'shop-purchase-status', orderId: order.key, shopId: shop.key, status: 'RECEIVED', updatedAt: new Date().toISOString() }, [B.keypair.id, A.keypair.id]);
+    eq(await statusOf(B, null, order.key), 'PENDING', 'an early receipt does not skip the seller steps');
+    await throwsAsync(() => B.use('shops').createOpinion(prod.key, 'interesting'));
+    A.setActor();
+    await throwsAsync(() => A.use('shops').setOrderStatus(order.key, 'SHIPPED'), 'Invalid status transition');
+    await A.use('shops').setOrderStatus(order.key, 'REJECTED');
+    await throwsAsync(() => A.use('shops').setOrderStatus(order.key, 'PAID'), 'Invalid status transition');
+    eq(await statusOf(A, shop, order.key), 'REJECTED');
+  });
+
+  t('a product placed in someone else shop cannot be ordered from that shop', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const X = makePeer(net);
+    const { shop } = await setupShopWithProduct(A);
+    X.setActor();
+    const fake = await X.use('shops').createProduct(shop.key, 'Fake', '', null, 1, 5, false);
+    B.setActor();
+    await throwsAsync(() => B.use('shops').createPurchaseOrder(fake.key, { deliveryAddress: '1 St' }), 'Product not found');
+    await box(B, { type: 'shop-purchase', productId: fake.key, productTipId: fake.key, shopId: shop.key, seller: A.keypair.id, title: 'Fake', price: '1.000000', deliveryAddress: '1 St', createdAt: new Date().toISOString() }, [B.keypair.id, A.keypair.id]);
+    A.setActor();
+    eq((await A.use('shops').listShopOrders(shop.key)).length, 0, 'the shop owner gets no order for it');
+  });
+
+  t('a stranger cannot delete a shop and its author is the signer', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const X = makePeer(net);
+    const { shop } = await setupShopWithProduct(A);
+    await publish(X, { type: 'tombstone', target: shop.key, deletedAt: new Date().toISOString(), author: X.keypair.id });
+    A.setActor();
+    ok(await A.use('shops').getShopById(shop.key), 'still there');
+    const now = new Date().toISOString();
+    const posing = await publish(X, { type: 'shop', title: 'Posing', shortDescription: '', description: '', image: null, url: '', location: '', tags: [], visibility: 'OPEN', clearnetPublic: false, mapUrl: '', author: A.keypair.id, createdAt: now, updatedAt: now, opinions: {}, opinions_inhabitants: [] });
+    eq((await A.use('shops').getShopById(posing.key)).author, X.keypair.id);
   });
 });

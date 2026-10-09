@@ -321,3 +321,42 @@ describe('views: the shared text renderer', (t) => {
     ok(preview.includes('one') && preview.includes('b'), 'the words survive');
   });
 });
+
+
+describe('views: what a peer sends never becomes markup', (t) => {
+  const { div, a, span } = require('../../../src/server/node_modules/hyperaxe');
+  const RAW_HTML = Symbol.for('oasis.rawHtml');
+  t('an object in a child position is dropped instead of being read as attributes', () => {
+    const html = div({ class: "x" }, { innerHTML: "<b>evil</b>" }, "text").outerHTML;
+    notOk(html.includes('<b>'), 'no raw HTML');
+    ok(html.includes('text'), 'the honest child stays');
+    const link = a({ href: '/safe' }, { href: 'javascript:alert(1)' }).outerHTML;
+    ok(link.includes('href="/safe"') && !link.includes('javascript'), 'a child cannot overwrite the href');
+  });
+  t('innerHTML from an object in the first position is ignored; only the private symbol renders raw HTML', () => {
+    notOk(span({ innerHTML: '<i>evil</i>' }).outerHTML.includes('<i>'), 'a plain innerHTML key is stripped');
+    ok(span({ [RAW_HTML]: '<i>ok</i>' }).outerHTML.includes('<i>ok</i>'), 'the symbol the views use still works');
+    const nested = div([{ innerHTML: '<u>evil</u>' }, 'fine']).outerHTML;
+    ok(!nested.includes('<u>') && nested.includes('fine'), 'arrays of children are scrubbed too');
+  });
+  t('the HTML sanitizer only keeps local media sources and ordinary links, and drops control characters', () => {
+    const { sanitizeHtml } = require('../../../src/backend/sanitizeHtml');
+    const out = sanitizeHtml('<img src="/tribes/open-invite/join/x"><img src="/blob/&abc.sha256"><a href="ftp://x">f</a><a href="https://solarnethub.com">s</a>\u0001\u00010\u0001');
+    notOk(out.includes('open-invite'), 'an image cannot point at a route with effects');
+    ok(out.includes('/blob/'), 'a blob image stays');
+    notOk(out.includes('ftp://'), 'odd schemes are dropped');
+    ok(out.includes('https://solarnethub.com'), 'web links stay');
+    notOk(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(out), 'no control characters survive');
+  });
+});
+
+describe('views: what a form asks the browser to do is not lost', (t) => {
+  t('a button that sends its form another way, and field limits, reach the page', () => {
+    const { button, input, img } = require('../../../src/server/node_modules/hyperaxe');
+    ok(button({ type: 'submit', formaction: '/x', formmethod: 'post' }).outerHTML.includes('formmethod="post"'), 'the method a button sends its form with is kept');
+    ok(button({ type: 'submit', formaction: '/x', attrs: { formmethod: 'get' } }).outerHTML.includes('formmethod="get"'), 'however it is written');
+    ok(input({ minlength: 32 }).outerHTML.includes('minlength="32"'), 'a minimum length is kept');
+    ok(input({ inputmode: 'numeric' }).outerHTML.includes('inputmode="numeric"'), 'and the keyboard to show');
+    ok(img({ loading: 'lazy', src: '/x' }).outerHTML.includes('loading="lazy"'), 'images can wait until they are needed');
+  });
+});

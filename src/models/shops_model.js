@@ -30,6 +30,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   const SELLER_STATUSES = ["ACCEPTED", "REJECTED", "PAID", "SHIPPED"]
   const BUYER_STATUSES = ["RECEIVED"]
   const ORDER_STATUSES = [...SELLER_STATUSES, ...BUYER_STATUSES]
+  const ORDER_FLOW = { PENDING: ["ACCEPTED", "REJECTED"], ACCEPTED: ["PAID", "REJECTED"], PAID: ["SHIPPED"], SHIPPED: ["RECEIVED"] }
 
   const buildOrderStatusMap = (ssbClient, messages) => {
     const map = new Map()
@@ -38,12 +39,47 @@ module.exports = ({ cooler, tribeCrypto }) => {
         const dec = openSealed(ssbClient, m)
         const dc = dec?.value?.content
         if (!dc || dc.type !== "shop-purchase-status" || !dc.orderId) continue
-        const ts = dec.value.timestamp || m.timestamp || 0
-        const prev = map.get(dc.orderId)
-        if (!prev || ts >= prev.ts) map.set(dc.orderId, { status: String(dc.status || "").toUpperCase(), ts })
+        if (!map.has(dc.orderId)) map.set(dc.orderId, [])
+        map.get(dc.orderId).push({ status: String(dc.status || "").toUpperCase(), author: dec.value.author, ts: dec.value.timestamp || m.timestamp || 0, price: dc.price !== undefined ? String(dc.price) : undefined, title: dc.title !== undefined ? String(dc.title) : undefined })
       } catch (_) {}
     }
     return map
+  }
+
+  const orderStatusOf = (updates, buyer, seller) => {
+    const signed = (updates || []).filter(u => (SELLER_STATUSES.includes(u.status) && u.author === seller) || (BUYER_STATUSES.includes(u.status) && u.author === buyer)).sort((a, b) => a.ts - b.ts)
+    let status = "PENDING", g = 0
+    while (g++ < 100) {
+      const next = signed.find(u => (ORDER_FLOW[status] || []).includes(u.status))
+      if (!next) break
+      status = next.status
+    }
+    return status
+  }
+
+  const acceptedTermsOf = (updates, seller) => {
+    const accepted = (updates || []).filter(u => u.status === "ACCEPTED" && u.author === seller && u.price !== undefined).sort((a, b) => a.ts - b.ts)[0]
+    return accepted ? { price: accepted.price, ...(accepted.title ? { title: accepted.title } : {}) } : null
+  }
+  const withOrderStatus = (statusMap) => (o) => {
+    const updates = statusMap.get(o.id)
+    return { ...o, ...(acceptedTermsOf(updates, o.seller) || {}), status: orderStatusOf(updates, o.buyer, o.seller) }
+  }
+
+  const resolveOrder = (idx, dc) => {
+    const productRoot = idx.rootOf(String(dc.productId || ""))
+    const productNode = idx.nodes.get(productRoot)
+    if (!productNode || productNode.c.type !== "shopProduct") return null
+    const shopRoot = idx.rootOf(productShopId(productNode.c))
+    const shopNode = idx.nodes.get(shopRoot)
+    if (!shopNode || shopNode.c.type !== "shop" || shopNode.author !== productNode.author) return null
+    let ref = productRoot
+    let g = 0
+    while (idx.strictChild.has(ref) && g++ < 100000) ref = idx.strictChild.get(ref)
+    const raw = idx.nodes.get(ref).c
+    const c = isEncrypted(raw) ? decryptShopContent(raw, shopRoot) : raw
+    const readable = !c._undecryptable
+    return { productId: productRoot, shopId: shopRoot, seller: shopNode.author, title: readable ? String(c.title || "") : "", price: readable ? (c.price || "") : "" }
   }
 
   const decryptBuyers = (val, key) => {
@@ -80,7 +116,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   }
 
   const buildIndex = (messages) => {
-    const tomb = new Set()
+    const tomb = buildValidatedTombstoneSet(messages)
     const nodes = new Map()
     const parent = new Map()
     const child = new Map()
@@ -93,7 +129,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const v = m.value || {}
       const c = v.content
       if (!c) continue
-      if (c.type === "tombstone" && c.target) { tomb.add(c.target); continue }
+      if (c.type === "tombstone") continue
       if (c.type === "shopOpinion" && c.target) { opinionMsgs.push({ target: c.target, author: v.author, category: c.category }); continue }
       if (c.type === "shopPurchase" && c.target) { purchaseMsgs.push({ target: c.target, author: v.author }); continue }
       if (c.type === "shop" || c.type === "shopProduct") {
@@ -165,7 +201,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       tags: safeArr(c.tags),
       visibility: c.visibility || (encrypted ? "CLOSED" : "OPEN"),
       clearnetPublic: !!c.clearnetPublic,
-      author: raw.author || c.author || node.author,
+      author: node.author,
       createdAt: c.createdAt || raw.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || raw.updatedAt || null,
       opinions: agg.opinions,
@@ -185,7 +221,6 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const undecryptable = !!c._undecryptable
     const agg = idx ? idx.aggregateFor(rootId, c) : { opinions: c.opinions || {}, opinions_inhabitants: safeArr(c.opinions_inhabitants) }
     const sellerStock = Number(c.stock) || 0
-    const purchaseCount = idx ? idx.purchaseCountFor(rootId) : 0
     const sellerBuyers = encrypted ? safeArr(c.buyers) : decryptBuyers(c.buyers, tribeCrypto ? tribeCrypto.getKey(rootId) : null)
     const buyers = Array.from(new Set(sellerBuyers.concat(idx ? idx.purchaseAuthorsFor(rootId) : [])))
     return {
@@ -196,9 +231,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       description: c.description || "",
       image: c.image || null,
       price: c.price || "0.000000",
-      stock: Math.max(0, sellerStock - purchaseCount),
+      stock: Math.max(0, sellerStock),
       featured: !!c.featured,
-      author: raw.author || c.author || node.author,
+      author: node.author,
       createdAt: c.createdAt || raw.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || raw.updatedAt || null,
       opinions: agg.opinions,
@@ -611,8 +646,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const shopRoot = productShopId(raw)
       const c = encrypted ? decryptShopContent(raw, shopRoot) : raw
       if (c._undecryptable) throw new Error("Cannot access product")
-      const stock = Math.max(0, (Number(c.stock) || 0) - idx.purchaseCountFor(rootId))
-      if (stock <= 0) throw new Error("Out of stock")
+      if (!((Number(c.stock) || 0) > 0)) throw new Error("Out of stock")
 
       const content = { type: "shopPurchase", target: rootId, createdAt: new Date().toISOString() }
       return new Promise((res, rej) => ssbClient.publish(content, (e, m) => e ? rej(e) : res(m)))
@@ -629,11 +663,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const rootId = idx.rootOf(tipId)
 
       const node = idx.nodes.get(tipId)
-      if (!node) throw new Error("Product not found")
+      if (!node || node.c.type !== "shopProduct") throw new Error("Product not found")
       const raw = node.c
-      const shopOwner = raw.author
-      if (shopOwner === userId) throw new Error("Cannot buy your own product")
       const shopRoot = productShopId(raw)
+      const shopNode = idx.nodes.get(idx.rootOf(shopRoot))
+      const productRootNode = idx.nodes.get(rootId)
+      if (!shopNode || shopNode.c.type !== "shop" || !productRootNode || productRootNode.author !== shopNode.author || node.author !== shopNode.author) throw new Error("Product not found")
+      const shopOwner = shopNode.author
+      if (shopOwner === userId) throw new Error("Cannot buy your own product")
       const c = isEncrypted(raw) ? decryptShopContent(raw, shopRoot) : raw
 
       const content = {
@@ -658,6 +695,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
       const me = ssbClient.id
       const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
       const out = []
       for (const m of messages) {
         try {
@@ -666,22 +704,15 @@ module.exports = ({ cooler, tribeCrypto }) => {
           const dc = dec.value.content
           if (dc.type !== "shop-purchase") continue
           if (dec.value.author !== me) continue
-          out.push({ id: m.key, ...dc, buyer: dec.value.author, ts: dec.value.timestamp || m.timestamp || 0 })
+          const ts = dec.value.timestamp || m.timestamp || 0
+          const resolved = resolveOrder(idx, dc)
+          if (!resolved) continue
+          out.push({ id: m.key, ...dc, ...resolved, buyer: dec.value.author, ts })
         } catch (_) {}
       }
       const statusMap = buildOrderStatusMap(ssbClient, messages)
-      const sellerCache = new Map()
-      for (const o of out) {
-        if (!o.seller && o.shopId) {
-          if (!sellerCache.has(o.shopId)) {
-            const shop = await this.getShopById(o.shopId).catch(() => null)
-            sellerCache.set(o.shopId, (shop && shop.author) || null)
-          }
-          o.seller = sellerCache.get(o.shopId) || null
-        }
-      }
       return out
-        .map(o => ({ ...o, status: (statusMap.get(o.id) || {}).status || "PENDING" }))
+        .map(withOrderStatus(statusMap))
         .sort((a, b) => b.ts - a.ts)
     },
 
@@ -691,8 +722,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const shop = await this.getShopById(shopRootId).catch(() => null)
       if (!shop) throw new Error("Shop not found")
       if (shop.author !== me) throw new Error("Not the shop owner")
+      const rootId = shop.rootId || shopRootId
 
       const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
       const out = []
       for (const m of messages) {
         try {
@@ -700,13 +733,15 @@ module.exports = ({ cooler, tribeCrypto }) => {
           if (!dec?.value?.content) continue
           const dc = dec.value.content
           if (dc.type !== "shop-purchase") continue
-          if (dc.shopId !== shopRootId) continue
-          out.push({ id: m.key, ...dc, buyer: dec.value.author, ts: dec.value.timestamp || m.timestamp || 0 })
+          const ts = dec.value.timestamp || m.timestamp || 0
+          const resolved = resolveOrder(idx, dc)
+          if (!resolved || resolved.shopId !== rootId || resolved.seller !== me) continue
+          out.push({ id: m.key, ...dc, ...resolved, buyer: dec.value.author, ts })
         } catch (_) {}
       }
       const statusMap = buildOrderStatusMap(ssbClient, messages)
       return out
-        .map(o => ({ ...o, status: (statusMap.get(o.id) || {}).status || "PENDING" }))
+        .map(withOrderStatus(statusMap))
         .sort((a, b) => b.ts - a.ts)
     },
 
@@ -716,26 +751,38 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const st = String(status || "").toUpperCase()
       if (!ORDER_STATUSES.includes(st)) throw new Error("Invalid status")
       const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
       let order = null
       for (const m of messages) {
         if (m.key !== orderId) continue
         try {
           const dec = openSealed(ssbClient, m)
           const dc = dec?.value?.content
-          if (dc && dc.type === "shop-purchase") order = { ...dc, buyer: dec.value.author }
+          const resolved = dc && dc.type === "shop-purchase" ? resolveOrder(idx, dc) : null
+          if (resolved) order = { ...dc, ...resolved, buyer: dec.value.author }
         } catch (_) {}
         break
       }
       if (!order) throw new Error("Order not found")
-      const seller = order.seller || (await this.getShopById(order.shopId).catch(() => null) || {}).author || null
+      const seller = order.seller
       if (BUYER_STATUSES.includes(st)) {
         if (me !== order.buyer) throw new Error("Only the buyer can set this status")
       } else {
         if (me !== seller) throw new Error("Only the seller can set this status")
       }
+      const current = orderStatusOf(buildOrderStatusMap(ssbClient, messages).get(orderId), order.buyer, seller)
+      if (!(ORDER_FLOW[current] || []).includes(st)) throw new Error("Invalid status transition")
       const recps = Array.from(new Set([order.buyer, seller].filter(Boolean)))
-      const content = { type: "shop-purchase-status", orderId, shopId: order.shopId, status: st, updatedAt: new Date().toISOString() }
-      return new Promise((res, rej) => ssbClient.private.publish(content, recps, (e, m) => e ? rej(e) : res(m)))
+      const content = { type: "shop-purchase-status", orderId, shopId: order.shopId, status: st, ...(st === "ACCEPTED" ? { price: String(order.price || ""), title: String(order.title || "") } : {}), updatedAt: new Date().toISOString() }
+      const published = await new Promise((res, rej) => ssbClient.private.publish(content, recps, (e, m) => e ? rej(e) : res(m)))
+      const delta = st === "ACCEPTED" ? -1 : (st === "REJECTED" && current === "ACCEPTED" ? 1 : 0)
+      if (delta) {
+        try {
+          const product = await this.getProductById(order.productId)
+          await this.updateProductById(order.productId, { stock: String(Math.max(0, (Number(product.stock) || 0) + delta)) })
+        } catch (_) {}
+      }
+      return published
     },
 
     async countPendingOrders(shopRootId) {

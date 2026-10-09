@@ -7,8 +7,9 @@ const staged = new Set();
 
 function readOasisConfig() {
   try {
-    const p = path.join(__dirname, '..', 'configs', 'oasis-config.json');
-    return JSON.parse(fs.readFileSync(p, 'utf8')) || {};
+    const dir = process.env.OASIS_STATE_DIR || process.env.ssb_path || path.join(require('os').homedir(), '.ssb');
+    const p = [path.join(dir, 'oasis', 'oasis-config.json'), path.join(dir, 'oasis-config.json')].find(f => fs.existsSync(f));
+    return JSON.parse(fs.readFileSync(p || path.join(__dirname, '..', 'configs', 'oasis-config.json'), 'utf8')) || {};
   } catch (_) { return {}; }
 }
 

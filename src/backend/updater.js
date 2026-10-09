@@ -1,4 +1,3 @@
-const fetch = require('../server/node_modules/node-fetch');
 const { existsSync, readFileSync, writeFileSync, unlinkSync } = require('fs');
 const { join } = require('path');
 
@@ -99,15 +98,8 @@ async function checkMirror(callback) {
   try {
     const response = await fetch(remoteUrl2, {
       method: 'GET',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Referer': 'https://raw.githubusercontent.com',
-        'Origin': 'https://raw.githubusercontent.com'
-      }
+      headers: { 'Accept': 'application/json, text/plain, */*' },
+      signal: AbortSignal.timeout(20000)
     });
 
     if (!response.ok) {
@@ -122,20 +114,21 @@ async function checkMirror(callback) {
   }
 }
 
+const networkAllowed = () => {
+  if (process.argv.includes('--offline') || process.env.OASIS_NETWORK_PAUSED === '1') return false;
+  try { if (require('../server/ssb_config').offline === true) return false; } catch (_) {}
+  try { if (require('../configs/config-manager.js').getConfig().networkPaused === true) return false; } catch (_) {}
+  return true;
+};
+
 exports.getRemoteVersion = async () => {
+  if (!networkAllowed()) return;
   if (existsSync(join(__dirname, '..', '..', '.git'))) {
     try {
       const response = await fetch(remoteUrl, {
         method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*',
-          'Accept-Language': 'en-US,en;q=0.9',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive',
-          'Referer': 'https://code.03c8.net',
-          'Origin': 'https://code.03c8.net'
-        }
+        headers: { 'Accept': 'application/json, text/plain, */*' },
+        signal: AbortSignal.timeout(20000)
       });
 
       if (!response.ok) {

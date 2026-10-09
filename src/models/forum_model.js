@@ -36,9 +36,12 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const ssbKeys = require('../server/node_modules/ssb-keys');
       const cfg = require('../server/ssb_config');
       const msgs = await readForumLog();
+      const authorOf = new Map();
+      for (const m of msgs) if (m && m.key && m.value) authorOf.set(m.key, m.value.author);
       for (const m of msgs) {
         const c = m.value && m.value.content;
         if (!c || c.type !== 'tribe-keys') continue;
+        if (!c.tribeId || authorOf.get(c.tribeId) !== m.value.author) continue;
         const memberKeys = c.memberKeys;
         if (!memberKeys || typeof memberKeys !== 'object') continue;
         const boxed = memberKeys[ssbClient.id];
@@ -77,25 +80,40 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     return readTyped(ssbClient, FORUM_TYPES, { limit: logLimit, withWindow: true });
   };
 
-  const scanForumOpenInvite = async (forumId) => {
-    const messages = await readForumLog();
+  const authorsByKey = (messages) => {
+    const out = new Map();
+    for (const m of messages) if (m && m.key && m.value) out.set(m.key, m.value.author);
+    return out;
+  };
+
+  const inviteTombstones = (messages, authorOf) => {
     const markerTomb = new Set();
     const invTomb = new Set();
     for (const m of messages) {
       const c = m.value && m.value.content;
-      if (!c) continue;
-      if (c.type === 'forum-open-invite-tombstone' && typeof c.target === 'string') markerTomb.add(c.target);
-      if (c.type === 'forum-invite-tombstone' && typeof c.target === 'string') invTomb.add(c.target);
+      if (!c || typeof c.target !== 'string' || authorOf.get(c.target) !== m.value.author) continue;
+      if (c.type === 'forum-open-invite-tombstone') markerTomb.add(c.target);
+      if (c.type === 'forum-invite-tombstone') invTomb.add(c.target);
     }
+    return { markerTomb, invTomb };
+  };
+
+  const scanForumOpenInvite = async (forumId) => {
+    const messages = await readForumLog();
+    const authorOf = authorsByKey(messages);
+    const forumAuthor = authorOf.get(forumId);
+    if (!forumAuthor) return null;
+    const { markerTomb, invTomb } = inviteTombstones(messages, authorOf);
     let best = null;
     for (const m of messages) {
       const c = m.value && m.value.content;
       if (!c || c.type !== 'forum-open-invite' || c.v !== 1) continue;
       if (c.target !== forumId || typeof c.code !== 'string') continue;
+      if (m.value.author !== forumAuthor) continue;
       if (markerTomb.has(m.key)) continue;
       if (c.inviteKey && invTomb.has(c.inviteKey)) continue;
       const ts = (m.value && m.value.timestamp) || 0;
-      if (!best || ts > best.ts) best = { code: c.code, by: c.by || m.value.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts };
+      if (!best || ts > best.ts) best = { code: c.code, by: m.value.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts };
     }
     return best;
   };
@@ -118,13 +136,24 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
   async function aggregateVotes(ssbClient, targetId) {
     const tombstoned = await collectTombstones(ssbClient);
     return new Promise((resolve, reject) => {
-      let positives = 0, negatives = 0;
+      const latest = new Map();
       pull(
         ssbClient.links({ source: null, dest: targetId, rel: 'vote', values: true, keys: true }),
         pull.filter(link => link.value.content?.vote && !tombstoned.has(link.key)),
         pull.drain(
-          link => link.value.content.vote.value > 0 ? positives++ : negatives++,
-          err => err ? reject(err) : resolve({ positives, negatives })
+          link => {
+            const author = link.value.author;
+            const ts = Number(link.value.timestamp) || 0;
+            const seq = Number(link.value.sequence) || 0;
+            const prev = latest.get(author);
+            if (!prev || ts > prev.ts || (ts === prev.ts && seq > prev.seq)) latest.set(author, { value: Number(link.value.content.vote.value) || 0, ts, seq });
+          },
+          err => {
+            if (err) return reject(err);
+            let positives = 0, negatives = 0;
+            for (const v of latest.values()) { if (v.value > 0) positives++; else if (v.value < 0) negatives++; }
+            resolve({ positives, negatives });
+          }
         )
       );
     });
@@ -151,7 +180,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     const msgs = await readForumLog();
     const msg = msgs.find(m => m.key === id && m.value.content?.type === 'forum');
     if (!msg) throw new Error('Message not found');
-    return { key: msg.key, ...msg.value.content, timestamp: msg.value.timestamp };
+    return { key: msg.key, ...msg.value.content, author: msg.value.author, timestamp: msg.value.timestamp };
   }
 
   return {
@@ -231,7 +260,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const rawC = rawRoot.content;
       const dec = rawC && rawC.encryptedPayload ? decryptForumContent(rawC, forumId) : rawC;
       if (dec && dec._undecryptable) throw new Error('Forum is encrypted and cannot be decrypted');
-      if (dec.author !== userId) throw new Error('Only the author can generate invites');
+      if (rawRoot.author !== userId) throw new Error('Only the author can generate invites');
       if (dec.isPrivate !== true) throw new Error('Only private forums use invitation codes');
       const key = lookupKey(forumId);
       if (!key) throw new Error('Missing forum key');
@@ -257,7 +286,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const rawC = rawRoot.content;
       const dec = rawC && rawC.encryptedPayload ? decryptForumContent(rawC, forumId) : rawC;
       if (dec && dec._undecryptable) throw new Error('Forum is encrypted and cannot be decrypted');
-      if (dec.author !== userId) throw new Error('Only the author can generate invites');
+      if (rawRoot.author !== userId) throw new Error('Only the author can generate invites');
       if (dec.isPrivate !== true) throw new Error('Only private forums use invitation codes');
       if (await scanForumOpenInvite(forumId)) throw new Error('An open invitation already exists');
       const key = lookupKey(forumId);
@@ -281,9 +310,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       let author = null;
       try {
         const rawRoot = await new Promise((res, rej) => ssbClient.get(forumId, (e, m) => e ? rej(e) : res(m)));
-        const rawC = rawRoot && rawRoot.content;
-        const dec = rawC && rawC.encryptedPayload ? decryptForumContent(rawC, forumId) : rawC;
-        author = dec && dec.author;
+        author = rawRoot && rawRoot.author;
       } catch (_) {}
       if (rec.by !== userId && author !== userId) throw new Error('Not allowed to remove this invitation');
       await new Promise((resolve, reject) => ssbClient.publish({ type: 'forum-open-invite-tombstone', target: rec.markerKey, ts: new Date().toISOString() }, (err) => err ? reject(err) : resolve()));
@@ -294,16 +321,14 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
       const ssbClient = await openSsb();
       const messages = await readForumLog();
-      const invTomb = new Set();
-      for (const m of messages) {
-        const c = m.value && m.value.content;
-        if (c && c.type === 'forum-invite-tombstone' && typeof c.target === 'string') invTomb.add(c.target);
-      }
+      const authorOf = authorsByKey(messages);
+      const { invTomb } = inviteTombstones(messages, authorOf);
       let matched = null;
       for (const m of messages) {
         const c = m.value && m.value.content;
         if (!c || c.type !== 'forum-invite') continue;
         if (invTomb.has(m.key)) continue;
+        if (!authorOf.get(c.target) || authorOf.get(c.target) !== m.value.author) continue;
         try {
           const hash = tribeCrypto.hashInviteCode(code, c.salt);
           if (hash === c.codeHash) { matched = c; break; }
@@ -374,7 +399,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const forums = msgs
         .map(m => ({ m, c: decode(m) }))
         .filter(({ m, c }) => c && c.type === 'forum' && !c.root && !deleted.has(m.key))
-        .map(({ m, c }) => ({ ...c, key: m.key, text: fullText(chunkIdx, c, m.value.author) }));
+        .map(({ m, c }) => ({ ...c, key: m.key, author: m.value.author, text: fullText(chunkIdx, c, m.value.author) }));
       const forumsWithVotes = await Promise.all(
         forums.map(async f => {
           const { positives, negatives } = await aggregateVotes(ssbClient, f.key);
@@ -392,12 +417,12 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
           if (!decReply || decReply._undecryptable || decReply.type !== 'forum' || !decReply.root) return;
           if (deleted.has(m.key)) return;
           repliesByRoot[decReply.root] = repliesByRoot[decReply.root] || [];
-          repliesByRoot[decReply.root].push({ key: m.key, text: fullText(chunkIdx, decReply, m.value.author), author: decReply.author, timestamp: m.value.timestamp });
+          repliesByRoot[decReply.root].push({ key: m.key, text: fullText(chunkIdx, decReply, m.value.author), author: m.value.author, timestamp: m.value.timestamp });
           return;
         }
         if (cRaw.type === 'forum' && root && !deleted.has(m.key)) {
           repliesByRoot[root] = repliesByRoot[root] || [];
-          repliesByRoot[root].push({ key: m.key, text: fullText(chunkIdx, cRaw, m.value.author), author: cRaw.author, timestamp: m.value.timestamp });
+          repliesByRoot[root].push({ key: m.key, text: fullText(chunkIdx, cRaw, m.value.author), author: m.value.author, timestamp: m.value.timestamp });
         }
       });
       const final = await Promise.all(
@@ -462,11 +487,12 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
           if (!dec || dec._undecryptable) continue;
           rc = dec;
         }
-        if (rc.type === 'forum' && rc.root === id) replyAuthors.push(rc.author);
+        if (rc.type === 'forum' && rc.root === id) replyAuthors.push(m.value.author);
       }
-      const participants = Array.from(new Set(replyAuthors.concat(base.author).filter(Boolean)));
+      const participants = Array.from(new Set(replyAuthors.concat(original.value.author).filter(Boolean)));
       return {
         ...base,
+        author: original.value.author,
         text: fullText(chunkIndexOf(msgs), base, original.value.author),
         key: id,
         positiveVotes: positives,
@@ -498,7 +524,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
         .map(({ c, m }) => ({
           key: m.key,
           text: fullText(chunkIdx, c, m.value.author),
-          author: c.author,
+          author: m.value.author,
           timestamp: m.value.timestamp,
           parent: c.branch || null
         }));

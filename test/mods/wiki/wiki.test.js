@@ -260,3 +260,51 @@ describe('wiki: license', (t) => {
     eq((await A.use('wiki').getPage(created.key)).license, 'CC-BY-SA-4.0', 'and edits that do not touch it keep it');
   });
 });
+
+describe('wiki: a revision only counts when its signer may edit the page', (t) => {
+  const publish = (peer, content) => new Promise((res, rej) => peer.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const revision = (page, over = {}) => ({
+    type: 'wikiPage', title: page.title, slug: page.slug, body: 'hijacked', tags: [], aliases: [], editPolicy: 'open',
+    author: page.author, createdAt: page.createdAt, updatedAt: new Date().toISOString(), replaces: page.tipId, ...over
+  });
+
+  t('a revision of an author-only page by someone else is ignored', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const created = await A.use('wiki').createPage({ title: 'Charter', body: 'original', editPolicy: 'author' });
+    await publish(B, revision(await A.use('wiki').getPage(created.key)));
+    const page = await A.use('wiki').getPage(created.key);
+    eq(page.body, 'original', 'the text is the one of its author');
+    eq(page.versionCount, 1, 'the forged revision is not part of the history');
+    eq(page.editPolicy, 'author', 'and the page stays closed');
+  });
+
+  t('on an open page others edit the text, but not the edit policy nor the licence', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const created = await A.use('wiki').createPage({ title: 'Commons', body: 'a', license: 'LAL-1.3' });
+    await publish(B, revision(await A.use('wiki').getPage(created.key), { body: 'b', editPolicy: 'author', license: 'NONE' }));
+    let page = await A.use('wiki').getPage(created.key);
+    eq(page.body, 'b', 'the edit of B is accepted');
+    eq(page.lastAuthor, B.keypair.id, 'and credited to the feed that signed it');
+    eq(page.editPolicy, 'open', 'but the page is still open');
+    eq(page.license, 'LAL-1.3', 'with the licence of its author');
+    C.setActor();
+    await C.use('wiki').updatePage(created.key, { body: 'c' });
+    page = await C.use('wiki').getPage(created.key);
+    eq(page.body, 'c', 'so others keep editing it');
+  });
+
+  t('an outsider cannot slip a revision into a tribe page', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tribe = await A.use('tribes').createTribe('Guild', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const tribeId = tribe.key || tribe.id;
+    const created = await A.use('wiki').createPage({ title: 'Lore', body: 'inside', tribeId });
+    const page = await A.use('wiki').getPage(created.key, { tribeId });
+    await publish(B, revision(page, { body: 'outside', tribeId }));
+    const after = await A.use('wiki').getPage(created.key, { tribeId });
+    eq(after.body, 'inside', 'the text of the members stays');
+    eq(after.versionCount, 1);
+  });
+});

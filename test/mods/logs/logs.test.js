@@ -172,3 +172,18 @@ describe('logs: editing follows the same shape as the other modules', (t) => {
     notOk(detail.includes('name="view" value="edit"'), 'no query-string screen switching left');
   });
 });
+
+describe('logs: the newest entries are always reachable', (t) => {
+  t('a fresh entry is listed even after more messages than the reading window', async () => {
+    const limit = require('../../../src/configs/config-manager.js').getConfig().ssbLogStream?.limit || 1000;
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await A.use('logs').createManual('Old', 'the first entry');
+    const ssbB = await B.cooler.open();
+    for (let i = 0; i < limit + 10; i++) await new Promise((res, rej) => ssbB.private.publish({ type: 'post', text: 'filler ' + i }, [A.keypair.id, B.keypair.id], (e) => e ? rej(e) : res()));
+    await A.use('logs').createManual('New', 'the latest entry');
+    const items = await A.use('logs').listLogs('always');
+    ok(items.find(i => i.text === 'the latest entry'), 'the newest entry is listed');
+    eq(items[0].text, 'the latest entry', 'and it comes first');
+  });
+});

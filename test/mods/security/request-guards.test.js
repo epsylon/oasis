@@ -59,7 +59,7 @@ describe('security: redirects never leave the node', (t) => {
 
 describe('security: which requests the HTTP layer trusts', (t) => {
   const hosts = ['localhost', '127.0.0.1'];
-  const req = ({ method = 'POST', hostname = 'localhost', referer, url = '/inbox' } = {}) => ({ method, hostname, url, header: referer === undefined ? {} : { referer } });
+  const req = ({ method = 'POST', hostname = 'localhost', host = `${hostname}:3000`, referer, origin, url = '/inbox' } = {}) => ({ method, hostname, host, url, header: { ...(referer === undefined ? {} : { referer }), ...(origin === undefined ? {} : { origin }) } });
 
   t('a GET from a valid host is trusted, from an unknown host it is not', () => {
     ok(guards.isTrustedRequest(req({ method: 'GET' }), hosts));
@@ -72,6 +72,28 @@ describe('security: which requests the HTTP layer trusts', (t) => {
     notOk(guards.isTrustedRequest(req({ referer: 'http://evil.example/' }), hosts), 'foreign referer');
     notOk(guards.isTrustedRequest(req({ referer: 'http://localhost:3000/blob/%abc' }), hosts), 'blob referer');
     notOk(guards.isTrustedRequest(req({ referer: 'garbage' }), hosts), 'unparsable referer');
+  });
+
+  t('a POST from another port of the same machine is not this node (CSRF from a neighbour service)', () => {
+    notOk(guards.isTrustedRequest(req({ referer: 'http://localhost:8080/inbox' }), hosts), 'same host, other port');
+    notOk(guards.isTrustedRequest(req({ referer: 'http://localhost/inbox' }), hosts), 'same host, default port');
+    ok(guards.isTrustedRequest(req({ referer: 'http://localhost:3000/inbox', host: 'localhost:3000' }), hosts));
+    notOk(guards.isTrustedRequest(req({ referer: 'ftp://localhost:3000/inbox' }), hosts), 'non-http scheme');
+  });
+
+  t('when the browser sends Origin it decides, even if a Referer looks right', () => {
+    ok(guards.isTrustedRequest(req({ origin: 'http://localhost:3000' }), hosts), 'origin alone is enough');
+    notOk(guards.isTrustedRequest(req({ origin: 'http://evil.example', referer: 'http://localhost:3000/inbox' }), hosts), 'foreign origin wins over referer');
+    notOk(guards.isTrustedRequest(req({ origin: 'http://localhost:8080', referer: 'http://localhost:3000/inbox' }), hosts), 'origin on another port');
+    ok(guards.isTrustedRequest(req({ origin: 'null', referer: 'http://localhost:3000/inbox' }), hosts), 'opaque origin falls back to the referer');
+  });
+
+  t('a confirmation page only acts through a POST form to the given action', () => {
+    const { confirmView } = require('../../../src/views/main_views');
+    const html = String(confirmView({ message: 'Sure?', action: '/qr-action/follow/%40x', hidden: [{ name: 'tribeId', value: '%abc' }], backHref: '/tribes' }));
+    ok(/<form[^>]*method="POST"[^>]*action="\/qr-action\/follow\/%40x"/.test(html), 'form posts to the action');
+    ok(/name="tribeId"[^>]*value="%abc"|value="%abc"[^>]*name="tribeId"/.test(html), 'hidden field carried');
+    ok(html.includes('href="/tribes"'), 'a way back without acting');
   });
 
   t('the clearnet HUB is read-only for everyone', () => {

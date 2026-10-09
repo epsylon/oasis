@@ -184,3 +184,127 @@ describe('peers: pausing the network', (t) => {
     } finally { await close(a); await close(b); }
   });
 });
+
+describe('peers: the list of pubs this node uses', (t) => {
+  t('pubs on the list are connected to on their own, with the normal address first, and forgotten ones stay forgotten', async () => {
+    const pausePlugin = require('../../../src/server/network_pause');
+    const statePath = require('../../../src/configs/state-manager').statePath;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-book-'));
+    const forgottenFile = statePath('gossip_unfollowed.json');
+    const previous = fs.existsSync(forgottenFile) ? fs.readFileSync(forgottenFile, 'utf8') : null;
+    const joined = id('J'), both = id('K'), gone = id('G'), older = id('L');
+    const core = (k) => k.slice(1, -8);
+    fs.writeFileSync(path.join(dir, 'gossip.json'), JSON.stringify([
+      { host: 'pub.example', port: 8008, key: joined },
+      { host: 'abcdefghij.onion', port: 8008, key: both },
+      { host: 'two.example', port: 8009, key: both },
+      { host: 'old.example', port: 8008, key: gone }
+    ]));
+    fs.writeFileSync(forgottenFile, JSON.stringify([{ key: gone }]));
+    const book = new Map([[`net:old.example:8008~shs:${core(gone)}`, { key: gone, type: 'pub', autoconnect: false }], [`net:legacy.example:8008~shs:${core(older).slice(0, -1)}`, { key: older, type: 'peer', autoconnect: true }]]);
+    const server = {
+      id: id('S'), peers: {},
+      conn: {
+        hub: () => ({ listen: () => require('../../../src/server/node_modules/pull-stream').empty() }),
+        dbPeers: () => [...book],
+        db: () => ({ has: (addr) => book.has(addr) }),
+        remember: (addr, data) => { book.set(addr, data); },
+        forget: (addr) => { book.delete(addr); }
+      }
+    };
+    try {
+      pausePlugin.init(server, { path: dir });
+      await new Promise(r => setTimeout(r, 5600));
+      const entry = (k) => [...book].filter(([, d]) => d.key === k);
+      eq(entry(joined).length, 1, 'a pub on the list is handed to the connection manager');
+      eq(entry(joined)[0][1].autoconnect, true, 'to be connected to on its own');
+      eq(entry(both).length, 1, 'a pub with two addresses is added once');
+      ok(entry(both)[0][0].startsWith('net:two.example:8009'), 'on its normal address rather than the onion one');
+      eq(entry(gone).length, 0, 'a forgotten pub is removed even when the network announces it again');
+      eq(entry(older).length, 1, 'an address written without the key padding is not kept twice');
+      ok(entry(older)[0][0].endsWith('='), 'it is kept in the standard form');
+      eq(entry(older)[0][1].autoconnect, true, 'with the same settings');
+    } finally {
+      if (previous === null) fs.rmSync(forgottenFile, { force: true }); else fs.writeFileSync(forgottenFile, previous);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('peers: pubs that keep the network together', (t) => {
+  t('a pub connects to the pubs announced on the network and to its seeds; a normal node only suggests them', async () => {
+    const pausePlugin = require('../../../src/server/network_pause');
+    const announced = id('A'), seed = id('E'), forgottenPub = id('F');
+    const core = (k) => k.slice(1, -8);
+    const statePath = require('../../../src/configs/state-manager').statePath;
+    const forgottenFile = statePath('gossip_unfollowed.json');
+    const previous = fs.existsSync(forgottenFile) ? fs.readFileSync(forgottenFile, 'utf8') : null;
+    fs.writeFileSync(forgottenFile, JSON.stringify([{ key: forgottenPub }]));
+    const run = async (isPub) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-mesh-'));
+      const book = new Map([[`net:a.example:8008~shs:${core(announced)}`, { key: announced, type: 'pub', autoconnect: false }]]);
+      const server = {
+        id: id('S'), peers: {},
+        conn: {
+          hub: () => ({ listen: () => require('../../../src/server/node_modules/pull-stream').empty() }),
+          dbPeers: () => [...book],
+          db: () => ({ has: (addr) => book.has(addr), update: (addr, patch) => book.set(addr, { ...book.get(addr), ...patch }) }),
+          remember: (addr, data) => { book.set(addr, data); },
+          forget: (addr) => { book.delete(addr); }
+        }
+      };
+      pausePlugin.init(server, { path: dir, pub: isPub, connections: { seeds: [`net:seed.example:8008~shs:${core(seed)}`, `net:f.example:8008~shs:${core(forgottenPub)}`] } });
+      await new Promise(r => setTimeout(r, 5600));
+      fs.rmSync(dir, { recursive: true, force: true });
+      return (k) => [...book].filter(([, d]) => d.key === k).map(([, d]) => d);
+    };
+    try {
+      const onPub = await run(true);
+      eq(onPub(announced)[0].autoconnect, true, 'a pub connects on its own to pubs announced on the network');
+      eq(onPub(seed)[0].autoconnect, true, 'and to the seeds in its settings');
+      eq(onPub(forgottenPub).length, 0, 'but never to one it was told to forget');
+      const onNode = await run(false);
+      eq(onNode(announced)[0].autoconnect, false, 'a normal node keeps announced pubs only as suggestions');
+      eq(onNode(seed)[0].autoconnect, true, 'while its seeds are connected to');
+    } finally {
+      if (previous === null) fs.rmSync(forgottenFile, { force: true }); else fs.writeFileSync(forgottenFile, previous);
+    }
+  });
+});
+
+describe('peers: connections others open to this node', (t) => {
+  t('a node keeps every connection others open to it; its limit is only for the ones it opens', async () => {
+    const crypto = require('crypto');
+    const SecretStack = require('../../../src/server/node_modules/secret-stack');
+    const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
+    const caps = { shs: crypto.randomBytes(32).toString('base64') };
+    const base = 30000 + Math.floor(Math.random() * 15000);
+    const nodes = [];
+    const make = (port, autostart) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-inbound-'));
+      const keys = ssbKeys.generate();
+      const node = SecretStack({ caps }).use(require('../../../src/server/node_modules/ssb-conn')).call(null, {
+        path: dir, keys, port, host: '127.0.0.1', conn: { autostart, populatePubs: false }, timers: { inactivity: 0, handshake: 10000 },
+        connections: { incoming: { net: [{ scope: 'device', transform: 'shs', port, host: '127.0.0.1' }] }, outgoing: { net: [{ transform: 'shs' }] } }
+      });
+      node.__dir = dir; node.__keys = keys;
+      nodes.push(node);
+      return node;
+    };
+    try {
+      const hub = make(base, true);
+      const addr = `net:127.0.0.1:${base}~shs:${hub.__keys.public.replace('.ed25519', '')}`;
+      for (let i = 0; i < 14; i++) {
+        const c = make(base + 50 + i * 3, false);
+        await new Promise(r => setTimeout(r, 150));
+        await new Promise((res) => c.connect(addr, () => res()));
+      }
+      const count = () => hub.conn.query().peersConnected().length;
+      eq(count(), 14, 'fourteen others are connected');
+      await new Promise(r => setTimeout(r, 25000));
+      eq(count(), 14, 'and they are all still there after the connection manager has run');
+    } finally {
+      await Promise.all(nodes.map(n => new Promise((res) => n.close(() => { try { fs.rmSync(n.__dir, { recursive: true, force: true }); } catch (_) {} res(); }))));
+    }
+  });
+});

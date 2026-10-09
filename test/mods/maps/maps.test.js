@@ -289,3 +289,121 @@ describe('maps: public page content', (t) => {
     ok(!readable, 'an outsider never gets the markers of a closed map');
   });
 });
+
+const publishAs = async (P, content) => {
+  const ssb = await P.cooler.open();
+  return new Promise((res, rej) => ssb.publish(content, (e, m) => e ? rej(e) : res(m)));
+};
+
+const boxedFor = (net, author, rootId, member) => net.log.some(m => m.value.author === author && m.value.content.type === 'tribe-keys' && m.value.content.tribeId === rootId && m.value.content.memberKeys && m.value.content.memberKeys[member]);
+
+const visibleTokenOf = (net) => {
+  let token = null;
+  for (const m of net.log) {
+    const c = m.value && m.value.content;
+    if (c && c.type === 'map' && Array.isArray(c.invites)) for (const inv of c.invites) if (inv && typeof inv.ch === 'string') token = inv.ch;
+  }
+  return token;
+};
+
+const readableBy = async (P, mapId) => {
+  try {
+    const map = await P.use('maps').getMapById(mapId, P.keypair.id);
+    return !map.encrypted && !!map.title;
+  } catch (_) { return false; }
+};
+
+describe('maps: keys reach members and nobody else', (t) => {
+  t('a member added by the author receives the key on the next listing and reads the map', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('maps').createMap(10, 20, 'inner', 'CLOSED', [], 'Inner Map', null, '', null);
+    await publishAs(A, { type: 'mapMember', target: r.key, member: B.keypair.id, on: true, createdAt: new Date().toISOString() });
+    await A.use('maps').listAll({ filter: 'all', viewerId: A.keypair.id });
+    ok(boxedFor(net, A.keypair.id, r.key, B.keypair.id), 'the key is boxed for the member');
+    B.setActor();
+    notOk(await readableBy(B, r.key), 'not readable before taking the key');
+    await B.use('maps').ingestKeys();
+    ok(await readableBy(B, r.key), 'readable once the key is taken');
+  });
+
+  t('an invited inhabitant reads the map right after joining, and the code is then spent', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('maps').createMap(10, 20, 'invited', 'CLOSED', [], 'Guest Map', null, '', null);
+    const code = await A.use('maps').generateInvite(r.key);
+    notOk(net.log.some(m => JSON.stringify(m.value.content).includes(code)), 'the code itself is never published');
+    B.setActor();
+    await B.use('maps').joinByInvite(code);
+    ok(await readableBy(B, r.key), 'the guest reads the map');
+    A.setActor();
+    ok((await A.use('maps').getMapById(r.key, A.keypair.id)).members.includes(B.keypair.id), 'and is a member for the author');
+    C.setActor();
+    let reused = false;
+    try { await C.use('maps').joinByInvite(code); } catch (_) { reused = true; }
+    ok(reused, 'the same code does not work twice');
+  });
+
+  t('a stranger who adds themselves gets neither a seat nor the key', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('maps').createMap(10, 20, 'locked', 'CLOSED', [], 'Locked Map', null, '', null);
+    await A.use('maps').generateInvite(r.key);
+    const token = visibleTokenOf(net);
+    ok(token, 'the invitation token is readable by anybody');
+    C.setActor();
+    await publishAs(C, { type: 'mapMember', target: r.key, member: C.keypair.id, on: true, code: token, createdAt: new Date().toISOString() });
+    A.setActor();
+    await A.use('maps').listAll({ filter: 'all', viewerId: A.keypair.id });
+    notOk((await A.use('maps').getMapById(r.key, A.keypair.id)).members.includes(C.keypair.id), 'the stranger is not a member');
+    notOk(boxedFor(net, A.keypair.id, r.key, C.keypair.id), 'no key is boxed for the stranger');
+    C.setActor();
+    await C.use('maps').ingestKeys();
+    notOk(await readableBy(C, r.key), 'the stranger cannot read');
+  });
+
+  t('a key slipped in by a stranger is never adopted', async () => {
+    const { fresh } = require('../../helpers/setup');
+    const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
+    const forger = require('../../../src/models/crypto')(fresh(), 'maps');
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('maps').createMap(10, 20, 'kept', 'CLOSED', [], 'Kept Map', null, '', null);
+    const fake = forger.generateTribeKey();
+    C.setActor();
+    await publishAs(C, { type: 'tribe-keys', tribeId: r.key, generation: 2, memberKeys: { [A.keypair.id]: forger.boxKeyForMember(fake, A.keypair.id, ssbKeys) } });
+    A.setActor();
+    await A.use('maps').ingestKeys();
+    await A.use('maps').updateMapById(r.key, 11, 21, 'kept', 'CLOSED', [], 'Kept Map v2', null);
+    const tip = net.log.filter(m => m.value.author === A.keypair.id && m.value.content.type === 'map').pop();
+    ok(forger.decryptContent(tip.value.content, [[fake]])._undecryptable, 'the stranger key does not open the new version');
+    eq((await A.use('maps').getMapById(r.key, A.keypair.id)).title, 'Kept Map v2', 'the author still reads it');
+  });
+});
+
+describe('maps: changing the key when someone leaves', (t) => {
+  t('the owner changes the key and only those who stay receive it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const pause = () => new Promise(r => setTimeout(r, 5));
+    const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'maps');
+    A.setActor();
+    const r = await A.use('maps').createMap(10, 20, 'd', 'SINGLE', [], 'Rotating Map', null, '', null);
+    const codeB = await A.use('maps').generateInvite(r.key);
+    const codeC = await A.use('maps').generateInvite(r.key);
+    B.setActor(); await B.use('maps').joinByInvite(codeB);
+    C.setActor(); await C.use('maps').joinByInvite(codeC);
+    A.setActor(); await A.use('maps').listAll('all', { viewerId: A.keypair.id });
+    await pause();
+    const before = net.log.length;
+    C.setActor(); await C.use('maps').leaveMap(r.key);
+    ok(!net.log.slice(before).some(m => m.value.content.type === 'tribe-keys'), 'the one who leaves does not hand out a key');
+    await pause();
+    A.setActor(); await A.use('maps').listAll('all', { viewerId: A.keypair.id });
+    const fresh = keysOf(A).getKey(r.key);
+    ok(!keysOf(C).getKeys(r.key).includes(fresh), 'the new key is not the one the leaver had');
+    B.setActor(); await B.use('maps').ingestKeys();
+    C.setActor(); await C.use('maps').ingestKeys();
+    ok(keysOf(B).getKeys(r.key).includes(fresh), 'the member who stays gets the new key');
+    ok(!keysOf(C).getKeys(r.key).includes(fresh), 'the member who left does not');
+  });
+});

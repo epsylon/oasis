@@ -46,7 +46,7 @@ const EDIT_POLICIES = ['open', 'author', 'tribe'];
 const RECENT_MS = 24 * 60 * 60 * 1000;
 const MAX_CHANGES = 60;
 const MAX_TITLE = 100;
-const IMAGE_RE = /!\[image:[^\]]*\]\((&[^)]+)\)/;
+const IMAGE_RE = /!\[image:[^\]\[\n]{0,160}\]\((&[^)\s]{1,120}\.sha256)\)/;
 const BODY_INLINE_MAX = 6000;
 const bodyCache = new Map();
 const addBlob = (ssbClient, buf) => new Promise((resolve, reject) => pull(pull.values([buf]), ssbClient.blobs.add((err, ref) => err ? reject(err) : resolve(ref))));
@@ -142,24 +142,64 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
     return out;
   };
 
-  const buildIndex = (entries) => {
+  const tribeMembersFor = async (entries) => {
+    const out = new Map();
+    if (!tribesModel) return out;
+    for (const m of entries) {
+      const c = m.value.content;
+      if (c.type !== WIKI_TYPE || !c.tribeId || out.has(String(c.tribeId))) continue;
+      let members = [];
+      try { const t = await tribesModel.getTribeById(c.tribeId); members = Array.isArray(t && t.members) ? t.members : []; } catch (_) {}
+      out.set(String(c.tribeId), members);
+    }
+    return out;
+  };
+
+  const buildIndex = (entries, membersOf = new Map()) => {
     const tomb = buildValidatedTombstoneSet(entries);
     const nodes = new Map();
-    const parentOf = new Map();
     for (const m of entries) {
       const c = m.value.content;
       if (c.type !== WIKI_TYPE) continue;
       nodes.set(m.key, { key: m.key, author: m.value.author, ts: m.value.timestamp || m.timestamp || 0, c });
-      if (typeof c.replaces === 'string') parentOf.set(m.key, c.replaces);
     }
-    const rootOf = (key) => {
+    const mayEdit = (state, author) => {
+      if (author === state.owner) return true;
+      if (state.policy === 'author') return false;
+      if (state.tribeId) return (membersOf.get(state.tribeId) || []).includes(author);
+      return state.policy !== 'tribe';
+    };
+    const states = new Map();
+    const stateOf = (key) => {
+      const path = [];
       const seen = new Set();
       let cur = key;
-      while (parentOf.has(cur) && !seen.has(cur)) { seen.add(cur); cur = parentOf.get(cur); }
-      return cur;
+      while (!states.has(cur)) {
+        const node = nodes.get(cur);
+        if (!node) { states.set(cur, null); break; }
+        if (typeof node.c.replaces !== 'string') {
+          states.set(cur, { root: cur, owner: node.author, tribeId: String(node.c.tribeId || ''), policy: normalizePolicy(node.c.editPolicy), license: safeText(node.c.license) });
+          break;
+        }
+        if (seen.has(cur)) { states.set(cur, null); break; }
+        seen.add(cur);
+        path.push(cur);
+        cur = node.c.replaces;
+      }
+      for (let i = path.length - 1; i >= 0; i--) {
+        const k = path[i];
+        if (states.has(k)) continue;
+        const node = nodes.get(k);
+        const parent = states.get(node.c.replaces);
+        if (!parent || String(node.c.tribeId || '') !== parent.tribeId || !mayEdit(parent, node.author)) { states.set(k, null); continue; }
+        states.set(k, node.author === parent.owner ? { ...parent, policy: normalizePolicy(node.c.editPolicy), license: safeText(node.c.license) } : parent);
+      }
+      return states.get(key);
     };
+    const rootOf = (key) => { const s = stateOf(key); return s ? s.root : key; };
     const versionsByRoot = new Map();
     for (const node of nodes.values()) {
+      if (!stateOf(node.key)) continue;
       const root = rootOf(node.key);
       if (tomb.has(root)) continue;
       if (!versionsByRoot.has(root)) versionsByRoot.set(root, []);
@@ -170,6 +210,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
       versions.sort((a, b) => a.ts - b.ts);
       const first = versions[0];
       const tip = versions[versions.length - 1];
+      const state = stateOf(tip.key);
       const c = tip.c;
       const body = safeText(c.body);
       pages.push({
@@ -182,12 +223,12 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         image: (body.match(IMAGE_RE) || [])[1] || null,
         tags: normalizeList(c.tags),
         aliases: [...new Set([...normalizeList(c.aliases).map(slugify), safeText(c.slug)].filter(a => a && a !== slugify(c.title)))],
-        editPolicy: normalizePolicy(c.editPolicy),
-        license: safeText(c.license),
+        editPolicy: state.policy,
+        license: state.license,
         tribeId: c.tribeId || null,
         encrypted: !!c.tribeId,
-        author: first.c.author || first.author,
-        lastAuthor: c.author || tip.author,
+        author: state.owner,
+        lastAuthor: tip.author,
         createdAt: first.c.createdAt || new Date(first.ts).toISOString(),
         updatedAt: c.updatedAt || new Date(tip.ts).toISOString(),
         ts: tip.ts,
@@ -195,7 +236,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
         links: extractWikiLinks(body),
         versions: versions.map(vn => ({
           key: vn.key,
-          author: vn.c.author || vn.author,
+          author: vn.author,
           ts: vn.ts,
           createdAt: vn.c.updatedAt || vn.c.createdAt || new Date(vn.ts).toISOString(),
           title: safeText(vn.c.title),
@@ -264,7 +305,8 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
 
   const load = async () => {
     const ssbClient = await openSsb();
-    const idx = buildIndex(await readEntries(ssbClient));
+    const entries = await readEntries(ssbClient);
+    const idx = buildIndex(entries, await tribeMembersFor(entries));
     return { ssbClient, idx };
   };
 

@@ -9,7 +9,8 @@ const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
 const validate = require('../../../src/server/node_modules/ssb-validate');
 
 const PASSWORD = 'p'.repeat(32);
-const SECRET = '{"curve":"ed25519","public":"aaa.ed25519","private":"bbb.ed25519","id":"@aaa.ed25519"}';
+const OWN_KEYS = ssbKeys.generate();
+const SECRET = JSON.stringify(OWN_KEYS);
 const tmpRoot = path.join(os.tmpdir(), 'oasis-backup-tests');
 const ssbConfig = require('../../../src/server/ssb_config');
 const realSsbPath = ssbConfig.path;
@@ -48,19 +49,27 @@ describe('backup: keys', (t) => {
       const out = await A.use('backup').exportKeys({ password: PASSWORD });
       eq(out.filename, 'oasis.enc');
       ok(out.data.slice(0, 6).equals(Buffer.from('OASIS1')));
-      ok(!out.data.includes(Buffer.from('bbb.ed25519')), 'the private key is not visible in the file');
+      ok(!out.data.includes(Buffer.from(OWN_KEYS.private)), 'the private key is not visible in the file');
       fs.writeFileSync(path.join(home, '.ssb', 'secret'), '{"id":"@other.ed25519"}');
       const enc = path.join(home, 'oasis.enc');
       fs.writeFileSync(enc, out.data);
       const imported = await A.use('backup').importKeys({ filePath: enc, password: PASSWORD });
-      eq(imported.id, '@aaa.ed25519', 'the imported identity is reported');
+      eq(imported.id, OWN_KEYS.id, 'the imported identity is reported');
       eq(fs.readFileSync(path.join(home, '.ssb', 'secret'), 'utf8'), SECRET);
       ok(fs.readdirSync(path.join(home, '.ssb')).some(f => f.startsWith('secret.bak-')), 'previous secret kept as .bak');
       let bad = false;
       try { await A.use('backup').importKeys({ filePath: enc, password: 'x'.repeat(32) }); } catch (_) { bad = true; }
       ok(bad, 'wrong password is refused');
+      const forged = { ...OWN_KEYS, private: ssbKeys.generate().private };
+      const forgedFile = path.join(home, 'forged.enc');
+      fs.writeFileSync(path.join(home, '.ssb', 'secret'), JSON.stringify(forged), { mode: 0o600 });
+      fs.writeFileSync(forgedFile, (await A.use('backup').exportKeys({ password: PASSWORD })).data);
+      fs.writeFileSync(path.join(home, '.ssb', 'secret'), SECRET, { mode: 0o600 });
+      let garbage = false;
+      try { await A.use('backup').importKeys({ filePath: forgedFile, password: PASSWORD }); } catch (_) { garbage = true; }
+      ok(garbage, 'a keypair whose halves do not match is refused');
       const kit = A.use('backup').recoveryKit();
-      eq(kit.id, '@aaa.ed25519'); ok(kit.secret.includes('bbb.ed25519'));
+      eq(kit.id, OWN_KEYS.id); ok(kit.secret.includes(OWN_KEYS.private));
     });
   });
 });
@@ -97,6 +106,26 @@ describe('backup: full and selective copies', (t) => {
     fs.copyFileSync(outPath, copy);
     try { await B.use('backup').restoreBackup({ filePath: copy, password: 'w'.repeat(32) }); } catch (_) { wrong = true; }
     ok(wrong, 'wrong password is refused');
+  });
+
+  t('a full backup carries the Oasis state but not the node settings nor the room recordings', async () => {
+    await withHome(async (home) => {
+      const net = makeNetwork(); const A = makePeer(net); A.setActor();
+      A.node.publish({ type: 'post', text: 'hello' }, () => {});
+      const root = path.join(require('../../../src/configs/state-manager').ssbDir(), 'oasis');
+      const put = (rel, data) => { fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true }); fs.writeFileSync(path.join(root, rel), data); };
+      put('content/content_favorites.json', '{"posts":[]}');
+      put('oasis-config.json', '{"wallet":{"pass":"secret-pass"}}');
+      put('oasis-server-config.json', '{"pub":true}');
+      put('rooms/meeting.wav', 'RIFF');
+      const outPath = tmpFile('state');
+      await A.use('backup').createBackup({ scope: 'all' }, PASSWORD, outPath);
+      const rels = [];
+      await A.use('backup').readBackup(outPath, PASSWORD, async (rec) => { if (rec.type === 'file') rels.push(rec.rel); });
+      ok(rels.includes('content/content_favorites.json'), 'the state of the modules is in the copy');
+      notOk(rels.some(r => r === 'oasis-config.json' || r === 'oasis-server-config.json'), 'the settings files are not');
+      notOk(rels.some(r => r.startsWith('rooms/')), 'nor the room recordings');
+    });
   });
 
   t('an EVERYTHING copy carries blobs that no message references', async () => {

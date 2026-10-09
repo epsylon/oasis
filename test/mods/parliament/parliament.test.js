@@ -91,6 +91,11 @@ describe('parliament: a tribe elects its government and runs for the global Parl
     A.setActor();
     const tribe = await A.use('tribes').createTribe('Solar', 'd', null, '', [], false, 'strict', null, 'OPEN', '');
     const tribeId = tribe.key;
+    const codeB = await A.use('tribes').generateInvite(tribeId);
+    const codeC = await A.use('tribes').generateInvite(tribeId);
+    B.setActor(); await B.use('tribes').joinByInvite(codeB);
+    C.setActor(); await C.use('tribes').joinByInvite(codeC);
+    A.setActor();
     const pA = makeParliament(A);
 
     const cand = await pA.tribe.publishTribeCandidature({ tribeId, candidateId: B.keypair.id, method: 'DEMOCRACY' });
@@ -135,8 +140,19 @@ describe('parliament: a tribe elects its government and runs for the global Parl
     await pA.proposeCandidature({ candidateId: tribeId, method: 'DEMOCRACY' });
     const pA3 = makeParliament(A);
     const open = await pA3.listCandidatures('OPEN');
-    ok(open.some(c => c.targetType === 'tribe' && c.targetId === tribeId), 'the tribe appears as a global candidature');
+    const tribeIds = new Set([tribeId, (await A.use('tribes').getTribeById(tribeId)).id]);
+    ok(open.some(c => c.targetType === 'tribe' && tribeIds.has(c.targetId)), 'the tribe appears as a global candidature');
     const after = await pA3.tribe.hasCandidatureInGlobalCycle(tribeId, null);
     ok(after, 'and the tribe cannot be sent twice in the same cycle');
+
+    const S = makePeer(net);
+    await publishAs(S, { type: 'tribeParliamentTerm', tribeId, method: 'DICTATORSHIP', leaderId: S.keypair.id, winnerVotes: 99, totalVotes: 99, startAt: new Date(now - 1000).toISOString(), endAt: new Date(now + 300 * 86400000).toISOString(), createdBy: S.keypair.id, createdAt: new Date(now - 1000).toISOString() });
+    await publishAs(A, { type: 'tribeParliamentTerm', tribeId, method: 'DICTATORSHIP', leaderId: A.keypair.id, winnerVotes: 99, totalVotes: 99, startAt: new Date(now - 500).toISOString(), endAt: new Date(now + 300 * 86400000).toISOString(), createdBy: A.keypair.id, createdAt: new Date(now - 500).toISOString() });
+    const still = await makeParliament(A).tribe.getCurrentTerm(tribeId);
+    eq(still.leaderId, B.keypair.id, 'a term from an outsider, or one whose leader has no counted votes, does not take over');
+    const ballotByOutsider = await publishAs(S, { type: 'tribeParliamentCandidature', tribeId, replaces: (await makeParliament(A).tribe.listCandidatures(tribeId)).length ? 'x' : cand.key, candidateId: B.keypair.id, method: 'DEMOCRACY', votes: 50, voters: [S.keypair.id] });
+    ok(ballotByOutsider, 'an outsider publishes a ballot');
+    const recount = (await makeParliament(A).tribe.listCandidatures(tribeId)).every(c => !c.voters.includes(S.keypair.id));
+    ok(recount, 'and it is not counted');
   });
 });

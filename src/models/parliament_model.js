@@ -3,6 +3,7 @@ const moment = require('../server/node_modules/moment');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
+const { buildVoteResults } = require('../backend/vote_tally');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const PARLIAMENT_TYPES = [
@@ -10,6 +11,8 @@ const PARLIAMENT_TYPES = [
   'parliamentProposal', 'parliamentRevocation', 'parliamentLaw',
   'tribe', 'about', 'tombstone'
 ];
+const VOTE_LOG_TYPES = ['votes', 'votesVote', 'tombstone'];
+const PROPOSER_TYPES = new Set(['parliamentCandidature', 'parliamentProposal', 'parliamentRevocation']);
 const TRIBE_PARLIAMENT_TYPES = [
   'tribeParliamentTerm', 'tribeParliamentCandidature', 'tribeParliamentRule',
   'parliamentCandidature', 'tombstone'
@@ -161,6 +164,7 @@ module.exports = ({ cooler, services = {} }) => {
 
   const CACHE_MS = 250;
   let logCache = { at: 0, arr: null };
+  let voteCache = { at: 0, results: null, tomb: null };
 
   let electionInFlight = null;
   let sweepInFlight = null;
@@ -195,6 +199,7 @@ module.exports = ({ cooler, services = {} }) => {
       ssbClient.publish(content, (e, r) => (e ? reject(e) : resolve(r)))
     );
     logCache = { at: 0, arr: null };
+    voteCache = { at: 0, results: null, tomb: null };
     return res;
   }
 
@@ -207,39 +212,62 @@ module.exports = ({ cooler, services = {} }) => {
     return arr;
   }
 
-  function listByTypeFromMsgs(msgs, type) {
+  function chainIndex(msgs, type) {
     const tomb = buildValidatedTombstoneSet(msgs);
-    const rep = new Map();
-    const children = new Map();
-    const map = new Map();
-
+    const nodes = new Map();
     for (const m of msgs || []) {
-      const k = m.key;
       const v = m.value || {};
       const c = v.content;
-      if (!c) continue;
-if (c.type === type) {
-        if (c.replaces) {
-          const oldId = c.replaces;
-          const ts = normMs(v.timestamp || m.timestamp || Date.now());
-          const prev = rep.get(oldId);
-          if (!prev || ts > prev.ts) rep.set(oldId, { id: k, ts });
-          if (!children.has(oldId)) children.set(oldId, new Set());
-          children.get(oldId).add(k);
-        }
-        map.set(k, { ...c, id: k });
-      }
+      if (!c || c.type !== type) continue;
+      nodes.set(m.key, { key: m.key, author: v.author, ts: normMs(v.timestamp || m.timestamp || Date.now()), c });
     }
+    const consistent = (n) => {
+      if (PROPOSER_TYPES.has(type)) return n.c.proposer === n.author;
+      if (type === 'parliamentTerm') return !n.c.createdBy || n.c.createdBy === n.author;
+      return true;
+    };
+    const valid = new Map();
+    const settle = (key) => {
+      const path = [];
+      const seen = new Set();
+      let cur = key;
+      while (!valid.has(cur)) {
+        const n = nodes.get(cur);
+        if (!n || !consistent(n)) { valid.set(cur, false); break; }
+        const parent = n.c.replaces ? nodes.get(n.c.replaces) : null;
+        if (!parent) { valid.set(cur, true); break; }
+        if (parent.author !== n.author || seen.has(cur)) { valid.set(cur, false); break; }
+        seen.add(cur);
+        path.push(cur);
+        cur = parent.key;
+      }
+      for (let i = path.length - 1; i >= 0; i--) {
+        if (!valid.has(path[i])) valid.set(path[i], valid.get(nodes.get(path[i]).c.replaces) === true);
+      }
+      return valid.get(key) === true;
+    };
+    const next = new Map();
+    for (const n of nodes.values()) {
+      if (!n.c.replaces || !nodes.has(n.c.replaces) || !settle(n.key)) continue;
+      const prev = next.get(n.c.replaces);
+      if (!prev || n.ts > nodes.get(prev).ts) next.set(n.c.replaces, n.key);
+    }
+    const tipOf = (k) => { let x = k, g = 0; while (next.has(x) && g++ < 100000) x = next.get(x); return x; };
+    const rootOf = (k) => { let x = k, g = 0; while (nodes.has(x) && nodes.has(nodes.get(x).c.replaces) && g++ < 100000) x = nodes.get(x).c.replaces; return x; };
+    const items = [];
+    for (const n of nodes.values()) {
+      if ((n.c.replaces && nodes.has(n.c.replaces)) || !settle(n.key)) continue;
+      const tip = tipOf(n.key);
+      if (tomb.has(tip)) continue;
+      items.push({ ...nodes.get(tip).c, id: tip });
+    }
+    const resolve = (k) => (nodes.has(k) && settle(k) ? tipOf(rootOf(k)) : null);
+    const authorOf = (k) => (nodes.has(k) ? nodes.get(k).author : null);
+    return { items, resolve, authorOf };
+  }
 
-    for (const oldId of rep.keys()) map.delete(oldId);
-    for (const [oldId, kids] of children.entries()) {
-      const winner = rep.get(oldId)?.id || null;
-      for (const kid of kids) {
-        if (kid !== winner) map.delete(kid);
-      }
-    }
-    for (const tId of tomb) map.delete(tId);
-    const items = [...map.values()];
+  function listByTypeFromMsgs(msgs, type) {
+    const items = chainIndex(msgs, type).items;
     return type === 'parliamentProposal' ? items.map(withCampaignRef) : items;
   }
 
@@ -343,11 +371,14 @@ if (c.type === type) {
     const s = String(candidateInput || '').trim();
     if (!s) return null;
     const tribes = await listTribesAny();
-    const t = tribes.find(tr =>
+    let t = tribes.find(tr =>
       tr.id === s ||
       (tr.title && tr.title.toLowerCase() === s.toLowerCase()) ||
       (tr.name && tr.name.toLowerCase() === s.toLowerCase())
     );
+    if (!t && s.startsWith('%') && services.tribes && services.tribes.getTribeById) {
+      try { t = await services.tribes.getTribeById(s); } catch (_) { t = null; }
+    }
     if (t) {
       return { type: 'tribe', id: t.id, title: t.title || t.name || t.id, members: ensureArray(t.members) };
     }
@@ -471,9 +502,186 @@ if (c.type === type) {
     return enriched;
   }
 
+  function supportFor(msgs) {
+    const cands = chainIndex(msgs, 'parliamentCandidature');
+    const byId = new Map(cands.items.map(c => [c.id, c]));
+    const votes = [];
+    for (const m of msgs || []) {
+      const v = m.value || {};
+      const c = v.content;
+      if (!c || c.type !== 'parliamentCandidatureVote' || typeof c.target !== 'string' || !v.author) continue;
+      const id = cands.resolve(c.target);
+      const cand = id ? byId.get(id) : null;
+      if (!cand) continue;
+      if (cand.targetType === 'inhabitant' && String(cand.targetId) === String(v.author)) continue;
+      votes.push({ cand, voter: v.author, ts: normMs(v.timestamp || m.timestamp || 0), seq: Number(v.sequence) || 0 });
+    }
+    votes.sort((a, b) => (a.ts - b.ts) || (a.seq - b.seq));
+    return (term) => {
+      const from = new Date(term.startAt).getTime();
+      const to = new Date(term.endAt).getTime();
+      const counted = new Map();
+      for (const x of votes) {
+        if (counted.has(x.voter)) continue;
+        const created = new Date(x.cand.createdAt).getTime();
+        if (!Number.isFinite(created) || created < from || created >= to) continue;
+        counted.set(x.voter, x.cand);
+      }
+      const perCand = new Map();
+      for (const cand of counted.values()) perCand.set(cand, (perCand.get(cand) || 0) + 1);
+      let best = 0;
+      for (const [cand, n] of perCand) {
+        if (cand.targetType !== term.powerType || String(cand.targetId) !== String(term.powerId)) continue;
+        if (String(cand.method || '').toUpperCase() !== String(term.method || '').toUpperCase()) continue;
+        if (n > best) best = n;
+      }
+      return { votes: best, total: counted.size };
+    };
+  }
+
+  function termShapeOk(t) {
+    const s = new Date(t && t.startAt).getTime();
+    const e = new Date(t && t.endAt).getTime();
+    if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s || s > Date.now()) return false;
+    const window = termWindowFor(s);
+    if (new Date(window.startAt).getTime() === s && new Date(window.endAt).getTime() === e) return true;
+    return e <= Date.now() && Math.abs(e - s - TERM_SPAN_MS) <= 86400000;
+  }
+
+  function validTermsFrom(msgs) {
+    const supportOf = supportFor(msgs);
+    const out = [];
+    for (const t of chainIndex(msgs, 'parliamentTerm').items) {
+      const method = String(t.method || '').toUpperCase();
+      if (!METHODS.includes(method) || !termShapeOk(t)) continue;
+      const inhabitant = t.powerType === 'inhabitant' && FEED_ID_RE.test(String(t.powerId || ''));
+      const tribe = t.powerType === 'tribe' && !!t.powerId;
+      if (!inhabitant && !tribe) continue;
+      const support = supportOf({ ...t, method });
+      if (support.votes < PROPOSAL_QUORUM) continue;
+      out.push({ ...t, method, winnerVotes: support.votes, totalVotes: support.total });
+    }
+    return collapseOverlappingTerms(out, (t) => t.winnerVotes);
+  }
+
+  async function listValidTerms() {
+    return validTermsFrom(await readLog());
+  }
+
+  async function readVoteResults() {
+    const now = Date.now();
+    if (voteCache.results && now - voteCache.at < CACHE_MS) return voteCache;
+    const ssbClient = await openSsb();
+    const arr = await readTyped(ssbClient, VOTE_LOG_TYPES, { limit: logLimit });
+    voteCache = { at: now, results: buildVoteResults(arr), tomb: buildValidatedTombstoneSet(arr) };
+    return voteCache;
+  }
+
+  async function voteResult(voteId, creator) {
+    if (!voteId) return null;
+    const { results, tomb } = await readVoteResults();
+    const r = results.get(voteId);
+    if (!r || tomb.has(r.rootId) || tomb.has(voteId)) return null;
+    if (creator && r.creator !== creator) return null;
+    const vm = r.votes || {};
+    const due = r.deadline ? new Date(r.deadline).getTime() : NaN;
+    return {
+      YES: Number(vm.YES ?? vm.Yes ?? vm.yes ?? 0),
+      NO: Number(vm.NO ?? vm.No ?? vm.no ?? 0),
+      ABSTENTION: Number(vm.ABSTENTION ?? vm.Abstention ?? vm.abstention ?? 0),
+      total: Number(r.totalVotes || 0),
+      deadline: r.deadline || null,
+      closed: Number.isFinite(due) && due <= Date.now()
+    };
+  }
+
+  function termForId(termId, terms) {
+    const id = String(termId || '');
+    const found = terms.find(t => t.id === id || t.startAt === id);
+    if (found) return found;
+    const m = id.match(/^anarchy:(-?\d+)$/);
+    return m ? virtualAnarchyTerm(termWindowFor(TERM_EPOCH + Number(m[1]) * TERM_SPAN_MS)) : null;
+  }
+
+  async function outcomeContext() {
+    const msgs = await readLog();
+    const terms = validTermsFrom(msgs);
+    const proposals = chainIndex(msgs, 'parliamentProposal');
+    const revocations = chainIndex(msgs, 'parliamentRevocation');
+    const voteOwner = new Map();
+    const byAge = [...proposals.items, ...revocations.items].sort((a, b) =>
+      ((new Date(a.createdAt).getTime() || 0) - (new Date(b.createdAt).getTime() || 0)) || String(a.id).localeCompare(String(b.id))
+    );
+    for (const x of byAge) if (x.voteId && !voteOwner.has(x.voteId)) voteOwner.set(x.voteId, x.id);
+    return { msgs, terms, proposals, revocations, voteOwner, members: new Map(), karma: new Map() };
+  }
+
+  async function mayPropose(term, feedId, ctx) {
+    if (!term || !feedId) return false;
+    if (term.virtual) return true;
+    if (term.powerType === 'inhabitant') return String(term.powerId) === String(feedId);
+    if (term.powerType === 'tribe') {
+      if (!ctx.members.has(term.powerId)) {
+        let members = [];
+        if (services.tribes) {
+          try { const tribe = await services.tribes.getTribeById(term.powerId); members = ensureArray(tribe && tribe.members); } catch {}
+        }
+        ctx.members.set(term.powerId, members);
+      }
+      return ctx.members.get(term.powerId).includes(feedId);
+    }
+    return false;
+  }
+
+  async function karmaOf(feedId, ctx) {
+    if (!ctx.karma.has(feedId)) ctx.karma.set(feedId, await getInhabitantKarma(feedId));
+    return ctx.karma.get(feedId);
+  }
+
+  async function wonKarmatocracy(p, term, ctx) {
+    const spanOf = (x) => [new Date(x.createdAt).getTime() || 0, new Date(x.deadline).getTime()];
+    const [ps, pe] = spanOf(p);
+    const rivals = [];
+    for (const q of ctx.proposals.items) {
+      if (q.termId !== p.termId || String(q.method || '').toUpperCase() !== 'KARMATOCRACY') continue;
+      const [qs, qe] = spanOf(q);
+      if (!Number.isFinite(qe) || qe > Date.now() || qs > pe || ps > qe) continue;
+      if (!(await mayPropose(term, q.proposer, ctx))) continue;
+      rivals.push({ id: q.id, proposer: q.proposer, karma: await karmaOf(q.proposer, ctx), createdAtMs: qs });
+    }
+    rivals.sort((a, b) => (b.karma - a.karma) || (a.createdAtMs - b.createdAtMs) || String(a.proposer).localeCompare(String(b.proposer)) || String(a.id).localeCompare(String(b.id)));
+    return rivals.length > 0 && rivals[0].id === p.id;
+  }
+
+  async function deriveOutcome(p, ctx, kind = 'proposal') {
+    if (!p || !p.proposer) return null;
+    const term = termForId(p.termId, ctx.terms);
+    if (!term) return null;
+    const method = String(p.method || '').toUpperCase();
+    if (method !== String(term.method || '').toUpperCase()) return null;
+    if (!(await mayPropose(term, p.proposer, ctx))) return null;
+    const status = String(p.status || 'OPEN').toUpperCase();
+    if (status === 'REJECTED' || status === 'DISCARDED') return status;
+    if (VOTE_METHODS.has(method)) {
+      if (!p.voteId || ctx.voteOwner.get(p.voteId) !== p.id) return null;
+      const v = await voteResult(p.voteId, p.proposer);
+      if (!v) return null;
+      if (!v.closed) return 'OPEN';
+      return (await passesThreshold(method, v.total, v.YES)) ? 'APPROVED' : 'REJECTED';
+    }
+    const due = new Date(p.deadline).getTime();
+    const expired = Number.isFinite(due) && due <= Date.now();
+    if (method === 'DICTATORSHIP') return (expired || status === 'APPROVED' || status === 'ENACTED') ? 'APPROVED' : 'OPEN';
+    if (method === 'KARMATOCRACY') {
+      if (!expired) return 'OPEN';
+      if (kind === 'revocation') return 'APPROVED';
+      return (await wonKarmatocracy(p, term, ctx)) ? 'APPROVED' : 'REJECTED';
+    }
+    return null;
+  }
+
   async function listTermsBase(filter = 'all') {
-    const all = await listByType('parliamentTerm');
-    const collapsed = collapseOverlappingTerms(all);
+    const collapsed = await listValidTerms();
     const latestStart = collapsed.reduce((mx, t) => Math.max(mx, new Date(t.startAt).getTime() || 0), 0);
     let arr = collapsed.map(t => {
       const superseded = (new Date(t.startAt).getTime() || 0) < latestStart;
@@ -485,8 +693,7 @@ if (c.type === type) {
   }
 
   async function getLatestTermAny() {
-    const terms = await listByType('parliamentTerm');
-    const collapsed = collapseOverlappingTerms(terms);
+    const collapsed = await listValidTerms();
     return collapsed[0] || null;
   }
 
@@ -583,53 +790,28 @@ if (c.type === type) {
       }
       return x.termId === termId || (termStart && x.termId === termStart);
     };
-    const proposals = await listByType('parliamentProposal');
-    const mine = termId ? proposals.filter(matchesTerm) : [];
-    const proposed = mine.length;
+    const ctx = await outcomeContext();
+    const mine = termId ? ctx.proposals.items.filter(matchesTerm) : [];
+    let proposed = 0;
     let approved = 0;
     let declined = 0;
     let discarded = 0;
     for (const p of mine) {
-      const baseStatus = String(p.status || 'OPEN').toUpperCase();
-      let finalStatus = baseStatus;
-      let isDiscarded = false;
-      if (p.voteId && services.votes?.getVoteById) {
-        try {
-          const v = await services.votes.getVoteById(p.voteId);
-          const votesMap = v.votes || {};
-          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-          const total = Number(v.totalVotes ?? v.total ?? sum);
-          const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-          const dl = v.deadline || v.endAt || v.expiresAt || null;
-          const closed = v.status === 'CLOSED' || (dl && moment(dl).isBefore(moment()));
-          const reached = await passesThreshold(p.method, total, yes);
-          if (!closed) {
-            if (dl && moment(dl).isBefore(moment()) && !reached) isDiscarded = true;
-            else finalStatus = 'OPEN';
-          } else {
-            finalStatus = reached ? 'APPROVED' : 'REJECTED';
-          }
-        } catch {}
-      } else {
-        if (baseStatus === 'OPEN' && p.deadline && moment(p.deadline).isBefore(moment())) isDiscarded = true;
-      }
-      if (isDiscarded) {
-        discarded++;
-        continue;
-      }
-      if (finalStatus === 'ENACTED' || finalStatus === 'APPROVED') {
-        approved++;
-        continue;
-      }
-      if (finalStatus === 'REJECTED') {
-        declined++;
-        continue;
+      const outcome = await deriveOutcome(p, ctx);
+      if (!outcome) continue;
+      proposed++;
+      if (outcome === 'APPROVED') approved++;
+      else if (outcome === 'REJECTED') declined++;
+      else if (outcome === 'DISCARDED') discarded++;
+    }
+    let revocated = 0;
+    if (termId) {
+      for (const r of ctx.revocations.items) {
+        if (!matchesTerm(r)) continue;
+        const rTerm = termForId(r.termId, ctx.terms);
+        if (rTerm && !rTerm.virtual && isExpiredTerm(rTerm) && (await deriveOutcome(r, ctx, 'revocation')) === 'APPROVED') revocated++;
       }
     }
-    const revs = await listByType('parliamentRevocation');
-    const revocated = termId
-      ? revs.filter(r => r.status === 'ENACTED' && matchesTerm(r)).length
-      : 0;
     return { proposed, approved, declined, discarded, revocated };
   }
 
@@ -683,84 +865,6 @@ if (c.type === type) {
     return nProp + nLaw;
   }
 
-  async function closeExpiredKarmatocracy(term) {
-    const termId = term.id || term.startAt;
-    const all = await listByType('parliamentProposal');
-    const pending = all.filter(p =>
-      p.termId === termId &&
-      String(p.method).toUpperCase() === 'KARMATOCRACY' &&
-      (p.status || 'OPEN') !== 'ENACTED' &&
-      p.deadline && moment().isAfter(parseISO(p.deadline))
-    );
-    if (!pending.length) return;
-    const withKarma = await Promise.all(pending.map(async p => ({
-      ...p,
-      karma: await getInhabitantKarma(p.proposer),
-      createdAtMs: new Date(p.createdAt).getTime() || 0
-    })));
-    withKarma.sort((a, b) => {
-      if (b.karma !== a.karma) return b.karma - a.karma;
-      if (a.createdAtMs !== b.createdAtMs) return a.createdAtMs - b.createdAtMs;
-      return String(a.proposer).localeCompare(String(b.proposer));
-    });
-    const winner = withKarma[0];
-    const losers = withKarma.slice(1);
-    const approve = { ...stripId(winner), replaces: winner.id, status: 'APPROVED', updatedAt: nowISO() };
-    await publishMsg(approve);
-    for (const lo of losers) {
-      const rej = { ...stripId(lo), replaces: lo.id, status: 'REJECTED', updatedAt: nowISO() };
-      await publishMsg(rej);
-    }
-  }
-
-  async function closeExpiredDictatorship(term) {
-    const termId = term.id || term.startAt;
-    const all = await listByType('parliamentProposal');
-    const pending = all.filter(p =>
-      p.termId === termId &&
-      String(p.method).toUpperCase() === 'DICTATORSHIP' &&
-      (p.status || 'OPEN') !== 'ENACTED' &&
-      p.deadline && moment().isAfter(parseISO(p.deadline))
-    );
-    if (!pending.length) return;
-    for (const p of pending) {
-      const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
-      await publishMsg(updated);
-    }
-  }
-
-  async function closeExpiredRevocationKarmatocracy(term) {
-    const termId = term.id || term.startAt;
-    const all = await listByType('parliamentRevocation');
-    const pending = all.filter(p =>
-      p.termId === termId &&
-      String(p.method).toUpperCase() === 'KARMATOCRACY' &&
-      (p.status || 'OPEN') !== 'ENACTED' &&
-      p.deadline && moment().isAfter(parseISO(p.deadline))
-    );
-    if (!pending.length) return;
-    for (const p of pending) {
-      const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
-      await publishMsg(updated);
-    }
-  }
-
-  async function closeExpiredRevocationDictatorship(term) {
-    const termId = term.id || term.startAt;
-    const all = await listByType('parliamentRevocation');
-    const pending = all.filter(p =>
-      p.termId === termId &&
-      String(p.method).toUpperCase() === 'DICTATORSHIP' &&
-      (p.status || 'OPEN') !== 'ENACTED' &&
-      p.deadline && moment().isAfter(parseISO(p.deadline))
-    );
-    if (!pending.length) return;
-    for (const p of pending) {
-      const updated = { ...stripId(p), replaces: p.id, status: 'APPROVED', updatedAt: nowISO() };
-      await publishMsg(updated);
-    }
-  }
-
   async function createRevocation({ lawId, title, reasons }) {
     const term = await getCurrentTermBase();
     if (!term) throw new Error('No active government');
@@ -768,7 +872,7 @@ if (c.type === type) {
     if (!allowed) throw new Error('You are not in the goverment, yet.');
     const lawIdStr = String(lawId || '').trim();
     if (!lawIdStr) throw new Error('Law required');
-    const laws = await listByType('parliamentLaw');
+    const laws = await listLaws();
     const law = laws.find(l => l.id === lawIdStr);
     if (!law) throw new Error('Law not found');
     const method = String(term.method || 'DEMOCRACY').toUpperCase();
@@ -809,34 +913,26 @@ if (c.type === type) {
     return await publishMsg(rev);
   }
 
-  async function closeRevocation(revId) {
-    const ssbClient = await openSsb();
-    const msg = await new Promise((resolve, reject) =>
-      ssbClient.get(revId, (e, m) => (e || !m) ? reject(new Error('Revocation not found')) : resolve(m))
-    );
-    if (msg.content?.type !== 'parliamentRevocation') throw new Error('Revocation not found');
-    const p = msg.content;
+  async function settleOwn(kind, id, manual) {
+    const ctx = await outcomeContext();
+    const index = kind === 'revocation' ? ctx.revocations : ctx.proposals;
+    const tipId = index.resolve(String(id || ''));
+    const p = tipId ? index.items.find(x => x.id === tipId) : null;
+    if (!p) throw new Error(kind === 'revocation' ? 'Revocation not found' : 'Proposal not found');
     const currentStatus = String(p.status || 'OPEN').toUpperCase();
     if (currentStatus === 'ENACTED' || currentStatus === 'REJECTED' || currentStatus === 'DISCARDED') return p;
-    const method = String(p.method || '').toUpperCase();
-    if (method === 'DICTATORSHIP') {
-      if (currentStatus === 'APPROVED') return p;
-      const updated = { ...p, replaces: revId, status: 'APPROVED', updatedAt: nowISO() };
-      await publishMsg(updated);
-      return updated;
-    }
-    if (method === 'KARMATOCRACY') return p;
-    const v = await services.votes.getVoteById(p.voteId);
-    const votesMap = v.votes || {};
-    const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-    const total = Number(v.totalVotes ?? v.total ?? sum);
-    const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-    const ok = await passesThreshold(method, total, yes);
-    const desiredStatus = ok ? 'APPROVED' : 'REJECTED';
-    if (currentStatus === desiredStatus) return p;
-    const updated = { ...p, replaces: revId, status: desiredStatus, updatedAt: nowISO() };
+    if (String(p.proposer) !== String(userId)) return p;
+    let outcome = await deriveOutcome(p, ctx, kind);
+    if (manual && outcome === 'OPEN' && String(p.method || '').toUpperCase() === 'DICTATORSHIP') outcome = 'APPROVED';
+    if (outcome !== 'APPROVED' && outcome !== 'REJECTED') return p;
+    if (currentStatus === outcome) return p;
+    const updated = { ...stripId(p), replaces: p.id, status: outcome, updatedAt: nowISO() };
     await publishMsg(updated);
     return updated;
+  }
+
+  async function closeRevocation(revId) {
+    return await settleOwn('revocation', revId, true);
   }
 
   async function proposeCandidature({ candidateId, method }) {
@@ -913,33 +1009,7 @@ if (c.type === type) {
   }
 
   async function closeProposal(proposalId) {
-    const ssbClient = await openSsb();
-    const msg = await new Promise((resolve, reject) =>
-      ssbClient.get(proposalId, (e, m) => (e || !m) ? reject(new Error('Proposal not found')) : resolve(m))
-    );
-    if (msg.content?.type !== 'parliamentProposal') throw new Error('Proposal not found');
-    const p = msg.content;
-    const currentStatus = String(p.status || 'OPEN').toUpperCase();
-    if (currentStatus === 'ENACTED' || currentStatus === 'REJECTED' || currentStatus === 'DISCARDED') return p;
-    const method = String(p.method || '').toUpperCase();
-    if (method === 'DICTATORSHIP') {
-      if (currentStatus === 'APPROVED') return p;
-      const updated = { ...p, replaces: proposalId, status: 'APPROVED', updatedAt: nowISO() };
-      await publishMsg(updated);
-      return updated;
-    }
-    if (method === 'KARMATOCRACY') return p;
-    const v = await services.votes.getVoteById(p.voteId);
-    const votesMap = v.votes || {};
-    const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-    const total = Number(v.totalVotes ?? v.total ?? sum);
-    const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-    const ok = await passesThreshold(method, total, yes);
-    const desiredStatus = ok ? 'APPROVED' : 'REJECTED';
-    if (currentStatus === desiredStatus) return p;
-    const updated = { ...p, replaces: proposalId, status: desiredStatus, updatedAt: nowISO() };
-    await publishMsg(updated);
-    return updated;
+    return await settleOwn('proposal', proposalId, true);
   }
 
   async function sweepProposals() {
@@ -947,48 +1017,15 @@ if (c.type === type) {
     sweepInFlight = (async () => {
       const term = await getCurrentTermBase();
       if (!term) return;
-      await closeExpiredKarmatocracy(term);
-      await closeExpiredDictatorship(term);
-
-      const allProps = await listByType('parliamentProposal');
-      const voteProps = allProps.filter(p => {
-        const m = String(p.method || '').toUpperCase();
-        return (m === 'DEMOCRACY' || m === 'ANARCHY' || m === 'MAJORITY' || m === 'MINORITY') && p.voteId;
-      });
-
-      for (const p of voteProps) {
-        try {
-          const v = await services.votes.getVoteById(p.voteId);
-          const votesMap = v.votes || {};
-          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-          const total = Number(v.totalVotes ?? v.total ?? sum);
-          const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-          const deadline = v.deadline || v.endAt || v.expiresAt || null;
-          const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-          if (closed) { try { await closeProposal(p.id); } catch {} ; continue; }
-        } catch {}
+      const termId = term.id || term.startAt;
+      const ctx = await outcomeContext();
+      for (const p of ctx.proposals.items) {
+        if (p.termId !== termId || String(p.proposer) !== String(userId)) continue;
+        try { await settleOwn('proposal', p.id, false); } catch {}
       }
-
-      await closeExpiredRevocationKarmatocracy(term);
-      await closeExpiredRevocationDictatorship(term);
-
-      const revs = await listByType('parliamentRevocation');
-      const voteRevs = revs.filter(p => {
-        const m = String(p.method || '').toUpperCase();
-        return (m === 'DEMOCRACY' || m === 'ANARCHY' || m === 'MAJORITY' || m === 'MINORITY') && p.voteId;
-      });
-
-      for (const p of voteRevs) {
-        try {
-          const v = await services.votes.getVoteById(p.voteId);
-          const votesMap = v.votes || {};
-          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-          const total = Number(v.totalVotes ?? v.total ?? sum);
-          const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-          const deadline = v.deadline || v.endAt || v.expiresAt || null;
-          const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-          if (closed) { try { await closeRevocation(p.id); } catch {} ; continue; }
-        } catch {}
+      for (const r of ctx.revocations.items) {
+        if (r.termId !== termId || String(r.proposer) !== String(userId)) continue;
+        try { await settleOwn('revocation', r.id, false); } catch {}
       }
     })().finally(() => { sweepInFlight = null; });
 
@@ -1105,207 +1142,104 @@ if (c.type === type) {
     return rows;
   }
 
-  async function listProposalsCurrent() {
-    const all = await listByType('parliamentProposal');
-    const rows = all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  async function listCurrentOf(kind) {
+    const ctx = await outcomeContext();
+    const index = kind === 'revocation' ? ctx.revocations : ctx.proposals;
+    const items = kind === 'revocation' ? index.items : index.items.map(withCampaignRef);
+    const rows = items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const needed = await proposalQuorum();
     const out = [];
     for (const p of rows) {
-      let deadline = p.deadline || null;
-      let yes = 0;
-      let total = 0;
-      const baseStatus = String(p.status || 'OPEN').toUpperCase();
-      let derivedStatus = baseStatus;
-      if (p.voteId && services.votes?.getVoteById) {
-        try {
-          const v = await services.votes.getVoteById(p.voteId);
-          const votesMap = v.votes || {};
-          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-          total = Number(v.totalVotes ?? v.total ?? sum);
-          yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-          deadline = deadline || v.deadline || v.endAt || v.expiresAt || null;
-          const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-          const reached = await passesThreshold(p.method, total, yes);
-          if (closed) derivedStatus = reached ? 'APPROVED' : 'REJECTED';
-          else derivedStatus = 'OPEN';
-        } catch {
-          derivedStatus = baseStatus;
-        }
-      } else {
-        if (baseStatus === 'OPEN' && p.deadline && moment(p.deadline).isBefore(moment())) derivedStatus = 'DISCARDED';
-      }
-      if (derivedStatus === 'ENACTED' || derivedStatus === 'REJECTED' || derivedStatus === 'DISCARDED') continue;
-      const needed = await proposalQuorum();
+      if (String(p.status || 'OPEN').toUpperCase() === 'ENACTED') continue;
+      const derivedStatus = await deriveOutcome(p, ctx, kind);
+      if (!derivedStatus || derivedStatus === 'REJECTED' || derivedStatus === 'DISCARDED') continue;
+      const v = p.voteId ? await voteResult(p.voteId, p.proposer) : null;
+      const yes = v ? v.YES : 0;
+      const total = v ? v.total : 0;
+      const deadline = p.deadline || (v && v.deadline) || null;
       const onTrack = await passesThreshold(p.method, total, yes);
       out.push({ ...p, deadline, yes, total, needed, onTrack, derivedStatus });
     }
     return out;
+  }
+
+  async function listFutureOf(kind) {
+    const term = await getCurrentTermBase();
+    if (!term) return [];
+    const termId = term.id || term.startAt;
+    const ctx = await outcomeContext();
+    const index = kind === 'revocation' ? ctx.revocations : ctx.proposals;
+    const items = kind === 'revocation' ? index.items : index.items.map(withCampaignRef);
+    const rows = items
+      .filter(p => p.termId === termId && String(p.status || 'OPEN').toUpperCase() !== 'ENACTED')
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const needed = await proposalQuorum();
+    const out = [];
+    for (const p of rows) {
+      if ((await deriveOutcome(p, ctx, kind)) !== 'APPROVED') continue;
+      const v = p.voteId ? await voteResult(p.voteId, p.proposer) : null;
+      const deadline = p.deadline || (v && v.deadline) || null;
+      out.push({ ...p, deadline, yes: v ? v.YES : 0, total: v ? v.total : 0, needed });
+    }
+    return out;
+  }
+
+  async function listProposalsCurrent() {
+    return await listCurrentOf('proposal');
   }
 
   async function deriveProposalStatus(method, voteId) {
     const m = String(method || '').toUpperCase();
-    if (!voteId || !(m === 'DEMOCRACY' || m === 'ANARCHY' || m === 'MAJORITY' || m === 'MINORITY')) return null;
+    if (!voteId || !VOTE_METHODS.has(m)) return null;
     try {
-      const v = await services.votes.getVoteById(voteId);
-      const votesMap = v.votes || {};
-      const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-      const total = Number(v.totalVotes ?? v.total ?? sum);
-      const yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-      const deadline = v.deadline || v.endAt || v.expiresAt || null;
-      const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-      if (!closed) return 'OPEN';
-      return (await passesThreshold(m, total, yes)) ? 'APPROVED' : 'REJECTED';
+      const v = await voteResult(voteId);
+      if (!v) return null;
+      if (!v.closed) return 'OPEN';
+      return (await passesThreshold(m, v.total, v.YES)) ? 'APPROVED' : 'REJECTED';
     } catch { return null; }
   }
 
   async function listFutureLawsCurrent() {
-    const term = await getCurrentTermBase();
-    if (!term) return [];
-    const termId = term.id || term.startAt;
-    const all = await listByType('parliamentProposal');
-    const rows = all
-      .filter(p => p.termId === termId)
-      .filter(p => p.status === 'APPROVED')
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const out = [];
-    for (const p of rows) {
-      let yes = 0;
-      let total = 0;
-      let deadline = p.deadline || null;
-      let voteClosed = true;
-      if (p.voteId && services.votes?.getVoteById) {
-        try {
-          const v = await services.votes.getVoteById(p.voteId);
-          const votesMap = v.votes || {};
-          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-          total = Number(v.totalVotes ?? v.total ?? sum);
-          yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-          deadline = deadline || v.deadline || v.endAt || v.expiresAt || null;
-          voteClosed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-          if (!voteClosed) continue;
-          if (VOTE_METHODS.has(String(p.method || '').toUpperCase()) && !(await passesThreshold(p.method, total, yes))) continue;
-        } catch {}
-      }
-      const needed = await proposalQuorum();
-      out.push({ ...p, deadline, yes, total, needed });
-    }
-    return out;
+    return await listFutureOf('proposal');
   }
 
   async function listRevocationsCurrent() {
-    const all = await listByType('parliamentRevocation');
-    const rows = all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const out = [];
-    for (const p of rows) {
-      let deadline = p.deadline || null;
-      let yes = 0;
-      let total = 0;
-      const baseStatus = String(p.status || 'OPEN').toUpperCase();
-      let derivedStatus = baseStatus;
-      if (p.voteId && services.votes?.getVoteById) {
-        try {
-          const v = await services.votes.getVoteById(p.voteId);
-          const votesMap = v.votes || {};
-          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-          total = Number(v.totalVotes ?? v.total ?? sum);
-          yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-          deadline = deadline || v.deadline || v.endAt || v.expiresAt || null;
-          const closed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-          const reached = await passesThreshold(p.method, total, yes);
-          if (closed) derivedStatus = reached ? 'APPROVED' : 'REJECTED';
-          else derivedStatus = 'OPEN';
-        } catch {
-          derivedStatus = baseStatus;
-        }
-      } else {
-        if (baseStatus === 'OPEN' && p.deadline && moment(p.deadline).isBefore(moment())) derivedStatus = 'DISCARDED';
-      }
-      if (derivedStatus === 'ENACTED' || derivedStatus === 'REJECTED' || derivedStatus === 'DISCARDED') continue;
-      const needed = await proposalQuorum();
-      const onTrack = await passesThreshold(p.method, total, yes);
-      out.push({ ...p, deadline, yes, total, needed, onTrack, derivedStatus });
-    }
-    return out;
+    return await listCurrentOf('revocation');
   }
 
   async function listFutureRevocationsCurrent() {
-    const term = await getCurrentTermBase();
-    if (!term) return [];
-    const termId = term.id || term.startAt;
-    const all = await listByType('parliamentRevocation');
-    const rows = all
-      .filter(p => p.termId === termId)
-      .filter(p => p.status === 'APPROVED')
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const out = [];
-    for (const p of rows) {
-      let yes = 0;
-      let total = 0;
-      let deadline = p.deadline || null;
-      let voteClosed = true;
-      if (p.voteId && services.votes?.getVoteById) {
-        try {
-          const v = await services.votes.getVoteById(p.voteId);
-          const votesMap = v.votes || {};
-          const sum = Object.values(votesMap).reduce((s, n) => s + Number(n || 0), 0);
-          total = Number(v.totalVotes ?? v.total ?? sum);
-          yes = Number(votesMap.YES ?? votesMap.Yes ?? votesMap.yes ?? 0);
-          deadline = deadline || v.deadline || v.endAt || v.expiresAt || null;
-          voteClosed = v.status === 'CLOSED' || (deadline && moment(deadline).isBefore(moment()));
-          if (!voteClosed) continue;
-          if (VOTE_METHODS.has(String(p.method || '').toUpperCase()) && !(await passesThreshold(p.method, total, yes))) continue;
-        } catch {}
-      }
-      const needed = await proposalQuorum();
-      out.push({ ...p, deadline, yes, total, needed });
-    }
-    return out;
+    return await listFutureOf('revocation');
   }
 
   async function countRevocationsEnacted() {
-    const all = await listByType('parliamentRevocation');
-    return all.filter(r => r.status === 'ENACTED').length;
+    const ctx = await outcomeContext();
+    let n = 0;
+    for (const r of ctx.revocations.items) {
+      const term = termForId(r.termId, ctx.terms);
+      if (term && !term.virtual && isExpiredTerm(term) && (await deriveOutcome(r, ctx, 'revocation')) === 'APPROVED') n++;
+    }
+    return n;
   }
 
-  async function voteSnapshot(voteId) {
-    if (!voteId || !services.votes?.getVoteById) return null;
-    try {
-      const v = await services.votes.getVoteById(voteId);
-      const vm = v?.votes || {};
-      const sum = Object.values(vm).reduce((s, n) => s + Number(n || 0), 0);
-      const total = Number(v.totalVotes ?? v.total ?? sum);
-      return {
-        YES: Number(vm.YES ?? vm.Yes ?? vm.yes ?? 0),
-        NO: Number(vm.NO ?? vm.No ?? vm.no ?? 0),
-        ABSTENTION: Number(vm.ABSTENTION ?? vm.Abstention ?? vm.abstention ?? 0),
-        total
-      };
-    } catch {
-      return null;
-    }
-  }
+  const votesOf = (v) => (v ? { YES: v.YES, NO: v.NO, ABSTENTION: v.ABSTENTION, total: v.total } : null);
 
   async function enactApprovedChanges(expiringTerm) {
     if (!expiringTerm) return;
     const termId = expiringTerm.id || expiringTerm.startAt;
+    const ctx = await outcomeContext();
 
-    const proposals = await listByType('parliamentProposal');
-    const revocations = await listByType('parliamentRevocation');
-
-    const approvedProps = proposals.filter(p => p.termId === termId && p.status === 'APPROVED');
-    for (const p of approvedProps) {
-      const snap = await voteSnapshot(p.voteId);
-      const votesFinal =
-        (p.votes && Object.keys(p.votes).length ? p.votes : null) ||
-        snap ||
-        { YES: 1, NO: 0, ABSTENTION: 0, total: 1 };
-
-      const totalFinal = Number(votesFinal.total ?? Object.entries(votesFinal).reduce((s, [k, n]) => s + (k === 'total' ? 0 : Number(n || 0)), 0));
-      const yesFinal = Number(votesFinal.YES ?? votesFinal.Yes ?? votesFinal.yes ?? 0);
-      if (VOTE_METHODS.has(String(p.method || '').toUpperCase()) && !(await passesThreshold(p.method, totalFinal, yesFinal))) {
+    for (const p of ctx.proposals.items.map(withCampaignRef)) {
+      if (p.termId !== termId || String(p.proposer) !== String(userId)) continue;
+      const status = String(p.status || 'OPEN').toUpperCase();
+      if (status === 'ENACTED' || status === 'REJECTED' || status === 'DISCARDED') continue;
+      const outcome = await deriveOutcome(p, ctx);
+      if (outcome === 'REJECTED') {
         const rej = { ...stripId(p), replaces: p.id, status: 'REJECTED', updatedAt: nowISO() };
         await publishMsg(rej);
         continue;
       }
+      if (outcome !== 'APPROVED') continue;
+      const snap = p.voteId ? await voteResult(p.voteId, p.proposer) : null;
 
       const law = {
         type: 'parliamentLaw',
@@ -1315,7 +1249,7 @@ if (c.type === type) {
         proposer: p.proposer,
         termId: p.termId,
         voteId: p.voteId || null,
-        votes: votesFinal,
+        votes: votesOf(snap) || { YES: 1, NO: 0, ABSTENTION: 0, total: 1 },
         proposedAt: p.createdAt,
         proposalId: p.id,
         enactedAt: nowISO()
@@ -1326,17 +1260,24 @@ if (c.type === type) {
       await publishMsg(updated);
     }
 
-    const approvedRevs = revocations.filter(r => r.termId === termId && r.status === 'APPROVED');
-    for (const r of approvedRevs) {
-      const tomb = { type: 'tombstone', target: r.lawId, deletedAt: nowISO(), author: userId };
-      await publishMsg(tomb);
+    for (const r of ctx.revocations.items) {
+      if (r.termId !== termId || String(r.proposer) !== String(userId)) continue;
+      const status = String(r.status || 'OPEN').toUpperCase();
+      if (status === 'ENACTED' || status === 'REJECTED' || status === 'DISCARDED') continue;
+      if ((await deriveOutcome(r, ctx, 'revocation')) !== 'APPROVED') continue;
+      const lawMsg = (ctx.msgs || []).find(m => m.key === r.lawId);
+      const lawValue = lawMsg && lawMsg.value;
+      if (lawValue && lawValue.author === userId && lawValue.content && lawValue.content.type === 'parliamentLaw') {
+        const tomb = { type: 'tombstone', target: r.lawId, deletedAt: nowISO(), author: userId };
+        await publishMsg(tomb);
+      }
 
-      const snap = await voteSnapshot(r.voteId);
+      const snap = r.voteId ? await voteResult(r.voteId, r.proposer) : null;
       const updated = {
         ...stripId(r),
         replaces: r.id,
         status: 'ENACTED',
-        votes: (r.votes && Object.keys(r.votes).length ? r.votes : null) || snap || undefined,
+        votes: votesOf(snap) || undefined,
         updatedAt: nowISO()
       };
       await publishMsg(updated);
@@ -1352,7 +1293,10 @@ if (c.type === type) {
       try { await enactApprovedChanges(latestAny); } catch (e) { console.error('enactApprovedChanges failed:', e); }
     }
 
-    const open = await listCandidaturesOpen();
+    const open = (await listCandidaturesOpen()).filter(c =>
+      METHODS.includes(String(c.method || '').toUpperCase()) &&
+      ((c.targetType === 'inhabitant' && FEED_ID_RE.test(String(c.targetId || ''))) || (c.targetType === 'tribe' && !!c.targetId))
+    );
     let chosen = null;
     let totalVotes = 0;
     let winnerVotes = 0;
@@ -1374,6 +1318,7 @@ if (c.type === type) {
     const startAt = window.startAt;
     const endAt = window.endAt;
     const population = await inhabitantsCount();
+    if (chosen && supportFor(await readLog())({ ...window, powerType: chosen.targetType, powerId: chosen.targetId, method: chosen.method }).votes < PROPOSAL_QUORUM) chosen = null;
 
     if (!chosen) {
       await archiveAllCandidatures();
@@ -1466,7 +1411,36 @@ if (c.type === type) {
   }
 
   async function listLaws() {
-    const items = await listByType('parliamentLaw');
+    const ctx = await outcomeContext();
+    const proposalsById = new Map(ctx.proposals.items.map(p => [p.id, p]));
+    const laws = chainIndex(ctx.msgs, 'parliamentLaw');
+    const chosen = new Map();
+    const groupOfLaw = new Map();
+    for (const l of laws.items) {
+      const pid = ctx.proposals.resolve(String(l.proposalId || ''));
+      const p = pid ? proposalsById.get(pid) : null;
+      if (!p || String(p.proposer) !== String(l.proposer) || p.termId !== l.termId) continue;
+      const voted = withCampaignRef(p);
+      if (l.question !== voted.title || String(l.description || '') !== String(voted.description || '') || String(l.method || '') !== String(voted.method || '')) continue;
+      const term = termForId(p.termId, ctx.terms);
+      if (!term || term.virtual || !isExpiredTerm(term)) continue;
+      if ((await deriveOutcome(p, ctx)) !== 'APPROVED') continue;
+      groupOfLaw.set(l.id, pid);
+      const own = laws.authorOf(l.id) === p.proposer;
+      const prev = chosen.get(pid);
+      const better = !prev
+        || (own && !prev.own)
+        || (own === prev.own && (new Date(l.enactedAt).getTime() || 0) < (new Date(prev.law.enactedAt).getTime() || 0));
+      if (better) chosen.set(pid, { law: l, own });
+    }
+    for (const r of ctx.revocations.items) {
+      const pid = groupOfLaw.get(String(r.lawId || ''));
+      if (!pid || !chosen.has(pid)) continue;
+      const term = termForId(r.termId, ctx.terms);
+      if (!term || term.virtual || !isExpiredTerm(term)) continue;
+      if ((await deriveOutcome(r, ctx, 'revocation')) === 'APPROVED') chosen.delete(pid);
+    }
+    const items = [...chosen.values()].map(x => x.law);
     return items.sort((a, b) => new Date(b.enactedAt) - new Date(a.enactedAt));
   }
 
@@ -1501,6 +1475,18 @@ if (c.type === type) {
     return readTyped(client, TRIBE_PARLIAMENT_TYPES, { limit: logLimit });
   };
 
+  const tribeMembersOf = async (ids) => {
+    const out = new Set();
+    for (const id of ids) {
+      try {
+        const t = services.tribes && services.tribes.getTribeById ? await services.tribes.getTribeById(id) : null;
+        if (t && t.author) out.add(t.author);
+        for (const m of (t && Array.isArray(t.members) ? t.members : [])) out.add(m);
+      } catch (_) {}
+    }
+    return out;
+  };
+
   const tribeListByType = async (type, tribeId) => {
     let chainIds;
     try {
@@ -1508,24 +1494,91 @@ if (c.type === type) {
         ? await services.tribes.getChainIds(tribeId)
         : [tribeId];
     } catch (_) { chainIds = [tribeId]; }
-    const tribeIdSet = new Set(Array.isArray(chainIds) && chainIds.length ? chainIds : [tribeId]);
+    const ids = Array.isArray(chainIds) && chainIds.length ? chainIds : [tribeId];
+    const tribeIdSet = new Set(ids);
+    const members = await tribeMembersOf(ids);
     const msgs = await tribeReadLog();
     const tomb = buildValidatedTombstoneSet(msgs);
-    const replaced = new Set();
-    const items = new Map();
+    const roots = new Map();
+    const rewrites = [];
     for (const m of msgs) {
       const c = m.value?.content; if (!c) continue;
-      if (c.type === 'tombstone') continue;
       if (c.type !== type) continue;
       if (!tribeIdSet.has(c.tribeId)) continue;
-      if (c.replaces) replaced.add(c.replaces);
-      items.set(m.key, { ...c, id: m.key, _ts: m.value?.timestamp || 0 });
+      const author = m.value?.author;
+      if (!members.has(author)) continue;
+      const item = { ...c, id: m.key, author, _ts: m.value?.timestamp || 0 };
+      if (c.replaces) { rewrites.push(item); continue; }
+      if (type === 'tribeParliamentCandidature' && c.proposer !== author) continue;
+      if (type === 'tribeParliamentTerm') {
+        if (c.createdBy && c.createdBy !== author) continue;
+        const method = String(c.method || '').toUpperCase();
+        if (!METHODS.includes(method) && method !== 'ANARCHY') continue;
+        if (c.leaderId && !members.has(c.leaderId)) continue;
+      }
+      roots.set(m.key, item);
     }
-    return [...items.values()].filter(it => !tomb.has(it.id) && !replaced.has(it.id));
+    if (type === 'tribeParliamentCandidature') {
+      const byId = new Map(rewrites.map(r => [r.id, r]));
+      const rootOfRewrite = (id) => { let cur = id, g = 0; while (byId.has(cur) && g++ < 1000) cur = byId.get(cur).replaces; return cur; };
+      const ballotsOf = new Map();
+      for (const r of rewrites) {
+        const root = roots.get(rootOfRewrite(r.id));
+        if (!root || r.author === root.candidateId) continue;
+        if (!ballotsOf.has(root.id)) ballotsOf.set(root.id, []);
+        ballotsOf.get(root.id).push({ author: r.author, ts: r._ts });
+      }
+      return [...roots.values()].map(it => ({ ...it, _ballots: ballotsOf.get(it.id) || [], _closed: tomb.has(it.id) }));
+    }
+    const replacedBySameAuthor = new Map();
+    for (const r of rewrites) { const orig = roots.get(r.replaces); if (orig && orig.author === r.author) replacedBySameAuthor.set(r.replaces, r); }
+    const out = [];
+    for (const it of roots.values()) {
+      let cur = it, g = 0;
+      while (replacedBySameAuthor.has(cur.id) && g++ < 1000) cur = replacedBySameAuthor.get(cur.id);
+      if (!tomb.has(cur.id) && !tomb.has(it.id)) out.push(cur);
+    }
+    return out;
+  };
+
+  const tallyCandidatures = (cands, fromTs, toTs) => {
+    const createdOf = (c) => Date.parse(c.createdAt) || c._ts || 0;
+    const inCycle = cands.filter(c => createdOf(c) >= fromTs && createdOf(c) < toTs);
+    const ballots = [];
+    for (const c of inCycle) for (const b of (c._ballots || [])) if (b.ts >= fromTs && b.ts < toTs) ballots.push({ ...b, root: c.id });
+    ballots.sort((a, b) => a.ts - b.ts);
+    const seen = new Set();
+    const votersOf = new Map();
+    for (const b of ballots) {
+      if (seen.has(b.author)) continue;
+      seen.add(b.author);
+      if (!votersOf.has(b.root)) votersOf.set(b.root, []);
+      votersOf.get(b.root).push(b.author);
+    }
+    return inCycle.map(c => { const { _ballots, _closed, ...rest } = c; const voters = votersOf.get(c.id) || []; return { ...rest, voters, votes: voters.length, ...(_closed ? { _closed } : {}) }; });
+  };
+
+  const tribeValidTerms = async (tribeId) => {
+    const terms = (await tribeListByType('tribeParliamentTerm', tribeId)).slice().sort((a, b) => (Date.parse(a.startAt) || 0) - (Date.parse(b.startAt) || 0));
+    if (!terms.some(t => t.leaderId)) return terms;
+    const cands = await tribeListByType('tribeParliamentCandidature', tribeId);
+    const quorum = await tribeElectionQuorum(tribeId);
+    const out = [];
+    for (const t of terms) {
+      const start = Date.parse(t.startAt) || 0;
+      if (t.leaderId) {
+        const prevStart = out.length ? (Date.parse(out[out.length - 1].startAt) || 0) : 0;
+        const tally = tallyCandidatures(cands, prevStart, start);
+        const backing = tally.filter(c => c.candidateId === t.leaderId).reduce((n, c) => Math.max(n, c.votes), 0);
+        if (backing < quorum) continue;
+      }
+      out.push(t);
+    }
+    return out;
   };
 
   const tribeGetCurrentTerm = async (tribeId) => {
-    const terms = await tribeListByType('tribeParliamentTerm', tribeId);
+    const terms = await tribeValidTerms(tribeId);
     if (terms.length === 0) return null;
     const now = moment();
     const active = terms.find(t => moment(t.startAt).isSameOrBefore(now) && moment(t.endAt).isAfter(now));
@@ -1573,11 +1626,7 @@ if (c.type === type) {
     const latest = await tribeGetCurrentTerm(tribeId);
     if (latest && !isExpiredTerm(latest)) return latest;
     const opens = (await tribeListCandidatures(tribeId))
-      .filter(c => (c.status || 'OPEN') === 'OPEN')
-      .map(c => {
-        const voters = ensureArray(c.voters).filter(v => String(v) !== String(c.candidateId));
-        return { ...c, voters, votes: voters.length };
-      });
+      .filter(c => (c.status || 'OPEN') === 'OPEN');
     let chosen = null, totalVotes = 0, winnerVotes = 0;
     if (opens.length) {
       opens.sort((a, b) => Number(b.votes || 0) - Number(a.votes || 0) || new Date(a.createdAt) - new Date(b.createdAt));
@@ -1622,7 +1671,11 @@ if (c.type === type) {
     return await tribeResolveElection(tribeId);
   }
 
-  const tribeListCandidatures = (tribeId) => tribeListByType('tribeParliamentCandidature', tribeId);
+  const tribeListCandidatures = async (tribeId) => {
+    const cands = await tribeListByType('tribeParliamentCandidature', tribeId);
+    const term = await tribeGetCurrentTerm(tribeId);
+    return tallyCandidatures(cands, term ? (Date.parse(term.startAt) || 0) : 0, Infinity).filter(c => !c._closed);
+  };
   const tribeListRules = (tribeId) => tribeListByType('tribeParliamentRule', tribeId);
 
   const tribePublishCandidature = async ({ tribeId, candidateId, method }) => {
@@ -1746,21 +1799,13 @@ if (c.type === type) {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-function compareTermsForWindow(a, b) {
-  const num = (t, field) => Number(t && t[field]) || 0;
+function compareTermsForWindow(a, b, supportOf = () => 0) {
+  const support = (t) => Number(supportOf(t)) || 0;
   const anarchy = (t) => (String(t && t.method || '').toUpperCase() === 'ANARCHY' ? 1 : 0);
 
-  const populationA = num(a, 'population');
-  const populationB = num(b, 'population');
-  if (populationA !== populationB) return populationB - populationA;
-
-  const turnoutA = num(a, 'totalVotes');
-  const turnoutB = num(b, 'totalVotes');
-  if (turnoutA !== turnoutB) return turnoutB - turnoutA;
-
-  const votesA = num(a, 'winnerVotes');
-  const votesB = num(b, 'winnerVotes');
-  if (votesA !== votesB) return votesB - votesA;
+  const supportA = support(a);
+  const supportB = support(b);
+  if (supportA !== supportB) return supportB - supportA;
 
   const anarchyA = anarchy(a);
   const anarchyB = anarchy(b);
@@ -1769,7 +1814,7 @@ function compareTermsForWindow(a, b) {
   return String(a && a.id || '').localeCompare(String(b && b.id || ''));
 }
 
-function collapseOverlappingTerms(terms = []) {
+function collapseOverlappingTerms(terms = [], supportOf) {
   if (!terms.length) return [];
   const sorted = [...terms].sort((a, b) => new Date(a.startAt) - new Date(b.startAt));
   const groups = [];
@@ -1789,7 +1834,7 @@ function collapseOverlappingTerms(terms = []) {
     if (!placed) groups.push({ items: [t], minStart: tStart, maxEnd: tEnd });
   }
   const winners = groups.map(g => {
-    g.items.sort(compareTermsForWindow);
+    g.items.sort((a, b) => compareTermsForWindow(a, b, supportOf));
     return g.items[0];
   });
   return winners.sort((a, b) => new Date(b.startAt) - new Date(a.startAt));

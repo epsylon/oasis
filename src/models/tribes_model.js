@@ -27,13 +27,13 @@ module.exports = ({ cooler, tribeCrypto }) => {
     return true;
   };
 
-  const validMembershipDelta = (prev, next, author) => {
+  const validMembershipDelta = (prev, next, author, selfJoinOk = () => true) => {
     const a = Array.isArray(prev) ? prev : [];
     const b = Array.isArray(next) ? next : [];
     const added = b.filter(m => !a.includes(m));
     const removed = a.filter(m => !b.includes(m));
     if (added.length === 0 && removed.length === 0) return true;
-    if (added.length === 1 && removed.length === 0 && added[0] === author) return true;
+    if (added.length === 1 && removed.length === 0 && added[0] === author) return selfJoinOk() === true;
     if (removed.length === 1 && added.length === 0 && removed[0] === author) return true;
     return false;
   };
@@ -60,6 +60,21 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const client = await openSsb();
     return readTyped(client, TRIBE_LOG_TYPES, { limit: tribeLogLimit });
   };
+  const readKeyDistribs = async () => {
+    const client = await openSsb();
+    const ssbKeys = require('../server/node_modules/ssb-keys');
+    const config = require('../server/ssb_config');
+    const msgs = await readTyped(client, TRIBE_LOG_TYPES, { limit: tribeLogLimit, withPrivate: true });
+    const out = [];
+    for (const m of msgs) {
+      const v = m && m.value;
+      if (!v) continue;
+      const c = v.content;
+      const dec = (c && typeof c === 'object') ? (v.private === true && tribeCrypto.isKeyDistribContent(c) ? c : null) : tribeCrypto.tryUnboxKeyDistrib(c, config.keys, ssbKeys);
+      if (dec) out.push({ m, dec });
+    }
+    return { msgs, distribs: out };
+  };
 
   const buildTribeIndex = async () => {
     subscribeInvalidation().catch(() => {});
@@ -69,12 +84,21 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
     const tribeMsgs = new Map();
     const tombstones = new Map();
+    const inviteAuthorByCh = new Map();
+    const inviteAuthorByKey = new Map();
+    const inviteTombstonesByAuthor = new Map();
 
     for (const m of msgs) {
       const c = m.value && m.value.content;
       if (!c) continue;
       const author = m.value.author;
       const ts = m.value.timestamp;
+      if (c.type === 'tribe-invite-msg' && typeof c.ch === 'string') { inviteAuthorByCh.set(c.ch, author); inviteAuthorByKey.set(m.key, author); continue; }
+      if (c.type === 'tribe-invite-tombstone' && typeof c.target === 'string') {
+        if (!inviteTombstonesByAuthor.has(author)) inviteTombstonesByAuthor.set(author, new Set());
+        inviteTombstonesByAuthor.get(author).add(c.target);
+        continue;
+      }
 
       let body = null;
       if (tribeCrypto.isTribeMsg(c)) {
@@ -101,7 +125,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
           mapUrl: c.mapUrl,
           createdAt: c.createdAt,
           updatedAt: c.updatedAt,
-          author: c.author
+          author: c.author,
+          joinedWith: typeof c.joinedWith === 'string' ? c.joinedWith : undefined,
+          removedSeqs: c.removedSeqs && typeof c.removedSeqs === 'object' ? c.removedSeqs : undefined
         };
       } else if (c.type === 'tombstone' && c.target) {
         tombstones.set(c.target, { author, ts });
@@ -122,6 +148,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
           op: body.op || (body.rootId ? 'update' : 'create'),
           content: body,
           author,
+          seq: (m.value && m.value.sequence) || 0,
           _ts: ts
         });
       }
@@ -139,49 +166,58 @@ module.exports = ({ cooler, tribeCrypto }) => {
       }
     }
 
-    let progress = true;
-    while (progress) {
-      progress = false;
-      const candidatesByReplaces = new Map();
-      for (const [k, entry] of tribeMsgs.entries()) {
+    const byReplaces = new Map();
+    for (const [k, entry] of tribeMsgs.entries()) {
+      if (!entry.replaces) continue;
+      if (!byReplaces.has(entry.replaces)) byReplaces.set(entry.replaces, []);
+      byReplaces.get(entry.replaces).push([k, entry]);
+    }
+    const queue = [...tribes.keys()];
+    for (let qi = 0; qi < queue.length; qi++) {
+      const replaces = queue[qi];
+      if (child.has(replaces)) continue;
+      const parentEntry = tribes.get(replaces);
+      const root = rootByTip.get(replaces);
+      const rootEntry = tribes.get(root);
+      const rootAuthor = rootEntry && rootEntry.author;
+      const prevMembers = Array.isArray(parentEntry.content.members) ? parentEntry.content.members : [];
+      const candidates = [];
+      for (const [k, entry] of (byReplaces.get(replaces) || [])) {
         if (tribes.has(k)) continue;
-        const replaces = entry.replaces;
-        if (!replaces) continue;
-        const parentEntry = tribes.get(replaces);
-        if (!parentEntry) continue;
-        if (child.has(replaces)) continue;
-        const root = rootByTip.get(replaces);
-        const rootEntry = tribes.get(root);
-        const rootAuthor = rootEntry && rootEntry.author;
         const isRootAuthor = entry.author === rootAuthor;
-        const prevMembers = Array.isArray(parentEntry.content.members) ? parentEntry.content.members : [];
         if (!isRootAuthor) {
           if (!prevMembers.includes(entry.author) && !(entry.content.members || []).includes(entry.author)) continue;
-          if (!validMembershipDelta(prevMembers, entry.content.members, entry.author)) continue;
+          const mode = String(parentEntry.content.inviteMode || (rootEntry && rootEntry.content.inviteMode) || 'strict');
+          const inviterOk = (inviter) => !!inviter && (inviter === rootAuthor || (mode === 'open' && prevMembers.includes(inviter)));
+          const selfJoinOk = () => {
+            const proof = entry.content.joinedWith;
+            if (proof && inviterOk(inviteAuthorByCh.get(proof))) return true;
+            const mine = inviteTombstonesByAuthor.get(entry.author);
+            if (mine) for (const target of mine) if (inviterOk(inviteAuthorByKey.get(target))) return true;
+            return false;
+          };
+          if (!validMembershipDelta(prevMembers, entry.content.members, entry.author, selfJoinOk)) continue;
           if (!validInvitesDelta(parentEntry.content.invites, entry.content.invites, entry.author, rootAuthor)) continue;
           if (!structuralFieldsEqual(parentEntry.content, entry.content)) continue;
         }
-        if (!candidatesByReplaces.has(replaces)) candidatesByReplaces.set(replaces, []);
-        candidatesByReplaces.get(replaces).push({ k, entry, isRootAuthor, root });
+        candidates.push({ k, entry, isRootAuthor, root });
       }
-      for (const [replaces, candidates] of candidatesByReplaces.entries()) {
-        if (child.has(replaces)) continue;
-        let winner = candidates[0];
-        for (let i = 1; i < candidates.length; i++) {
-          const c = candidates[i];
-          if (c.isRootAuthor && !winner.isRootAuthor) { winner = c; continue; }
-          if (winner.isRootAuthor && !c.isRootAuthor) continue;
-          const wt = winner.entry._ts || 0;
-          const ct = c.entry._ts || 0;
-          if (ct < wt) winner = c;
-          else if (ct === wt && c.k < winner.k) winner = c;
-        }
-        parent.set(winner.k, replaces);
-        child.set(replaces, winner.k);
-        tribes.set(winner.k, winner.entry);
-        rootByTip.set(winner.k, winner.root);
-        progress = true;
+      if (!candidates.length) continue;
+      let winner = candidates[0];
+      for (let i = 1; i < candidates.length; i++) {
+        const c = candidates[i];
+        if (c.isRootAuthor && !winner.isRootAuthor) { winner = c; continue; }
+        if (winner.isRootAuthor && !c.isRootAuthor) continue;
+        const wt = winner.entry._ts || 0;
+        const ct = c.entry._ts || 0;
+        if (ct < wt) winner = c;
+        else if (ct === wt && c.k < winner.k) winner = c;
       }
+      parent.set(winner.k, replaces);
+      child.set(replaces, winner.k);
+      tribes.set(winner.k, winner.entry);
+      rootByTip.set(winner.k, winner.root);
+      queue.push(winner.k);
     }
 
     const tombstoned = new Set();
@@ -194,35 +230,32 @@ module.exports = ({ cooler, tribeCrypto }) => {
     }
 
     const rootOf = (id) => rootByTip.get(id) || id;
-    const tipOf = (id) => { let cur = id; while (child.has(cur)) cur = child.get(cur); return cur; };
     const tipByRoot = new Map();
     for (const k of tribes.keys()) {
       const root = rootOf(k);
-      const tip = tipOf(root);
+      if (tipByRoot.has(root)) continue;
+      let tip = root;
+      while (child.has(tip)) tip = child.get(tip);
       tipByRoot.set(root, tip);
     }
 
     const effectivelyTombstoned = new Set(tombstoned);
-    let cascade = true;
-    const seen = new Set();
-    while (cascade) {
-      cascade = false;
-      for (const k of tribes.keys()) {
-        if (effectivelyTombstoned.has(k)) continue;
-        const root = rootOf(k);
-        if (effectivelyTombstoned.has(root)) { effectivelyTombstoned.add(k); cascade = true; continue; }
+    const deadMemo = new Map();
+    const isDead = (k) => {
+      if (tombstoned.has(k)) return true;
+      if (deadMemo.has(k)) return deadMemo.get(k);
+      deadMemo.set(k, false);
+      const root = rootOf(k);
+      let dead = tombstoned.has(tipByRoot.get(root)) || (root !== k && isDead(root));
+      if (!dead) {
         const e = tribes.get(k);
         const pid = e && e.content && e.content.parentTribeId;
-        if (!pid) continue;
-        if (seen.has(`${k}:${pid}`)) continue;
-        seen.add(`${k}:${pid}`);
-        const parentRoot = rootOf(pid);
-        if (effectivelyTombstoned.has(parentRoot) || effectivelyTombstoned.has(pid)) {
-          effectivelyTombstoned.add(k);
-          cascade = true;
-        }
+        if (pid) dead = isDead(rootOf(pid)) || isDead(pid);
       }
-    }
+      deadMemo.set(k, dead);
+      return dead;
+    };
+    for (const k of tribes.keys()) if (isDead(k)) effectivelyTombstoned.add(k);
 
     tribeIndex = { tribes, tombstoned, effectivelyTombstoned, parent, child, tipByRoot, rootByTip };
     tribeIndexTs = Date.now();
@@ -294,6 +327,15 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (c.type === 'tribe-open-invite-tombstone' && typeof c.target === 'string') tombstoned.add(c.target);
       if (c.type === 'tribe-invite-tombstone' && typeof c.target === 'string') tombstoned.add('inv:' + c.target);
     }
+    const idx = await buildTribeIndex();
+    const allowedMarker = (root, author) => {
+      const rootEntry = idx.tribes.get(root);
+      if (!rootEntry || !author) return false;
+      if (author === rootEntry.author) return true;
+      const tip = idx.tribes.get(idx.tipByRoot.get(root) || root) || rootEntry;
+      const members = Array.isArray(tip.content.members) ? tip.content.members : [];
+      return members.includes(author);
+    };
     const byRoot = new Map();
     for (const m of msgs) {
       const v = m.value;
@@ -302,6 +344,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (typeof c.rootId !== 'string' || typeof c.code !== 'string') continue;
       if (tombstoned.has(m.key)) continue;
       if (c.inviteKey && tombstoned.has('inv:' + c.inviteKey)) continue;
+      if (!allowedMarker(c.rootId, v.author)) continue;
       const ts = (v && v.timestamp) || 0;
       const prev = byRoot.get(c.rootId);
       if (!prev || ts > prev.ts) byRoot.set(c.rootId, { code: c.code, by: c.by || v.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts });
@@ -354,6 +397,27 @@ module.exports = ({ cooler, tribeCrypto }) => {
       tribeIndex = null;
       subscribeInvalidation().catch(() => {});
       return result;
+    },
+
+    async departures(tribeId) {
+      const idx = await buildTribeIndex();
+      const root = idx.rootByTip.get(tribeId) || tribeId;
+      const out = new Map();
+      const rootAuthor = idx.tribes.get(root) && idx.tribes.get(root).author;
+      let cur = root;
+      let prev = null;
+      let g = 0;
+      while (cur && g++ < 100000) {
+        const e = idx.tribes.get(cur);
+        if (!e) break;
+        const members = Array.isArray(e.content.members) ? e.content.members : [];
+        const noted = rootAuthor && e.author === rootAuthor && e.content.removedSeqs ? e.content.removedSeqs : {};
+        if (prev) for (const m of prev) if (!members.includes(m)) out.set(m, e.author === m ? { seq: e.seq || 0 } : (Number.isFinite(Number(noted[m])) && noted[m] !== null ? { seq: Number(noted[m]) } : { ts: e._ts || 0 }));
+        for (const m of members) out.delete(m);
+        prev = members;
+        cur = idx.child.get(cur);
+      }
+      return out;
     },
 
     async getRootId(tribeId) {
@@ -525,7 +589,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
         mapUrl: updatedContent.mapUrl !== undefined ? updatedContent.mapUrl : tribe.mapUrl,
         createdAt: tribe.createdAt,
         updatedAt: now,
-        author: tribe.author
+        author: tribe.author,
+        ...(typeof updatedContent.joinedWith === 'string' && updatedContent.joinedWith ? { joinedWith: updatedContent.joinedWith } : {}),
+        ...(updatedContent.removedSeqs && typeof updatedContent.removedSeqs === 'object' ? { removedSeqs: updatedContent.removedSeqs } : {})
       };
       if (fields.isAnonymous) {
         return wrapAndPublish(rootId, { k: 'tribe', op: 'update', rootId, replaces: tipId, ...fields });
@@ -546,7 +612,15 @@ module.exports = ({ cooler, tribeCrypto }) => {
     async updateTribeMembers(tribeId, members) {
       const tribe = await this.getTribeById(tribeId);
       const old = tribe.members || [];
-      await this.updateTribeById(tribeId, { members });
+      const leaving = old.filter(m => !members.includes(m));
+      const removedSeqs = {};
+      if (leaving.length) {
+        const client = await openSsb();
+        for (const m of leaving) {
+          removedSeqs[m] = await new Promise((resolve) => pull(client.createUserStream({ id: m, reverse: true, limit: 1 }), pull.collect((err, list) => resolve(!err && list && list[0] && list[0].value ? Number(list[0].value.sequence) || 0 : 0))));
+        }
+      }
+      await this.updateTribeById(tribeId, { members, ...(leaving.length ? { removedSeqs } : {}) });
       const removed = old.filter(m => !members.includes(m));
       const added = members.filter(m => !old.includes(m));
       if (removed.length > 0) {
@@ -691,21 +765,39 @@ module.exports = ({ cooler, tribeCrypto }) => {
         }
       }
       if (!matched) throw new Error('Invalid or expired invite code');
-      for (const entry of matched.chain) {
-        tribeCrypto.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
-      }
-      tribeIndex = null;
       const rootId = matched.chain[0].rootId;
+      const fresh = matched.chain.filter(entry => entry && Array.isArray(entry.keys) && entry.keys.length && !tribeCrypto.getKeys(entry.rootId).length);
+      for (const entry of fresh) tribeCrypto.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
+      tribeIndex = null;
+      const undo = () => { for (const entry of fresh) tribeCrypto.dropKey(entry.rootId); tribeIndex = null; };
       let tribe;
       try { tribe = await this.getTribeById(rootId); } catch (_) { tribe = null; }
-      if (!tribe) throw new Error('Tribe not found after key import');
-      if (tribe.members.includes(userId)) throw new Error('Already a member of this tribe');
+      if (!tribe) { undo(); throw new Error('Tribe not found'); }
+      if (tribe.members.includes(userId)) { undo(); throw new Error('Already a member of this tribe'); }
+      const lineage = new Set([rootId]);
+      let cursor = tribe;
+      for (let hops = 0; cursor && cursor.parentTribeId && hops < 8; hops++) {
+        let parentTribe = null;
+        try { parentTribe = await this.getTribeById(cursor.parentTribeId); } catch (_) { parentTribe = null; }
+        if (!parentTribe) break;
+        const parentCircle = [parentTribe.author, ...(Array.isArray(parentTribe.members) ? parentTribe.members : [])];
+        if (!parentCircle.includes(cursor.author)) break;
+        lineage.add(parentTribe.id);
+        lineage.add(cursor.parentTribeId);
+        cursor = parentTribe;
+      }
+      for (const entry of matched.chain) {
+        if (!entry || !Array.isArray(entry.keys) || !entry.keys.length) continue;
+        if (fresh.includes(entry)) { if (!lineage.has(entry.rootId)) tribeCrypto.dropKey(entry.rootId); continue; }
+        if (lineage.has(entry.rootId)) tribeCrypto.mergeKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
+      }
+      tribeIndex = null;
       const members = [...tribe.members, userId];
       if (matched.multi) {
-        await this.updateTribeById(tribe.id, { members });
+        await this.updateTribeById(tribe.id, { members, joinedWith: matched.codeHash });
       } else {
         const invites = (tribe.invites || []).filter(inv => inv.codeHash !== matched.codeHash);
-        await this.updateTribeById(tribe.id, { members, invites });
+        await this.updateTribeById(tribe.id, { members, invites, joinedWith: matched.codeHash });
         await this.publishInviteTombstone(matched.msgKey).catch(() => {});
       }
       await this.ensureFollowTribeMembers(tribe.id).catch(() => {});
@@ -741,9 +833,6 @@ module.exports = ({ cooler, tribeCrypto }) => {
         return;
       }
       await this.updateTribeById(tribeId, { members });
-      if (members.length > 0) {
-        await this.rotateTribeKey(tribeId, members).catch(() => {});
-      }
     },
 
     async distributeTribeKey(tribeId, toMembers) {
@@ -754,13 +843,16 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const gen = tribeCrypto.getGen(rootId);
       if (!keys.length) return;
       const payload = tribeCrypto.buildKeyDistribPayload(rootId, keys, gen);
-      const batch = tribeCrypto.KEY_DISTRIB_BATCH;
-      for (let i = 0; i < toMembers.length; i += batch) {
-        const recps = toMembers.slice(i, i + batch);
+      const others = [...new Set(toMembers)].filter(m => m && m !== client.id);
+      const batch = tribeCrypto.KEY_DISTRIB_BATCH - 1;
+      let i = 0;
+      do {
+        const recps = [client.id, ...others.slice(i, i + batch)];
         await new Promise((resolve, reject) =>
           client.publish({ ...payload, recps }, (err) => err ? reject(err) : resolve())
         );
-      }
+        i += batch;
+      } while (i < others.length);
     },
 
     async rotateTribeKey(tribeId, remainingMembers) {
@@ -783,38 +875,41 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const rootId = await this.getRootId(tribeId);
       if (!tribeCrypto.getKey(rootId)) return;
       const others = (tribe.members || []).filter(m => m !== userId);
-      if (!others.length) return;
-      const ssbKeys = require('../server/node_modules/ssb-keys');
-      const config = require('../server/ssb_config');
-      const msgs = await streamLog();
+      const { distribs } = await readKeyDistribs();
       const distributed = new Set();
-      for (const m of msgs) {
-        if (m.value && m.value.author !== userId) continue;
-        const c = m.value && m.value.content;
-        const dec = tribeCrypto.tryUnboxKeyDistrib(c, config.keys, ssbKeys);
-        if (!dec || dec.rootId !== rootId) continue;
+      const currentGen = tribeCrypto.getGen(rootId);
+      const holdersOfCurrent = new Set();
+      for (const { m, dec } of distribs) {
+        if (m.value.author !== userId) continue;
+        if (dec.rootId !== rootId) continue;
         const recps = Array.isArray(dec.recps) ? dec.recps : [];
         for (const r of recps) distributed.add(r);
+        if (Number(dec.gen) === Number(currentGen)) for (const r of recps) holdersOfCurrent.add(r);
       }
+      const departed = [...holdersOfCurrent].filter(r => r !== userId && !(tribe.members || []).includes(r));
+      if (departed.length > 0) { await this.rotateTribeKey(tribeId, others).catch(() => {}); return; }
+      if (!others.length) return;
       const missing = others.filter(m => !distributed.has(m));
       if (missing.length > 0) await this.distributeTribeKey(tribeId, missing).catch(() => {});
     },
 
     async processIncomingKeys() {
-      const client = await openSsb();
-      const ssbKeys = require('../server/node_modules/ssb-keys');
-      const config = require('../server/ssb_config');
-      const msgs = await streamLog();
+      const { msgs, distribs } = await readKeyDistribs();
       const byTribe = new Map();
-      for (const m of msgs) {
-        const c = m.value && m.value.content;
-        const dec = tribeCrypto.tryUnboxKeyDistrib(c, config.keys, ssbKeys);
-        if (!dec) continue;
+      const authorOf = new Map();
+      for (const m of msgs) if (m && m.key && m.value) authorOf.set(m.key, m.value.author);
+      for (const { m, dec } of distribs) {
         const list = byTribe.get(dec.rootId) || [];
-        list.push({ generation: dec.gen || dec.keys.length, keys: dec.keys, ts: m.value.timestamp });
+        list.push({ generation: dec.gen || dec.keys.length, keys: dec.keys, ts: m.value.timestamp, author: m.value.author });
         byTribe.set(dec.rootId, list);
       }
-      for (const [rootId, entries] of byTribe.entries()) {
+      for (const [rootId, all] of byTribe.entries()) {
+        const owner = authorOf.get(rootId);
+        if (!owner) continue;
+        let members = [];
+        try { const t = await this.getTribeById(rootId); members = Array.isArray(t && t.members) ? t.members : []; } catch (_) {}
+        const allowed = new Set([owner, ...members]);
+        const entries = all.filter(e => allowed.has(e.author));
         entries.sort((a, b) => b.generation - a.generation);
         const top = entries[0];
         if (top && Array.isArray(top.keys) && top.keys.length) {

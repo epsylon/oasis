@@ -94,6 +94,15 @@ module.exports = ({ cooler } = {}) => {
       else if (content.type === 'tombstone' && typeof content.target === 'string') tombstoned.add(content.target);
       for (const id of (JSON.stringify(content).match(BLOB_RE) || [])) own.add(id);
     }
+    if (ssb.private && typeof ssb.private.read === 'function') {
+      const boxed = await new Promise((resolve) => {
+        pull(ssb.private.read({ reverse: false }), pull.collect((err, arr) => resolve(err ? [] : (arr || []))));
+      });
+      for (const m of boxed) {
+        const content = m && m.value && m.value.content;
+        if (content && typeof content === 'object') for (const id of (JSON.stringify(content).match(BLOB_RE) || [])) own.add(id);
+      }
+    }
     for (const id of loadPins()) own.add(id);
     for (const [key, link] of spreads) {
       if (tombstoned.has(key)) continue;

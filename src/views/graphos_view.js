@@ -1,4 +1,5 @@
 const h = require("../server/node_modules/hyperaxe");
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { div, h2, p, section, button, form, input, span, a, table, tr, td } = h;
 const { template, i18n, renderStateChip } = require('./main_views');
 
@@ -146,7 +147,7 @@ exports.graphosView = ({ filter, me, peers, links = [], kpis, focus = null, focu
           filter !== 'MINE' ? kpi(i18n.unknown || 'Unknown', kpis.unknown) : null
         )
       ),
-      div({ class: 'graphos-canvas', innerHTML: buildGraphSvg(me, peers, links) }),
+      div({ class: 'graphos-canvas', [RAW_HTML]: buildGraphSvg(me, peers, links) }),
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
         legendItem('online', i18n.online || 'Online'),
@@ -263,7 +264,7 @@ exports.graphosFederationView = ({ myName, rows = [], links = [], ownVersion = '
           kpi(i18n.graphosFedIsolated, count(r => r.isolated))
         )
       ),
-      sorted.length ? div({ class: 'graphos-canvas', innerHTML: buildFederationSvg(myName || '', sorted, links, ownVersion) }) : p(i18n.graphosFedEmpty),
+      sorted.length ? div({ class: 'graphos-canvas', [RAW_HTML]: buildFederationSvg(myName || '', sorted, links, ownVersion) }) : p(i18n.graphosFedEmpty),
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
         span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-connected' }), span(i18n.peerStateConnected)),

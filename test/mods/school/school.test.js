@@ -431,6 +431,21 @@ describe('school: star ratings by students', (t) => {
     ok(threw);
   });
 
+  t('an opinion published directly by someone who is not a student does not count', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const S = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course());
+    B.setActor();
+    await B.use('school').enroll(r.key);
+    await B.use('school').createOpinion(r.key, 'interesting');
+    const ssbS = await S.cooler.open();
+    await new Promise((res, rej) => ssbS.publish({ type: 'schoolOpinion', target: r.key, category: 'interesting', createdAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    A.setActor();
+    const c = await A.use('school').getCourseById(r.key, A.keypair.id);
+    eq(c.opinions.interesting, 1, 'only the student counts');
+    ok(!c.opinions_inhabitants.includes(S.keypair.id));
+  });
+
   t('the teacher cannot rate their own course', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('school').createCourse(course());
@@ -957,5 +972,189 @@ describe('school: one reusable code per course', (t) => {
     const first = await A.use('school').generateInvite(r.key);
     const second = await A.use('school').generateInvite(r.key);
     eq(second.code, first.code, 'the course keeps its single reusable code');
+  });
+});
+
+const publishAs = async (P, content) => {
+  const ssb = await P.cooler.open();
+  return new Promise((res, rej) => ssb.publish(content, (e, m) => e ? rej(e) : res(m)));
+};
+
+const enrollPrivatelyWith = async (P, teacher, courseId, transferId) => {
+  const ssb = await P.cooler.open();
+  return new Promise((res, rej) => ssb.private.publish({ type: 'schoolEnroll', courseId, value: true, transferId, createdAt: new Date().toISOString() }, [P.keypair.id, teacher.keypair.id], (e, m) => e ? rej(e) : res(m)));
+};
+
+const billDeadline = () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+describe('school: only the teacher speaks for a course', (t) => {
+  t('a stranger cannot hide a course nor block its edition', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course({ title: 'Resilient' }));
+    B.setActor();
+    await publishAs(B, { type: 'tombstone', target: r.key, deletedAt: new Date().toISOString(), author: A.keypair.id });
+    ok((await B.use('school').listCourses('ALL', B.keypair.id, {})).find(x => x.title === 'Resilient'), 'the course is still listed for everyone');
+    A.setActor();
+    await A.use('school').updateCourse(r.key, { title: 'Renamed' });
+    const list = await A.use('school').listCourses('ALL', A.keypair.id, {});
+    ok(list.find(x => x.title === 'Renamed'), 'the teacher can still edit it');
+  });
+
+  t('a stranger cannot remove a lesson', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course());
+    const l = await A.use('school').addLesson(r.key, { title: 'Stays', text: 'here' });
+    B.setActor();
+    await publishAs(B, { type: 'tombstone', target: l.key, deletedAt: new Date().toISOString(), author: A.keypair.id });
+    A.setActor();
+    const lessons = await A.use('school').listLessons(r.key);
+    eq(lessons.length, 1);
+    eq(lessons[0].title, 'Stays');
+  });
+
+  t('lessons, exams and certificates published by a stranger are ignored', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course({ price: '2' }));
+    C.setActor();
+    await publishAs(C, { type: 'schoolLesson', courseId: r.key, title: 'Fake', text: 'x', author: A.keypair.id, createdAt: new Date().toISOString() });
+    await publishAs(C, { type: 'schoolExam', courseId: r.key, title: 'Fake exam', author: A.keypair.id, createdAt: new Date().toISOString() });
+    await publishAs(C, { type: 'schoolCertificate', courseId: r.key, courseTitle: 'Course', student: C.keypair.id, text: '', author: A.keypair.id, createdAt: new Date().toISOString() });
+    A.setActor();
+    eq((await A.use('school').listLessons(r.key)).length, 0, 'no lesson');
+    eq((await A.use('school').listExams(r.key)).length, 0, 'no exam');
+    eq((await A.use('school').listCertificates(r.key)).length, 0, 'no certificate');
+    C.setActor();
+    eq((await C.use('school').listCertificatesForStudent(C.keypair.id)).length, 0, 'the stranger holds no certificate');
+  });
+
+  t('a forged certificate does not block the real one', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course());
+    B.setActor();
+    await B.use('school').enroll(r.key);
+    C.setActor();
+    await publishAs(C, { type: 'schoolCertificate', courseId: r.key, courseTitle: 'Course', student: B.keypair.id, text: 'forged', author: A.keypair.id, createdAt: new Date().toISOString() });
+    A.setActor();
+    const issued = await A.use('school').issueCertificate(r.key, B.keypair.id, 'real');
+    ok(!issued.alreadyIssued, 'the teacher can still issue it');
+    const certs = await A.use('school').listCertificates(r.key);
+    eq(certs.length, 1);
+    eq(certs[0].author, A.keypair.id);
+    eq(certs[0].text, 'real');
+  });
+});
+
+describe('school: a paid seat needs the right bill signed by the teacher', (t) => {
+  const paidCourse = async (A) => {
+    A.setActor();
+    return A.use('school').createCourse(course({ title: 'Paid', price: '5' }));
+  };
+
+  const seatOf = async (A, r, B) => {
+    A.setActor();
+    const c = await A.use('school').getCourseById(r.key, A.keypair.id);
+    return { student: c.students.includes(B.keypair.id), pending: c.pending.some(p => p.author === B.keypair.id) };
+  };
+
+  t('a bill below the price does not settle the seat', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const r = await paidCourse(A);
+    B.setActor();
+    const bill = await B.use('transfers').createTransfer(A.keypair.id, `SCHOOL ${r.key}`, '1', billDeadline(), ['SCHOOL'], 'ECONOMIC');
+    await enrollPrivatelyWith(B, A, r.key, bill.key);
+    A.setActor();
+    await A.use('transfers').confirmTransferById(bill.key);
+    const seat = await seatOf(A, r, B);
+    ok(!seat.student && seat.pending, 'still pending');
+  });
+
+  t('a bill for another course does not settle the seat', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const r = await paidCourse(A);
+    const other = await A.use('school').createCourse(course({ title: 'Other', price: '5' }));
+    B.setActor();
+    const bill = await B.use('transfers').createTransfer(A.keypair.id, `SCHOOL ${other.key}`, '5', billDeadline(), ['SCHOOL'], 'ECONOMIC');
+    await enrollPrivatelyWith(B, A, r.key, bill.key);
+    A.setActor();
+    await A.use('transfers').confirmTransferById(bill.key);
+    const seat = await seatOf(A, r, B);
+    ok(!seat.student && seat.pending, 'still pending');
+  });
+
+  t('a bill paid by somebody else does not settle the seat', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const r = await paidCourse(A);
+    C.setActor();
+    const bill = await C.use('transfers').createTransfer(A.keypair.id, `SCHOOL ${r.key}`, '5', billDeadline(), ['SCHOOL'], 'ECONOMIC');
+    A.setActor();
+    await A.use('transfers').confirmTransferById(bill.key);
+    B.setActor();
+    await enrollPrivatelyWith(B, A, r.key, bill.key);
+    const seat = await seatOf(A, r, B);
+    ok(!seat.student && seat.pending, 'still pending');
+  });
+
+  t('a bill signed by anyone but the teacher does not settle the seat', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const r = await paidCourse(A);
+    B.setActor();
+    const bill = await B.use('transfers').createTransfer(A.keypair.id, `SCHOOL ${r.key}`, '5', billDeadline(), ['SCHOOL'], 'ECONOMIC');
+    await enrollPrivatelyWith(B, A, r.key, bill.key);
+    await publishAs(B, { type: 'transferConfirm', target: bill.key, createdAt: new Date().toISOString() });
+    C.setActor();
+    await publishAs(C, { type: 'transferConfirm', target: bill.key, createdAt: new Date().toISOString() });
+    const seat = await seatOf(A, r, B);
+    ok(!seat.student && seat.pending, 'still pending');
+  });
+
+  t('lowering the bill after enrolling does not settle the seat', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const r = await paidCourse(A);
+    B.setActor();
+    await B.use('school').enroll(r.key);
+    const before = await B.use('school').getCourseById(r.key, B.keypair.id);
+    const billId = before.pending[0].transferId;
+    await B.use('transfers').updateTransferById(billId, A.keypair.id, `SCHOOL ${r.key}`, '1', billDeadline(), ['SCHOOL'], 'ECONOMIC');
+    A.setActor();
+    await A.use('transfers').confirmTransferById(billId);
+    const seat = await seatOf(A, r, B);
+    ok(!seat.student && seat.pending, 'still pending');
+  });
+
+  t('the right bill signed by the teacher settles the seat', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const r = await paidCourse(A);
+    B.setActor();
+    const bill = await B.use('transfers').createTransfer(A.keypair.id, `SCHOOL ${r.key}`, '5', billDeadline(), ['SCHOOL'], 'ECONOMIC');
+    await enrollPrivatelyWith(B, A, r.key, bill.key);
+    A.setActor();
+    await A.use('transfers').confirmTransferById(bill.key);
+    const seat = await seatOf(A, r, B);
+    ok(seat.student && !seat.pending, 'the student holds the seat');
+  });
+});
+
+describe('school: invitation codes come from the teacher', (t) => {
+  t('a code planted by a stranger does not open an invite course', async () => {
+    const { fresh } = require('../../helpers/setup');
+    const planted = require('../../../src/models/crypto')(fresh(), 'school');
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net); const D = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course({ title: 'Guarded', visibility: 'INVITE' }));
+    C.setActor();
+    const code = 'cafebabecafebabecafebabecafebabe';
+    const salt = planted.generateInviteSalt();
+    await publishAs(C, { type: 'school-invite', target: r.key, ek: planted.encryptForInvite(planted.generateTribeKey(), code, salt), salt, codeHash: planted.hashInviteCode(code, salt) });
+    D.setActor();
+    let threw = false;
+    try { await D.use('school').joinByInvite(code); } catch (_) { threw = true; }
+    ok(threw, 'the planted code is rejected');
+    A.setActor();
+    const c = await A.use('school').getCourseById(r.key, A.keypair.id);
+    ok(!c.students.includes(D.keypair.id) && !c.pending.some(p => p.author === D.keypair.id), 'nobody got in through it');
   });
 });

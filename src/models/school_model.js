@@ -2,6 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { readTyped } = require("./typed_log")
+const { buildValidatedTombstoneSet } = require("./tombstone_validator")
 const opinionCategories = require("../backend/opinion_categories")
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
@@ -54,7 +55,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
   const readAll = async (ssbClient) => readTyped(ssbClient, SCHOOL_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
 
   const buildIndex = (messages, ssbClient) => {
-    const tomb = new Set()
+    const tomb = buildValidatedTombstoneSet(messages)
     const courseNodes = new Map()
     const lessonNodes = new Map()
     const certNodes = new Map()
@@ -64,6 +65,8 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     const lessonReplaces = new Map()
     const enrollLatest = new Map()
     const transferAgg = new Map()
+    const transferNodes = new Map()
+    const transferConfirms = []
     const tribeKeyMsgs = []
     const opinionMsgs = []
     const examNodes = new Map()
@@ -71,6 +74,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     const progressLatest = new Map()
     const examResultLatest = new Map()
     const chatByCourse = new Map()
+    const chatMsgs = []
 
     for (const m of messages) {
       const key = m.key
@@ -79,14 +83,11 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       if (!c) continue
 
       if (c.type === "chat") {
-        if (typeof c.courseId === "string" && c.courseId && !chatByCourse.has(c.courseId)) chatByCourse.set(c.courseId, key)
+        if (typeof c.courseId === "string" && c.courseId) chatMsgs.push({ courseId: c.courseId, key, author: v.author })
         continue
       }
 
-      if (c.type === "tombstone" && c.target) {
-        tomb.add(c.target)
-        continue
-      }
+      if (c.type === "tombstone") continue
 
       if (c.type === "schoolCourse") {
         courseNodes.set(key, { key, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
@@ -116,17 +117,13 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       }
 
       if (c.type === "transfer") {
-        const set = transferAgg.get(key) || new Set()
-        for (const cb of (Array.isArray(c.confirmedBy) ? c.confirmedBy : [])) set.add(cb)
-        if (c.from) set.add(c.from)
-        transferAgg.set(key, set)
+        if (!v.author || c.from !== v.author) continue
+        transferNodes.set(key, { author: v.author, to: c.to, amount: toNum(c.amount), concept: String(c.concept || ""), discarded: String(c.status || "").toUpperCase() === "DISCARDED", replaces: c.replaces || null })
         continue
       }
 
       if (c.type === "transferConfirm" && c.target) {
-        const set = transferAgg.get(c.target) || new Set()
-        if (v.author) set.add(v.author)
-        transferAgg.set(c.target, set)
+        if (v.author) transferConfirms.push({ target: c.target, author: v.author })
         continue
       }
 
@@ -196,6 +193,32 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       }
     }
 
+    const transferChild = new Map()
+    const transferForked = new Set()
+    for (const [key, t] of transferNodes.entries()) {
+      const orig = t.replaces ? transferNodes.get(t.replaces) : null
+      if (!orig || orig.author !== t.author) continue
+      if (transferChild.has(t.replaces)) transferForked.add(t.replaces)
+      transferChild.set(t.replaces, key)
+    }
+    const confirmersOf = new Map()
+    for (const cf of transferConfirms) {
+      if (!confirmersOf.has(cf.target)) confirmersOf.set(cf.target, new Set())
+      confirmersOf.get(cf.target).add(cf.author)
+    }
+    for (const [key, t] of transferNodes.entries()) {
+      const orig = t.replaces ? transferNodes.get(t.replaces) : null
+      if (orig && orig.author === t.author) continue
+      const chain = [key]
+      while (transferChild.has(chain[chain.length - 1])) chain.push(transferChild.get(chain[chain.length - 1]))
+      const tipKey = chain[chain.length - 1]
+      const tip = transferNodes.get(tipKey)
+      const signers = new Set()
+      for (const ck of chain) for (const signer of (confirmersOf.get(ck) || [])) if (signer === tip.to) signers.add(signer)
+      const bill = { author: tip.author, to: tip.to, amount: tip.amount, concept: tip.concept, void: tip.discarded || tomb.has(tipKey) || chain.some(ck => transferForked.has(ck)), signers }
+      for (const ck of chain) transferAgg.set(ck, bill)
+    }
+
     for (const [key, replacesId] of naiveReplaces.entries()) {
       const node = courseNodes.get(key)
       if (!node) continue
@@ -238,6 +261,16 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     const tipByRoot = new Map()
     for (const r of roots) tipByRoot.set(r, tipOf(r))
 
+    const courseAuthorOf = (id) => { const n = courseNodes.get(rootOf(id)); return n ? n.author : null }
+    for (const [key, node] of lessonNodes.entries()) if (courseAuthorOf(node.c.courseId) !== node.author) lessonNodes.delete(key)
+    for (const [key, node] of certNodes.entries()) if (courseAuthorOf(node.c.courseId) !== node.author) certNodes.delete(key)
+    for (const [key, node] of examNodes.entries()) if (courseAuthorOf(node.c.courseId) !== node.author) examNodes.delete(key)
+    for (const [key, node] of questionNodes.entries()) if (courseAuthorOf(node.c.courseId) !== node.author) questionNodes.delete(key)
+    for (const ch of chatMsgs) {
+      if (chatByCourse.has(ch.courseId) || courseAuthorOf(ch.courseId) !== ch.author) continue
+      chatByCourse.set(ch.courseId, ch.key)
+    }
+
     const enrollByCourse = new Map()
     for (const { courseId, author, value, transferId, keyProof } of enrollLatest.values()) {
       if (!enrollByCourse.has(courseId)) enrollByCourse.set(courseId, new Map())
@@ -250,11 +283,10 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     for (const op of opinionMsgs) {
       const root = rootOf(op.target)
       if (!courseNodes.has(root)) continue
-      if (!opinionsByCourse.has(root)) opinionsByCourse.set(root, { opinions: {}, voters: new Set() })
+      if (!opinionsByCourse.has(root)) opinionsByCourse.set(root, { byAuthor: new Map() })
       const agg = opinionsByCourse.get(root)
-      if (!op.author || agg.voters.has(op.author)) continue
-      agg.voters.add(op.author)
-      if (op.category) agg.opinions[op.category] = (agg.opinions[op.category] || 0) + 1
+      if (!op.author || agg.byAuthor.has(op.author)) continue
+      agg.byAuthor.set(op.author, op.category)
     }
 
     const progressByCourse = new Map()
@@ -273,6 +305,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     for (const tk of tribeKeyMsgs) {
       const root = rootOf(tk.tribeId)
       if (!courseNodes.has(root)) continue
+      if (courseNodes.get(root).author !== tk.author) continue
       if (!grantsByCourse.has(root)) grantsByCourse.set(root, new Set())
       for (const member of Object.keys(tk.memberKeys)) grantsByCourse.get(root).add(member)
       if (schoolCrypto && myId && tk.memberKeys[myId]) {
@@ -310,12 +343,19 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     for (const [student, info] of (enrollments || new Map())) {
       if (info.keyProof && ringKeys.some(k => keyProofFor(k, student) === info.keyProof)) grantedViaInvite.push(student)
       if (paid) {
-        const signatures = info.transferId ? (transferAgg && transferAgg.get(info.transferId)) : null
-        if (signatures && signatures.size >= 2) students.push(student)
+        const bill = info.transferId ? (transferAgg && transferAgg.get(info.transferId)) : null
+        const settled = !!bill && !bill.void && bill.author === student && bill.to === node.author && bill.amount >= priceN && bill.concept.includes(rootId) && bill.signers.has(node.author)
+        if (settled) students.push(student)
         else pending.push({ author: student, transferId: info.transferId || null })
       } else {
         students.push(student)
       }
+    }
+    const studentOpinions = { opinions: {}, voters: [] }
+    for (const [author, category] of ((opinionAgg && opinionAgg.byAuthor) || new Map())) {
+      if (!students.includes(author)) continue
+      studentOpinions.voters.push(author)
+      if (category) studentOpinions.opinions[category] = (studentOpinions.opinions[category] || 0) + 1
     }
     return {
       id: node.key,
@@ -331,14 +371,14 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       startDate: c.startDate || null,
       chatId: c.chatId || chatByCourse.get(rootId) || null,
       inviteCode: c.inviteCode || null,
-      author: node.author || c.author,
+      author: node.author,
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       students,
       pending,
       granted: Array.from(new Set([...(grants ? Array.from(grants) : []), ...grantedViaInvite])),
-      opinions: opinionAgg ? opinionAgg.opinions : {},
-      opinions_inhabitants: opinionAgg ? Array.from(opinionAgg.voters) : []
+      opinions: studentOpinions.opinions,
+      opinions_inhabitants: studentOpinions.voters
     }
   }
 
@@ -619,7 +659,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       if (Number(course.price) > 0) {
         if (!transfersModel) throw new Error("Transfers module unavailable")
         const deadline = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-        const bill = await transfersModel.createTransfer(course.author, "SCHOOL", course.price, deadline, ["SCHOOL"], "ECONOMIC")
+        const bill = await transfersModel.createTransfer(course.author, `SCHOOL ${rootId}`, course.price, deadline, ["SCHOOL"], "ECONOMIC")
         transferId = bill && bill.key ? bill.key : null
       }
 
@@ -995,7 +1035,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
         const messages = await readAll(ssbClient)
         const alive = messages.some(m => {
           const c = m.value && m.value.content
-          if (!c || c.type !== "school-invite" || c.target !== course.rootId) return false
+          if (!c || c.type !== "school-invite" || c.target !== course.rootId || m.value.author !== course.author) return false
           try { return schoolCrypto.hashInviteCode(course.inviteCode, c.salt) === c.codeHash } catch { return false }
         })
         if (alive) return { code: course.inviteCode, courseId: course.rootId }
@@ -1029,6 +1069,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       const ssbClient = await openSsb()
       const me = ssbClient.id
       const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages, ssbClient)
 
       const candidates = Array.from(new Set([String(rawCode || "").trim(), String(rawCode || "").trim().toLowerCase()])).filter(Boolean)
       let matched = null
@@ -1036,6 +1077,8 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       for (const m of messages) {
         const c = m.value && m.value.content
         if (!c || c.type !== "school-invite") continue
+        const owner = idx.courseNodes.get(idx.rootOf(c.target))
+        if (!owner || owner.author !== m.value.author) continue
         for (const cand of candidates) {
           try {
             if (schoolCrypto.hashInviteCode(cand, c.salt) === c.codeHash) { matched = c; code = cand; break }
@@ -1049,7 +1092,6 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       if (!courseKey) throw new Error("Could not decrypt invite")
       schoolCrypto.addNewKey(matched.target, courseKey)
 
-      const idx = buildIndex(messages, ssbClient)
       const tipId = idx.tipOf(matched.target)
       const node = idx.courseNodes.get(tipId)
       if (!node) throw new Error("Course not found")
@@ -1067,7 +1109,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
           let transferId = null
           if (Number.isFinite(priceN) && priceN > 0 && transfersModel) {
             const deadline = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-            const bill = await transfersModel.createTransfer(teacherId, "SCHOOL", priceN.toFixed(6), deadline, ["SCHOOL"], "ECONOMIC")
+            const bill = await transfersModel.createTransfer(teacherId, `SCHOOL ${matched.target}`, priceN.toFixed(6), deadline, ["SCHOOL"], "ECONOMIC")
             transferId = bill && bill.key ? bill.key : null
           }
           const msg = { type: "schoolEnroll", courseId: matched.target, value: true, transferId, keyProof: keyProofFor(courseKey, me), createdAt: new Date().toISOString() }

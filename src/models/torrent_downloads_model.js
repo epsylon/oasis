@@ -42,11 +42,12 @@ module.exports = ({ cooler }) => {
     const abortable = Abortable();
     job.abort = () => abortable.abort(new Error('cancelled'));
     let received = 0;
-    const opts = job.size > 0 ? { key: job.blobId, max: job.size } : { key: job.blobId };
+    const cap = job.size > 0 ? job.size : 75 * 1024 * 1024;
+    const opts = { key: job.blobId, max: cap };
     pull(
       seed.rpc.blobs.get(opts),
       abortable,
-      pull.through((buf) => { received += buf.length; job.received = received; }),
+      pull.through((buf) => { received += buf.length; job.received = received; if (received > cap) abortable.abort(new Error('too large')); }),
       ssb.blobs.add(job.blobId, (err) => { job.abort = null; err ? reject(err) : resolve(received); })
     );
   });

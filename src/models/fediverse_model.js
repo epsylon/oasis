@@ -19,9 +19,10 @@ const spoofHeaders = (accept) => ({
 });
 
 const isPrivateHost = (hostname) => {
-  const h = String(hostname || '').toLowerCase();
+  let h = String(hostname || '').toLowerCase().trim().replace(/^\[|\]$/g, '');
   if (!h) return true;
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local')) return true;
+  if (h.startsWith('::ffff:')) h = h.slice(7);
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h === '0.0.0.0' || h === '::') return true;
   if (h === '::1' || h.startsWith('fe80:') || h.startsWith('fc') || h.startsWith('fd')) return true;
   const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (m) {
@@ -38,6 +39,50 @@ const isPrivateHost = (hostname) => {
 
 const TG_TIMEOUT_MS = 20000;
 const TG_MEDIA_MAX_BYTES = 25 * 1024 * 1024;
+const PROXY_MEDIA_MAX_BYTES = TG_MEDIA_MAX_BYTES;
+const networkPaused = () => {
+  if (process.env.OASIS_NETWORK_PAUSED === '1') return true;
+  try { return require('../configs/config-manager.js').getConfig().networkPaused === true; } catch (_) { return true; }
+};
+const netFetch = (url, opts) => networkPaused() ? Promise.reject(new Error('Network is paused')) : fetch(url, opts);
+const publicOnlyLookup = (hostname, options, callback) => {
+  require('dns').lookup(hostname, { ...(options || {}), all: true }, (err, addresses) => {
+    if (err) return callback(err);
+    const list = Array.isArray(addresses) ? addresses : [];
+    if (!list.length || list.some(a => isPrivateHost(a.address))) return callback(Object.assign(new Error('Refusing a private address'), { code: 'EPRIVATE' }));
+    if (options && options.all) return callback(null, list);
+    callback(null, list[0].address, list[0].family);
+  });
+};
+let publicClient;
+const publicFetch = (url, opts) => {
+  if (networkPaused()) return Promise.reject(new Error('Network is paused'));
+  if (publicClient === undefined) {
+    try {
+      const { Agent, fetch: clientFetch } = require('../server/node_modules/undici');
+      publicClient = { fetch: clientFetch, dispatcher: new Agent({ connect: { lookup: publicOnlyLookup } }) };
+    } catch (_) { publicClient = null; }
+  }
+  return publicClient ? publicClient.fetch(url, { ...opts, dispatcher: publicClient.dispatcher }) : fetch(url, opts);
+};
+const readCapped = async (res, max) => {
+  if (Number(res.headers.get('content-length') || 0) > max) return null;
+  if (!res.body || typeof res.body.getReader !== 'function') {
+    const ab = await res.arrayBuffer();
+    return ab.byteLength > max ? null : Buffer.from(ab);
+  }
+  const reader = res.body.getReader();
+  const parts = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > max) { try { await reader.cancel(); } catch (_) {} return null; }
+    parts.push(Buffer.from(value));
+  }
+  return Buffer.concat(parts);
+};
 const TG_MEDIA_CACHE_MAX = 60;
 const TG_LOGIN_TTL_MS = 10 * 60 * 1000;
 let gram = null;
@@ -60,6 +105,7 @@ const tgDisplayName = (u) => {
   return full || (u.username ? `@${u.username}` : '');
 };
 const tgErrCode = (err) => {
+  if (err && err.message === 'peerErrPaused') return 'peerErrPaused';
   const m = String((err && (err.errorMessage || err.message)) || '').toUpperCase();
   if (m.includes('PHONE_CODE_INVALID') || m.includes('PHONE_CODE_EMPTY')) return 'telegramErrCode';
   if (m.includes('PHONE_CODE_EXPIRED')) return 'telegramErrCodeExpired';
@@ -121,7 +167,7 @@ module.exports = ({ isPublic } = {}) => {
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
     try {
       const headers = Object.assign(spoofHeaders('application/json'), { Authorization: `Bearer ${token}` }, opts.headers || {});
-      const res = await fetch(`${instance}${pathName}`, { ...opts, headers, signal: controller.signal });
+      const res = await netFetch(`${instance}${pathName}`, { ...opts, headers, signal: controller.signal });
       return res;
     } finally {
       clearTimeout(timer);
@@ -424,6 +470,12 @@ module.exports = ({ isPublic } = {}) => {
       const getClient = async () => {
         const t = getTg();
         if (!t || !t.session) throw new Error('telegramErrAuth');
+        if (networkPaused()) {
+          const c = client;
+          client = null;
+          await killClient(c);
+          throw new Error('peerErrPaused');
+        }
         if (client && client.connected) return client;
         if (!client) client = newClient(t.session, t.apiId, t.apiHash);
         await withTimeout(client.connect());
@@ -529,6 +581,7 @@ module.exports = ({ isPublic } = {}) => {
           const ph = String(phone || '').trim();
           if (!id || !hash || !ph) throw new Error('telegramErrMissing');
           await dropPending();
+          if (networkPaused()) throw new Error('peerErrPaused');
           const c = newClient('', id, hash);
           try { await withTimeout(c.connect()); } catch (err) { throw new Error(tgErrCode(err)); }
           const p = { client: c, apiId: id, apiHash: hash, phone: ph, step: 'sending', error: '', done: false, awaiting: false, startedAt: Date.now(), resolveCode: null, resolvePassword: null };
@@ -592,6 +645,12 @@ module.exports = ({ isPublic } = {}) => {
           return this.loginState();
         },
         async cancelLogin() { await dropPending(); },
+        async goOffline() {
+          await dropPending();
+          const c = client;
+          client = null;
+          await killClient(c);
+        },
         async disconnect() {
           const { Api } = loadGram();
           try {
@@ -712,7 +771,7 @@ module.exports = ({ isPublic } = {}) => {
       const fetchTimed = async (url, opts = {}, timeoutMs = FETCH_TIMEOUT_MS) => {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
-        try { return await fetch(url, { ...opts, signal: controller.signal }); } finally { clearTimeout(timer); }
+        try { return await netFetch(url, { ...opts, signal: controller.signal }); } finally { clearTimeout(timer); }
       };
       const oauthClient = async (instance) => {
         let res;
@@ -1012,9 +1071,18 @@ module.exports = ({ isPublic } = {}) => {
           if (u.protocol !== 'https:' || isPrivateHost(u.hostname) || !api.isHostAllowed(u.host)) return null;
           const headers = spoofHeaders('*/*');
           if (range) headers.Range = String(range);
-          let res;
-          try { res = await fetch(u.href, { headers, redirect: 'follow' }); } catch (_) { return null; }
-          if (!res.ok && res.status !== 206) return null;
+          let res = null;
+          let current = u;
+          for (let hop = 0; hop < 5; hop++) {
+            try { res = await publicFetch(current.href, { headers, redirect: 'manual' }); } catch (_) { return null; }
+            if (![301, 302, 303, 307, 308].includes(res.status)) break;
+            let next;
+            try { next = new URL(res.headers.get('location') || '', current); } catch (_) { return null; }
+            if (next.protocol !== 'https:' || isPrivateHost(next.hostname)) return null;
+            current = next;
+            res = null;
+          }
+          if (!res || (!res.ok && res.status !== 206)) return null;
           const type = res.headers.get('content-type') || 'application/octet-stream';
           if (!/^(video|audio|application\/octet-stream)/i.test(type)) return null;
           return {
@@ -1053,7 +1121,7 @@ module.exports = ({ isPublic } = {}) => {
       try {
         let current = u, res = null;
         for (let hop = 0; hop < 5; hop++) {
-          res = await fetch(current.href, { signal: controller.signal, redirect: 'manual', headers: spoofHeaders('image/avif,image/webp,*/*') });
+          res = await publicFetch(current.href, { signal: controller.signal, redirect: 'manual', headers: spoofHeaders('image/avif,image/webp,*/*') });
           if (res.status < 300 || res.status >= 400) break;
           const loc = res.headers.get('location');
           if (!loc) return null;
@@ -1066,8 +1134,8 @@ module.exports = ({ isPublic } = {}) => {
         if (!res || !res.ok) return null;
         const ct = res.headers.get('content-type') || 'application/octet-stream';
         if (!/^(image|video|audio)\//i.test(ct)) return null;
-        const ab = await res.arrayBuffer();
-        return { contentType: ct, buffer: Buffer.from(ab) };
+        const buffer = await readCapped(res, PROXY_MEDIA_MAX_BYTES);
+        return buffer ? { contentType: ct, buffer } : null;
       } catch (_) {
         return null;
       } finally {
@@ -1078,3 +1146,5 @@ module.exports = ({ isPublic } = {}) => {
 
   return api;
 };
+
+module.exports.isPrivateHost = isPrivateHost;

@@ -1,4 +1,5 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
+const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, CONTENT_FAV_KIND, CONTENT_TORRENTABLE } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
@@ -151,7 +152,7 @@ const renderContentHtml = (content, key) => {
       return div({ class: 'opinion-bookmark' },
         div({ class: 'card-section bookmark' },
           h2(content.url ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, p(a({ href: safeExternalHref(content.url), target: '_blank', class: "bookmark-url" }, content.url)))
+            span({ class: 'card-label' }, p(a({ href: safeExternalHref(content.url), target: '_blank', rel: 'noopener noreferrer', class: "bookmark-url" }, content.url)))
           ) : ""),
           content.lastVisit ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.bookmarkLastVisitLabel + ':'),
@@ -269,7 +270,7 @@ const renderContentHtml = (content, key) => {
     case 'feed':
       return div({ class: 'opinion-feed' },
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text', innerHTML: sanitizeHtml(renderStyledHtml(content.text)) }),
+          div({ class: 'feed-text', [RAW_HTML]: sanitizeHtml(renderStyledHtml(content.text)) }),
           content.refeeds
             ? h2({ class: 'card-field' }, span({ class: 'card-label' }, `${i18n.tribeFeedRefeeds}: `), span({ class: 'card-value' }, content.refeeds))
             : ""
@@ -337,7 +338,7 @@ const renderContentHtml = (content, key) => {
       return div({ class: 'styled-text' },
         div({ class: 'card-section styled-text-content' },
           div({ class: 'card-field' },
-            span({ class: 'card-value', innerHTML: sanitizeHtml(renderStyledHtml(content.title || content.name || content.text || content.description || '[no content]')) })
+            span({ class: 'card-value', [RAW_HTML]: sanitizeHtml(renderStyledHtml(content.title || content.name || content.text || content.description || '[no content]')) })
           )
         )
       );

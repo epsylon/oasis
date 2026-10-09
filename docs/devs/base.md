@@ -34,7 +34,7 @@ node scripts/patch-node-modules.js
 ./oasis.sh test                     # the whole suite must pass
 ```
 
-`build-base.js` walks the lockfile from the root dependencies: everything reachable from the non-AI roots goes to `src/base/node_modules`, everything reachable from the AI roots goes to `src/AI/node_modules` (packages needed by both are copied to both, because each tree must resolve on its own), and what is left (dev tools such as nodemon, nyc, typescript) stays behind in `src/server/node_modules.full`, which can be deleted. The optional canvas renderer of `pdfjs-dist` is skipped on purpose: Oasis only serves pdf.js to the browser.
+`build-base.js` walks the lockfile from the root dependencies: everything reachable from the non-AI roots goes to `src/base/node_modules`, everything reachable from the AI roots goes to `src/AI/node_modules` (packages needed by both are copied to both, because each tree must resolve on its own), and what is left (dev tools such as nodemon, nyc, typescript) stays behind in `src/server/node_modules.full`, which can be deleted. pdf.js is not part of the core: Oasis only serves its browser build, which lives in `src/client/public/js`.
 
 For a platform other than the one you build on, install its binary packages explicitly before running `build-base.js`, for example `npm install --os=linux --cpu=arm64 sharp` and `npm install --os=linux --cpu=arm64 --libc=musl sharp` for Alpine.
 

@@ -46,7 +46,19 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
     if (a.length) return a
     return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
   }
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
   const setRoomKey = (rootId, keyHex) => { if (ownCrypto) ownCrypto.setKey(rootId, keyHex, 1) }
+  const hashCode = (code, salt) => (ownCrypto && typeof ownCrypto.hashInviteCode === "function") ? ownCrypto.hashInviteCode(code, salt) : (tribeCrypto ? tribeCrypto.hashInviteCode(code, salt) : null)
+  const inviteMatches = (inv, token) => {
+    if (!token) return false
+    if (typeof inv === "string") return inv === token
+    if (!inv || typeof inv !== "object") return false
+    if (typeof inv.code === "string" && inv.code === token) return true
+    if (typeof inv.ch === "string" && (inv.ch === token || hashCode(token, inv.salt) === inv.ch)) return true
+    return false
+  }
+  const inviteToken = (inv) => (inv && typeof inv === "object" && typeof inv.ch === "string") ? inv.ch : (typeof inv === "string" ? inv : (inv && inv.code) || "")
+  const keyProofFor = (keyHex, id) => { try { return crypto.createHmac("sha256", Buffer.from(keyHex, "hex")).update(String(id), "utf8").digest("hex") } catch (_) { return null } }
   const deriveRid = (keyHex, roomId) => crypto.createHmac("sha256", Buffer.from(String(keyHex), "hex")).update("oasis-room-rid|" + roomId).digest("hex").slice(0, 32)
   const currentKeyFor = (rootId, tribeId, tribeKeys) => (tribeId && Array.isArray(tribeKeys) && tribeKeys.length ? tribeKeys[0] : lookupKeys(rootId)[0]) || null
 
@@ -134,11 +146,10 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
     if (!lookupKey(rootId)) return
     const newKey = crypto.randomBytes(32).toString("hex")
     const newGen = ownCrypto.addNewKey(rootId, newKey)
-    if (!Array.isArray(remainingMembers) || !remainingMembers.length) return
     const ssbClient = await openSsb()
     const ssbKeys = require("../server/node_modules/ssb-keys")
     const memberKeys = {}
-    for (const m of remainingMembers) {
+    for (const m of new Set([ssbClient.id, ...(Array.isArray(remainingMembers) ? remainingMembers : [])])) {
       try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
     }
     if (Object.keys(memberKeys).length) {
@@ -149,6 +160,39 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
   }
 
   const readAll = async (ssbClient) => readTyped(ssbClient, ROOM_TYPES, { limit: logLimit })
+
+  const ensureMemberKeys = async (ssbClient, messages, rooms) => {
+    if (!tribeCrypto || !ownCrypto) return
+    const leavesByRoot = new Map()
+    for (const m of messages) {
+      const c = m.value && m.value.content
+      if (!c || c.type !== "roomMember" || c.on !== false || !c.target || !c.member) continue
+      if (!leavesByRoot.has(c.target)) leavesByRoot.set(c.target, [])
+      leavesByRoot.get(c.target).push({ member: c.member, author: m.value.author, ts: Number(m.timestamp || m.value.timestamp || 0) })
+    }
+    const ssbKeys = require("../server/node_modules/ssb-keys")
+    for (const room of (Array.isArray(rooms) ? rooms : [])) {
+      if (!room || room.tribeId || room.author !== ssbClient.id) continue
+      const rootId = room.rootId
+      if (!rootId || !lookupKey(rootId)) continue
+      const members = Array.isArray(room.members) ? room.members : []
+      const leaves = (leavesByRoot.get(rootId) || []).filter(l => l.author === l.member || l.author === room.author)
+      const plan = ownCrypto.keyPlan({ rootId, ownerId: room.author, gen: lookupGen(rootId), members, messages, leaves })
+      if (plan.rotate) {
+        await rotateRoomKey(rootId, members)
+        continue
+      }
+      if (!plan.missing.length) continue
+      const key = lookupKey(rootId)
+      const memberKeys = {}
+      for (const m of plan.missing) {
+        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
+      }
+      if (!Object.keys(memberKeys).length) continue
+      await asP(ssbClient.publish, { type: "tribe-keys", tribeId: rootId, generation: lookupGen(rootId) || 1, memberKeys })
+    }
+  }
+
 
   const ingestOwnTribeKeys = async () => {
     if (!ownCrypto) return
@@ -162,9 +206,12 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
         const c = m.value && m.value.content
         if (c && c.type === "room") rooms.add(m.key)
       }
+      const idx = buildIndex(msgs)
+      const trusted = (root, author) => { const owner = idx.nodes.get(root) && idx.nodes.get(root).author; return !!author && !!owner && (author === owner || author === ssbClient.id) }
       for (const m of msgs) {
         const c = m.value && m.value.content
         if (!c || c.type !== "tribe-keys" || !rooms.has(c.tribeId)) continue
+        if (!trusted(c.tribeId, m.value.author)) continue
         const boxed = c.memberKeys && typeof c.memberKeys === "object" ? c.memberKeys[ssbClient.id] : null
         if (!boxed) continue
         try {
@@ -193,7 +240,7 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       const c = v.content
       if (!c) continue
       if (c.type === "tombstone" && c.target) { tombRequests.push({ target: c.target, author: v.author }); continue }
-      if (c.type === "roomMember" && c.target) { memberMsgs.push({ target: c.target, member: c.member, on: c.on !== false, author: v.author, ts: v.timestamp || m.timestamp || 0, code: typeof c.code === "string" ? c.code : "" }); continue }
+      if (c.type === "roomMember" && c.target) { memberMsgs.push({ target: c.target, member: c.member, on: c.on !== false, author: v.author, ts: v.timestamp || m.timestamp || 0, code: typeof c.code === "string" ? c.code : "", keyProof: typeof c.keyProof === "string" ? c.keyProof : "" }); continue }
       if (c.type === "room") {
         nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
         authorByKey.set(k, v.author)
@@ -232,6 +279,20 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
     const roots = new Set()
     for (const id of nodes.keys()) roots.add(strictRootOf(id))
 
+    const invitesOf = (root) => {
+      const out = []
+      for (const id of [root, contentTipOf(root)]) { const n = nodes.get(id); if (n && Array.isArray(n.c.invites)) out.push(...n.c.invites) }
+      return out
+    }
+    const selfJoinAllowed = (root, mm) => {
+      const oc = (nodes.get(root) || {}).c || {}
+      if (oc.encrypted !== true || oc.tribeId) return true
+      const invites = invitesOf(root)
+      if (invites.some(inv => inv && typeof inv === "object" && inv.public === true)) return true
+      if (mm.keyProof && lookupKeys(root).some(k => keyProofFor(k, mm.member) === mm.keyProof)) return true
+      return !!mm.code && invites.some(inv => inviteMatches(inv, mm.code))
+    }
+
     const memberByRoot = new Map()
     const consumedByRoot = new Map()
     for (const mm of memberMsgs) {
@@ -239,7 +300,9 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       const r = strictRootOf(mm.target)
       const ownerAuthor = nodes.get(r) && nodes.get(r).author
       if (!ownerAuthor || !mm.member) continue
-      if (mm.member !== mm.author && mm.author !== ownerAuthor) continue
+      const self = mm.member === mm.author
+      if (!self && mm.author !== ownerAuthor) continue
+      if (self && mm.author !== ownerAuthor && mm.on && !selfJoinAllowed(r, mm)) continue
       if (!memberByRoot.has(r)) memberByRoot.set(r, new Map())
       const m2 = memberByRoot.get(r)
       const p = m2.get(mm.member)
@@ -505,7 +568,8 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
         const key = tryDecryptPublicInviteKey(c.invites)
         if (key) setRoomKey(rootId, key)
       }
-      return asP(ssbClient.publish, { type: "roomMember", target: rootId, member: feedId, on: true, createdAt: new Date().toISOString(), ...(typeof consumedCode === "string" && consumedCode ? { code: consumedCode } : {}) })
+      const proofKey = feedId === ssbClient.id && c.encrypted === true && !c.tribeId ? lookupKey(rootId) : null
+      return asP(ssbClient.publish, { type: "roomMember", target: rootId, member: feedId, on: true, createdAt: new Date().toISOString(), ...(typeof consumedCode === "string" && consumedCode ? { code: consumedCode } : {}), ...(proofKey ? { keyProof: keyProofFor(proofKey, feedId) } : {}) })
     },
 
     async leaveRoomMembership(roomId) {
@@ -516,9 +580,6 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       if (room.author === userId) throw new Error("Author cannot leave their own room")
       if (!room.members.includes(userId)) return
       await asP(ssbClient.publish, { type: "roomMember", target: room.rootId, member: userId, on: false, createdAt: new Date().toISOString() })
-      if (room.type === "INVITE-ONLY" && !room.tribeId) {
-        try { await rotateRoomKey(room.rootId, room.members.filter(m => m !== userId)) } catch (_) {}
-      }
     },
 
     async ingestKeys() { await ingestOwnTribeKeys() },
@@ -554,8 +615,10 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
     async listAll({ filter = "all", viewerId } = {}) {
       const ssbClient = await openSsb()
       const uid = viewerId || ssbClient.id
-      const idx = buildIndex(await readAll(ssbClient))
+      const messages = await readAll(ssbClient)
+      const idx = buildIndex(messages)
       let list = roomCollab.visibleThenCollapsed(await collectRooms(idx), uid)
+      try { await ensureMemberKeys(ssbClient, messages, list) } catch (_) {}
       if (filter === "mine") list = list.filter(r => r.author === uid)
       else if (filter === "recent") list = list.filter(r => new Date(r.createdAt).getTime() >= Date.now() - RECENT_MS)
       else if (filter === "open") list = list.filter(r => r.type === "OPEN" && !r.isClosed)
@@ -574,11 +637,14 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       const code = crypto.randomBytes(INVITE_BYTES).toString("hex")
       let invite = code
       const pubFlag = opts.public ? { public: true } : {}
+      const inviteSalt = generateInviteSalt()
       if (keyHex) {
-        const inviteSalt = generateInviteSalt()
-        invite = { code, ek: encryptForInvite(keyHex, code, inviteSalt), salt: inviteSalt, ...pubFlag }
+        invite = opts.public
+          ? { code, ek: encryptForInvite(keyHex, code, inviteSalt), salt: inviteSalt, ...pubFlag }
+          : { ch: hashCode(code, inviteSalt), ek: encryptForInvite(keyHex, code, inviteSalt), salt: inviteSalt }
+      } else {
+        invite = opts.public ? { code, public: true } : { ch: hashCode(code, inviteSalt), salt: inviteSalt }
       }
-      if (opts.public && typeof invite !== "object") invite = { code, public: true }
       await this.updateRoomById(roomId, { invites: [...room.invites, invite] })
       return code
     },
@@ -611,7 +677,7 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       let matchedInvite = null
       for (const r of rooms) {
         for (const inv of r.invites) {
-          if ((typeof inv === "string" && inv === code) || (typeof inv === "object" && inv.code === code)) { matchedRoom = r; matchedInvite = inv; break }
+          if (inviteMatches(inv, code)) { matchedRoom = r; matchedInvite = inv; break }
         }
         if (matchedRoom) break
       }
@@ -619,16 +685,17 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       if (matchedRoom.members.includes(userId)) throw new Error("Already a member")
       const isPublic = typeof matchedInvite === "object" && matchedInvite.public === true
       const resolvedRootId = await this.resolveRootId(matchedRoom.rootId)
+      const token = inviteToken(matchedInvite) || code
       if (!isPublic) {
         const idx = buildIndex(await readAll(ssbClient))
-        if (idx.isCodeConsumed(resolvedRootId, code)) throw new Error("Invite already used")
+        if (idx.isCodeConsumed(resolvedRootId, token) || idx.isCodeConsumed(resolvedRootId, code)) throw new Error("Invite already used")
       }
       let roomKey = null
       if (typeof matchedInvite === "object" && matchedInvite.ek) {
         roomKey = decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt)
         if (roomKey) setRoomKey(resolvedRootId, roomKey)
       }
-      await this.addMemberToRoom(matchedRoom.rootId, userId, isPublic ? "" : code)
+      await this.addMemberToRoom(matchedRoom.rootId, userId, isPublic ? "" : token)
       if (tribeCrypto && roomKey) {
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys")
@@ -684,6 +751,12 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       const ph = await phone()
       if (!ph || typeof ph.roomMute !== "function") return null
       return asP(ph.roomMute, !!flag)
+    },
+
+    async hand(flag) {
+      const ph = await phone()
+      if (!ph || typeof ph.roomHand !== "function") return null
+      return asP(ph.roomHand, !!flag)
     },
 
     async silence(id, flag) {

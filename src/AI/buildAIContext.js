@@ -120,14 +120,34 @@ const writeVectors = (map) => { try { const p = vectorsPath(); if (p) fs.writeFi
 
 const exchangeText = (c) => clip(squash(c.question), 300)
 
+async function trustedAuthors(s) {
+  const me = s.id
+  const msgs = await readTyped(s, ['contact'], { limit: logLimit }).catch(() => null) || []
+  const latest = new Map()
+  for (const m of msgs) {
+    const v = m && m.value || {}
+    const c = v.content || {}
+    if (v.author !== me || typeof c.contact !== 'string') continue
+    const ts = Number(v.timestamp) || 0
+    const prev = latest.get(c.contact)
+    if (prev && prev.ts > ts) continue
+    latest.set(c.contact, { ts, on: c.following === true && c.blocking !== true })
+  }
+  const out = new Set([me])
+  for (const [id, st] of latest) if (st.on) out.add(id)
+  return out
+}
+
 async function listExchanges() {
   const s = await openSsb()
   if (!s) return { exchanges: [], votes: new Map() }
   const msgs = await readTyped(s, ['aiExchange', 'aiExchangeVote'], { limit: logLimit }).catch(() => null) || []
+  const trusted = await trustedAuthors(s)
   const exchanges = []
   const votes = new Map()
   for (const m of msgs) {
     const c = m && m.value && m.value.content || {}
+    if (!trusted.has(m.value.author)) continue
     if (c.type === 'aiExchange' && c.question && c.answer) {
       exchanges.push({ key: m.key, author: m.value.author, ts: m.value.timestamp || m.timestamp || 0, question: String(c.question), answer: String(c.answer), rating: Number(c.rating) || 0, tags: Array.isArray(c.tags) ? c.tags : [], lang: c.lang || '' })
     } else if (c.type === 'aiExchangeVote' && c.target) {

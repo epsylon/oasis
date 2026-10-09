@@ -166,25 +166,118 @@ describe('chats: E2E crypto round-trip and key auto-heal (regression)', (t) => {
     ok(aView.some(m => m.text === 'from B encrypted'), 'A decrypts B message');
   });
 
-  t('a member without a key distribution gets healed by a keyholder listing', async () => {
+  t('an invite-only chat cannot be entered by adding yourself, and an invited member who lost the keyring recovers it from the log', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();
     const chat = await A.use('chats').createChat('Healme', 'd', null, '', 'INVITE-ONLY', [], null);
     await A.use('chats').sendMessage(chat.key, 'secret from A');
 
     B.setActor();
-    await B.use('chats').joinChat(chat.key);
+    try { await B.use('chats').joinChat(chat.key); } catch (_) {}
     await B.use('chats').ingestKeys();
-    let before = await B.use('chats').listMessages(chat.rootId || chat.key);
-    ok(!before.some(m => m.text === 'secret from A'), 'B cannot yet read (no key distributed)');
-
+    const sneaked = await B.use('chats').listMessages(chat.rootId || chat.key).catch(() => []);
+    ok(!sneaked.some(m => m.text === 'secret from A'), 'adding yourself to an invite-only chat does not get you in');
     A.setActor();
-    await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const seen = await A.use('chats').getChatById(chat.key);
+    ok(!seen.members.includes(B.keypair.id), 'the self-added outsider is not listed as a member');
 
+    const code = await A.use('chats').generateInvite(chat.key);
+    B.setActor();
+    await B.use('chats').joinByInvite(code);
+    await B.use('chats').ingestKeys();
+    const joined = await B.use('chats').listMessages(chat.rootId || chat.key);
+    ok(joined.some(m => m.text === 'secret from A'), 'the invited member reads the chat');
+
+    const os = require('os'); const fs = require('fs'); const path = require('path');
+    const lostDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-lost-keys-'));
+    const lostCrypto = require('../../../src/models/crypto')(lostDir, 'chats');
+    const restored = require('../../../src/models/chats_model')({ cooler: B.cooler, isPublic: false, tribeCrypto: lostCrypto, chatCrypto: lostCrypto, tribesModel: B.use('tribes') });
+    const blind = await restored.listMessages(chat.rootId || chat.key).catch(() => []);
+    ok(!blind.some(m => m.text === 'secret from A'), 'without the keyring the member cannot read');
+    await restored.ingestKeys();
+    const healed = await restored.listMessages(chat.rootId || chat.key);
+    ok(healed.some(m => m.text === 'secret from A'), 'after ingesting keys from the log the member reads again');
+  });
+});
+
+describe('chats: invitation codes', (t) => {
+  t('a stranger who copies an invitation token cannot use it up', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const S = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Burn', 'd', null, '', 'INVITE-ONLY', [], null);
+    const code = await A.use('chats').generateInvite(chat.key);
+    const withInvites = net.log.filter(m => m.value.content && Array.isArray(m.value.content.invites) && m.value.content.invites.length).pop();
+    const token = withInvites.value.content.invites[0].ch;
+    ok(token, 'the invitation token is readable by anyone');
+    S.setActor();
+    const ssbS = await S.cooler.open();
+    await new Promise((res, rej) => ssbS.publish({ type: 'chatMember', target: chat.key, member: S.keypair.id, on: true, code: token, createdAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    B.setActor();
+    await B.use('chats').joinByInvite(code);
+    A.setActor();
+    const seen = await A.use('chats').getChatById(chat.key);
+    ok(seen.members.includes(B.keypair.id), 'the invited inhabitant still gets in');
+    ok(!seen.members.includes(S.keypair.id), 'the stranger does not');
+  });
+
+  t('someone without the key yet does not accept one from a stranger', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const S = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Bootstrap', 'd', null, '', 'INVITE-ONLY', [], null);
+    const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
+    const planted = require('crypto').randomBytes(32).toString('hex');
+    const ssbS = await S.cooler.open();
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: chat.key, generation: 1, memberKeys: { [B.keypair.id]: S.tribeCrypto.boxKeyForMember(planted, B.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
     B.setActor();
     await B.use('chats').ingestKeys();
-    const after = await B.use('chats').listMessages(chat.rootId || chat.key);
-    ok(after.some(m => m.text === 'secret from A'), 'after keyholder listed, B is healed and decrypts');
+    const ring = require('../../../src/models/crypto')(B.configDir, 'chats');
+    ok(!ring.getKeys(chat.key).includes(planted), 'the planted key is ignored');
+  });
+
+  t('when a member leaves, the owner changes the key and only those who stay receive it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const pause = () => new Promise(r => setTimeout(r, 5));
+    const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'chats');
+    A.setActor();
+    const chat = await A.use('chats').createChat('Rotate', 'd', null, '', 'INVITE-ONLY', [], null);
+    const codeB = await A.use('chats').generateInvite(chat.key);
+    const codeC = await A.use('chats').generateInvite(chat.key);
+    B.setActor(); await B.use('chats').joinByInvite(codeB);
+    C.setActor(); await C.use('chats').joinByInvite(codeC);
+    await pause();
+    const before = net.log.length;
+    C.setActor(); await C.use('chats').leaveChat(chat.key);
+    ok(!net.log.slice(before).some(m => m.value.content.type === 'tribe-keys'), 'the one who leaves does not hand out a key');
+    await pause();
+    A.setActor();
+    await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+    const fresh = keysOf(A).getKey(chat.key);
+    ok(!keysOf(C).getKeys(chat.key).includes(fresh), 'the new key is not the one the leaver had');
+    const settled = net.log.length;
+    await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+    eq(net.log.length, settled, 'the key changes once, not on every visit');
+    B.setActor(); await B.use('chats').ingestKeys();
+    C.setActor(); await C.use('chats').ingestKeys();
+    ok(keysOf(B).getKeys(chat.key).includes(fresh), 'the member who stays gets the new key');
+    ok(!keysOf(C).getKeys(chat.key).includes(fresh), 'the member who left does not');
+  });
+
+  t('a fake delivery entry from a stranger does not stop the owner from sending a member the key', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const S = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Deliver', 'd', null, '', 'INVITE-ONLY', [], null);
+    await A.use('chats').sendMessage(chat.key, 'for members');
+    S.setActor();
+    const ssbS = await S.cooler.open();
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: chat.key, generation: 1, memberKeys: { [B.keypair.id]: 'not-a-key' } }, (e) => e ? rej(e) : res()));
+    A.setActor();
+    const ssbA = await A.cooler.open();
+    await new Promise((res, rej) => ssbA.publish({ type: 'chatMember', target: chat.key, member: B.keypair.id, on: true, createdAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+    B.setActor();
+    await B.use('chats').ingestKeys();
+    const view = await B.use('chats').listMessages(chat.key).catch(() => []);
+    ok(view.some(m => m.text === 'for members'), 'the member receives the key and reads the chat');
   });
 });
 
@@ -324,5 +417,84 @@ describe('chats: pinned messages', (t) => {
     await A.use('chats').togglePin(chat.key, msg.key);
     seen = (await A.use('chats').listMessages(chat.key))[0];
     ok(!seen.pinned, 'second toggle unpins');
+  });
+});
+
+const publishAs = async (P, content) => {
+  const ssb = await P.cooler.open();
+  return new Promise((res, rej) => ssb.publish(content, (e, m) => e ? rej(e) : res(m)));
+};
+
+const visibleTokenOf = (net) => {
+  let token = null;
+  for (const m of net.log) {
+    const c = m.value && m.value.content;
+    if (c && c.type === 'chat' && Array.isArray(c.invites)) for (const inv of c.invites) if (inv && typeof inv.ch === 'string') token = inv.ch;
+  }
+  return token;
+};
+
+describe('chats: the signed author is the author', (t) => {
+  t('a message claiming somebody else as author shows who really sent it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Agora', '', null, '', 'OPEN', [], null);
+    B.setActor();
+    await B.use('chats').joinChat(chat.key);
+    await publishAs(B, { type: 'chatMessage', chatId: chat.key, text: 'impostor', author: A.keypair.id, createdAt: new Date().toISOString() });
+    A.setActor();
+    const msg = (await A.use('chats').listMessages(chat.key)).find(m => m.text === 'impostor');
+    ok(msg, 'the message is listed');
+    eq(msg.author, B.keypair.id);
+  });
+
+  t('a chat claiming somebody else as author belongs to whoever signed it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    B.setActor();
+    const fake = await publishAs(B, { type: 'chat', title: 'Fake', description: '', image: null, category: '', status: 'OPEN', tags: [], members: [B.keypair.id], invites: [], author: A.keypair.id, createdAt: new Date().toISOString() });
+    A.setActor();
+    const chat = await A.use('chats').getChatById(fake.key);
+    eq(chat.author, B.keypair.id);
+    let threw = false;
+    try { await A.use('chats').deleteChatById(fake.key); } catch (_) { threw = true; }
+    ok(threw, 'the named author cannot delete it');
+  });
+});
+
+describe('chats: a private invitation token is not a key', (t) => {
+  t('a stranger who copies the visible invitation token gets neither a seat nor the key', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Vault', 'd', null, '', 'INVITE-ONLY', [], null);
+    await A.use('chats').generateInvite(chat.key);
+    await A.use('chats').sendMessage(chat.key, 'secret from A');
+    const token = visibleTokenOf(net);
+    ok(token, 'the token is readable by anybody');
+    C.setActor();
+    await publishAs(C, { type: 'chatMember', target: chat.key, member: C.keypair.id, on: true, code: token, createdAt: new Date().toISOString() });
+    A.setActor();
+    await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+    ok(!(await A.use('chats').getChatById(chat.key)).members.includes(C.keypair.id), 'the stranger is not a member');
+    C.setActor();
+    await C.use('chats').ingestKeys();
+    const seen = await C.use('chats').listMessages(chat.key).catch(() => []);
+    ok(!seen.some(m => m.text === 'secret from A'), 'the stranger cannot read');
+  });
+
+  t('the invited inhabitant joins once and the code is then spent', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Guild', 'd', null, '', 'INVITE-ONLY', [], null);
+    await A.use('chats').sendMessage(chat.key, 'welcome');
+    const code = await A.use('chats').generateInvite(chat.key);
+    B.setActor();
+    await B.use('chats').joinByInvite(code);
+    ok((await B.use('chats').listMessages(chat.key)).some(m => m.text === 'welcome'), 'the invited inhabitant reads');
+    A.setActor();
+    ok((await A.use('chats').getChatById(chat.key)).members.includes(B.keypair.id), 'and is a member for the author');
+    C.setActor();
+    let reused = false;
+    try { await C.use('chats').joinByInvite(code); } catch (_) { reused = true; }
+    ok(reused, 'the same code does not work twice');
   });
 });

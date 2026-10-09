@@ -24,10 +24,10 @@ Most of these files are created the first time something needs them. A missing f
 | `ebt/` | Replication bookkeeping: how far along each peer is in each feed, so a reconnection resumes instead of starting over. |
 | `conn.json` | The address book of peers: where each one was reachable, when it was last seen and how the connection went. |
 | `conn.json~` | The previous copy of the above, left by the atomic write. |
-| `gossip.json` | The classic peer list — the pubs and LAN peers this device knows. |
+| `gossip.json` | The pubs this device uses — the ones you joined or added — in the classic format SSB clients know. Oasis keeps it; the connections themselves are handled from `conn.json`. |
 | `manifest.json` | The list of RPC methods the sbot exposes, written at every start so clients know what they may call. |
 | `socket` | The local unix socket. This is how the Oasis web backend talks to the sbot; nothing travels over the network here. |
-| `node_modules/` | Where third-party sbot plugins would be installed. Oasis loads its own plugins from the application folder, so this stays empty unless you install one by hand. |
+| `node_modules/` | Not used by Oasis, which loads only its own plugins from the application folder. It can be removed if present. |
 | `invites/` | The invite codes this node has issued. Only exists on a node running in PUB mode. |
 | `config` | An optional JSON file to override the sbot configuration. Oasis never writes it; it is there because SSB reads it if you create it. |
 
@@ -50,6 +50,8 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 
 | Path | What it holds |
 | --- | --- |
+| `oasis-config.json` | The node's settings: modules on or off, theme, language, home page, phone and privacy choices, and the ECOin wallet connection. Created on first start and readable only by your user, because it can hold the wallet's RPC password. |
+| `oasis-server-config.json` | This node's own sbot choices (replication hops, and on a PUB its whole server config), merged over the default in the application folder. Only exists once something differs from the default. |
 | `keys/tribes-keys.json` | The symmetric keys of the tribes you belong to — without them, tribe content cannot be read. |
 | `keys/chats-keys.json` | The same, for private chats. |
 | `keys/pads-keys.json` | The same, for pads. |
@@ -91,13 +93,14 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `peers/peer-health.json` | Since when each pub or peer has been failing to connect. A pub that keeps failing for long enough is shown as unreachable and hidden from the peer lists; as soon as it connects again it is removed from here. |
 | `peers/lan-peers.json` | The inhabitants this node has met on the local network. With the Wish set to Only LAN, you see content from them and from yourself. |
 | `phone/phone-history.json` | Your call history: who, when, direction, result and duration. It stays on this device. |
+| `rooms/` | The recordings you made in rooms, as audio files. They stay on this device and are not part of a backup. |
 | `phone/phone-seen.json` | Which missed calls and audio records you have already seen or played, so the PHONE counter only counts the rest. |
 
 A file with a `.before-restore` suffix next to any of these is the copy a restore kept of whatever was there before it wrote the one from the backup.
 
 ## What a backup covers
 
-**Tools › Backup › FULL BACKUP** packs the log, the blobs and the whole of `~/.ssb/oasis/` — keyrings included — into one encrypted file, and a restore puts them back where they belong. The identity is *not* in there: `secret` travels on its own, through **RECOVERY** or **EXPORT KEYS**, and must be restored *after* the backup. The order matters and [the backup guide](../backups/README.md) explains why.
+**Tools › Backup › FULL BACKUP** packs the log, the blobs and `~/.ssb/oasis/` — keyrings included, but not the settings files nor the room recordings — into one encrypted file, and a restore puts them back where they belong. The identity is *not* in there: `secret` travels on its own, through **RECOVERY** or **EXPORT KEYS**, and must be restored *after* the backup. The order matters and [the backup guide](../backups/README.md) explains why.
 
 ## What is sensitive
 
