@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const { getConfig } = require("../configs/config-manager.js");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { collabContent, openInviteOf } = require('../backend/collab_content');
-const { readTyped } = require("./typed_log");
+const { readTyped, memoIndex } = require("./typed_log");
 const mapCollab = collabContent({ membersField: 'members', undecField: 'encrypted', contentFields: ['title', 'description', 'image'], listFields: ['tags', 'invites', 'markers'] });
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -759,9 +759,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const viewer = viewerId || ssbClient.id;
 
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(unwrapForIndex(messages));
-      await decryptIndexNodes(idx);
-      await expandMarkers(idx);
+      const idx = await memoIndex('maps', messages, async (m) => { const built = buildIndex(unwrapForIndex(m)); await decryptIndexNodes(built); await expandMarkers(built); return built; });
 
       let root = id;
       while (idx.parent.has(root)) root = idx.parent.get(root);

@@ -459,7 +459,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
     section(
       div({ class: "tags-header module-header-line" },
         h2(i18n.torrentAllSectionTitle || i18n.torrentsTitle),
-        p(i18n.torrentDescription)
+        p(i18n.torrentsDescription)
       ),
       div(
         { class: "filters" },

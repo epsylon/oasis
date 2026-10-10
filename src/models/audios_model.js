@@ -1,7 +1,7 @@
 const pull = require("../server/node_modules/pull-stream");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 
@@ -361,7 +361,7 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const viewer = viewerId || ssbClient.id;
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(messages);
+      const idx = memoIndex('audios', messages, buildIndex);
 
       const rootId = idx.rootOf(id);
       const agg = idx.resolveGroup(rootId);

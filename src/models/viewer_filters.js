@@ -81,6 +81,7 @@ const rememberLanPeers = (keys) => {
   return changed;
 };
 
+const MUTUAL_CONCURRENCY = 16;
 const filterByWish = async (items, { wish, viewer, authorOf: author, isOwn, isMutual, lan } = {}) => {
   if (!Array.isArray(items)) return items;
   const own = (it) => !!(isOwn && isOwn(it, viewer));
@@ -90,12 +91,13 @@ const filterByWish = async (items, { wish, viewer, authorOf: author, isOwn, isMu
     return items.filter(it => { const a = author(it); return !a || a === viewer || own(it) || near.has(a); });
   }
   if (wish === 'mutuals' && typeof isMutual === 'function') {
-    const out = [];
-    for (const it of items) {
-      const a = author(it);
-      if (!a || a === viewer || await isMutual(a)) out.push(it);
-    }
-    return out;
+    const authors = [...new Set(items.map(author).filter(a => a && a !== viewer))];
+    const verdict = new Map();
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(MUTUAL_CONCURRENCY, authors.length) }, async () => {
+      while (next < authors.length) { const a = authors[next++]; verdict.set(a, !!(await isMutual(a))); }
+    }));
+    return items.filter(it => { const a = author(it); return !a || a === viewer || verdict.get(a); });
   }
   return items;
 };

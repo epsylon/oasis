@@ -477,7 +477,8 @@ describe('banking: a PUB pays each UBI claim once, and only its own', (t) => {
       req.on('end', () => {
         const { method, params } = JSON.parse(body || '{}');
         const reply = (result, error = null) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ result, error, id: 'oasis' })); };
-        if (method === 'getbalance') return reply(opts.balance ?? 1000);
+        if (method === 'getbalance' && opts.balanceDown) return reply(null, { code: -28, message: 'Loading wallet' });
+        if (method === 'getbalance') return reply((opts.balance ?? 1000) + state.sends.filter(x => x.category === 'send' && !(opts.preload || []).includes(x)).reduce((acc, x) => acc + Number(x.amount || 0), 0));
         if (method === 'listtransactions') return reply(state.sends.slice());
         if (method === 'sendtoaddress') {
           state.sendCalls += 1;
@@ -633,6 +634,121 @@ describe('banking: a PUB pays each UBI claim once, and only its own', (t) => {
       await runAsPub(P, wallet, async (bank) => { await bank.rebalanceUbiPools(); await bank.rebalanceUbiPools(); });
       eq(wallet.state.sends.filter(s => s.address === qAddress).length, 1, 'a single rebalance went out');
       eq(await transfersToQ(), 1, 'and it is recorded once');
+    } finally { await wallet.close(); }
+  });
+
+  const ubiPub = async (net, balance, available = true) => {
+    const X = makePeer(net);
+    const address = randomAddress();
+    await publish(X, { type: 'pubAvailability', coin: 'ECO', available, balance, address, timestamp: Date.now() });
+    for (let i = 0; i < 3; i++) { const { A } = await makeClaimant(net); await claim(A, X.keypair.id); }
+    return { X, address };
+  };
+  const follow = (a, b) => publish(a, { type: 'contact', contact: b.keypair.id, following: true });
+
+  t('a richer PUB sends a poorer one what leaves both with the same, even if the poorer one still has funds', async () => {
+    const net = makeNetwork();
+    const { X: P } = await ubiPub(net, 0);
+    const { X: Q, address: qAddress } = await ubiPub(net, 10000);
+    await follow(P, Q);
+    const wallet = await fakeWallet({ balance: 20500 });
+    try {
+      await runAsPub(P, wallet, async (bank) => { await bank.rebalanceUbiPools(); await bank.rebalanceUbiPools(); });
+      const toQ = wallet.state.sends.filter(s => s.address === qAddress);
+      eq(toQ.length, 1, 'a single transfer, however many times it runs');
+      eq(-toQ[0].amount, 5000, 'both end with 15000 above the reserve');
+    } finally { await wallet.close(); }
+  });
+
+  t('with several richer PUBs, each one sends only its part of the gap', async () => {
+    const net = makeNetwork();
+    const { X: P } = await ubiPub(net, 0);
+    const { X: R } = await ubiPub(net, 20000);
+    const { X: Q, address: qAddress } = await ubiPub(net, 5000);
+    await follow(P, Q); await follow(P, R);
+    const wallet = await fakeWallet({ balance: 20500 });
+    try {
+      await runAsPub(P, wallet, (bank) => bank.rebalanceUbiPools());
+      const toQ = wallet.state.sends.filter(s => s.address === qAddress);
+      eq(toQ.length, 1);
+      eq(-toQ[0].amount, 5000, 'half of the 10000 missing, the other PUB above the average sends the rest');
+    } finally { await wallet.close(); }
+  });
+
+  t('a PUB below the average sends nothing', async () => {
+    const net = makeNetwork();
+    const { X: P } = await ubiPub(net, 0);
+    const { X: Q } = await ubiPub(net, 20000);
+    const { X: S } = await ubiPub(net, 9800);
+    await follow(P, Q); await follow(P, S);
+    const wallet = await fakeWallet({ balance: 5500 });
+    try {
+      await runAsPub(P, wallet, (bank) => bank.rebalanceUbiPools());
+      eq(wallet.state.sends.length, 0, 'the poorest PUB keeps what it has');
+    } finally { await wallet.close(); }
+  });
+
+  t('small differences between PUBs are left alone', async () => {
+    const net = makeNetwork();
+    const { X: P } = await ubiPub(net, 0);
+    const { X: Q } = await ubiPub(net, 9800);
+    const { X: S } = await ubiPub(net, 9900);
+    await follow(P, Q); await follow(P, S);
+    const wallet = await fakeWallet({ balance: 10500 });
+    try {
+      await runAsPub(P, wallet, (bank) => bank.rebalanceUbiPools());
+      eq(wallet.state.sends.length, 0, 'nothing moves for a hundred or two out of ten thousand');
+    } finally { await wallet.close(); }
+  });
+
+  t('once the richer PUB announces its new balance, the poorer one does not send anything back', async () => {
+    const net = makeNetwork();
+    const { X: P, address: pAddress } = await ubiPub(net, 0);
+    const { X: Q, address: qAddress } = await ubiPub(net, 10000);
+    await follow(P, Q); await follow(Q, P);
+    const walletP = await fakeWallet({ balance: 20500 });
+    const walletQ = await fakeWallet({ balance: 15500 });
+    try {
+      await runAsPub(P, walletP, (bank) => bank.rebalanceUbiPools());
+      eq(walletP.state.sends.filter(s => s.address === qAddress).length, 1);
+      await publish(P, { type: 'pubAvailability', coin: 'ECO', available: true, balance: 15000, address: pAddress, timestamp: Date.now() });
+      await runAsPub(Q, walletQ, (bank) => bank.rebalanceUbiPools());
+      eq(walletQ.state.sends.filter(s => s.address === pAddress).length, 0, 'nothing goes back and forth');
+    } finally { await walletP.close(); await walletQ.close(); }
+  });
+
+  t('a PUB whose wallet does not answer announces it without a balance, and gets nothing for it', async () => {
+    const net = makeNetwork();
+    const { X: P } = await ubiPub(net, 0);
+    const { X: Q, address: qAddress } = await ubiPub(net, 10000);
+    await follow(P, Q);
+    const down = await fakeWallet({ balanceDown: true });
+    const wallet = await fakeWallet({ balance: 20500 });
+    try {
+      await runAsPub(Q, down, (bank) => bank.publishPubAvailability());
+      const latest = await new Promise((resolve) => {
+        const pull = require('../../../src/server/node_modules/pull-stream');
+        let last = null;
+        pull(Q.node.messagesByType({ type: 'pubAvailability' }), pull.drain(m => { if (m.value.author === Q.keypair.id) last = m.value.content; }, () => resolve(last)));
+      });
+      eq(latest.available, false, 'it announces itself unavailable');
+      eq(latest.balance, undefined, 'without a balance');
+      await runAsPub(P, wallet, (bank) => bank.rebalanceUbiPools());
+      eq(wallet.state.sends.filter(s => s.address === qAddress).length, 0, 'an unknown balance is not filled');
+    } finally { await down.close(); await wallet.close(); }
+  });
+
+  t('a PUB that serves no claimants receives nothing', async () => {
+    const net = makeNetwork();
+    const { X: P } = await ubiPub(net, 0);
+    const Q = makePeer(net);
+    const qAddress = randomAddress();
+    await publish(Q, { type: 'pubAvailability', coin: 'ECO', available: true, balance: 100, address: qAddress, timestamp: Date.now() });
+    await follow(P, Q);
+    const wallet = await fakeWallet({ balance: 20500 });
+    try {
+      await runAsPub(P, wallet, (bank) => bank.rebalanceUbiPools());
+      eq(wallet.state.sends.filter(s => s.address === qAddress).length, 0);
     } finally { await wallet.close(); }
   });
 

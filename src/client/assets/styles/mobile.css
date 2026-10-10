@@ -810,14 +810,14 @@ a.filter-btn,
   margin-left: 0 !important;
 }
 
-.oasis-id-copy {
+input.oasis-id-copy[readonly] {
   width: 100% !important;
   max-width: 100% !important;
   box-sizing: border-box !important;
   font-family: monospace !important;
-  font-size: 12px !important;
+  font-size: clamp(8px, 2.5vw, 12px) !important;
   text-align: center !important;
-  padding: 8px !important;
+  padding: 8px 6px !important;
   border: 1px solid #FFA500 !important;
   border-radius: 8px !important;
   background: rgba(255, 165, 0, 0.08) !important;
@@ -1189,3 +1189,268 @@ a.create-button {
 .hemi-legend-count { margin-left: auto !important; }
 .hemi-modes { flex-wrap: wrap !important; }
 .room-item .mailing-archive-head{flex-wrap:wrap}
+
+.oasis-nav-side-toggle {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+.oasis-nav-side-toggle ~ .header {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px 6px !important;
+  padding: 8px 8px 4px !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left,
+.oasis-nav-side-toggle ~ .header .top-bar-right,
+.oasis-nav-side-toggle ~ .header .top-bar-mid {
+  display: contents !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left a.logo-icon {
+  order: 1 !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left a.logo-icon img.logo-icon {
+  width: 44px !important;
+  height: 44px !important;
+  margin: 0 !important;
+}
+.oasis-nav-side-toggle ~ .header .oasis-mobile-menus {
+  order: 2 !important;
+  display: flex !important;
+  flex: 1 1 auto !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.oasis-nav-side-toggle ~ .header .oasis-menu-slot {
+  display: inline-flex !important;
+}
+.oasis-nav-side-toggle ~ .header .oasis-menu-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  min-height: 44px !important;
+  padding: 6px 16px !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+.oasis-nav-side-toggle ~ .header .oasis-menu-slot .oasis-menu-close {
+  display: none !important;
+}
+#nav-left-toggle:checked ~ .header .oasis-menu-slot-left .oasis-menu-open,
+#nav-right-toggle:checked ~ .header .oasis-menu-slot-right .oasis-menu-open {
+  display: none !important;
+}
+#nav-left-toggle:checked ~ .header .oasis-menu-slot-left .oasis-menu-close,
+#nav-right-toggle:checked ~ .header .oasis-menu-slot-right .oasis-menu-close {
+  display: inline-flex !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left nav {
+  order: 3 !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-right nav {
+  order: 4 !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left nav,
+.oasis-nav-side-toggle ~ .header .top-bar-right nav {
+  flex: 1 1 calc(50% - 4px) !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left nav ul,
+.oasis-nav-side-toggle ~ .header .top-bar-right nav ul {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 4px !important;
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left nav ul li,
+.oasis-nav-side-toggle ~ .header .top-bar-right nav ul li {
+  margin: 0 !important;
+  min-width: 0 !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left nav ul li a,
+.oasis-nav-side-toggle ~ .header .top-bar-right nav ul li a {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  min-height: 50px !important;
+  padding: 0 !important;
+  font-size: 0 !important;
+  text-decoration: none !important;
+  box-sizing: border-box !important;
+}
+.oasis-nav-side-toggle ~ .header nav ul li a .nav-text {
+  display: none !important;
+}
+.oasis-nav-side-toggle ~ .header nav ul li a .emoji {
+  font-size: 1.6rem !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+}
+.oasis-nav-side-toggle ~ .header nav ul li a .inbox-badge {
+  position: absolute !important;
+  top: 3px !important;
+  right: 3px !important;
+  margin: 0 !important;
+  font-size: 0.66rem !important;
+}
+.oasis-nav-side-toggle ~ .main-content {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.oasis-nav-side-toggle ~ .main-content .main-column {
+  order: 0 !important;
+}
+.oasis-nav-side-toggle ~ .main-content .sidebar-left,
+.oasis-nav-side-toggle ~ .main-content .sidebar-right {
+  display: none !important;
+}
+#nav-left-toggle:checked ~ .main-content .sidebar-left,
+#nav-right-toggle:checked ~ .main-content .sidebar-right {
+  display: block !important;
+  order: -1 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  padding: 0 4px !important;
+  margin: 0 0 8px 0 !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-header {
+  margin: 0 0 6px 0 !important;
+  padding: 12px !important;
+}
+.oasis-nav-side-toggle ~ .main-content .sidebar-left .oasis-nav-list,
+.oasis-nav-side-toggle ~ .main-content .sidebar-right .oasis-nav-list {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-list li {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-list li a {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-height: 74px !important;
+  height: 100% !important;
+  padding: 8px 4px !important;
+  margin: 0 !important;
+  text-align: center !important;
+  font-size: 0.72rem !important;
+  opacity: 1 !important;
+  box-sizing: border-box !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-list li a .emoji {
+  width: auto !important;
+  font-size: 1.5rem !important;
+  line-height: 1 !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-list li a .nav-text {
+  line-height: 1.15 !important;
+  overflow-wrap: anywhere !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left nav,
+.oasis-nav-side-toggle ~ .header .top-bar-right nav {
+  position: fixed !important;
+  bottom: 0 !important;
+  width: 50% !important;
+  flex: none !important;
+  z-index: 900 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left nav {
+  left: 0 !important;
+  right: auto !important;
+  padding: 6px 2px 6px 6px !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-right nav {
+  right: 0 !important;
+  left: auto !important;
+  padding: 6px 6px 6px 2px !important;
+}
+.oasis-nav-side-toggle ~ .oasis-footer {
+  padding-bottom: 84px !important;
+}
+body:has(:is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select):focus) .oasis-nav-side-toggle ~ .header .top-bar-left nav,
+body:has(:is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select):focus) .oasis-nav-side-toggle ~ .header .top-bar-right nav {
+  display: none !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-left nav {
+  width: calc(300% / 7) !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-right nav {
+  width: calc(400% / 7) !important;
+}
+.oasis-nav-side-toggle ~ .header .top-bar-right nav ul {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+}
+.oasis-nav-side-toggle ~ .main-content .sidebar-left nav > ul,
+.oasis-nav-side-toggle ~ .main-content .sidebar-right nav > ul {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-auto-flow: row dense !important;
+  gap: 8px !important;
+  list-style: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-group {
+  display: contents !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-group > .oasis-nav-header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-height: 74px !important;
+  margin: 0 !important;
+  padding: 8px 4px !important;
+  text-align: center !important;
+  font-size: 0.68rem !important;
+  box-sizing: border-box !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-group > .oasis-nav-header .emoji {
+  width: auto !important;
+  font-size: 1.5rem !important;
+  line-height: 1 !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-group > .oasis-nav-header .nav-text {
+  flex: 0 0 auto !important;
+  line-height: 1.15 !important;
+  overflow-wrap: anywhere !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-group > .oasis-nav-header .oasis-nav-arrow {
+  display: none !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-group > .oasis-nav-list {
+  grid-column: 1 / -1 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.oasis-nav-side-toggle ~ .main-content .oasis-nav-toggle:not(:checked) + .oasis-nav-header + .oasis-nav-list {
+  display: none !important;
+}

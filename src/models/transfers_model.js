@@ -6,7 +6,7 @@ const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
-const { readTyped } = require('./typed_log')
+const { readTyped, memoIndex } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const TRANSFER_TYPES = ["transfer", "transferConfirm", "transferOpinion", "ubiClaim", "tombstone"]
@@ -416,7 +416,7 @@ module.exports = ({ cooler }) => {
     async getTransferById(id) {
       const ssbClient = await openSsb()
       const messages = await getAllMessages(ssbClient)
-      const idx = buildIndex(messages)
+      const idx = memoIndex('transfers', messages, buildIndex)
 
       const root = idx.rootOf(id)
       const g = idx.resolveGroup(root)

@@ -826,8 +826,8 @@ const CasesTable = (rows = [], opts = {}) => {
   const bodyRows = rows.map((c) => {
     const role = showRole ? roleTextForCase(c) : '';
     return tr(
-      td(c.title || ''),
-      td(
+      td({ 'data-label': i18n.courtsThCase }, c.title || ''),
+      td({ 'data-label': i18n.courtsAccuser },
         c.accuser
           ? a(
               {
@@ -838,10 +838,10 @@ const CasesTable = (rows = [], opts = {}) => {
             )
           : ''
       ),
-      td(methodLabel(c.method)),
-      td(c.createdAt ? fmt(c.createdAt) : ''),
-      showRole ? td(role) : null,
-      td(
+      td({ 'data-label': i18n.courtsCaseMethod }, methodLabel(c.method)),
+      td({ 'data-label': i18n.courtsThCreatedAt }, c.createdAt ? fmt(c.createdAt) : ''),
+      showRole ? td({ 'data-label': i18n.courtsThRole || 'Role' }, role) : null,
+      td({ class: 'table-row-action' },
         c.id
           ? form(
               {
@@ -885,10 +885,10 @@ const NominationsTable = (nominations = [], currentUserId = '') => {
       currentUserId &&
       String(n.judgeId || '') === String(currentUserId || '');
     return tr(
-      td(userLink(n.judgeId)),
-      td(String(n.supports || 0)),
-      td(fmt(n.createdAt)),
-      td(
+      td({ 'data-label': i18n.courtsThJudge }, userLink(n.judgeId)),
+      td({ 'data-label': i18n.courtsThSupports }, String(n.supports || 0)),
+      td({ 'data-label': i18n.courtsThDate }, fmt(n.createdAt)),
+      td({ class: 'table-row-action' },
         isSelf
           ? span('')
           : form(

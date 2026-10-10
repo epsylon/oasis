@@ -1558,7 +1558,7 @@ const renderInhabitantsSection = (tribe, members, query = {}) => {
     renderTribeSectionHeader(i18n.tribeSectionInhabitants, i18n.discoverPeople),
     resolved.length ? renderTribeSearchRow(tribe, 'inhabitants', null, search, renderModuleStats(shown.length), i18n.searchInhabitantsPlaceholder, 'search') : null,
     shown.length
-      ? div({ class: 'inhabitants-list' }, ...paged(shown).map(u => renderInhabitantCard(u, 'all', userId, false)))
+      ? div({ class: 'inhabitants-list inhabitants-grid' }, ...paged(shown).map(u => renderInhabitantCard(u, 'all', userId, false)))
       : renderTribeEmpty(i18n.tribeInhabitantsEmpty || i18n.noInhabitantsFound)
   );
 };

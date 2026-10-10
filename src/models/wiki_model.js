@@ -1,5 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -306,7 +306,8 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
   const load = async () => {
     const ssbClient = await openSsb();
     const entries = await readEntries(ssbClient);
-    const idx = buildIndex(entries, await tribeMembersFor(entries));
+    const members = await tribeMembersFor(entries);
+    const idx = memoIndex('wiki', entries, (e) => buildIndex(e, members));
     return { ssbClient, idx };
   };
 

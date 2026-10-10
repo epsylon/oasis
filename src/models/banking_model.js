@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const pull = require("../server/node_modules/pull-stream");
-const { readTyped, CONTENT_TYPES } = require("./typed_log");
+const { readTyped, CONTENT_TYPES, requestScope } = require("./typed_log");
 const { getConfig } = require("../configs/config-manager.js");
 const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state.js");
@@ -323,6 +323,17 @@ async function sendVerified(address, amount, comment, kind = "pub") {
   return { txid: null, unknown: found === undefined };
 }
 
+async function tryGetBalance(kind = "user", timeoutMs = 0) {
+  try {
+    const r = await rpcCall("getbalance", [], kind, timeoutMs);
+    if (r === null || r === undefined) return null;
+    const n = Number(r);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
 async function safeGetBalance(kind = "user", timeoutMs = 0) {
   try {
     const r = await rpcCall("getbalance", [], kind, timeoutMs);
@@ -411,8 +422,9 @@ const PUB_ANNOUNCE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;
 const PUB_ANNOUNCE_REFRESH_MS = 12 * 60 * 60 * 1000;
 const CLAIMANT_MIN_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 const REBALANCE_MIN_CLAIMANTS = 3;
-const REBALANCE_MAX_PER_EPOCH = 200;
 const REBALANCE_PAYOUT_RATIO = 0.5;
+const REBALANCE_TOLERANCE = 0.05;
+const REBALANCE_SETTLE_MS = 6 * 60 * 60 * 1000;
 const REBALANCE_CONCEPT = "OASIS UBI Rebalance";
 const UBI_PAYMENT_CONCEPT = "UBI - ";
 const UBI_PAYMENT_PREFIXES = ["UBI - ", "OASIS UBI Payment"];
@@ -929,7 +941,7 @@ async function getBytesForUser(userId) {
 }
 
 let _ecoTaxStatsCache = null;
-const ECO_TAX_STATS_TTL_MS = 60 * 1000;
+const ECO_TAX_STATS_TTL_MS = 10 * 60 * 1000;
 
 async function calculateEcoTaxStatsInternal() {
   const ssb = await (async () => {
@@ -1007,12 +1019,14 @@ async function calculateEcoTaxStatsInternal() {
   });
 }
 
+let _ecoTaxStatsPending = null;
 async function calculateEcoTaxStats() {
   const now = Date.now();
   if (_ecoTaxStatsCache && (now - _ecoTaxStatsCache.ts) < ECO_TAX_STATS_TTL_MS) {
     return _ecoTaxStatsCache.value;
   }
-  const value = await calculateEcoTaxStatsInternal().catch(() => null);
+  if (!_ecoTaxStatsPending) _ecoTaxStatsPending = calculateEcoTaxStatsInternal().catch(() => null).finally(() => { _ecoTaxStatsPending = null; });
+  const value = await _ecoTaxStatsPending;
   if (value) _ecoTaxStatsCache = { ts: now, value };
   return value || {
     totalBlocks: 0, totalBytes: 0, totalGramsCO2: 0,
@@ -1583,7 +1597,7 @@ async function getLastPublishedTimestamp(userId) {
       if (!c || c.type !== "pubAvailability" || c.coin !== "ECO") continue;
       const ts = Number(c.timestamp) || Number(v.timestamp) || 0;
       const prev = latestByPub.get(v.author);
-      if (!prev || ts > prev.timestamp) latestByPub.set(v.author, { pubId: v.author, available: !!c.available, timestamp: ts, balance: Number(c.balance) || 0, pool: Number(c.pool) || 0, address: isValidEcoinAddress(c.address) ? String(c.address) : null });
+      if (!prev || ts > prev.timestamp) latestByPub.set(v.author, { pubId: v.author, available: !!c.available, timestamp: ts, balance: Number(c.balance) || 0, balanceKnown: c.balance !== undefined && c.balance !== null && Number.isFinite(Number(c.balance)), pool: Number(c.pool) || 0, address: isValidEcoinAddress(c.address) ? String(c.address) : null });
     }
     return latestByPub;
   }
@@ -1791,21 +1805,22 @@ async function getLastPublishedTimestamp(userId) {
 
   async function publishPubAvailability() {
     if (!isPubNode()) return;
-    const balance = await safeGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
+    const raw = await tryGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
+    const balance = raw === null ? 0 : raw;
     const floor = Math.max(1, DEFAULT_RULES?.caps?.floor_user ?? 1);
-    const pv = computePoolVars(Number(balance) || 0, DEFAULT_RULES);
-    const available = pv.available >= floor;
+    const pv = computePoolVars(balance, DEFAULT_RULES);
+    const available = raw !== null && pv.available >= floor;
     const ssb = await openSsb();
     if (!ssb || !ssb.publish) return;
     const last = await loadLastAnnounce(ssb);
     const stale = Date.now() - last.timestamp > PUB_ANNOUNCE_REFRESH_MS;
     const announcedBalance = Number(pv.available.toFixed(6));
-    const balanceMoved = Math.abs(announcedBalance - (Number(last.balance) || 0)) > Math.max(1, (Number(last.balance) || 0) * 0.2);
+    const balanceMoved = raw !== null && Math.abs(announcedBalance - (Number(last.balance) || 0)) > Math.max(1, (Number(last.balance) || 0) * 0.2);
     if (last.available === available && !stale && !balanceMoved) return available;
     const address = await getAnyWalletAddress().catch(() => null);
-    const content = { type: "pubAvailability", available, coin: "ECO", balance: announcedBalance, pool: Number(pv.pool.toFixed(6)), address: isValidEcoinAddress(address) ? address : undefined, timestamp: Date.now() };
+    const content = { type: "pubAvailability", available, coin: "ECO", ...(raw === null ? {} : { balance: announcedBalance, pool: Number(pv.pool.toFixed(6)) }), address: isValidEcoinAddress(address) ? address : undefined, timestamp: Date.now() };
     await new Promise((resolve, reject) => ssb.publish(content, (err, res) => err ? reject(err) : resolve(res)));
-    lastAnnounce = { available, timestamp: content.timestamp, balance: announcedBalance };
+    lastAnnounce = { available, timestamp: content.timestamp, balance: raw === null ? 0 : announcedBalance };
     console.log(`[UBI] announced ${available ? "available" : "unavailable"} (PUB wallet ${Number(balance).toFixed(6)} ECO)`);
     return available;
   }
@@ -1874,7 +1889,9 @@ async function getLastPublishedTimestamp(userId) {
     let epochs = await epochsRepo.list();
     if (!epochs.length) epochs = await listNetworkEpochs().catch(() => []);
     let computed = null;
-    try { computed = await computeEpoch({ epochId, userId: uid, rules: DEFAULT_RULES }); } catch {}
+    if (filter === "overview" || isPubNode()) {
+      try { computed = await computeEpoch({ epochId, userId: uid, rules: DEFAULT_RULES }); } catch {}
+    }
     const pv = computePoolVars(pubBalance, DEFAULT_RULES);
     const actions = await fetchUserActions(uid);
     const rawScore = scoreFromActions(actions);
@@ -2126,15 +2143,23 @@ async function getLastPublishedTimestamp(userId) {
     return result;
   }
 
+  const perRequest = (key, fn) => {
+    const store = requestScope.getStore();
+    if (!store) return fn();
+    const memo = store.bankingMemo || (store.bankingMemo = new Map());
+    if (!memo.has(key)) memo.set(key, fn());
+    return memo.get(key);
+  };
+
   async function getBankingData(userId) {
-    const ecoValue = await calculateEcoinValue();
+    const ecoValue = await perRequest("ecoinValue", () => calculateEcoinValue());
     const karmaScore = await getUserEngagementScore(userId);
     let estimatedUBI = 0;
     try {
-      const pubBal = isPubNode() ? await safeGetBalance("pub") : 0;
+      const pubBal = isPubNode() ? await perRequest("pubBalance", () => safeGetBalance("pub")) : 0;
       const pv = computePoolVars(pubBal, DEFAULT_RULES);
       const pool = pv.pool || 0;
-      const addresses = await listAddressesMerged();
+      const addresses = await perRequest("addresses", () => listAddressesMerged());
       const eligible = addresses.filter(a => a.address && isValidEcoinAddress(a.address));
       const wMin = DEFAULT_RULES.caps?.w_min ?? 0.2;
       const wMax = DEFAULT_RULES.caps?.w_max ?? 6;
@@ -2413,56 +2438,91 @@ async function getLastPublishedTimestamp(userId) {
     if (!ssb || !ssb.publish) return [];
     const me = config.keys.id;
     const epochId = epochIdNow();
-    const myBal = await safeGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
-    const pv = computePoolVars(myBal, DEFAULT_RULES);
-    let surplus = pv.available - (DEFAULT_RULES.capPerEpoch ?? 2000);
-    if (surplus <= 0) return [];
-    const pubs = (await listUbiPubs()).filter(p => p.pubId !== me && !p.available);
-    if (!pubs.length) return [];
+    const pubs = (await listUbiPubs()).filter(p => p.pubId !== me && p.balanceKnown);
     const { transfers, confirms, claims } = await readUbiLedger(ssb);
     const confirmedBy = (t) => confirms.get(t.key) || new Set();
+    const sum = (list) => list.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+    const createdOf = (t) => Date.parse(t.createdAt || "") || 0;
+    const isRebalance = (t) => String(t.concept || "").startsWith(REBALANCE_CONCEPT);
+    const epochOf = (t) => {
+      const tag = (Array.isArray(t.tags) ? t.tags : []).find(x => String(x).startsWith("epoch:"));
+      return tag ? String(tag).slice(6) : ((String(t.concept || "").match(/(\d{4}-\d{2})\s*$/) || [])[1] || "");
+    };
+    const eligibleCache = new Map();
+    const eligible = async (id) => {
+      if (!eligibleCache.has(id)) eligibleCache.set(id, !!(await isEligibleClaimant(id)).ok);
+      return eligibleCache.get(id);
+    };
+    const servedBy = async (pubId) => {
+      const epochs = new Set([previousEpochId(), epochId]);
+      const people = new Set();
+      for (const c of claims) {
+        if (!epochs.has(c.epochId) || people.has(c.author) || !(c.pubId === pubId || transfers.some(t => t.author === pubId && t.to === c.author && isUbiPayoutConcept(t.concept) && epochOf(t) === c.epochId))) continue;
+        if (await eligible(c.author)) people.add(c.author);
+      }
+      return people;
+    };
+    const now = Date.now();
+    const balanceOf = (p) => {
+      const announcedAt = Number(p.timestamp) || 0;
+      const inflows = transfers.filter(t => isRebalance(t) && t.to === p.pubId && createdOf(t) > announcedAt - REBALANCE_SETTLE_MS);
+      const outflows = transfers.filter(t => isRebalance(t) && t.author === p.pubId && createdOf(t) > announcedAt);
+      const payouts = transfers.filter(t => t.author === p.pubId && isUbiPayoutConcept(t.concept) && createdOf(t) > announcedAt);
+      return Math.max(0, (Number(p.balance) || 0) + sum(inflows) - sum(outflows) - sum(payouts));
+    };
     const sent = [];
     const recorded = new Set(transfers.map(t => t.txid).filter(Boolean));
     const pendingAll = () => { const raw = readJson(REBALANCE_PENDING_PATH, {}); return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}; };
     const setPending = (key, value) => { const all = pendingAll(); if (value) all[key] = value; else delete all[key]; writeJson(REBALANCE_PENDING_PATH, all); };
-    const record = async (pub, amount, txid, claimantsCount) => {
-      const now = new Date().toISOString();
-      const content = { type: "transfer", from: me, to: pub.pubId, concept: `${REBALANCE_CONCEPT} · ${epochId}`, amount: Number(amount).toFixed(6), category: "ECONOMIC", createdAt: now, updatedAt: now, deadline: null, confirmedBy: [me], status: "UNCONFIRMED", tags: ["UBI", "REBALANCE", `epoch:${epochId}`], opinions: {}, opinions_inhabitants: [], txid };
+    let left = 0;
+    const record = async (pub, amount, txid, served, ep = epochId, at = null) => {
+      const when = at || new Date().toISOString();
+      const content = { type: "transfer", from: me, to: pub.pubId, concept: `${REBALANCE_CONCEPT} · ${ep}`, amount: Number(amount).toFixed(6), category: "ECONOMIC", createdAt: when, updatedAt: when, deadline: null, confirmedBy: [me], status: "UNCONFIRMED", tags: ["UBI", "REBALANCE", `epoch:${ep}`], opinions: {}, opinions_inhabitants: [], txid };
       await new Promise((resolve, reject) => ssb.publish(content, (err, msg) => err ? reject(err) : resolve(msg)));
       recorded.add(txid);
-      surplus -= Number(amount);
-      console.log(`[UBI] rebalanced ${amount} ECO to PUB ${pub.pubId.slice(0, 12)}…${claimantsCount ? ` (${claimantsCount} claimants)` : ""} tx ${txid}`);
+      transfers.push({ ...content, author: me });
+      left -= Number(amount);
+      console.log(`[UBI] rebalanced ${amount} ECO to PUB ${pub.pubId.slice(0, 12)}…${served ? ` (${served} claimants)` : ""} tx ${txid}`);
       sent.push({ pubId: pub.pubId, amount: Number(amount), txid });
     };
-    for (const pub of pubs) {
+    for (const [key, pending] of Object.entries(pendingAll())) {
+      const cut = key.indexOf(":");
+      const ep = key.slice(0, cut);
+      const pubId = key.slice(cut + 1);
+      const list = await listWalletSends("pub");
+      if (!list) { console.warn(`[UBI] rebalance to ${pubId.slice(0, 12)}… waiting: the wallet does not answer, the previous attempt cannot be checked`); continue; }
+      const found = await findWalletSend({ address: pending.address, amount: pending.amount, comment: REBALANCE_CONCEPT, sinceMs: Date.parse(pending.startedAt || "") || 0, exclude: recorded }, "pub", list);
+      if (found) await record(pubs.find(p => p.pubId === pubId) || { pubId }, pending.amount, found, 0, ep, pending.startedAt || null);
+      setPending(key, null);
+    }
+    if (!pubs.length) return sent;
+    const myBalance = await tryGetBalance("pub", ENGINE_RPC_TIMEOUT_MS);
+    if (myBalance === null) return sent;
+    const mine = computePoolVars(myBalance, DEFAULT_RULES).available;
+    const balances = new Map([[me, mine], ...pubs.map(p => [p.pubId, balanceOf(p)])]);
+    const average = Array.from(balances.values()).reduce((a, b) => a + b, 0) / balances.size;
+    const tolerance = Math.max(1, average * REBALANCE_TOLERANCE);
+    const myExcess = mine - average;
+    if (myExcess < tolerance) return sent;
+    const totalExcess = Array.from(balances.values()).reduce((acc, b) => acc + Math.max(0, b - average), 0);
+    left = myExcess;
+    const poorer = pubs.map(p => ({ pub: p, gap: average - balances.get(p.pubId) })).filter(x => x.gap >= tolerance).sort((a, b) => b.gap - a.gap);
+    for (const { pub, gap } of poorer) {
+      if (left < 1) break;
       const tag = pub.pubId.slice(0, 12);
       try {
         const pendingKey = `${epochId}:${pub.pubId}`;
-        const pending = pendingAll()[pendingKey];
-        if (pending) {
-          const list = await listWalletSends("pub");
-          if (!list) { console.warn(`[UBI] rebalance to ${tag}… waiting: the wallet does not answer, the previous attempt cannot be checked`); continue; }
-          const found = await findWalletSend({ address: pending.address, amount: pending.amount, comment: REBALANCE_CONCEPT, sinceMs: Date.parse(pending.startedAt || "") || 0, exclude: recorded }, "pub", list);
-          if (found) { await record(pub, pending.amount, found, 0); setPending(pendingKey, null); continue; }
-          setPending(pendingKey, null);
-        }
+        if (Object.keys(pendingAll()).some(k => k.endsWith(`:${pub.pubId}`))) { console.warn(`[UBI] rebalance to ${tag}… waiting: an earlier transfer is still being checked`); continue; }
         if (!(await isFollowing(ssb, me, pub.pubId))) { console.warn(`[UBI] rebalance to ${tag}… skipped: this PUB does not follow it`); continue; }
         const address = pub.address || await getUserAddress(pub.pubId).catch(() => null);
         if (!address || !isValidEcoinAddress(address)) { console.warn(`[UBI] rebalance to ${tag}… skipped: no ECOin address`); continue; }
-        const claimants = new Set();
-        for (const c of claims) {
-          if (c.pubId !== pub.pubId || c.epochId !== epochId || claimants.has(c.author)) continue;
-          const el = await isEligibleClaimant(c.author);
-          if (el.ok) claimants.add(c.author);
-        }
-        if (claimants.size < REBALANCE_MIN_CLAIMANTS) { console.warn(`[UBI] rebalance to ${tag}… skipped: ${claimants.size} eligible claimant(s), ${REBALANCE_MIN_CLAIMANTS} required`); continue; }
-        const receivedBefore = transfers.filter(t => t.author === me && t.to === pub.pubId && String(t.concept || "").startsWith(REBALANCE_CONCEPT)).reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
-        const sentThisEpoch = transfers.filter(t => t.author === me && t.to === pub.pubId && String(t.concept || "").endsWith(`· ${epochId}`) && String(t.concept || "").startsWith(REBALANCE_CONCEPT)).reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
-        const paidOut = transfers.filter(t => t.author === pub.pubId && isUbiPayoutConcept(t.concept) && confirmedBy(t).has(t.to)).reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+        const served = await servedBy(pub.pubId);
+        if (served.size < REBALANCE_MIN_CLAIMANTS) { console.warn(`[UBI] rebalance to ${tag}… skipped: ${served.size} eligible claimant(s), ${REBALANCE_MIN_CLAIMANTS} required`); continue; }
+        const receivedBefore = sum(transfers.filter(t => t.author === me && t.to === pub.pubId && isRebalance(t)));
+        const paidOut = sum(transfers.filter(t => t.author === pub.pubId && isUbiPayoutConcept(t.concept) && confirmedBy(t).has(t.to)));
         if (receivedBefore > 0 && paidOut < receivedBefore * REBALANCE_PAYOUT_RATIO) { console.warn(`[UBI] rebalance to ${tag}… skipped: paid out ${paidOut.toFixed(6)} of ${receivedBefore.toFixed(6)} received`); continue; }
-        const need = Math.min(REBALANCE_MAX_PER_EPOCH, claimants.size * DEFAULT_RULES.caps.cap_user_epoch) - (Number(pub.balance) || 0);
-        const amount = Number(Math.min(surplus, need, REBALANCE_MAX_PER_EPOCH - sentThisEpoch).toFixed(6));
-        if (!(amount >= 1)) { console.warn(`[UBI] rebalance to ${tag}… skipped: nothing needed this epoch`); continue; }
+        const amount = Number(Math.min(left, gap * myExcess / totalExcess).toFixed(6));
+        if (!(amount >= 1)) { console.warn(`[UBI] rebalance to ${tag}… skipped: nothing needed`); continue; }
         setPending(pendingKey, { address, amount, startedAt: new Date().toISOString() });
         const result = await sendVerified(address, amount, REBALANCE_CONCEPT, "pub");
         if (!result.txid) {
@@ -2470,10 +2530,9 @@ async function getLastPublishedTimestamp(userId) {
           console.warn(`[UBI] rebalance to ${tag}… not sent: ${result.unknown ? "the wallet did not answer, it will be checked next time" : "sendtoaddress failed"}`);
           continue;
         }
-        await record(pub, amount, result.txid, claimants.size);
+        await record(pub, amount, result.txid, served.size);
         setPending(pendingKey, null);
       } catch (err) { console.warn(`[UBI] rebalance to ${tag}… failed: ${(err && err.message) || err}`); }
-      if (surplus < 1) break;
     }
     return sent;
   }

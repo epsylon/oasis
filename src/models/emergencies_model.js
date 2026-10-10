@@ -1,4 +1,4 @@
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -130,7 +130,7 @@ module.exports = ({ cooler }) => {
 
   const load = async () => {
     const ssbClient = await openSsb();
-    const idx = buildIndex(await readAll(ssbClient));
+    const idx = memoIndex('emergencies', await readAll(ssbClient), buildIndex);
     return { ssbClient, idx };
   };
 

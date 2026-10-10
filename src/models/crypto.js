@@ -152,8 +152,15 @@ module.exports = (configPath, namespace = 'tribes') => {
     }
   };
 
-  const fingerprint = (kHex) =>
-    crypto.createHmac('sha256', Buffer.from(kHex, 'hex')).update(FP_INFO).digest('hex').slice(0, 32);
+  const fingerprints = new Map();
+  const fingerprint = (kHex) => {
+    let fp = fingerprints.get(kHex);
+    if (!fp) {
+      fp = crypto.createHmac('sha256', Buffer.from(kHex, 'hex')).update(FP_INFO).digest('hex').slice(0, 32);
+      fingerprints.set(kHex, fp);
+    }
+    return fp;
+  };
 
   const buildFingerprintIndex = () => {
     const m = new Map();

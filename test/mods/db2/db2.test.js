@@ -69,6 +69,11 @@ describe('ssb-db2: the legacy surface the models rely on', (t) => {
       ok(pr.indexes && pr.indexes.target >= pr.indexes.current, 'progress keeps the indexes shape');
       const since = (await collect(sbot.createLogStream({ gte: log[1].timestamp }))).map(m => m.key);
       eq(since.join(','), [log[1].key, log[2].key].join(','), 'gte on arrival time narrows the log');
+      const late = await new Promise((res, rej) => sbot.db.create({ keys: ssbKeys.generate(), content: { type: 'post', text: 'late' }, timestamp: log[0].timestamp - 86400000 }, (e, m) => e ? rej(e) : res(m)));
+      const sinceLate = (await collect(sbot.createLogStream({ gte: log[2].timestamp }))).map(m => m.key);
+      eq(sinceLate.join(','), [log[2].key, late.key].join(','), 'a message that arrives late keeps its place even when it declares an older time');
+      const newestFirst = (await collect(sbot.createLogStream({ gt: log[0].timestamp, reverse: true, limit: 1 }))).map(m => m.key);
+      eq(newestFirst.join(','), late.key, 'reverse and limit apply after the range');
     } finally { await closeSbot(sbot); }
   });
 
@@ -299,6 +304,30 @@ describe('ssb-db2: the legacy surface the models rely on', (t) => {
       eq(await woke, 'wake', 'a live stream still delivers what arrives after it opened');
       await new Promise((r) => setTimeout(r, 50));
       eq(listeners(), base, 'live streams never hold a log listener of their own');
+    } finally { await closeSbot(sbot); }
+  });
+
+  t('the latest activity of each author skips deletions and keeps the newest time', async () => {
+    const sbot = makeSbot();
+    try {
+      const me = sbot.id;
+      const other = ssbKeys.generate();
+      const latest = (ids) => new Promise((res, rej) => sbot.activity.latest(ids, (e, v) => e ? rej(e) : res(v)));
+      eq(Object.keys((await latest()) || {}).length, 0, 'an empty log has no activity');
+      const a = await publish(sbot, { type: 'post', text: 'one' });
+      const b = await publish(sbot, { type: 'post', text: 'two' });
+      eq((await latest([me]))[me], b.value.timestamp, 'the newest message sets the time');
+      await new Promise((res, rej) => sbot.db.create({ content: { type: 'tombstone', target: a.key }, timestamp: b.value.timestamp + 60000 }, (e, m) => e ? rej(e) : res(m)));
+      eq((await latest([me]))[me], b.value.timestamp, 'a deletion is not activity');
+      const old = b.value.timestamp - 86400000;
+      await new Promise((res, rej) => sbot.db.create({ keys: other, content: { type: 'post', text: 'late' }, timestamp: old }, (e, m) => e ? rej(e) : res(m)));
+      const both = await latest([me, other.id, ssbKeys.generate().id]);
+      eq(both[other.id], old, 'an author that arrived late keeps the time it declared');
+      eq(Object.keys(both).length, 2, 'authors without messages are left out');
+      eq(Object.keys(await latest()).sort().join(','), [me, other.id].sort().join(','), 'without ids every author is listed');
+      const tail = await new Promise((res, rej) => sbot.activity.tail(3, (e, v) => e ? rej(e) : res(v)));
+      const probe = await collect(sbot.createLogStream({ reverse: true, limit: 3 }));
+      eq(tail.map(m => m.key).join(','), probe.map(m => m.key).join(','), 'the tail of the log comes newest first, as a reversed log read gives it');
     } finally { await closeSbot(sbot); }
   });
 });

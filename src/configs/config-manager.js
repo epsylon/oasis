@@ -23,7 +23,9 @@ const writeStateFile = (file, data) => {
   fs.renameSync(tmp, file);
   try { fs.chmodSync(file, 0o600); } catch (_) {}
 };
-const writeConfigFile = (data) => writeStateFile(configFilePath, data);
+let configCache = { at: 0, cfg: null };
+const CONFIG_TTL_MS = 2000;
+const writeConfigFile = (data) => { configCache = { at: 0, cfg: null }; return writeStateFile(configFilePath, data); };
 const readJsonFile = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; } };
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const mergeDeep = (base, over) => {
@@ -137,6 +139,12 @@ if (!fs.existsSync(configFilePath)) {
 }
 
 const getConfig = () => {
+  const now = Date.now();
+  if (!configCache.cfg || now - configCache.at > CONFIG_TTL_MS) configCache = { at: now, cfg: readConfig() };
+  return structuredClone(configCache.cfg);
+};
+
+const readConfig = () => {
   const configData = fs.readFileSync(configFilePath);
   const cfg = JSON.parse(configData);
   if (!['whole', 'mutuals', 'only-lan', 'local'].includes(cfg.wish)) cfg.wish = 'whole';

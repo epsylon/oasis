@@ -94,6 +94,15 @@ const buildGraphSvg = (me, peers, links = []) => {
     + `</svg>`;
 };
 
+const zoomableGraph = (id, svg) => [
+  div({ class: 'graphos-zoom-row' }, a({ href: `#${id}`, id: `${id}-src`, class: 'filter-btn graphos-zoom-btn' }, `\u2922 ${i18n.graphosZoom || 'Enlarge'}`)),
+  div({ class: 'graphos-canvas', [RAW_HTML]: svg }),
+  div({ id, class: 'lightbox graphos-lightbox' },
+    a({ href: `#${id}-src`, class: 'lightbox-close' }, '\u00d7'),
+    div({ class: 'graphos-canvas-zoom', [RAW_HTML]: svg })
+  )
+];
+
 const kpi = (label, value) => div({ class: 'stats-kpi stats-kpi-inline' },
   span({ class: 'stats-kpi-label' }, String(label).toUpperCase()),
   span({ class: 'stats-kpi-value' }, String(value))
@@ -147,7 +156,7 @@ exports.graphosView = ({ filter, me, peers, links = [], kpis, focus = null, focu
           filter !== 'MINE' ? kpi(i18n.unknown || 'Unknown', kpis.unknown) : null
         )
       ),
-      div({ class: 'graphos-canvas', [RAW_HTML]: buildGraphSvg(me, peers, links) }),
+      ...zoomableGraph('graphos-zoom', buildGraphSvg(me, peers, links)),
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
         legendItem('online', i18n.online || 'Online'),
@@ -264,7 +273,7 @@ exports.graphosFederationView = ({ myName, rows = [], links = [], ownVersion = '
           kpi(i18n.graphosFedIsolated, count(r => r.isolated))
         )
       ),
-      sorted.length ? div({ class: 'graphos-canvas', [RAW_HTML]: buildFederationSvg(myName || '', sorted, links, ownVersion) }) : p(i18n.graphosFedEmpty),
+      ...(sorted.length ? zoomableGraph('graphos-fed-zoom', buildFederationSvg(myName || '', sorted, links, ownVersion)) : [p(i18n.graphosFedEmpty)]),
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
         span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-connected' }), span(i18n.peerStateConnected)),

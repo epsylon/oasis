@@ -1,7 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const longText = require('../backend/long_text');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -75,7 +75,7 @@ module.exports = ({ cooler, isPublic = false }) => {
   const collect = async () => {
     const ssbClient = await openSsb();
     const messages = await getAllMessages(ssbClient);
-    const idx = buildIndex(messages);
+    const idx = memoIndex('blog', messages, buildIndex);
     const list = [];
     for (const node of idx.posts.values()) list.push(buildBlog(node, idx));
     return { list, idx, viewerId: ssbClient.id };

@@ -35,7 +35,12 @@ const renderRoomLineChip = (room) => room.isClosed || String(room.author) === St
   ? null
   : renderStateChip(room.line === "SWITCHBOARD" ? "mutuals" : "hidden", null, String(room.line === "SWITCHBOARD" ? i18n.roomLineSwitchboard : i18n.phoneDnd).toUpperCase())
 
-const renderLiveChip = (occ) => occ && occ.count > 0 ? renderStateChip("mutuals", "●", `${i18n.roomLiveChip} ${occ.count}/${occ.max || ROOM_MAX}`) : null
+const renderLiveChip = (occ) => {
+  if (!occ) return null
+  const count = Number(occ.count) || 0
+  const max = occ.max || ROOM_MAX
+  return count > 0 ? renderStateChip("mutuals", "●", `${i18n.roomLiveChip} ${count}/${max}`) : renderStateChip("neutral", "●", `${count}/${max}`)
+}
 
 const roomChips = (room, occ, inside = false) => [
   renderRoomStatusChip(room),
@@ -78,8 +83,8 @@ const joinForm = (room, occ, cls = "tribe-action-btn") => {
 }
 
 const renderRoomItem = (room, params = {}) => {
-  const occ = occOf(params, room)
   const inside = params.live && params.live.ref === room.rootId
+  const occ = inside && Number.isFinite(Number(params.live.count)) ? { count: Number(params.live.count), max: params.live.max } : occOf(params, room)
   const canJoin = !room.isClosed && !inside && (room.type === "OPEN" || room.tribeId || String(room.author) === String(userId) || safeArr(room.members).includes(userId))
   return li({ class: "mailing-archive-item room-item" },
     div({ class: "emergency-update-head mailing-archive-head" },

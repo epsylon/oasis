@@ -2,7 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const crypto = require("crypto")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
-const { readTyped } = require("./typed_log")
+const { readTyped, memoIndex } = require("./typed_log")
 const { collabContent, openInviteOf } = require('../backend/collab_content')
 const chatCollab = collabContent({ membersField: 'members', undecField: 'undecryptable', contentFields: ['title', 'description', 'image', 'category', 'status'], listFields: ['tags', 'invites'] })
 const logLimit = getConfig().ssbLogStream?.limit || 1000
@@ -657,7 +657,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     async getChatById(id) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages)
+      const idx = memoIndex('chats', messages, buildIndex)
 
       let tip = id
       while (idx.child.has(tip)) tip = idx.child.get(tip)

@@ -120,7 +120,9 @@ if (process.argv[2] === '--embed-worker') {
         return null
       }
     })()
-    return pipelinePromise
+    const fe = await pipelinePromise
+    if (!fe) pipelinePromise = null
+    return fe
   }
   process.on('message', async (msg) => {
     let vec = null

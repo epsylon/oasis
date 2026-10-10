@@ -1,7 +1,7 @@
 const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
-const { readTyped } = require("./typed_log");
+const { readTyped, memoIndex } = require("./typed_log");
 
 const { dedupeBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -351,8 +351,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const ssbClient = await openSsb();
       const viewer = viewerId || ssbClient.id;
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(unwrapForIndex(messages));
-      await decryptIndexNodes(idx);
+      const idx = await memoIndex('torrents', messages, async (m) => { const built = buildIndex(unwrapForIndex(m)); await decryptIndexNodes(built); return built; });
 
       const root = idx.rootOf(id);
       const agg = idx.resolveGroup(root);

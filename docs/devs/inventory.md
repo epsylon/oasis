@@ -41,6 +41,7 @@ Most of these files are created the first time something needs them. A missing f
 | `jit/` | Small bitmaps built on demand, one per question the interface asks often: messages of a type, messages by an author, which ones are encrypted and which ones you could open. |
 | `indexes/base`, `indexes/keys` | The latest sequence known for each feed, and messages by their id, for fetching one message directly. |
 | `indexes/oasisLinks` | Which message points at which: replies, votes, mentions, tombstones. It is what "what links here", comment counts and the vote tallies read. |
+| `indexes/oasisActivity` | When each feed last published something other than a deletion. It is what the inhabitants list and the activity colours of authors read. |
 | `indexes/contacts` | The follow and block graph — who follows whom, and how many hops away each feed is. |
 | `indexes/private`, `encrypted.index`, `decrypted.index` | Which messages are boxed and which of them this identity can open. |
 

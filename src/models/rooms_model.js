@@ -1,7 +1,7 @@
 const crypto = require("crypto")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
 const { collabContent, openInviteOf } = require('../backend/collab_content')
-const { readTyped } = require('./typed_log')
+const { readTyped, memoIndex } = require('./typed_log')
 const { roomNumberOf, normalizeNumber } = require('./phone_number')
 const { getConfig } = require("../configs/config-manager.js")
 const roomCollab = collabContent({ membersField: 'members', undecField: 'undecryptable', contentFields: ['title', 'description', 'image', 'status'], listFields: ['tags', 'invites'] })
@@ -599,7 +599,7 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
 
     async getRoomById(id) {
       const ssbClient = await openSsb()
-      const idx = buildIndex(await readAll(ssbClient))
+      const idx = memoIndex('rooms', await readAll(ssbClient), buildIndex)
       const root = idx.strictRootOf(id)
       const tip = idx.contentTipOf(root)
       if (idx.tomb.has(tip)) return null

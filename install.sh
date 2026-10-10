@@ -256,7 +256,7 @@ if [ "$WANT_LLM" = "1" ] || [ "$WANT_EMB" = "1" ]; then
         if [ -d node_modules ] && node -e "$AI_CHECK" >/dev/null 2>&1; then
             echo "AI packages already in place."
         else
-            $AI_NPM --no-audit --no-fund --no-progress --loglevel=error && node ../../scripts/patch-node-modules.js || { echo "The AI packages could not be installed; AI features will stay off."; WANT_LLM=0; WANT_EMB=0; }
+            ONNXRUNTIME_NODE_INSTALL_CUDA=skip $AI_NPM --no-audit --no-fund --no-progress --loglevel=error && node ../../scripts/patch-node-modules.js || { echo "The AI packages could not be installed; AI features will stay off."; WANT_LLM=0; WANT_EMB=0; }
         fi
     } )
 fi

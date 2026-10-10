@@ -3,7 +3,7 @@ const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
-const { readTyped } = require('./typed_log')
+const { readTyped, memoIndex } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -384,7 +384,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     async getShopById(id) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages)
+      const idx = memoIndex('shops', messages, buildIndex)
 
       const tip = idx.strictTipOf(id)
       if (idx.tomb.has(tip)) return null
@@ -559,7 +559,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     async getProductById(id) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages)
+      const idx = memoIndex('shops', messages, buildIndex)
 
       const tip = idx.strictTipOf(id)
       if (idx.tomb.has(tip)) return null

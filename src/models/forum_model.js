@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const crypto = require('crypto');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped } = require('./typed_log');
+const { readTyped, requestScope, memoIndex } = require('./typed_log');
 const longText = require('../backend/long_text');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -119,7 +119,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
   };
 
   async function collectTombstones(ssbClient) {
-    return buildValidatedTombstoneSet(await readForumLog());
+    return deletedOf(await readForumLog());
   }
 
   async function findActiveVote(ssbClient, targetId, voter) {
@@ -133,8 +133,19 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     });
   }
 
-  async function aggregateVotes(ssbClient, targetId) {
-    const tombstoned = await collectTombstones(ssbClient);
+  const deletedOf = (msgs) => memoIndex('forum:deleted', msgs, buildValidatedTombstoneSet);
+
+  function aggregateVotes(ssbClient, targetId, known = null) {
+    const store = requestScope.getStore();
+    if (!store || store.method !== 'GET') return countVotes(ssbClient, targetId, known);
+    if (!store.forumVotes) store.forumVotes = new Map();
+    let pending = store.forumVotes.get(targetId);
+    if (!pending) { pending = countVotes(ssbClient, targetId, known); store.forumVotes.set(targetId, pending); }
+    return pending;
+  }
+
+  async function countVotes(ssbClient, targetId, known = null) {
+    const tombstoned = known || await collectTombstones(ssbClient);
     return new Promise((resolve, reject) => {
       const latest = new Map();
       pull(
@@ -182,6 +193,83 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     if (!msg) throw new Error('Message not found');
     return { key: msg.key, ...msg.value.content, author: msg.value.author, timestamp: msg.value.timestamp };
   }
+
+  const buildForums = async (ssbClient) => {
+    const msgs = await readForumLog();
+    const deleted = deletedOf(msgs);
+    const chunkIdx = chunkIndexOf(msgs);
+    const decode = (m) => {
+      const c = m.value && m.value.content;
+      if (!c) return null;
+      if (c.encryptedPayload) {
+        const dec = decryptForumContent(c, m.value.content.root || m.key);
+        return (dec && !dec._undecryptable) ? dec : null;
+      }
+      return c;
+    };
+    const forums = msgs
+      .map(m => ({ m, c: decode(m) }))
+      .filter(({ m, c }) => c && c.type === 'forum' && !c.root && !deleted.has(m.key))
+      .map(({ m, c }) => ({ ...c, key: m.key, author: m.value.author, text: fullText(chunkIdx, c, m.value.author) }));
+    const forumsWithVotes = await Promise.all(
+      forums.map(async f => {
+        const { positives, negatives } = await aggregateVotes(ssbClient, f.key, deleted);
+        return { ...f, positiveVotes: positives, negativeVotes: negatives };
+      })
+    );
+    const repliesByRoot = {};
+    msgs.forEach(m => {
+      const cRaw = m.value && m.value.content;
+      if (!cRaw) return;
+      const root = cRaw.encryptedPayload ? null : cRaw.root;
+      if (!root) {
+        if (!cRaw.encryptedPayload) return;
+        const decReply = decryptForumContent(cRaw, null);
+        if (!decReply || decReply._undecryptable || decReply.type !== 'forum' || !decReply.root) return;
+        if (deleted.has(m.key)) return;
+        repliesByRoot[decReply.root] = repliesByRoot[decReply.root] || [];
+        repliesByRoot[decReply.root].push({ key: m.key, text: fullText(chunkIdx, decReply, m.value.author), author: m.value.author, timestamp: m.value.timestamp });
+        return;
+      }
+      if (cRaw.type === 'forum' && root && !deleted.has(m.key)) {
+        repliesByRoot[root] = repliesByRoot[root] || [];
+        repliesByRoot[root].push({ key: m.key, text: fullText(chunkIdx, cRaw, m.value.author), author: m.value.author, timestamp: m.value.timestamp });
+      }
+    });
+    const final = await Promise.all(
+      forumsWithVotes.map(async f => {
+        const replies = repliesByRoot[f.key] || [];
+        await Promise.all(replies.map(async (r) => {
+          const { positives: rp, negatives: rn } = await aggregateVotes(ssbClient, r.key, deleted);
+          r.positiveVotes = rp;
+          r.negativeVotes = rn;
+          r.score = rp - rn;
+        }));
+        const replyPos = replies.reduce((sum, r) => sum + (r.positiveVotes || 0), 0);
+        const replyNeg = replies.reduce((sum, r) => sum + (r.negativeVotes || 0), 0);
+        const positiveVotes = f.positiveVotes + replyPos;
+        const negativeVotes = f.negativeVotes + replyNeg;
+        const score = positiveVotes - negativeVotes;
+        const participants = new Set(replies.map(r => r.author).concat(f.author));
+        const messagesCount = replies.length + 1;
+        const lastMessage =
+          replies.length
+            ? replies.reduce((a, b) => (new Date(a.timestamp) > new Date(b.timestamp) ? a : b))
+            : null;
+        return {
+          ...f,
+          positiveVotes,
+          negativeVotes,
+          score,
+          participants: Array.from(participants),
+          messagesCount,
+          lastMessage,
+          messages: replies
+        };
+      })
+    );
+    return final;
+  };
 
   return {
     ingestKeys: async () => { await ingestOwnTribeKeys(); },
@@ -384,79 +472,10 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
 
     listAll: async filter => {
       const ssbClient = await openSsb();
-      const msgs = await readForumLog();
-      const deleted = buildValidatedTombstoneSet(msgs);
-      const chunkIdx = chunkIndexOf(msgs);
-      const decode = (m) => {
-        const c = m.value && m.value.content;
-        if (!c) return null;
-        if (c.encryptedPayload) {
-          const dec = decryptForumContent(c, m.value.content.root || m.key);
-          return (dec && !dec._undecryptable) ? dec : null;
-        }
-        return c;
-      };
-      const forums = msgs
-        .map(m => ({ m, c: decode(m) }))
-        .filter(({ m, c }) => c && c.type === 'forum' && !c.root && !deleted.has(m.key))
-        .map(({ m, c }) => ({ ...c, key: m.key, author: m.value.author, text: fullText(chunkIdx, c, m.value.author) }));
-      const forumsWithVotes = await Promise.all(
-        forums.map(async f => {
-          const { positives, negatives } = await aggregateVotes(ssbClient, f.key);
-          return { ...f, positiveVotes: positives, negativeVotes: negatives };
-        })
-      );
-      const repliesByRoot = {};
-      msgs.forEach(m => {
-        const cRaw = m.value && m.value.content;
-        if (!cRaw) return;
-        const root = cRaw.encryptedPayload ? null : cRaw.root;
-        if (!root) {
-          if (!cRaw.encryptedPayload) return;
-          const decReply = decryptForumContent(cRaw, null);
-          if (!decReply || decReply._undecryptable || decReply.type !== 'forum' || !decReply.root) return;
-          if (deleted.has(m.key)) return;
-          repliesByRoot[decReply.root] = repliesByRoot[decReply.root] || [];
-          repliesByRoot[decReply.root].push({ key: m.key, text: fullText(chunkIdx, decReply, m.value.author), author: m.value.author, timestamp: m.value.timestamp });
-          return;
-        }
-        if (cRaw.type === 'forum' && root && !deleted.has(m.key)) {
-          repliesByRoot[root] = repliesByRoot[root] || [];
-          repliesByRoot[root].push({ key: m.key, text: fullText(chunkIdx, cRaw, m.value.author), author: m.value.author, timestamp: m.value.timestamp });
-        }
-      });
-      const final = await Promise.all(
-        forumsWithVotes.map(async f => {
-          const replies = repliesByRoot[f.key] || [];
-          for (let r of replies) {
-            const { positives: rp, negatives: rn } = await aggregateVotes(ssbClient, r.key);
-            r.positiveVotes = rp;
-            r.negativeVotes = rn;
-            r.score = rp - rn;
-          }
-          const replyPos = replies.reduce((sum, r) => sum + (r.positiveVotes || 0), 0);
-          const replyNeg = replies.reduce((sum, r) => sum + (r.negativeVotes || 0), 0);
-          const positiveVotes = f.positiveVotes + replyPos;
-          const negativeVotes = f.negativeVotes + replyNeg;
-          const score = positiveVotes - negativeVotes;
-          const participants = new Set(replies.map(r => r.author).concat(f.author));
-          const messagesCount = replies.length + 1;
-          const lastMessage =
-            replies.length
-              ? replies.reduce((a, b) => (new Date(a.timestamp) > new Date(b.timestamp) ? a : b))
-              : null;
-          return {
-            ...f,
-            positiveVotes,
-            negativeVotes,
-            score,
-            participants: Array.from(participants),
-            messagesCount,
-            lastMessage,
-            messages: replies
-          };
-        })
-      );
+      const userId = ssbClient.id;
+      const store = requestScope.getStore();
+      if (store && !store.forumAll) store.forumAll = buildForums(ssbClient);
+      const final = (await (store ? store.forumAll : buildForums(ssbClient))).slice();
       const filtered =
         filter === 'mine'
           ? final.filter(f => f.author === userId)
@@ -469,13 +488,13 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     getForumById: async id => {
       const ssbClient = await openSsb();
       const msgs = await readForumLog();
-      const deleted = buildValidatedTombstoneSet(msgs);
+      const deleted = deletedOf(msgs);
       const original = msgs.find(m => m.key === id && !deleted.has(m.key));
       if (!original || original.value.content?.type !== 'forum') throw new Error('Forum not found');
       const rawBase = original.value.content;
       const base = rawBase.encryptedPayload ? decryptForumContent(rawBase, id) : rawBase;
       if (base && base._undecryptable) throw new Error('Forum is encrypted and cannot be decrypted with available keys');
-      const { positives, negatives } = await aggregateVotes(ssbClient, id);
+      const { positives, negatives } = await aggregateVotes(ssbClient, id, deleted);
       const replyAuthors = [];
       for (const m of msgs) {
         if (deleted.has(m.key)) continue;
@@ -505,7 +524,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     getMessagesByForumId: async forumId => {
       const ssbClient = await openSsb();
       const msgs = await readForumLog();
-      const deleted = buildValidatedTombstoneSet(msgs);
+      const deleted = deletedOf(msgs);
       const chunkIdx = chunkIndexOf(msgs);
       const decodeReply = (m) => {
         const c = m.value && m.value.content;
@@ -528,13 +547,15 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
           timestamp: m.value.timestamp,
           parent: c.branch || null
         }));
-      for (let r of replies) {
-        const { positives: rp, negatives: rn } = await aggregateVotes(ssbClient, r.key);
-        r.positiveVotes = rp;
-        r.negativeVotes = rn;
-        r.score = rp - rn;
-      }
-      const { positives: p, negatives: n } = await aggregateVotes(ssbClient, forumId);
+      const [, { positives: p, negatives: n }] = await Promise.all([
+        Promise.all(replies.map(async (r) => {
+          const { positives: rp, negatives: rn } = await aggregateVotes(ssbClient, r.key, deleted);
+          r.positiveVotes = rp;
+          r.negativeVotes = rn;
+          r.score = rp - rn;
+        })),
+        aggregateVotes(ssbClient, forumId, deleted)
+      ]);
       const replyPos = replies.reduce((sum, r) => sum + (r.positiveVotes || 0), 0);
       const replyNeg = replies.reduce((sum, r) => sum + (r.negativeVotes || 0), 0);
       const positiveVotes = p + replyPos;

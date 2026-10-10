@@ -404,8 +404,9 @@ module.exports = ({ cooler, services = {} }) => {
     let n = 0;
     try {
       if (services.inhabitants?.listInhabitants) {
-        const list = await services.inhabitants.listInhabitants({ filter: 'all', includeInactive: true });
-        n = Array.isArray(list) ? list.length : 0;
+        n = typeof services.inhabitants.countInhabitants === 'function'
+          ? Number(await services.inhabitants.countInhabitants()) || 0
+          : ((await services.inhabitants.listInhabitants({ filter: 'all', includeInactive: true })) || []).length;
       }
     } catch {}
     _inhCache = { at: now, n };

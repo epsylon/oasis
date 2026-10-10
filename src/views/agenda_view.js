@@ -61,6 +61,9 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     );
   }
   const extraActions = [];
+  if (filter === 'discarded') extraActions.push(form({ method: 'POST', action: `/agenda/remove/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
+    button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, String(i18n.agendaRemoveButton).toUpperCase())
+  ));
 
   if (item.type === 'market') {
     chips.push(chip(item.item_type), chip(item.status, statusKind(item.status)), chip(`${i18n.marketItemStock}: ${item.stock}`), item.includesShipping ? chip(i18n.marketItemIncludesShipping, 'mutuals', '✓') : null);

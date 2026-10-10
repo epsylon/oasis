@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const config = require('../server/ssb_config');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readContentWindow } = require('./typed_log');
+const { readContentWindow, requestScope, logTip } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
@@ -128,110 +128,127 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     return nameByFeedId;
   };
 
+  let windowCache = null;
+  const readWindow = async (ssbClient) => {
+    const tip = await logTip(ssbClient).catch(() => null);
+    if (tip && windowCache && windowCache.tip === tip) return windowCache.msgs;
+    const msgs = await readContentWindow(ssbClient, logLimit);
+    if (tip) windowCache = { tip, msgs };
+    return msgs;
+  };
+
+  async function buildBlocks(showLogs, me) {
+    const ssbClient = await openSsb();
+
+    const results = await readWindow(ssbClient);
+
+    const tombstoned = buildValidatedTombstoneSet(results);
+    const idToBlock = new Map();
+    const referencedAsReplaces = new Set();
+
+    const nameByFeedId = new Map();
+
+    const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+    const accessibleTribeIds = await buildAccessibleTribeIds();
+    for (const msg of results) {
+      const k = msg.key;
+      let c = msg.value?.content;
+      const author = msg.value?.author;
+      if (isHiddenBoxedContent(c) || msg.value?.private === true) continue;
+      if (showLogs && typeof c === 'string' && author === me) {
+        try {
+          const dec = ssbClient.private.unbox({ key: k, value: msg.value, timestamp: msg.timestamp || msg.value?.timestamp || 0 });
+          c = dec?.value?.content;
+        } catch { c = null; }
+      }
+      if (!c?.type) continue;
+      if (HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
+      if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
+        const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+        if (!r || !r.body) continue;
+        const inner = r.body;
+        const innerType = inner.k === 'tribe' ? 'tribe' : (inner.k === 'tribe-content' ? `tribe-content:${inner.contentType || ''}` : inner.k || 'tribe-msg');
+        c = { type: innerType, _decrypted: true, _rootId: r.rootId, ...inner };
+      } else if (c.tribeId && !accessibleTribeIds.has(c.tribeId)) {
+        continue;
+      }
+
+      if (c.type === 'about') {
+        const aboutId = String(c.about || author || '').trim();
+        const nm = typeof c.name === 'string' ? c.name.trim() : '';
+        if (aboutId && nm && !nameByFeedId.has(aboutId)) nameByFeedId.set(aboutId, nm);
+      }
+
+      if (c.type === 'tombstone' && c.target) {
+        idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
+        continue;
+      }
+      if (c.replaces) referencedAsReplaces.add(c.replaces);
+      idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
+    }
+
+    const tipBlocks = [];
+    for (const [id, block] of idToBlock.entries()) {
+      if (!referencedAsReplaces.has(id) && block.content.replaces) tipBlocks.push(block);
+    }
+    for (const [id, block] of idToBlock.entries()) {
+      if (!block.content.replaces && !referencedAsReplaces.has(id)) tipBlocks.push(block);
+    }
+
+    const groups = {};
+    for (const block of tipBlocks) {
+      const ancestor = block.content.replaces || block.id;
+      if (!groups[ancestor]) groups[ancestor] = [];
+      groups[ancestor].push(block);
+    }
+
+    const liveTipIds = new Set();
+    for (const groupBlocks of Object.values(groups)) {
+      let best = groupBlocks[0];
+      for (const block of groupBlocks) {
+        if (block.type === 'market') {
+          if (isClosedSold(block.content.status) && !isClosedSold(best.content.status)) {
+            best = block;
+          } else if ((block.content.status === best.content.status) && block.ts > best.ts) {
+            best = block;
+          }
+        } else if (block.type === 'project') {
+          const br = projectRank(best.content.status);
+          const cr = projectRank(block.content.status);
+          if (cr > br || (cr === br && block.ts > best.ts)) best = block;
+        } else if (block.type === 'job' || block.type === 'forum') {
+          if (block.ts > best.ts) best = block;
+        } else {
+          if (block.ts > best.ts) best = block;
+        }
+      }
+      liveTipIds.add(best.id);
+    }
+
+    const blockData = Array.from(idToBlock.values()).map(block => {
+      const c = block.content;
+      const rootDeleted = c?.type === 'forum' && c.root && tombstoned.has(c.root);
+      return {
+        ...block,
+        isTombstoned: tombstoned.has(block.id),
+        isReplaced: c.replaces
+          ? (!liveTipIds.has(block.id) || tombstoned.has(block.id))
+          : referencedAsReplaces.has(block.id) || tombstoned.has(block.id) || rootDeleted
+      };
+    });
+
+    return blockData;
+  }
+
   return {
     async listBlockchain(filter = 'all', userId, search = {}) {
-      const ssbClient = await openSsb();
-
-      const results = await readContentWindow(ssbClient, logLimit);
-
-      const tombstoned = buildValidatedTombstoneSet(results);
-      const idToBlock = new Map();
-      const referencedAsReplaces = new Set();
-
-      const nameByFeedId = new Map();
-
       const showLogs = (filter === 'logs' || filter === 'LOGS');
       const me = userId || config.keys.id;
-      const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
-      const accessibleTribeIds = await buildAccessibleTribeIds();
-      for (const msg of results) {
-        const k = msg.key;
-        let c = msg.value?.content;
-        const author = msg.value?.author;
-        if (isHiddenBoxedContent(c) || msg.value?.private === true) continue;
-        if (showLogs && typeof c === 'string' && author === me) {
-          try {
-            const dec = ssbClient.private.unbox({ key: k, value: msg.value, timestamp: msg.timestamp || msg.value?.timestamp || 0 });
-            c = dec?.value?.content;
-          } catch { c = null; }
-        }
-        if (!c?.type) continue;
-        if (HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
-        if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
-          const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
-          if (!r || !r.body) continue;
-          const inner = r.body;
-          const innerType = inner.k === 'tribe' ? 'tribe' : (inner.k === 'tribe-content' ? `tribe-content:${inner.contentType || ''}` : inner.k || 'tribe-msg');
-          c = { type: innerType, _decrypted: true, _rootId: r.rootId, ...inner };
-        } else if (c.tribeId && !accessibleTribeIds.has(c.tribeId)) {
-          continue;
-        }
-
-        if (c.type === 'about') {
-          const aboutId = String(c.about || author || '').trim();
-          const nm = typeof c.name === 'string' ? c.name.trim() : '';
-          if (aboutId && nm && !nameByFeedId.has(aboutId)) nameByFeedId.set(aboutId, nm);
-        }
-
-        if (c.type === 'tombstone' && c.target) {
-          idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
-          continue;
-        }
-        if (c.replaces) referencedAsReplaces.add(c.replaces);
-        idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
-      }
-
-      const tipBlocks = [];
-      for (const [id, block] of idToBlock.entries()) {
-        if (!referencedAsReplaces.has(id) && block.content.replaces) tipBlocks.push(block);
-      }
-      for (const [id, block] of idToBlock.entries()) {
-        if (!block.content.replaces && !referencedAsReplaces.has(id)) tipBlocks.push(block);
-      }
-
-      const groups = {};
-      for (const block of tipBlocks) {
-        const ancestor = block.content.replaces || block.id;
-        if (!groups[ancestor]) groups[ancestor] = [];
-        groups[ancestor].push(block);
-      }
-
-      const liveTipIds = new Set();
-      for (const groupBlocks of Object.values(groups)) {
-        let best = groupBlocks[0];
-        for (const block of groupBlocks) {
-          if (block.type === 'market') {
-            if (isClosedSold(block.content.status) && !isClosedSold(best.content.status)) {
-              best = block;
-            } else if ((block.content.status === best.content.status) && block.ts > best.ts) {
-              best = block;
-            }
-          } else if (block.type === 'project') {
-            const br = projectRank(best.content.status);
-            const cr = projectRank(block.content.status);
-            if (cr > br || (cr === br && block.ts > best.ts)) best = block;
-          } else if (block.type === 'job' || block.type === 'forum') {
-            if (block.ts > best.ts) best = block;
-          } else {
-            if (block.ts > best.ts) best = block;
-          }
-        }
-        liveTipIds.add(best.id);
-      }
-
-      const blockData = Array.from(idToBlock.values()).map(block => {
-        const c = block.content;
-        const rootDeleted = c?.type === 'forum' && c.root && tombstoned.has(c.root);
-        return {
-          ...block,
-          isTombstoned: tombstoned.has(block.id),
-          isReplaced: c.replaces
-            ? (!liveTipIds.has(block.id) || tombstoned.has(block.id))
-            : referencedAsReplaces.has(block.id) || tombstoned.has(block.id) || rootDeleted
-        };
-      });
-
-      let filtered = blockData;
+      const store = requestScope.getStore();
+      const memoKey = `blockchainBase:${showLogs}:${me}`;
+      if (store && !store[memoKey]) store[memoKey] = buildBlocks(showLogs, me);
+      const blockData = await (store ? store[memoKey] : buildBlocks(showLogs, me));
+      let filtered = blockData.slice();
 
       if (filter === 'RECENT' || filter === 'recent') {
         const now = Date.now();
@@ -289,7 +306,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
     async getBlockById(id, userId) {
       const ssbClient = await openSsb();
-      const results = await readContentWindow(ssbClient, logLimit);
+      const results = await readWindow(ssbClient);
 
       const me = userId || config.keys.id;
       const tombstoned = buildValidatedTombstoneSet(results);

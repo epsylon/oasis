@@ -3,7 +3,7 @@ const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
-const { readTyped } = require('./typed_log')
+const { readTyped, memoIndex } = require('./typed_log')
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
@@ -430,7 +430,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const userId = ssbClient.id
       const messages = await readAll(ssbClient)
 
-      const idx = buildMarketIndex(messages)
+      const idx = memoIndex('market', messages, buildMarketIndex)
       const rootOf = (key) => { let x = key, g = 0; while (idx.naivePrev.has(x) && idx.nodes.has(idx.naivePrev.get(x)) && g++ < 100000) x = idx.naivePrev.get(x); return x }
       const grp = resolveGroups(idx).get(rootOf(itemId))
       if (!grp) return null
@@ -494,6 +494,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const myId = ssbClient.id
       const now = moment()
       const list = Array.isArray(items) ? items : []
+      let changed = 0
 
       for (const item of list) {
         if (!item || !item.deadline) continue
@@ -516,8 +517,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
         try {
           await this.updateItemById(item.id, { status })
+          changed++
         } catch (_) {}
       }
+      return changed
     },
 
     async getItemByShopProductId(shopProductId) {

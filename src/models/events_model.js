@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
 const { dedupeBy, norm } = require('../backend/dedupe');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const EVENT_TYPES = [
@@ -505,7 +505,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     async getEventById(eventId) {
       const ssbClient = await openSsb();
       const messages = await readAll(ssbClient);
-      const idx = buildEventIndex(messages);
+      const idx = memoIndex('events', messages, buildEventIndex);
       const rid = idx.rootOf(eventId);
       const contentTip = idx.contentTipOf(rid);
       const msg = await new Promise((res, rej) => ssbClient.get(contentTip, (err, msg) => err || !msg || !msg.content ? rej(new Error("Error retrieving event")) : res(msg)));

@@ -546,8 +546,7 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
           button({ type: "submit" }, i18n.removePanicButton)
         )
       )
-    ),
-    section({ class: "settings-anchor-space" })
+    )
   );
 };
 

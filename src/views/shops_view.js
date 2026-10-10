@@ -408,7 +408,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       : null,
     div({ class: "shop-products-grid" },
       products.length
-        ? products.map(prod => renderProductCard(prod, shop.rootId || shop.key, `/shops/${encodeURIComponent(shop.key)}`, params))
+        ? paged(products).map(prod => renderProductCard(prod, shop.rootId || shop.key, `/shops/${encodeURIComponent(shop.key)}`, params))
         : p(i18n.shopNoProducts)
     )
   )

@@ -110,6 +110,21 @@ if (fs.existsSync(ssbDb2UtilsPath)) {
   log('ssb-db2 patch skipped: file not found');
 }
 
+const ssbDb2PluginPath = path.resolve(__dirname, '../src/server/node_modules/ssb-db2/indexes/plugin.js');
+if (fs.existsSync(ssbDb2PluginPath)) {
+  const data = fs.readFileSync(ssbDb2PluginPath, 'utf8');
+  const target = `    this.onRecord = function onRecord(record, isLive, pValue) {`;
+  const flushTarget = `      if (changes > chunkSize) this.flush(thenMaybeReportError)\n      else if (isLive) liveFlush(thenMaybeReportError)`;
+  if (!data.includes('lastFlushAt') && data.includes(target) && data.includes(flushTarget)) {
+    fs.writeFileSync(ssbDb2PluginPath, data
+      .replace(target, `    let lastFlushAt = Date.now()\n${target}`)
+      .replace(flushTarget, `      if (changes > chunkSize || Date.now() - lastFlushAt > 1000) {\n        lastFlushAt = Date.now()\n        this.flush(thenMaybeReportError)\n      } else if (isLive) liveFlush(thenMaybeReportError)`));
+    log('Patched ssb-db2 indexes so their progress is saved at least once per second');
+  }
+} else {
+  log('ssb-db2 index patch skipped: file not found');
+}
+
 // === Patch @xenova/transformers (onnxruntime 1.19 Tensor getter) ===
 const xenovaTensorPath = path.resolve(__dirname, '../src/AI/node_modules/@xenova/transformers/src/utils/tensor.js');
 if (fs.existsSync(xenovaTensorPath)) {

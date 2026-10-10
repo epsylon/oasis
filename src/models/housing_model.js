@@ -3,7 +3,7 @@ const moment = require("../server/node_modules/moment")
 const categories = require("../backend/opinion_categories")
 const { getConfig } = require("../configs/config-manager.js")
 const { dedupeByPreferring } = require('../backend/dedupe')
-const { readTyped } = require('./typed_log')
+const { readTyped, memoIndex } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const HOUSING_TYPES = ["sale", "rent", "couchsurfing"]
@@ -536,7 +536,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     async getHousingById(id, viewerId = null) {
       const ssbClient = await openSsb()
       const viewer = viewerId || ssbClient.id
-      const idx = buildIndex(await readAll(ssbClient), ssbClient)
+      const idx = memoIndex('housing', await readAll(ssbClient), (m) => buildIndex(m, ssbClient))
       const tipId = idx.tipOf(id)
       if (idx.tomb.has(tipId)) throw new Error("Housing not found")
       const node = idx.nodes.get(tipId)

@@ -1,7 +1,7 @@
 const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
-const { readTyped } = require("./typed_log")
+const { readTyped, memoIndex } = require("./typed_log")
 const { buildValidatedTombstoneSet } = require("./tombstone_validator")
 const opinionCategories = require("../backend/opinion_categories")
 const logLimit = getConfig().ssbLogStream?.limit || 1000
@@ -53,6 +53,8 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
   ]
 
   const readAll = async (ssbClient) => readTyped(ssbClient, SCHOOL_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
+
+  const indexOf = (messages, ssbClient) => memoIndex('school', messages, (m) => buildIndex(m, ssbClient))
 
   const buildIndex = (messages, ssbClient) => {
     const tomb = buildValidatedTombstoneSet(messages)
@@ -485,7 +487,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async resolveCurrentId(courseId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const { tomb, child } = buildIndex(messages, ssbClient)
+      const { tomb, child } = indexOf(messages, ssbClient)
 
       let cur = courseId
       while (child.has(cur)) cur = child.get(cur)
@@ -496,7 +498,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async resolveRootId(courseId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const { tomb, parent, child } = buildIndex(messages, ssbClient)
+      const { tomb, parent, child } = indexOf(messages, ssbClient)
 
       let tip = courseId
       while (child.has(tip)) tip = child.get(tip)
@@ -510,7 +512,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async updateCourse(id, data) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
 
       const tipId = await this.resolveCurrentId(id)
       const node = idx.courseNodes.get(tipId)
@@ -776,7 +778,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async progressForCourse(courseId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
       const rootId = idx.rootOf(courseId)
       const perStudent = idx.progressByCourse.get(rootId) || new Map()
       const out = {}
@@ -845,7 +847,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async deleteExamQuestion(questionId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
       const node = idx.questionNodes.get(questionId)
       if (!node || idx.tomb.has(questionId)) throw new Error("Question not found")
       if (node.author !== ssbClient.id) throw new Error("Unauthorized")
@@ -856,7 +858,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async deleteExam(examId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
       const node = idx.examNodes.get(examId)
       if (!node || node.isMedia || idx.tomb.has(examId)) throw new Error("Exam not found")
       if (node.author !== ssbClient.id) throw new Error("Unauthorized")
@@ -867,7 +869,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async listExams(courseId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
       const rootId = idx.rootOf(courseId)
       const keys = schoolCrypto ? (schoolCrypto.getKeys(rootId) || []) : []
 
@@ -983,7 +985,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async deleteLessonMaterial(materialId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
       const node = idx.examNodes.get("media:" + materialId)
       if (!node || idx.tomb.has(materialId)) throw new Error("Material not found")
       if (node.author !== ssbClient.id) throw new Error("Unauthorized")
@@ -994,7 +996,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async listLessonMaterials(courseId, lessonId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
       const rootId = idx.rootOf(courseId)
       const keys = schoolCrypto ? (schoolCrypto.getKeys(rootId) || []) : []
 
@@ -1069,7 +1071,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       const ssbClient = await openSsb()
       const me = ssbClient.id
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
 
       const candidates = Array.from(new Set([String(rawCode || "").trim(), String(rawCode || "").trim().toLowerCase()])).filter(Boolean)
       let matched = null
@@ -1185,7 +1187,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async deleteLesson(lessonId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
 
       const node = idx.lessonNodes.get(lessonId)
       if (!node || idx.tomb.has(lessonId)) throw new Error("Lesson not found")
@@ -1204,7 +1206,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async listLessons(courseId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
 
       const rootId = idx.rootOf(courseId)
       const keys = schoolCrypto ? (schoolCrypto.getKeys(rootId) || []) : []
@@ -1248,7 +1250,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       if (!lessons.length) return false
       const exams = await this.listExams(course.rootId)
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
       const progressSet = (idx.progressByCourse.get(course.rootId) || new Map()).get(student) || new Set()
       for (const lesson of lessons) {
         const lessonRoot = idx.lessonRootOf(lesson.id)
@@ -1278,7 +1280,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       if (lessons.length) {
         const exams = await this.listExams(course.rootId)
         const messages2 = await readAll(ssbClient)
-        const idx2 = buildIndex(messages2, ssbClient)
+        const idx2 = indexOf(messages2, ssbClient)
         const progressSet = (idx2.progressByCourse.get(course.rootId) || new Map()).get(student) || new Set()
         for (const lesson of lessons) {
           const lessonRoot = idx2.lessonRootOf(lesson.id)
@@ -1314,7 +1316,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async listCertificates(courseId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
 
       const rootId = idx.rootOf(courseId)
       const certs = []
@@ -1337,7 +1339,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async listCertificatesForStudent(studentId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
 
       const certs = []
       for (const node of idx.certNodes.values()) {
@@ -1359,7 +1361,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async lessonRootOf(lessonId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
       return idx.lessonRootOf(lessonId) || lessonId
     },
 
@@ -1391,7 +1393,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       const viewer = viewerId || ssbClient.id
 
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
 
       const courses = []
       for (const [rootId, tipId] of idx.tipByRoot.entries()) {
@@ -1432,7 +1434,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       const viewer = viewerId || ssbClient.id
 
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = indexOf(messages, ssbClient)
 
       let tipId = id
       while (idx.child.has(tipId)) tipId = idx.child.get(tipId)

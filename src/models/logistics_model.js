@@ -1,5 +1,4 @@
-const pull = require('../server/node_modules/pull-stream');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const categories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
@@ -45,16 +44,12 @@ module.exports = ({ cooler }) => {
   const readPublic = async (ssbClient) => readTyped(ssbClient, PUBLIC_TYPES, { limit: logLimit });
 
   const readPrivate = async (ssbClient) => {
-    const raw = await new Promise((resolve, reject) => {
-      pull(ssbClient.createLogStream({ reverse: false }), pull.collect((err, arr) => err ? reject(err) : resolve(arr)));
-    });
+    const msgs = await readTyped(ssbClient, [BOOKING_TYPE, BOOKING_STATUS_TYPE], { limit: logLimit, withPrivate: true });
     const bookings = [];
     const statuses = [];
-    for (const m of raw) {
-      if (!m || !m.value || typeof m.value.content !== 'string') continue;
-      let dec;
-      try { dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.timestamp || m.value.timestamp }); } catch (_) { continue; }
-      const v = (dec && dec.value) || {};
+    for (const m of msgs) {
+      const v = (m && m.value) || {};
+      if (v.private !== true) continue;
       const c = v.content;
       if (!c || typeof c !== 'object') continue;
       const ts = v.timestamp || m.timestamp || 0;
@@ -166,7 +161,7 @@ module.exports = ({ cooler }) => {
   const load = async () => {
     const ssbClient = await openSsb();
     const [pub, priv] = await Promise.all([readPublic(ssbClient), readPrivate(ssbClient)]);
-    return { ssbClient, idx: buildIndex(pub), priv };
+    return { ssbClient, idx: memoIndex('logistics', pub, buildIndex), priv };
   };
 
   const find = (idx, id) => {

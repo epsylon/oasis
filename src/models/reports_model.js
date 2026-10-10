@@ -3,7 +3,7 @@ const { normalizeImages, normalizeVideo } = require('./media_gallery');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const normU = (v) => String(v || '').trim().toUpperCase();
@@ -301,7 +301,7 @@ module.exports = ({ cooler }) => {
       const ssb = await openSsb();
 
       const messages = await getAllMessages(ssb);
-      const idx = buildIndex(messages);
+      const idx = memoIndex('reports', messages, buildIndex);
       const root = idx.rootOf(id);
       const agg = idx.resolveGroup(root);
       if (!agg || agg.tombstoned) throw new Error('Report not found');

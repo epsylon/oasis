@@ -2,7 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const crypto = require("crypto")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
-const { readTyped } = require('./typed_log')
+const { readTyped, memoIndex } = require('./typed_log')
 const { collabContent, openInviteOf } = require('../backend/collab_content')
 const calCollab = collabContent({ membersField: 'participants', undecField: 'encrypted', contentFields: ['title', 'deadline', 'status'], listFields: ['tags', 'invites'] })
 const logLimit = getConfig().ssbLogStream?.limit || 1000
@@ -638,7 +638,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     async getCalendarById(id) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages)
+      const idx = memoIndex('calendars', messages, buildIndex)
       await decryptIndexNodes(idx)
       let root = id
       while (idx.parent.has(root)) root = idx.parent.get(root)
@@ -930,18 +930,19 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
 
       const calendarInfo = new Map()
       const dueByCalendar = new Map()
-      for (const m of messages) {
-        if (tombstoned.has(m.key)) continue
+      const dated = messages.filter(m => !tombstoned.has(m.key) && ((m.value || {}).content || {}).type === "calendarDate")
+      const decoded = await Promise.all(dated.map(async (m) => {
+        const c = m.value.content
+        if (!(c.encryptedPayload && tribeCrypto && tribesModel)) return c
+        const r = await tribeCrypto.decryptFromTribe(c, tribesModel)
+        return !r || r._undecryptable ? null : r
+      }))
+      for (let i = 0; i < dated.length; i++) {
+        const m = dated[i]
         const v = m.value || {}
         const c = v.content
-        if (!c || c.type !== "calendarDate") continue
-        let dec = c
-        if (c.encryptedPayload && tribeCrypto && tribesModel) {
-          const r = await tribeCrypto.decryptFromTribe(c, tribesModel)
-          if (!r || r._undecryptable) continue
-          dec = r
-        }
-        if (!dec.date) continue
+        const dec = decoded[i]
+        if (!dec || !dec.date) continue
         const calId = c.calendarId
         let info = calendarInfo.get(calId)
         if (info === undefined) {

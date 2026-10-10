@@ -3,7 +3,7 @@ const moment = require("../server/node_modules/moment");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const { dedupeBy, norm } = require('../backend/dedupe');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -315,7 +315,7 @@ module.exports = ({ cooler }) => {
       const viewer = viewerId || ssbClient.id;
 
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(messages);
+      const idx = memoIndex('bookmarking', messages, buildIndex);
       const rootId = idx.rootOf(id);
       const agg = idx.resolveGroup(rootId);
       if (!agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error("Bookmark not found");

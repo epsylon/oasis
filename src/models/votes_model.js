@@ -5,7 +5,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { dedupeBy, norm } = require('../backend/dedupe');
 const { buildVoteTally } = require('../backend/vote_tally');
 const categories = require('../backend/opinion_categories');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const MIN_VOTE_DAYS = 7;
 
@@ -331,7 +331,7 @@ module.exports = ({ cooler }) => {
     async getVoteById(id) {
       const ssbClient = await openSsb();
       const messages = await getAllMessages(ssbClient);
-      const index = buildIndex(messages);
+      const index = memoIndex('votes', messages, buildIndex);
       const activeList = computeActiveVotes(index);
       const byId = new Map(activeList.map(v => [v.id, v]));
 

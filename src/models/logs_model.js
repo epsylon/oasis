@@ -1,4 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
+const { requestScope } = require('./typed_log');
 const util = require('util');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
@@ -446,7 +447,9 @@ module.exports = ({ cooler }) => {
   }
 
   async function listLogs(filter = 'today') {
-    const items = await readAllLogMessages();
+    const store = requestScope.getStore();
+    if (store && !store.logsAll) store.logsAll = readAllLogMessages();
+    const items = await (store ? store.logsAll : readAllLogMessages());
     const win = FILTER_WINDOWS[filter];
     if (win === null || win === undefined) return items;
     const cutoff = Date.now() - win;

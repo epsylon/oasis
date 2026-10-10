@@ -35,7 +35,7 @@ const caches = new WeakMap();
 const cacheFor = (ssb) => {
   let c = caches.get(ssb);
   if (!c) {
-    c = { types: new Map(), window: null };
+    c = { types: new Map(), window: null, results: new Map() };
     caches.set(ssb, c);
   }
   return c;
@@ -123,6 +123,18 @@ const syncPrivate = async (ssb, cache) => {
   return entry;
 };
 
+const logTailOf = async (ssb, n) => {
+  if (ssb.activity && typeof ssb.activity.tail === 'function') {
+    const store = requestScope.getStore();
+    const fresh = !(store && store.method === 'GET');
+    const fast = await new Promise((resolve) => {
+      try { ssb.activity.tail(n, { fresh }, (err, arr) => resolve(err ? null : arr)); } catch (_) { resolve(null); }
+    });
+    if (Array.isArray(fast)) return fast;
+  }
+  return collectStream(ssb.createLogStream({ reverse: true, limit: n }));
+};
+
 const readTyped = async (ssbClient, types, opts = {}) => {
   const limit = opts.limit;
   if (typeof ssbClient.messagesByType !== 'function') {
@@ -133,21 +145,32 @@ const readTyped = async (ssbClient, types, opts = {}) => {
   const cache = cacheFor(ssbClient);
   const wanted = new Set(types);
 
-  const logTail = (await collectStream(ssbClient.createLogStream({ reverse: true, limit: LOG_TAIL_PROBE }))).reverse();
+  const logTail = (await logTailOf(ssbClient, LOG_TAIL_PROBE)).reverse();
   const tipKey = logTail.length ? logTail[logTail.length - 1].key : null;
+  const inTail = new Set(logTail.map((m) => m && m.key));
   const upToDate = (e) => !!e && e.warm && e.tip === tipKey;
+  const caughtUp = (e) => !!e && e.warm && !!e.tip && (e.tip === tipKey || inTail.has(e.tip));
   const allWarm = types.every((type) => upToDate(cache.types.get(type)))
     && (!opts.withWindow || upToDate(cache.window));
 
-  const entries = !allWarm
-    ? await Promise.all(types.map((type) => syncType(ssbClient, cache, type, limit)))
-    : types.map((type) => cache.types.get(type));
+  const entries = await Promise.all(types.map((type) => {
+    const e = cache.types.get(type);
+    return caughtUp(e) ? e : syncType(ssbClient, cache, type, limit);
+  }));
   const windowEntry = opts.withWindow
-    ? (!allWarm ? await syncWindow(ssbClient, cache, limit) : cache.window)
+    ? (caughtUp(cache.window) ? cache.window : await syncWindow(ssbClient, cache, limit))
     : null;
   const withPrivate = opts.withPrivate === true;
+  const resultKey = `${types.join(',')}|${limit || 0}|${opts.withWindow ? 1 : 0}|${withPrivate ? 1 : 0}`;
+  if (allWarm && (!withPrivate || !wanted.size || upToDate(cache.private))) {
+    const hit = cache.results.get(resultKey);
+    if (hit && hit.tip === tipKey) {
+      if (hit.capped) noteCapped(limit, limit);
+      return hit.list.slice();
+    }
+  }
   const privateEntry = withPrivate && wanted.size
-    ? (!allWarm || !upToDate(cache.private) ? await syncPrivate(ssbClient, cache) : cache.private)
+    ? (!upToDate(cache.private) ? await syncPrivate(ssbClient, cache) : cache.private)
     : null;
   for (const e of [...entries, windowEntry, privateEntry]) if (e && e.warm) e.tip = tipKey;
 
@@ -162,9 +185,10 @@ const readTyped = async (ssbClient, types, opts = {}) => {
   }
 
   const union = new Map();
+  let capped = false;
   for (const entry of entries) {
     if (!entry) continue;
-    if (entry.capped) noteCapped(limit, limit);
+    if (entry.capped) { capped = true; noteCapped(limit, limit); }
     for (const [k, m] of entry.byKey) if (!union.has(k)) union.set(k, m);
   }
   if (windowEntry) {
@@ -176,7 +200,7 @@ const readTyped = async (ssbClient, types, opts = {}) => {
       if (typeof t === 'string' && wanted.has(t)) union.set(k, m);
     }
   }
-  return Array.from(union.values()).sort((a, b) => {
+  const sorted = Array.from(union.values()).sort((a, b) => {
     const at = (a.value && a.value.timestamp) || 0;
     const bt = (b.value && b.value.timestamp) || 0;
     if (at !== bt) return at - bt;
@@ -186,6 +210,11 @@ const readTyped = async (ssbClient, types, opts = {}) => {
     if (a.value && b.value && a.value.author === b.value.author) return (a.value.sequence || 0) - (b.value.sequence || 0);
     return 0;
   });
+  const complete = entries.every((e) => e && e.warm)
+    && (!windowEntry === !opts.withWindow) && (!windowEntry || windowEntry.warm)
+    && (!(withPrivate && wanted.size) || (privateEntry && privateEntry.warm));
+  if (tipKey && complete) cache.results.set(resultKey, { tip: tipKey, capped, list: sorted });
+  return sorted.slice();
 };
 
 const NON_MESSAGE_LITERALS = new Set([
@@ -218,4 +247,39 @@ const discoverContentTypes = () => {
 
 const CONTENT_TYPES = discoverContentTypes();
 
-module.exports = { readTyped, collectStream, readContentWindow, CONTENT_TYPES, discoverContentTypes, requestScope };
+const logTip = async (ssb) => {
+  const tail = await logTailOf(ssb, 1);
+  return tail[0] && tail[0].key ? tail[0].key : null;
+};
+
+const activityCache = new WeakMap();
+const ACTIVITY_TTL_MS = 5000;
+const authorActivity = (ssb) => {
+  if (!ssb || !ssb.activity || typeof ssb.activity.latest !== 'function') return Promise.resolve(null);
+  const hit = activityCache.get(ssb);
+  if (hit && Date.now() - hit.at < ACTIVITY_TTL_MS) return hit.pending;
+  const store = requestScope.getStore();
+  const fresh = !(store && store.method === 'GET');
+  const pending = new Promise((resolve) => {
+    try { ssb.activity.latest(null, { fresh }, (err, all) => resolve(err || !all ? null : new Map(Object.entries(all)))); } catch (_) { resolve(null); }
+  });
+  activityCache.set(ssb, { at: Date.now(), pending });
+  return pending;
+};
+
+const memoIndex = (name, messages, build) => {
+  const store = requestScope.getStore();
+  if (!store) return build(messages);
+  const list = Array.isArray(messages) ? messages : [];
+  const first = list[0];
+  const last = list[list.length - 1];
+  const sig = `${list.length}|${first && first.key}|${last && last.key}`;
+  if (!store.indexMemo) store.indexMemo = new Map();
+  const hit = store.indexMemo.get(name);
+  if (hit && hit.sig === sig) return hit.idx;
+  const idx = build(messages);
+  store.indexMemo.set(name, { sig, idx });
+  return idx;
+};
+
+module.exports = { readTyped, collectStream, readContentWindow, CONTENT_TYPES, discoverContentTypes, requestScope, memoIndex, logTip, authorActivity };

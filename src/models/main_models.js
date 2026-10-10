@@ -1,7 +1,7 @@
 "use strict";
 
 const { buildValidatedTombstoneSet } = require("./tombstone_validator");
-const { readTyped } = require("./typed_log");
+const { readTyped, requestScope, authorActivity } = require("./typed_log");
 const longText = require("../backend/long_text");
 const debug = require("../server/node_modules/debug")("oasis");
 const { isRoot, isReply: isComment } = require("../server/node_modules/ssb-thread-schema");
@@ -21,6 +21,9 @@ const sharedState = require('../configs/shared-state');
 
 const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const LIFETIME_CONCURRENCY = 32;
+const LIFETIME_TTL_MS = 60000;
+const LIFETIME_CACHE_MAX = 20000;
 
 const isEncrypted = (message) => typeof message.value.content === "string";
 const isNotEncrypted = (message) => isEncrypted(message) === false;
@@ -167,7 +170,7 @@ function toLegacyInvite(s) {
 
 module.exports = ({ cooler, isPublic }) => {
   const models = {};
-  const getAbout = async ({ key, feedId }) => {
+  const readAboutOf = async (feedId) => {
     const ssb = await cooler.open();
     const source = ssb.backlinks.read({
       reverse: true,
@@ -186,22 +189,30 @@ module.exports = ({ cooler, isPublic }) => {
     return new Promise((resolve, reject) =>
       pull(
         source,
-        pull.find(
-          (message) => message.value.content[key] !== undefined,
-          (err, message) => {
-            if (err) {
-              reject(err);
-            } else {
-              if (message === null) {
-                resolve(null);
-              } else {
-                resolve(message.value.content[key]);
-              }
-            }
+        pull.collect((err, messages) => {
+          if (err) return reject(err);
+          const out = {};
+          for (const message of messages || []) {
+            const content = (message && message.value && message.value.content) || {};
+            for (const k of Object.keys(content)) if (out[k] === undefined && content[k] !== undefined) out[k] = content[k];
           }
-        )
+          resolve(out);
+        })
       )
     );
+  };
+  const getAbout = async ({ key, feedId }) => {
+    const store = requestScope.getStore();
+    let pending;
+    if (store) {
+      const memo = store.aboutOf || (store.aboutOf = new Map());
+      if (!memo.has(feedId)) memo.set(feedId, readAboutOf(feedId));
+      pending = memo.get(feedId);
+    } else {
+      pending = readAboutOf(feedId);
+    }
+    const all = await pending;
+    return all[key] === undefined ? null : all[key];
   };
   const feeds_to_name = {};
   let all_the_names = {};
@@ -211,58 +222,48 @@ module.exports = ({ cooler, isPublic }) => {
     if (!dirty) return;
     if (running) return;
     running = true;
-
-    all_the_names = {};
+    dirty = false;
 
     const allFeeds = Object.keys(feeds_to_name);
     sharedState.setSyncedPeerCount(allFeeds.length);
     console.log(`- Synced-peers: [ ${allFeeds.length} ]`);
     console.time("- Sync-time");
 
-    const lookups = [];
-    for (const feed of allFeeds) {
-      const e = feeds_to_name[feed];
-      let pair = { feed, name: e.name };
-      lookups.push(enhanceFeedInfo(pair));
-    }
-    Promise.all(lookups)
-      .then(() => {
-        dirty = false; 
+    buildNameTable(allFeeds)
+      .then((table) => {
+        all_the_names = table;
         running = false;
         console.timeEnd("- Sync-time");
       })
       .catch((err) => {
+        dirty = true;
         running = false;
         console.warn("- Lookup Sync failed: ", err);
       });
   };
-  const enhanceFeedInfo = ({ feed, name }) => {
-    return new Promise((resolve, reject) => {
-      getAbout({ feedId: feed, key: "image" })
-        .then((img) => {
-          if (
-            img !== null &&
-            typeof img !== "string" &&
-            typeof img === "object" &&
-            typeof img.link === "string"
-          ) {
-            img = img.link;
-          } else if (img === null) {
-            img = nullImage; 
-          }
-
-          models.friend
-            .getRelationship(feed)
-            .then((rel) => {
-              let feeds_named = all_the_names[name] || [];
-              feeds_named.push({ feed, name, rel, img });
-              all_the_names[name.toLowerCase()] = feeds_named;
-              resolve();
-            })
-            .catch(reject);
-        })
-        .catch(reject);
-    });
+  const buildNameTable = async (allFeeds) => {
+    const ssb = await cooler.open();
+    const [profiles, graph] = await Promise.all([
+      models.about.profiles(),
+      new Promise((resolve) => ssb.friends.graph((err, g) => resolve(err || !g ? {} : g)))
+    ]);
+    const me = ssb.id;
+    const mine = graph[me] || {};
+    const table = {};
+    for (const feed of allFeeds) {
+      const e = feeds_to_name[feed];
+      if (!e || typeof e.name !== "string") continue;
+      const p = profiles.get(feed) || {};
+      const img = p.image && typeof p.image === "object" && typeof p.image.link === "string"
+        ? p.image.link
+        : (typeof p.image === "string" ? p.image : nullImage);
+      const rel = feed === me
+        ? { me: true, following: false, blocking: false, followsMe: false }
+        : { me: false, following: mine[feed] >= 0, blocking: Math.round(mine[feed]) === -1, followsMe: !!(graph[feed] && graph[feed][me] >= 0) };
+      const k = e.name.toLowerCase();
+      (table[k] || (table[k] = [])).push({ feed, name: e.name, rel, img });
+    }
+    return table;
   };
   
   async function enrichEntries(entries) {
@@ -309,8 +310,8 @@ models.about = {
     const result = await getAbout({ key: "deviceSource", feedId });
     return typeof result === 'string' && result.trim() ? result : null;
   },
-  visibilityPrefs: async (feedId) => {
-    const result = await getAbout({ key: "visibilityPrefs", feedId });
+  visibilityPrefs: async (feedId) => models.about.visibilityFrom(await getAbout({ key: "visibilityPrefs", feedId })),
+  visibilityFrom: (result) => {
     if (!result || typeof result !== 'object') return null;
     return {
       activity: result.activity === true,
@@ -362,6 +363,32 @@ models.about = {
       profileFeed:       result.profileFeed       === true,
       profileWiki:       result.profileWiki       === true
     };
+  },
+  profiles: async () => {
+    const store = requestScope.getStore();
+    if (store && store.aboutProfiles) return store.aboutProfiles;
+    const pending = (async () => {
+      const ssb = await cooler.open();
+      const out = new Map();
+      await new Promise((resolve) => {
+        pull(
+          ssb.messagesByType({ type: "about", reverse: true }),
+          pull.drain((m) => {
+            const v = (m && m.value) || {};
+            const c = v.content || {};
+            if (!v.author || c.about !== v.author) return;
+            const cur = out.get(v.author) || {};
+            for (const k of ["name", "description", "image", "visibilityPrefs", "gpgFingerprint", "deviceSource"]) if (cur[k] === undefined && c[k] !== undefined) cur[k] = c[k];
+            out.set(v.author, cur);
+          }, () => resolve())
+        );
+      });
+      const now = Date.now();
+      for (const [id, p] of out) if (p.name) nameCache.set(id, p.name, now);
+      return out;
+    })();
+    if (store) store.aboutProfiles = pending;
+    return pending;
   },
   name: async (feedId) => {
     if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
@@ -560,12 +587,13 @@ models.blob = {
     let buf = await checkLocalBlob(blobId);
     if (buf) return buf;
     const ssb = await cooler.open();
-    await new Promise((resolve, reject) => {
-      ssb.blobs.want(blobId, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
+    const arrived = await new Promise((resolve) => {
+      const wait = setTimeout(() => resolve(false), timeout);
+      try {
+        ssb.blobs.want(blobId, (err) => { clearTimeout(wait); resolve(!err); });
+      } catch (_) { clearTimeout(wait); resolve(false); }
     });
+    if (!arrived) return null;
     return new Promise((resolve, reject) => {
       let timer = setTimeout(() => resolve(null), timeout);
       pull(
@@ -1285,20 +1313,12 @@ const post = {
         return msg;
       })
     );
-    const gone = new Set();
-    await Promise.all(fullMessages.map((m) => new Promise((resolve) => {
-      if (!m || !m.key) return resolve();
-      try {
-        pull(
-          ssb.backlinks.read({ query: [{ $filter: { dest: m.key } }], meta: true }),
-          pull.filter(t => t && t.value && t.value.content && t.value.content.type === 'tombstone' && t.value.content.target === m.key && t.value.author === (m.value && m.value.author)),
-          pull.collect((err, ts) => { if (!err && ts && ts.length) gone.add(m.key); resolve(); })
-        );
-      } catch (_) { resolve(); }
-    })));
+    const topic = fullMessages.filter((m) => m && m.value && m.value.content && m.value.content.type === "post" && m.value.content.root === rootId);
+    const tombstones = topic.length ? await readTyped(ssb, ["tombstone"], { limit: 0 }).catch(() => []) : [];
+    const gone = buildValidatedTombstoneSet([...topic.filter(m => m && m.key && m.value), ...tombstones]);
     const chunkIdx = longText.indexChunks(await readTyped(ssb, [longText.CHUNK_TYPE], { limit: logLimit }));
     const lookup = longText.lookupIn(chunkIdx);
-    return fullMessages
+    return topic
       .filter(m => !(m && gone.has(m.key)))
       .map(m => m && m.value && longText.hasChunks(m.value.content)
         ? { ...m, value: { ...m.value, content: longText.resolveField(m.value.content, "text", m.value.author, lookup) } }
@@ -1836,9 +1856,11 @@ models.lifetime = (() => {
     if (days < FRESH_ORANGE_DAYS) return { bucket: 'orange', range: '2w–6m' };
     return { bucket: 'red', range: '≥6m' };
   };
-  const lastAuthorTs = async (feedId) => {
+  const lastAuthorTsRaw = async (feedId) => {
     if (!feedId) return null;
     const ssbClient = await cooler.open();
+    const activity = await authorActivity(ssbClient);
+    if (activity) return activity.get(feedId) || null;
     return new Promise((resolve) => {
       try {
         pull(
@@ -1854,7 +1876,7 @@ models.lifetime = (() => {
       } catch (_) { resolve(null); }
     });
   };
-  const lastBacklinkTs = async (msgKey) => {
+  const lastBacklinkTsRaw = async (msgKey) => {
     if (!msgKey) return null;
     const ssbClient = await cooler.open();
     return new Promise((resolve) => {
@@ -1870,7 +1892,23 @@ models.lifetime = (() => {
       } catch (_) { resolve(null); }
     });
   };
+  const recent = new Map();
+  const remembered = (bucket, key, fn) => {
+    if (!key) return fn(key);
+    let memo = recent.get(bucket);
+    if (!memo) recent.set(bucket, memo = new Map());
+    const hit = memo.get(key);
+    if (hit && Date.now() - hit.at < LIFETIME_TTL_MS) return hit.value;
+    const value = fn(key);
+    memo.delete(key);
+    memo.set(key, { at: Date.now(), value });
+    while (memo.size > LIFETIME_CACHE_MAX) memo.delete(memo.keys().next().value);
+    return value;
+  };
+  const lastAuthorTs = (feedId) => remembered('author', feedId, lastAuthorTsRaw);
+  const lastBacklinkTs = (msgKey) => remembered('backlink', msgKey, lastBacklinkTsRaw);
   return {
+    forget: () => recent.clear(),
     bucket: bucketOf,
     lastAuthorTs,
     lastBacklinkTs,
@@ -1889,19 +1927,25 @@ models.lifetime = (() => {
     },
     async enrichAndFilter(items, opts = {}) {
       const { includeDead = false, getKey = (x) => x.id || x.key, getAuthor = (x) => x.author, getCreatedAt = (x) => x.createdAt } = opts;
-      const authorCache = new Map();
+      const list = Array.from(items || []);
+      const authors = [...new Set(list.map(getAuthor).filter(Boolean))];
+      const mapLimit = async (items, fn) => {
+        const out = new Array(items.length);
+        let next = 0;
+        await Promise.all(Array.from({ length: Math.min(LIFETIME_CONCURRENCY, items.length) }, async () => {
+          while (next < items.length) { const k = next++; out[k] = await fn(items[k]); }
+        }));
+        return out;
+      };
+      const authorTsList = await mapLimit(authors, (a) => lastAuthorTs(a));
+      const authorCache = new Map(authors.map((a, i) => [a, authorTsList[i]]));
+      const interactionList = await mapLimit(list, (item) => { const key = getKey(item); return key ? lastBacklinkTs(key) : null; });
       const out = [];
-      for (const item of items) {
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
         const author = getAuthor(item);
-        let authorTs;
-        if (author && authorCache.has(author)) {
-          authorTs = authorCache.get(author);
-        } else {
-          authorTs = author ? await lastAuthorTs(author) : null;
-          if (author) authorCache.set(author, authorTs);
-        }
-        const key = getKey(item);
-        const interactionTs = key ? await lastBacklinkTs(key) : null;
+        const authorTs = author ? authorCache.get(author) : null;
+        const interactionTs = interactionList[i];
         const createdAt = getCreatedAt(item);
         const createdTs = createdAt ? new Date(createdAt).getTime() : null;
         const candidates = [authorTs, interactionTs, createdTs].filter(x => typeof x === 'number' && x > 0);

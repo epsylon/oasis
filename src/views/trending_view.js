@@ -338,7 +338,16 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   }
 
   const header = div({ class: 'tags-header module-header-line' }, h2(title), p(i18n.exploreTrending));
-  const cards = filteredItems
+  const seenDocs = new Set();
+  const shownItems = filteredItems.filter(item => {
+    const c = item.value.content || {};
+    const t = c.type === 'document' ? String(c.title || '').trim() : '';
+    if (!t) return true;
+    if (seenDocs.has(t)) return false;
+    seenDocs.add(t);
+    return true;
+  });
+  const cards = paged(shownItems)
     .map(item =>
       renderTrendingCard(
         item,
@@ -366,7 +375,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
         })
       ),
       emptyTrend ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
-        renderModuleStats(cards.length),
+        renderModuleStats(shownItems.length),
         form({ method: 'GET', action: '/trending', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.trendingSearchPlaceholder, class: 'filter-box__input' }),
@@ -377,7 +386,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
       ),
       section(
         cards.length
-          ? div({ class: 'trending-container' }, ...paged(cards))
+          ? div({ class: 'trending-container' }, ...cards)
           : div({ class: 'no-results' }, p(i18n.trendingNoContentMessage))
       )
     )

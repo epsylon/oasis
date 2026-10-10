@@ -94,6 +94,12 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
 
   let _feedCache = null;
   let _feedCacheInflight = null;
+  const logTip = async () => {
+    try {
+      const ssbClient = await openSsb();
+      return await require('./typed_log').logTip(ssbClient);
+    } catch (_) { return null; }
+  };
   const FEED_CACHE_MS = 15 * 1000;
 
   const buildAccessibleTribeIds = async () => {
@@ -101,14 +107,14 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
     if (!tribesModel) return set;
     try {
       const list = await tribesModel.listAll();
-      for (const t of list) {
-        if (!t || !t.id) continue;
+      await Promise.all(list.map(async (t) => {
+        if (!t || !t.id) return;
         set.add(t.id);
         try {
           const chain = await tribesModel.getChainIds(t.id);
           for (const cid of chain) set.add(cid);
         } catch (_) {}
-      }
+      }));
     } catch (_) {}
     return set;
   };
@@ -181,9 +187,10 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
       if (!msgsByRoot.has(root)) msgsByRoot.set(root, []);
       msgsByRoot.get(root).push(isPoll ? { ...a, content: { chatId: root, text: c.question.trim(), poll: true } } : a);
     }
-    for (const root of msgsByRoot.keys()) {
-      if (stateByRoot.has(root)) continue;
-      const val = await getMsg(ssbClient, root);
+    const missingRoots = [...msgsByRoot.keys()].filter(root => !stateByRoot.has(root));
+    const rootMsgs = new Map(await Promise.all(missingRoots.map(async root => [root, await getMsg(ssbClient, root)])));
+    for (const root of missingRoots) {
+      const val = rootMsgs.get(root);
       const cc = val && val.content;
       if (cc && typeof cc === 'object' && cc.type === 'chat') {
         stateByRoot.set(root, { ts: 0, owner: cc.author || val.author || null, status: String(cc.status || '').toUpperCase(), tribeId: cc.tribeId || null, title: String(cc.title || ''), description: String(cc.description || ''), members: Array.isArray(cc.members) ? cc.members.length : 0 });
@@ -247,16 +254,18 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
       if (entry && now - entry.ts < FEED_CACHE_MS) return entry.value;
       if (!_feedCacheInflight) _feedCacheInflight = new Map();
       if (_feedCacheInflight.has(cacheKey)) return _feedCacheInflight.get(cacheKey);
+      const tipNow = await logTip();
+      if (entry && tipNow && entry.tip === tipNow) { entry.ts = now; return entry.value; }
       const promise = (async () => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
-      const results = await new Promise((resolve, reject) => {
+      const results = (await new Promise((resolve, reject) => {
         pull(
-          ssbClient.createLogStream({ reverse: true }),
+          ssbClient.createLogStream({}),
           pull.collect((err, msgs) => err ? reject(err) : resolve(msgs))
         );
-      });
+      })).reverse();
 
       if (typeof ssbClient.createUserStream === 'function') {
         const ownResults = await new Promise((resolve) => {
@@ -423,6 +432,10 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
       }
 
       const fetchedTargetCache = new Map();
+      const missingTargets = [...new Set([...idToAction.values()].filter(a => a.type === 'spread').map(a => (a.content || {}).vote?.link || '').filter(link => link && !rawById.get(link)))];
+      for (const [link, got] of await Promise.all(missingTargets.map(async link => [link, await getMsg(ssbClient, link)]))) {
+        fetchedTargetCache.set(link, got ? { key: link, value: got } : null);
+      }
 
       for (const a of idToAction.values()) {
         if (a.type !== 'spread') continue;
@@ -612,6 +625,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
       }
 
       const latest = [];
+      const docUrls = [...new Set([...idToAction.values()].filter(a => a.type === 'document').map(a => (a.content || {}).url))];
+      const docBlobOk = new Map(await Promise.all(docUrls.map(async url => [url, await hasBlob(ssbClient, url)])));
       for (const a of idToAction.values()) {
         if (tombstoned.has(a.id)) continue;
         if (a.type === 'tribe' && parentOf.has(a.id)) continue;
@@ -622,11 +637,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
         if (c.key && tombstoned.has(c.key)) continue;
         if (c.branch && tombstoned.has(c.branch)) continue;
         if (c.target && tombstoned.has(c.target)) continue;
-        if (a.type === 'document') {
-          const url = c.url;
-          const ok = await hasBlob(ssbClient, url);
-          if (!ok) continue;
-        }
+        if (a.type === 'document' && !docBlobOk.get(c.url)) continue;
         if (a.type === 'forum' && c.root) {
           const rootId = typeof c.root === 'string' ? c.root : (c.root?.key || c.root?.id || '');
           const rootAction = idToAction.get(rootId);
@@ -884,7 +895,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
       _feedCacheInflight.set(cacheKey, promise);
       try {
         const value = await promise;
-        _feedCache.set(cacheKey, { value, ts: Date.now() });
+        _feedCache.set(cacheKey, { value, ts: Date.now(), tip: tipNow });
         return value;
       } finally {
         _feedCacheInflight.delete(cacheKey);

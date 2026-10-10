@@ -3,7 +3,7 @@ const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeByPreferring } = require('../backend/dedupe')
-const { readTyped } = require('./typed_log')
+const { readTyped, memoIndex } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const JOB_TYPES = ["job", "job_sub", "tombstone"]
@@ -521,7 +521,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const viewer = viewerId || ssbClient.id
 
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages, ssbClient)
+      const idx = memoIndex('jobs', messages, (m) => buildIndex(m, ssbClient))
 
       let tipId = id
       while (idx.child.has(tipId)) tipId = idx.child.get(tipId)

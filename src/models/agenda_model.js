@@ -144,6 +144,7 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
     async listAgenda(filter = 'all') {
       const agendaConfig = readAgendaConfig();
       const discardedItems = agendaConfig.discardedItems || [];
+      const removedItems = agendaConfig.removedItems || [];
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
@@ -224,7 +225,7 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
       ).map(m => ({ ...m, type: 'market' }));
       const reports = reportsAll.filter(c => c.author === userId || (Array.isArray(c.confirmations) && c.confirmations.includes(userId))).map(r => ({ ...r, type: 'report' }));
       const jobs = jobsAll.filter(c => c.author === userId || (Array.isArray(c.subscribers) && c.subscribers.includes(userId))).map(j => ({ ...j, type: 'job', title: j.title }));
-      const projects = projectsAll.map(p => ({ ...p, type: 'project' }));
+      const projects = projectsAll.filter(p => p.author === userId || (Array.isArray(p.followers) && p.followers.includes(userId)) || (Array.isArray(p.backers) && p.backers.some(b => b && b.userId === userId)) || (Array.isArray(p.bounties) && p.bounties.some(b => b && b.claimedBy === userId))).map(p => ({ ...p, type: 'project' }));
       const industryBuilds = industryAll.map(b => ({ ...b, type: 'industry', title: b.title }));
       const schoolCourses = schoolAll
         .filter(c => c.author === userId || (Array.isArray(c.students) && c.students.includes(userId)) || (Array.isArray(c.pending) && c.pending.some(pn => pn.author === userId)))
@@ -243,9 +244,10 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
       const calendars = myCalendars.map(c => ({ ...c, id: c.rootId || c.id || c.key, type: 'calendar' }));
       const calendarDates = [];
       if (calendarsModel && typeof calendarsModel.getDatesForCalendar === 'function') {
-        for (const cal of myCalendars) {
+        const datesByCal = await Promise.all(myCalendars.map(cal => calendarsModel.getDatesForCalendar(cal.rootId || cal.id || cal.key).catch(() => [])));
+        for (const [ci, cal] of myCalendars.entries()) {
           try {
-            const dates = await calendarsModel.getDatesForCalendar(cal.rootId || cal.id || cal.key);
+            const dates = datesByCal[ci];
             for (const d of (dates || [])) {
               calendarDates.push({
                 type: 'calendarDate',
@@ -280,7 +282,7 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
         ...routes,
         ...calendars,
         ...calendarDates
-      ];
+      ].filter(i => !removedItems.includes(i.id));
 
       let filtered;
       if (filter === 'discarded') {
@@ -380,6 +382,14 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
     async restoreItem(itemId) {
       const agendaConfig = readAgendaConfig();
       agendaConfig.discardedItems = agendaConfig.discardedItems.filter(id => id !== itemId);
+      writeAgendaConfig(agendaConfig);
+    },
+
+    async removeItem(itemId) {
+      const agendaConfig = readAgendaConfig();
+      agendaConfig.discardedItems = (agendaConfig.discardedItems || []).filter(id => id !== itemId);
+      agendaConfig.removedItems = agendaConfig.removedItems || [];
+      if (!agendaConfig.removedItems.includes(itemId)) agendaConfig.removedItems.push(itemId);
       writeAgendaConfig(agendaConfig);
     }
   };

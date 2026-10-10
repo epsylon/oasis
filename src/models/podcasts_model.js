@@ -1,4 +1,4 @@
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
 const categories = require('../backend/opinion_categories');
@@ -145,7 +145,7 @@ module.exports = ({ cooler }) => {
 
   const load = async () => {
     const ssbClient = await openSsb();
-    const idx = buildIndex(await readTyped(ssbClient, TYPES, { limit: logLimit }));
+    const idx = memoIndex('podcasts', await readTyped(ssbClient, TYPES, { limit: logLimit }), buildIndex);
     return { ssbClient, idx };
   };
 

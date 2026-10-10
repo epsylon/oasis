@@ -3,7 +3,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const opinionCategories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped, CONTENT_TYPES } = require('./typed_log');
+const { readTyped, CONTENT_TYPES, requestScope } = require('./typed_log');
 const { buildVoteTally } = require('../backend/vote_tally');
 
 module.exports = ({ cooler }) => {
@@ -28,10 +28,8 @@ module.exports = ({ cooler }) => {
 
   const categories = opinionCategories;
 
-  const listTrending = async (filter = 'ALL') => {
+  const computeBase = async () => {
     const ssbClient = await openSsb();
-    const userId = ssbClient.id;
-
     const messages = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true });
 
     const tombstoned = buildValidatedTombstoneSet(messages);
@@ -179,7 +177,21 @@ module.exports = ({ cooler }) => {
         bySig.set(sig, m);
       }
     }
-    items = Array.from(bySig.values());
+    return Array.from(bySig.values());
+  };
+
+  const baseItems = () => {
+    const store = requestScope.getStore();
+    if (store && store.trendingBase) return store.trendingBase;
+    const pending = computeBase();
+    if (store) store.trendingBase = pending;
+    return pending;
+  };
+
+  const listTrending = async (filter = 'ALL') => {
+    const ssbClient = await openSsb();
+    const userId = ssbClient.id;
+    let items = (await baseItems()).slice();
 
     if (filter === 'MINE') {
       items = items.filter(m => m.value.author === userId);

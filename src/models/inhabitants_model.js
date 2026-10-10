@@ -1,5 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
-const { readTyped, CONTENT_TYPES } = require('./typed_log');
+const { readTyped, CONTENT_TYPES, requestScope, authorActivity } = require('./typed_log');
 const { isContentVisibleTo } = require('./content_visibility');
 const models = require("../models/main_models");
 const { getConfig } = require('../configs/config-manager.js');
@@ -19,32 +19,40 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
-  async function getLastKarmaScore(feedId) {
+  const bytesPerAuthor = (ssbClient) => readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true }).then((msgs) => {
+    const acc = {};
+    for (const m of msgs) {
+      const author = m && m.value && m.value.author;
+      if (!author) continue;
+      try { acc[author] = (acc[author] || 0) + Buffer.byteLength(JSON.stringify(m.value), 'utf8'); } catch (_) {}
+    }
+    return acc;
+  }).catch(() => ({}));
+
+  async function latestKarmaByAuthor() {
     const ssbClient = await openSsb();
     return new Promise(resolve => {
+      const out = new Map();
       const src = ssbClient.messagesByType
         ? ssbClient.messagesByType({ type: "karmaScore", reverse: true })
         : ssbClient.createLogStream && ssbClient.createLogStream({ reverse: true });
-      if (!src) return resolve(0);
+      if (!src) return resolve(out);
       pull(
         src,
-        pull.filter(msg => {
+        pull.drain(msg => {
           const v = msg.value || msg;
           const c = v.content || {};
-          return v.author === feedId && c.type === "karmaScore" && typeof c.karmaScore !== "undefined";
-        }),
-        pull.take(1),
-        pull.collect((err, arr) => {
-          if (err || !arr || !arr.length) return resolve(0);
-          const v = arr[0].value || arr[0];
-          resolve(v.content.karmaScore || 0);
-        })
+          if (c.type !== "karmaScore" || typeof c.karmaScore === "undefined" || out.has(v.author)) return;
+          out.set(v.author, c.karmaScore || 0);
+        }, () => resolve(out))
       );
     });
   }
 
   async function getLastActivityTimestamp(feedId) {
     const ssbClient = await openSsb();
+    const activity = await authorActivity(ssbClient);
+    if (activity) return activity.get(feedId) || null;
     const norm = (t) => (t && t < 1e12 ? t * 1000 : t || 0);
     return new Promise((resolve) => {
       pull(
@@ -82,15 +90,34 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
     }
   };
 
-  async function listAllBase(ssbClient) {
+  const publicMode = require('../server/ssb_config').public;
+  const imageUrlFrom = (raw, size = 256) => {
+    const img = raw == null || raw.link == null ? `&${"0".repeat(43)}=.sha256` : (typeof raw.link === 'string' ? raw.link : raw);
+    const id = typeof img === 'string' ? img : (img && (img.link || img.url));
+    return toImageUrl(id, size);
+  };
+
+  async function listAllBase(ssbClient, onlyIds = null) {
+    const store = requestScope.getStore();
+    const memoKey = onlyIds ? null : 'inhabitantsBase';
+    if (memoKey && store && store[memoKey]) return store[memoKey];
+    const pending = buildBase(ssbClient, onlyIds);
+    if (memoKey && store) store[memoKey] = pending;
+    return pending;
+  }
+
+  async function buildBase(ssbClient, onlyIds) {
+    const only = onlyIds ? new Set(onlyIds) : null;
     const authorsMsgs = (await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true })).filter(msg => !!msg.value?.author && msg.value?.content?.type !== 'tombstone').reverse();
-    const uniqueFeedIds = Array.from(new Set(authorsMsgs.map(r => r.value.author).filter(Boolean)));
+    const uniqueFeedIds = Array.from(new Set(authorsMsgs.map(r => r.value.author).filter(Boolean))).filter(id => !only || only.has(id));
+    const profiles = publicMode ? null : await about.profiles().catch(() => null);
     const users = await Promise.all(
       uniqueFeedIds.map(async (feedId) => {
-        const rawName = await about.name(feedId);
+        const p = profiles ? (profiles.get(feedId) || {}) : null;
+        const rawName = p ? (p.name || feedId.slice(1, 9)) : await about.name(feedId);
         const name = rawName || feedId.slice(0, 10);
-        const description = await about.description(feedId);
-        const photo = await fetchUserImageUrl(feedId, 256);
+        const description = p ? (p.description || "") : await about.description(feedId);
+        const photo = p ? imageUrlFrom(p.image, 256) : await fetchUserImageUrl(feedId, 256);
         const lastActivityTs = await getLastActivityTimestamp(feedId);
         const { bucket, range } = bucketLastActivity(lastActivityTs);
         return { id: feedId, name, description, photo, lastActivityTs, lastActivityBucket: bucket, lastActivityRange: range };
@@ -109,8 +136,14 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
   }
 
   return {
+    async countInhabitants() {
+      const ssbClient = await openSsb();
+      const msgs = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true });
+      return new Set(msgs.filter(msg => !!msg.value?.author && msg.value?.content?.type !== 'tombstone').map(msg => msg.value.author)).size;
+    },
+
     async listInhabitants(options = {}) {
-      const { filter = 'all', search = '', location = '', language = '', skills = '', includeInactive = false } = options;
+      const { filter = 'all', search = '', location = '', language = '', skills = '', includeInactive = false, ids = null } = options;
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
 
@@ -125,7 +158,7 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
       }
 
       if (filter === 'all' || filter === 'TOP KARMA' || filter === 'TOP ACTIVITY' || filter === 'TOP INACTIVITY' || filter === 'TOP ECO') {
-        let users = await listAllBase(ssbClient);
+        let users = (await listAllBase(ssbClient, ids)).slice();
         if (filter !== 'TOP ACTIVITY' && filter !== 'TOP INACTIVITY') {
           users = filterInactive(users);
         }
@@ -137,17 +170,12 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
             (u.id || '').toLowerCase().includes(q)
           );
         }
-        const bytesByAuthor = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true }).then((msgs) => {
-          const acc = {};
-          for (const m of msgs) {
-            const author = m && m.value && m.value.author;
-            if (!author) continue;
-            try { acc[author] = (acc[author] || 0) + Buffer.byteLength(JSON.stringify(m.value), 'utf8'); } catch (_) {}
-          }
-          return acc;
-        }).catch(() => ({}));
+        const store = requestScope.getStore();
+        if (store && !store.inhabitantBytes) store.inhabitantBytes = bytesPerAuthor(ssbClient);
+        const bytesByAuthor = await (store ? store.inhabitantBytes : bytesPerAuthor(ssbClient));
+        const karmaOf = await latestKarmaByAuthor();
         const withMetrics = await Promise.all(users.map(async u => {
-          const karmaScore = await getLastKarmaScore(u.id);
+          const karmaScore = karmaOf.get(u.id) || 0;
           const bytes = (bytesByAuthor && bytesByAuthor[u.id]) || 0;
           const carbonGrams = (bytes / (1024 * 1024)) * 0.095;
           if (filter === 'TOP ECO') {
@@ -189,6 +217,7 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
         const active = filterInactive(base);
         const affinities = dataModel ? await dataModel.authorAffinities().catch(() => null) : null;
         const byAuthor = affinities ? affinities.byAuthor : new Map();
+        const karmaOf = await latestKarmaByAuthor();
         const rels = await Promise.all(
           active.map(async u => {
             if (u.id === userId) return null;
@@ -201,7 +230,7 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
             const social = (n.followsMe ? 0.15 : 0) + (tribeMate ? 0.1 : 0);
             const activityBonus = u.lastActivityBucket === 'green' ? 0.05 : (u.lastActivityBucket === 'orange' ? 0.02 : 0);
             const suggestionScore = Math.min(1, aff.score + social + activityBonus);
-            const karmaScore = await getLastKarmaScore(u.id);
+            const karmaScore = karmaOf.get(u.id) || 0;
             return { user: u, rel: n, karmaScore, commonSkills: aff.common, reasons: aff.reasons, suggestionScore };
           })
         );
@@ -231,8 +260,9 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
         cvs = Array.from(new Map(cvs.map(u => [u.author, u])).values());
 
         if (filter === 'CVs') {
+          const profiles = publicMode ? null : await about.profiles().catch(() => null);
           let out = await Promise.all(cvs.map(async c => {
-            const photo = await fetchUserImageUrl(c.author, 256);
+            const photo = profiles ? imageUrlFrom((profiles.get(c.author) || {}).image, 256) : await fetchUserImageUrl(c.author, 256);
             const lastActivityTs = await getLastActivityTimestamp(c.author);
             const { bucket, range } = bucketLastActivity(lastActivityTs);
             const base = this._normalizeCurriculum(c, photo);

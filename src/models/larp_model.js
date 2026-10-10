@@ -1,4 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
+const { readTyped, requestScope } = require('./typed_log');
 const fs = require('fs');
 const path = require('path');
 
@@ -210,74 +211,55 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     return candidates[0];
   }
 
+  const ANCHOR_TYPES = ['larpHouseTribeAnchor', 'larpHouseTribeAnchorTombstone', 'tombstone'];
+  const authorOfMsg = (client, key) => new Promise((resolve) => client.get(key, (err, v) => resolve(err || !v ? null : v.author || null)));
+
   async function findEarliestHouseAnchor(houseKey) {
     if (!VALID_KEY(houseKey)) return null;
     const client = await openSsb();
-    return new Promise((resolve) => {
-      const anchors = [];
-      const anchorTombstones = [];
-      const tribeTombstones = new Map();
-      const msgAuthorByKey = new Map();
-      pull(
-        client.createLogStream(),
-        pull.drain((m) => {
-          if (!m || !m.value) return;
-          const author = m.value.author;
-          if (m.key && author) msgAuthorByKey.set(m.key, author);
-          const c = m.value.content;
-          if (!c || typeof c !== 'object') return;
-          if (c.type === 'larpHouseTribeAnchor') {
-            if (c.house !== houseKey) return;
-            if (typeof c.tribeRootId !== 'string') return;
-            const tribeTs = Number(Date.parse(c.tribeCreatedAt || '')) || m.value.timestamp || 0;
-            anchors.push({ tribeRootId: c.tribeRootId, anchorAuthor: author, tribeTs });
-          } else if (c.type === 'larpHouseTribeAnchorTombstone') {
-            if (c.house !== houseKey) return;
-            if (typeof c.tribeRootId !== 'string') return;
-            anchorTombstones.push({ tribeRootId: c.tribeRootId, tombstoneAuthor: author });
-          } else if (c.type === 'tombstone' && typeof c.target === 'string') {
-            tribeTombstones.set(c.target, author);
-          }
-        }, () => {
-          const killedAnchorPairs = new Set();
-          for (const t of anchorTombstones) {
-            killedAnchorPairs.add(`${t.tribeRootId}|${t.tombstoneAuthor}`);
-          }
-          const deadTribes = new Set();
-          for (const [target, tombAuthor] of tribeTombstones) {
-            const tribeAuthor = msgAuthorByKey.get(target);
-            if (tribeAuthor && tribeAuthor === tombAuthor) deadTribes.add(target);
-          }
-          const live = anchors.filter(a =>
-            !killedAnchorPairs.has(`${a.tribeRootId}|${a.anchorAuthor}`) &&
-            !deadTribes.has(a.tribeRootId)
-          );
-          if (!live.length) return resolve(null);
-          live.sort((a, b) => a.tribeTs - b.tribeTs);
-          const first = live[0];
-          resolve({ tribeRootId: first.tribeRootId, author: first.anchorAuthor, tribeTs: first.tribeTs });
-        })
-      );
-    });
+    const msgs = await readTyped(client, ANCHOR_TYPES);
+    const anchors = [];
+    const killedAnchorPairs = new Set();
+    const tombAuthors = new Map();
+    for (const m of msgs) {
+      const c = m && m.value && m.value.content;
+      if (!c || typeof c !== 'object') continue;
+      const author = m.value.author;
+      if (c.type === 'larpHouseTribeAnchor') {
+        if (c.house !== houseKey || typeof c.tribeRootId !== 'string') continue;
+        const tribeTs = Number(Date.parse(c.tribeCreatedAt || '')) || m.value.timestamp || 0;
+        anchors.push({ tribeRootId: c.tribeRootId, anchorAuthor: author, tribeTs });
+      } else if (c.type === 'larpHouseTribeAnchorTombstone') {
+        if (c.house !== houseKey || typeof c.tribeRootId !== 'string') continue;
+        killedAnchorPairs.add(`${c.tribeRootId}|${author}`);
+      } else if (c.type === 'tombstone' && typeof c.target === 'string') {
+        if (!tombAuthors.has(c.target)) tombAuthors.set(c.target, new Set());
+        tombAuthors.get(c.target).add(author);
+      }
+    }
+    const candidates = anchors.filter(a => !killedAnchorPairs.has(`${a.tribeRootId}|${a.anchorAuthor}`));
+    const deadTribes = new Set();
+    await Promise.all([...new Set(candidates.map(a => a.tribeRootId).filter(t => tombAuthors.has(t)))].map(async (t) => {
+      const tribeAuthor = await authorOfMsg(client, t);
+      if (tribeAuthor && tombAuthors.get(t).has(tribeAuthor)) deadTribes.add(t);
+    }));
+    const live = candidates.filter(a => !deadTribes.has(a.tribeRootId));
+    if (!live.length) return null;
+    live.sort((a, b) => a.tribeTs - b.tribeTs);
+    const first = live[0];
+    return { tribeRootId: first.tribeRootId, author: first.anchorAuthor, tribeTs: first.tribeTs };
   }
 
   async function findHouseAnchorByTribe(houseKey, tribeRootId) {
     if (!VALID_KEY(houseKey) || !tribeRootId) return null;
     const client = await openSsb();
-    return new Promise((resolve) => {
-      let hit = null;
-      pull(
-        client.createLogStream(),
-        pull.drain((m) => {
-          if (hit) return;
-          const c = m && m.value && m.value.content;
-          if (!c || c.type !== 'larpHouseTribeAnchor') return;
-          if (c.house !== houseKey) return;
-          if (c.tribeRootId !== tribeRootId) return;
-          hit = { author: m.value.author, ts: m.value.timestamp || 0 };
-        }, () => resolve(hit))
-      );
-    });
+    const msgs = await readTyped(client, ANCHOR_TYPES);
+    for (const m of msgs) {
+      const c = m && m.value && m.value.content;
+      if (!c || c.type !== 'larpHouseTribeAnchor' || c.house !== houseKey || c.tribeRootId !== tribeRootId) continue;
+      return { author: m.value.author, ts: m.value.timestamp || 0 };
+    }
+    return null;
   }
 
   async function publishHouseTribeAnchor(houseKey, tribeRootId, tribeCreatedAt) {
@@ -460,6 +442,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
         joinedAt: new Date().toISOString()
       }, (err, msg) => err ? reject(err) : resolve(msg));
     });
+    forgetMemberships();
     if (previousHouse && previousHouse !== houseKey) {
       await leaveMyHouseTribe(previousHouse).catch(() => {});
     }
@@ -471,53 +454,45 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
   async function getUserHouse(feedId) {
     const client = await openSsb();
     const target = feedId || client.id;
-    return new Promise((resolve) => {
-      let latest = null;
-      let latestTs = 0;
-      pull(
-        client.createUserStream({ id: target, reverse: true }),
-        pull.drain((m) => {
-          const c = m && m.value && m.value.content;
-          if (!c) return;
-          const ts = m.value.timestamp || 0;
-          if (c.type === 'larpJoinHouse' && VALID_KEY(c.house)) {
-            if (ts > latestTs) { latestTs = ts; latest = c.house; }
-          } else if (c.type === 'larpLeaveLarp') {
-            if (ts > latestTs) { latestTs = ts; latest = null; }
-          }
-        }, () => resolve(latest))
-      );
-    });
+    return (await listAllMemberships()).get(target) || null;
   }
 
-  async function listAllMemberships() {
+  async function readMemberships() {
     const client = await openSsb();
-    return new Promise((resolve) => {
-      const byAuthor = new Map();
-      pull(
-        client.createLogStream({ reverse: true }),
-        pull.drain((m) => {
-          const author = m && m.value && m.value.author;
-          if (!author) return;
-          const c = m.value.content;
-          if (!c) return;
-          const ts = m.value.timestamp || 0;
-          if (c.type === 'larpJoinHouse' && VALID_KEY(c.house)) {
-            const prev = byAuthor.get(author);
-            if (!prev || ts > prev.ts) byAuthor.set(author, { house: c.house, ts });
-          } else if (c.type === 'larpLeaveLarp') {
-            const prev = byAuthor.get(author);
-            if (!prev || ts > prev.ts) byAuthor.set(author, { house: null, ts });
-          }
-        }, () => {
-          const result = new Map();
-          for (const [a, v] of byAuthor.entries()) {
-            if (v.house) result.set(a, v.house);
-          }
-          resolve(result);
-        })
-      );
-    });
+    const msgs = await readTyped(client, ['larpJoinHouse', 'larpLeaveLarp'], { limit: 0 });
+    const byAuthor = new Map();
+    for (const m of msgs) {
+      const author = m && m.value && m.value.author;
+      if (!author) continue;
+      const c = m.value.content;
+      if (!c) continue;
+      const ts = m.value.timestamp || 0;
+      const seq = Number(m.value.sequence) || 0;
+      const prev = byAuthor.get(author);
+      const newer = !prev || ts > prev.ts || (ts === prev.ts && seq > prev.seq);
+      if (c.type === 'larpJoinHouse' && VALID_KEY(c.house)) {
+        if (newer) byAuthor.set(author, { house: c.house, ts, seq });
+      } else if (c.type === 'larpLeaveLarp') {
+        if (newer) byAuthor.set(author, { house: null, ts, seq });
+      }
+    }
+    const result = new Map();
+    for (const [a, v] of byAuthor.entries()) {
+      if (v.house) result.set(a, v.house);
+    }
+    return result;
+  }
+
+  const forgetMemberships = () => {
+    const store = requestScope.getStore();
+    if (store) delete store.larpMemberships;
+  };
+
+  async function listAllMemberships() {
+    const store = requestScope.getStore();
+    if (!store) return readMemberships();
+    if (!store.larpMemberships) store.larpMemberships = readMemberships();
+    return store.larpMemberships;
   }
 
   async function publishLeaveLarp() {
@@ -530,6 +505,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
         leftAt: new Date().toISOString()
       }, (err, msg) => err ? reject(err) : resolve(msg));
     });
+    forgetMemberships();
     if (previousHouse) {
       await leaveMyHouseTribe(previousHouse).catch(() => {});
     }

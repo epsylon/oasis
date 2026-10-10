@@ -3,7 +3,7 @@ const moment = require('../server/node_modules/moment');
 const { normalizeImages, normalizeVideo } = require('./media_gallery');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const { dedupeBy, norm } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -275,7 +275,7 @@ module.exports = ({ cooler, pmModel }) => {
       const ssb = await openSsb();
       const now = moment();
       const messages = await getAllMessages(ssb);
-      const idx = buildIndex(messages);
+      const idx = memoIndex('tasks', messages, buildIndex);
       const rootId = idx.rootOf(taskId);
       const agg = idx.resolveGroup(rootId);
       if (!agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error('Task not found');

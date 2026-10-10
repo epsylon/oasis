@@ -165,7 +165,7 @@ const renderCreateForm = (calendarToEdit, params) => {
 }
 
 const renderMonthGrid = (year, month, datesMap, calendarId) => {
-  const DAY_NAMES = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+  const DAY_NAMES = String(i18n.calendarDayInitials || "M,T,W,T,F,S,S").split(",")
   const firstDay = new Date(year, month, 1)
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const startPad = (firstDay.getDay() + 6) % 7
@@ -383,11 +383,12 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
       )
     : null
 
-  const monthLabel = currentMonth.format("MMMM YYYY")
+  const monthNames = String(i18n.calendarMonthNames || "").split(",")
+  const monthLabel = `${monthNames[currentMonth.month()] || currentMonth.format("MMMM")} ${currentMonth.year()}`
   const calNav = div({ class: "calendar-nav" },
-    a({ href: `${shareUrl}?month=${prevMonth}`, class: "filter-btn" }, i18n.calendarMonthPrev || "\u2190 Prev"),
+    a({ href: `${shareUrl}?month=${prevMonth}`, class: "filter-btn", title: i18n.calendarMonthPrev || "Prev" }, "\u2190"),
     span({ class: "tribe-info-label" }, monthLabel),
-    a({ href: `${shareUrl}?month=${nextMonth}`, class: "filter-btn" }, i18n.calendarMonthNext || "Next \u2192")
+    a({ href: `${shareUrl}?month=${nextMonth}`, class: "filter-btn", title: i18n.calendarMonthNext || "Next" }, "\u2192")
   )
 
   const grid = renderMonthGrid(year, month, datesMap, calendar.rootId)

@@ -3,7 +3,7 @@ const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
-const { readTyped } = require("./typed_log");
+const { readTyped, memoIndex } = require("./typed_log");
 const contentFavorites = require("../backend/content_favorites");
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -327,7 +327,7 @@ module.exports = ({ cooler }) => {
     async getDocumentById(id) {
       const ssbClient = await openSsb();
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(messages);
+      const idx = memoIndex('documents', messages, buildIndex);
       const favorites = await favoritesSetForDocuments();
 
       const rootId = idx.rootOf(id);

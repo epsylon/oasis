@@ -133,7 +133,7 @@ const invitesView = (opts = {}) => {
         p(i18n.invitesFederationsHint),
         div({ class: 'conn-actions invites-pubs-actions' },
           form({ action: '/invites/refresh-pubs', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsRefresh || 'Refresh')),
-          form({ action: '/invites/clear-unreachable', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsClearUnreachable || 'Remove unreachable')),
+          form({ action: '/invites/clear-unreachable', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsClearUnreachable || 'Clean')),
           form({ action: '/invites/export-pubs', method: 'get' }, button({ type: 'submit' }, i18n.invitesPubsExport || 'Export'))
         ),
         form(

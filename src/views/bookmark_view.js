@@ -73,6 +73,7 @@ const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filt
           : bookmark.tribeOrigin
             ? renderContentActions(null, bookmark.tribeOrigin.href)
             : renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, { spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, author: bookmark.author, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title, deleteAction: isOwn ? contentDeleteAction('bookmark', bookmark.id) : undefined, returnTo });
+        const titleHref = typeof params.headerActions === "function" ? null : bookmark.tribeOrigin ? bookmark.tribeOrigin.href : `/bookmarks/${encodeURIComponent(bookmark.id)}`;
         const engagement = typeof params.engagement === "function"
           ? params.engagement(bookmark)
           : bookmark.tribeOrigin ? null : renderEngagement(bookmark.id,
@@ -88,9 +89,9 @@ const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filt
           ),
           div(
             { class: "card-section bookmark-card-body" },
-            h2({ class: "bookmark-title" }, bookmark.url ? urlLink : (bookmark.title || "")),
+            h2({ class: "bookmark-title" }, titleHref ? a({ href: titleHref, class: "card-title-link" }, bookmark.title || bookmark.url || "") : (bookmark.url ? urlLink : (bookmark.title || ""))),
             bookmark.lifetime || reachChip || extraChips.length ? div({ class: "card-chips-row" }, renderLifespanChip(bookmark.lifetime, i18n), reachChip, ...extraChips) : null,
-            bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null,
+            titleHref ? (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null) : (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null),
             params.hideLastVisit ? null : renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(bookmark) : []),
             br,

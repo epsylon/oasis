@@ -49,21 +49,27 @@ module.exports = ({ cooler, subscriptionsModel = null }) => {
     return out;
   };
 
+  const privateState = new WeakMap();
   const readPrivate = async (ssbClient) => {
     const me = ssbClient.id;
+    let st = privateState.get(ssbClient);
+    if (!st || st.me !== me) {
+      st = { me, lastTs: 0, seen: new Set(), lists: [], leaves: [], posts: [], chunks: new Map(), tombClaims: new Map(), authorByKey: new Map() };
+      privateState.set(ssbClient, st);
+    }
     const raw = await new Promise((resolve, reject) => {
-      pull(ssbClient.createLogStream({ reverse: false }), pull.collect((err, arr) => err ? reject(err) : resolve(arr)));
+      pull(ssbClient.createLogStream(st.lastTs > 0 ? { reverse: false, gte: st.lastTs } : { reverse: false }), pull.collect((err, arr) => err ? reject(err) : resolve(arr)));
     });
-    const lists = [];
-    const leaves = [];
-    const posts = [];
-    const chunks = new Map();
-    const tombClaims = new Map();
-    const authorByKey = new Map();
     for (const m of raw) {
       if (!m || !m.value) continue;
+      const recv = Number(m.timestamp) || 0;
+      if (recv > st.lastTs) st.lastTs = recv;
       const content = m.value.content;
       if (typeof content !== 'string') continue;
+      if (m.key) {
+        if (st.seen.has(m.key)) continue;
+        st.seen.add(m.key);
+      }
       let dec;
       try { dec = ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.timestamp || m.value.timestamp }); } catch (_) { continue; }
       const v = (dec && dec.value) || {};
@@ -72,30 +78,30 @@ module.exports = ({ cooler, subscriptionsModel = null }) => {
       if (!c || typeof c !== 'object' || !k) continue;
       const ts = v.timestamp || m.timestamp || 0;
       if (c.type === 'tombstone' && c.target) {
-        const set = tombClaims.get(c.target) || new Set();
+        const set = st.tombClaims.get(c.target) || new Set();
         set.add(v.author);
-        tombClaims.set(c.target, set);
+        st.tombClaims.set(c.target, set);
         continue;
       }
       if (c.type === longText.CHUNK_TYPE) {
         const ch = longText.chunkOf(v.author, c);
-        if (ch) chunks.set(k, ch);
+        if (ch) st.chunks.set(k, ch);
         continue;
       }
-      authorByKey.set(k, v.author);
-      if (c.type === LIST_TYPE) lists.push({ key: k, author: v.author, ts, c });
-      else if (c.type === LEAVE_TYPE && c.list) leaves.push({ key: k, author: v.author, ts, list: String(c.list) });
+      st.authorByKey.set(k, v.author);
+      if (c.type === LIST_TYPE) st.lists.push({ key: k, author: v.author, ts, c });
+      else if (c.type === LEAVE_TYPE && c.list) st.leaves.push({ key: k, author: v.author, ts, list: String(c.list) });
       else if (c.type === 'post' && c.list) {
         const to = Array.isArray(c.to) ? c.to : [];
-        if (v.author === me || to.includes(me)) posts.push({ key: k, author: v.author, ts, c });
+        if (v.author === me || to.includes(me)) st.posts.push({ key: k, author: v.author, ts, c });
       }
     }
     const tombed = new Set();
-    for (const [target, authors] of tombClaims.entries()) {
-      const orig = authorByKey.get(target);
+    for (const [target, authors] of st.tombClaims.entries()) {
+      const orig = st.authorByKey.get(target);
       for (const a of authors) if (a === orig || a === me) { tombed.add(target); break; }
     }
-    return { lists, leaves, posts: posts.filter(p => !tombed.has(p.key)), tombed, chunks };
+    return { lists: st.lists.slice(), leaves: st.leaves.slice(), posts: st.posts.filter(p => !tombed.has(p.key)), tombed, chunks: st.chunks };
   };
 
   const buildIndex = (publicMsgs, priv) => {

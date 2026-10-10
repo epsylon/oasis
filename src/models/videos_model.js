@@ -2,7 +2,7 @@ const pull = require("../server/node_modules/pull-stream");
 const { getConfig } = require("../configs/config-manager.js");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm } = require('../backend/dedupe');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 const categories = require("../backend/opinion_categories");
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -304,7 +304,7 @@ module.exports = ({ cooler }) => {
       const ssbClient = await openSsb();
       const viewer = viewerId || ssbClient.id;
       const messages = await getAllMessages(ssbClient);
-      const idx = buildIndex(messages);
+      const idx = memoIndex('videos', messages, buildIndex);
       const rootId = idx.rootOf(id);
       const agg = idx.resolveGroup(rootId);
       if (!agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error("Video not found");

@@ -168,7 +168,6 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
     div({ class: 'card-section inhabitants-card-body' },
       div({ class: 'inhabitant-card' },
     div({ class: 'inhabitant-left' },
-      isMe ? p({ class: 'inhabitant-left-name' }, span({ class: 'status you' }, i18n.relationshipYou)) : null,
       a(
          { href: `/author/${encodeURIComponent(user.id)}` },
          img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo, 256), alt: user.name || 'Anonymous' })
@@ -182,7 +181,8 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
         estimatedUBI: user.estimatedUBI, lastClaimedDate: user.lastClaimedDate, totalClaimed: user.totalClaimed,
         larpHouse: user.larpHouse, stats: user.stats,
         mutual: !!(user.relationship && user.relationship.following && user.relationship.followsMe)
-      }, { excludeContent: true }),
+      }, { excludeContent: true, sensorsOnly: true, dndToggle: false }),
+      isMe ? p({ class: 'inhabitant-left-name' }, span({ class: 'status you' }, i18n.relationshipYou)) : null,
       filter === 'CVs'
         ? div(
             { class: 'cv-actions doc-export-actions' },
@@ -195,17 +195,10 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
               button({ type: 'submit', class: 'filter-btn' }, i18n.sharePm)
             )
           )
-        : null,
-      !isMe
-        ? div(
-            { class: 'inhabitant-user-actions' },
-            div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(user.relationship || {}, user.id))
-          )
         : null
     ),
     (() => {
       const detailNodes = [
-        user.description ? p(...renderStyledText(user.description)) : null,
         filter === 'CVs' ? renderCvFields(user) : null,
         filter === 'SUGGESTED' && user.commonSkills?.length
           ? div({ class: 'suggested-meta' },
@@ -213,8 +206,7 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
             )
           : null,
         filter === 'blocked' && user.isBlocked
-          ? p(i18n.blockedLabel) : null,
-        renderContentStats(user.stats, i18n)
+          ? p(i18n.blockedLabel) : null
       ].filter(Boolean);
       return detailNodes.length ? div({ class: 'inhabitant-details' }, ...detailNodes) : null;
     })()
@@ -313,7 +305,7 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
       ),
       filter === 'GALLERY'
         ? renderGalleryInhabitants(paged(inhabitants))
-        : div({ class: 'inhabitants-list' },
+        : div({ class: filter === 'CVs' ? 'inhabitants-list' : 'inhabitants-list inhabitants-grid' },
             inhabitants.length
               ? paged(inhabitants).map(user => renderInhabitantCard(user, filter, currentUserId, fediverseConfigured))
               : p({ class: 'no-results' }, i18n.noInhabitantsFound)

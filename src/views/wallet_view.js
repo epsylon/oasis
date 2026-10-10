@@ -211,6 +211,10 @@ exports.walletSendResultView = async (balance, destination, amount, txId, note =
 
 exports.walletErrorView = async (error) => {
     const header = div({ class: 'tags-header module-header-line' }, h2(i18n.walletTitle), p(i18n.walletDescription), renderWalletChip());
+    const w = (require('../configs/config-manager.js').getConfig() || {}).wallet || {};
+    if (![w.url, w.user, w.pass].every(v => String(v || '').trim())) {
+        return template(i18n.walletTitle, section(header, div({ class: "wallet-error" }, h2(i18n.walletStatus), p(i18n.walletNotConfigured, ' ', a({ href: '/settings#wallet' }, i18n.walletConfiguration)))));
+    }
     return template(
         i18n.walletTitle,
         section(

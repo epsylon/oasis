@@ -1,7 +1,7 @@
 const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped } = require('./typed_log');
+const { readTyped, memoIndex } = require('./typed_log');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -224,7 +224,7 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
   const collect = async (viewerId) => {
     const ssbClient = await openSsb();
     const messages = await getAllMessages(ssbClient);
-    const idx = buildIndex(messages);
+    const idx = memoIndex('polls', messages, buildIndex);
     const roots = new Set();
     for (const key of idx.nodes.keys()) roots.add(idx.rootOf(key));
 

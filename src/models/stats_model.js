@@ -6,6 +6,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const DISK_USAGE_TTL_MS = 10 * 60 * 1000;
 
 const addrFile = () => process.env.OASIS_BANKING_DIR ? path.join(process.env.OASIS_BANKING_DIR, "wallet-addresses.json") : require('../configs/state-manager').statePath("wallet-addresses.json");
 
@@ -68,18 +69,43 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
   ];
 
-  const getFolderSize = (folderPath) => {
-    let files;
-    try { files = fs.readdirSync(folderPath); } catch (_) { return 0; }
-    let totalSize = 0;
-    for (const file of files) {
-      const filePath = `${folderPath}/${file}`;
+  const walkBytes = async (dir) => {
+    let names;
+    try { names = await fs.promises.readdir(dir); } catch (_) { return 0; }
+    let total = 0;
+    for (const name of names) {
+      const filePath = path.join(dir, name);
       try {
-        const st = fs.statSync(filePath);
-        totalSize += st.isDirectory() ? getFolderSize(filePath) : st.size;
+        const st = await fs.promises.stat(filePath);
+        total += st.isDirectory() ? await walkBytes(filePath) : st.size;
       } catch (_) {}
     }
-    return totalSize;
+    return total;
+  };
+  const diskUsage = new Map();
+  const ssbDiskUsage = (root) => {
+    const hit = diskUsage.get(root);
+    if (hit && (hit.pending || Date.now() - hit.at < DISK_USAGE_TTL_MS)) return hit.pending || Promise.resolve(hit.value);
+    const pending = (async () => {
+      let names = [];
+      try { names = await fs.promises.readdir(root); } catch (_) {}
+      const usage = { total: 0, log: 0, blobs: 0 };
+      for (const name of names) {
+        const filePath = path.join(root, name);
+        let bytes = 0;
+        try {
+          const st = await fs.promises.stat(filePath);
+          bytes = st.isDirectory() ? await walkBytes(filePath) : st.size;
+        } catch (_) {}
+        usage.total += bytes;
+        if (name === 'db2') usage.log = bytes;
+        if (name === 'blobs') usage.blobs = bytes;
+      }
+      return usage;
+    })();
+    diskUsage.set(root, { pending, at: 0, value: null });
+    pending.then((value) => diskUsage.set(root, { pending: null, at: Date.now(), value }), () => diskUsage.delete(root));
+    return pending;
   };
 
   const formatSize = (sizeInBytes) => {
@@ -470,9 +496,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const secretStat = fs.statSync(path.join(ssbDirOf(), 'secret'));
     const createdAt = secretStat.birthtime.toLocaleString();
 
-    const folderSize = getFolderSize(ssbDirOf());
-    const logSize = getFolderSize(path.join(ssbDirOf(), 'db2'));
-    const blobsSize = getFolderSize(path.join(ssbDirOf(), 'blobs'));
+    const { total: folderSize, log: logSize, blobs: blobsSize } = await ssbDiskUsage(ssbDirOf());
 
     const allTs = scopedMsgs.map(m => m.value.timestamp || 0).filter(Boolean);
     const lastTs = allTs.length ? Math.max(...allTs) : 0;

@@ -58,6 +58,7 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
           : doc.tribeOrigin
             ? renderContentActions(null, doc.tribeOrigin.href)
             : renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title, deleteAction: isOwn ? contentDeleteAction('document', doc.key) : undefined, returnTo });
+        const titleHref = typeof params.headerActions === "function" ? null : doc.tribeOrigin ? doc.tribeOrigin.href : `/documents/${encodeURIComponent(doc.key)}`;
         const engagement = typeof params.engagement === "function"
           ? params.engagement(doc)
           : doc.tribeOrigin ? null : renderEngagement(doc.key,
@@ -73,7 +74,7 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
           ),
           div(
             { class: "card-section document-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(title) : null, doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null, renderLicenseChip(doc.license), ...(typeof params.titleChips === "function" ? params.titleChips(doc) : [])),
+            div({ class: "shop-title-row" }, title ? h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title) : null, doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null, renderLicenseChip(doc.license), ...(typeof params.titleChips === "function" ? params.titleChips(doc) : [])),
             doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
             doc?.url
               ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })

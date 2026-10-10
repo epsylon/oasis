@@ -8,7 +8,6 @@ const { renderStyledText, renderStyledHtml, safeExternalHref } = require('../bac
 const opinionCategories = require('../backend/opinion_categories');
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
-const seenDocumentTitles = new Set();
 
 const detailHref = (type, key) => {
   switch (type) {
@@ -247,8 +246,6 @@ const renderContentHtml = (content, key) => {
       );
     case 'document': {
       const t = content.title?.trim();
-      if (t && seenDocumentTitles.has(t)) return null;
-      if (t) seenDocumentTitles.add(t);
       return div({ class: 'opinion-document' },
         div({ class: 'card-section document' },
           t ? div({ class: 'card-field' },
@@ -351,7 +348,6 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
     const ops = (it.value?.content || {}).opinions || {};
     for (const [cat, n] of Object.entries(ops)) if (Number(n) > 0) presentCats.add(cat);
   }
-  seenDocumentTitles.clear();
   items = items
     .filter(item => {
       const c = item.value?.content || item.content;
@@ -370,7 +366,16 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
   const baseFilters = ['RECENT', 'MINE', 'ALL', 'TOP'];
   const emptyOps = (Array.isArray(allItems) ? allItems : items).length === 0 && !String(q || '').trim();
 
-  const cards = items
+  const seenDocs = new Set();
+  const shownItems = items.filter(item => {
+    const c = item.value.content || {};
+    const t = c.type === 'document' ? String(c.title || '').trim() : '';
+    if (!t) return true;
+    if (seenDocs.has(t)) return false;
+    seenDocs.add(t);
+    return true;
+  });
+  const cards = paged(shownItems)
     .map(item => {
       const c = item.value.content;
       const key = item.key;
@@ -510,7 +515,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
         )
       ),
       emptyOps ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
-        renderModuleStats(cards.length),
+        renderModuleStats(shownItems.length),
         form({ method: 'GET', action: '/opinions', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.opinionsSearchPlaceholder, class: 'filter-box__input' }),
@@ -521,7 +526,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
       ),
       section(
         cards.length
-          ? div({ class: 'opinions-container' }, ...paged(cards))
+          ? div({ class: 'opinions-container' }, ...cards)
           : div({ class: 'no-results' }, p(i18n.noOpinionsFound))
       )
     )

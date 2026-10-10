@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const categories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped, CONTENT_TYPES } = require('./typed_log');
+const { readTyped, CONTENT_TYPES, requestScope } = require('./typed_log');
 const { buildVoteTally } = require('../backend/vote_tally');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -77,9 +77,8 @@ module.exports = ({ cooler }) => {
     );
   };
 
-  const listOpinions = async (filter = 'ALL', category = '') => {
+  const computeBase = async () => {
     const ssbClient = await openSsb();
-    const userId = ssbClient.id;
     const messages = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true });
     const tombstoned = buildValidatedTombstoneSet(messages);
     const replaces = new Map();
@@ -246,10 +245,24 @@ module.exports = ({ cooler }) => {
     }
     filtered = Array.from(bySig.values());
 
-    filtered = filtered.filter(m => {
+    return filtered.filter(m => {
       const ops = m.value?.content?.opinions || {};
       return Object.values(ops).reduce((acc, x) => acc + (Number(x) || 0), 0) > 0;
     });
+  };
+
+  const baseItems = () => {
+    const store = requestScope.getStore();
+    if (store && store.opinionsBase) return store.opinionsBase;
+    const pending = computeBase();
+    if (store) store.opinionsBase = pending;
+    return pending;
+  };
+
+  const listOpinions = async (filter = 'ALL', category = '') => {
+    const ssbClient = await openSsb();
+    const userId = ssbClient.id;
+    let filtered = (await baseItems()).slice();
 
     if (filter === 'MINE') {
       filtered = filtered.filter(m => m.value.author === userId);

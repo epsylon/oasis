@@ -360,7 +360,7 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
     section(
       div({ class: "tags-header module-header-line" },
         h2(i18n.fileAllSectionTitle || i18n.filesTitle),
-        p(i18n.fileDescription)
+        p(i18n.filesDescription)
       ),
       div(
         { class: "filters" },
