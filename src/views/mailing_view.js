@@ -66,16 +66,12 @@ const renderArchiveItem = (list, params = {}) =>
       div({ class: "mailing-archive-meta" },
         a({ href: listHref(list), class: "user-link" }, list.title || "—"),
         countsLine(list),
-        renderOpenClosedChip(list.listType, i18n),
-        statusChip(list)
+        renderOpenClosedChip(list.listType, { statusChipOPEN: typeLabel("OPEN"), statusChipCLOSED: typeLabel("CLOSED") }),
+        statusChip(list),
+        list.isMember && !list.isOwner ? renderStateChip("mutuals", "✉", i18n.subscriptionOn) : null
       ),
       renderContentActions(list.id, listHref(list), { author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: (params.spreadMap && params.spreadMap.get(list.id)) || null, deleteAction: String(list.author) === String(userId) ? contentDeleteAction("mailingList", list.id) : null })
-    ),
-    subscribeForm(list, "/mailing")
-      ? div({ class: "emergency-update-head mailing-archive-row" },
-          div({ class: "tribe-side-actions emergency-update-actions" }, subscribeForm(list, "/mailing"))
-        )
-      : null
+    )
   );
 
 const chipButtons = (modes, filter, census, labelOf) =>
@@ -268,7 +264,7 @@ exports.singleMailingView = async (list, params = {}) => {
       renderContentActions(list.id, href, { author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null, deleteAction: isAuthor ? contentDeleteAction("mailingList", list.id) : null })
     ),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, list.title)),
-    div({ class: "card-chips-row" }, renderOpenClosedChip(list.listType, i18n), statusChip(list)),
+    div({ class: "card-chips-row" }, renderOpenClosedChip(list.listType, { statusChipOPEN: typeLabel("OPEN"), statusChipCLOSED: typeLabel("CLOSED") }), statusChip(list)),
     list.description ? p({ class: "tribe-side-description" }, ...renderStyledText(list.description)) : null,
     table({ class: "tribe-info-table jobs-info-table" },
       tr(

@@ -25,7 +25,7 @@ const PRESETS = {
 
 const MOBILE_MODULES = [
   'agenda', 'favorites', 'wallet', 'tribes', 'larp', 'votes', 'polls', 'events', 'calendars', 'tasks',
-  'reports', 'banking', 'market', 'housing', 'jobs', 'shops', 'school', 'transfers', 'cipher', 'invites',
+  'reports', 'banking', 'market', 'housing', 'jobs', 'shops', 'school', 'courts', 'transfers', 'cipher', 'invites',
   'games', 'audios', 'bookmarks', 'docs', 'files', 'images', 'torrents', 'emergencies', 'mailing', 'logistics', 'podcasts', 'campaigns', ...NETWORK.filter(m => m !== 'rooms')
 ];
 

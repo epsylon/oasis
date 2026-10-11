@@ -656,7 +656,7 @@ a.filter-btn,
   padding: 9px 16px !important;
 }
 .filters .ui-toolbar--filters {
-  justify-content: center !important;
+  justify-content: flex-start !important;
   align-items: center !important;
   gap: 6px !important;
 }
@@ -1228,7 +1228,7 @@ a.create-button {
   flex-wrap: nowrap !important;
   justify-content: flex-end !important;
   align-items: center !important;
-  gap: 8px !important;
+  gap: 5px !important;
   margin: 0 !important;
   padding: 0 !important;
 }
@@ -1241,7 +1241,7 @@ a.create-button {
   justify-content: center !important;
   gap: 4px !important;
   min-height: 44px !important;
-  padding: 6px 16px !important;
+  padding: 6px 9px !important;
   white-space: nowrap !important;
   cursor: pointer !important;
 }
@@ -1453,4 +1453,41 @@ body:has(:is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"
 }
 .oasis-nav-side-toggle ~ .main-content .oasis-nav-toggle:not(:checked) + .oasis-nav-header + .oasis-nav-list {
   display: none !important;
+}
+.oasis-nav-side-toggle ~ .header .oasis-phone-state {
+  order: 1 !important;
+  flex: 1 1 0 !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  align-self: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+}
+.oasis-nav-side-toggle ~ .header:has(.oasis-phone-state) .oasis-mobile-menus {
+  flex: 0 1 auto !important;
+}
+.oasis-nav-side-toggle ~ .header .oasis-phone-state-btn {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  font: inherit !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 3px !important;
+  min-height: 0 !important;
+  justify-content: center !important;
+  width: 38px !important;
+  height: 38px !important;
+  padding: 0 !important;
+  font-size: 8.5px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+  border-radius: 999px !important;
+  cursor: pointer !important;
+}
+.oasis-nav-side-toggle ~ .header .oasis-phone-state-btn .pm-exposition-icon {
+  font-size: 22px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
 }

@@ -388,7 +388,7 @@ a.user-link:focus, button.user-link:focus {
 .tribe-subtribe-link:hover { background: #5A1A85 !important; }
 .tribe-parent-image { border-color: #B86ADE !important; }
 .tribe-parent-box { background: #3C1360 !important; }
-.trending-card.own-content { box-shadow: inset 3px 0 0 #B86ADE; }
+.trending-card.own-content, .addr-card.ubi-pub-card.own-content { box-shadow: inset 3px 0 0 #B86ADE; }
 .map-stage { background: #2a0640 !important; border-color: #9B1C96 !important; }
 .map-label-country { fill: #E5E5E5; stroke: #2a0640; }
 .map-place-dot { fill: #ffffff; stroke: #2a0640; }

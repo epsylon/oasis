@@ -712,6 +712,8 @@ exports.setLanguage = (language) => {
   const newLang = i18nBase[selectedLanguage] || i18nBase['en'];
   Object.keys(i18n).forEach(k => delete i18n[k]);
   Object.assign(i18n, newLang);
+  const momentLocale = moment.locale(selectedLanguage === 'zh' ? 'zh-cn' : (i18nBase[selectedLanguage] ? selectedLanguage : 'en'));
+  if (moment.localeData(momentLocale).postformat('1') !== '1') moment.updateLocale(momentLocale, { preparse: (str) => str, postformat: (str) => str });
 };
 exports.i18n = i18n;
 Object.defineProperty(exports, 'selectedLanguage', { get: () => selectedLanguage });
@@ -1130,7 +1132,7 @@ const renderImagesLink = () => {
     return [
       navLink({
         href: "/images",
-        emoji: "ꕥ",
+        emoji: "▦",
         text: i18n.imagesLabel,
         class: "images-link enabled"
       })
@@ -1388,7 +1390,7 @@ const renderLarpLink = () => {
     ? [
         navLink({
           href: "/larp",
-          emoji: "✦",
+          emoji: "♜",
           text: i18n.larpTitle || "L.A.R.P.",
           class: "larp-link enabled"
         })
@@ -1540,7 +1542,7 @@ const renderReportsLink = () => {
     ? [
         navLink({
           href: "/reports",
-          emoji: "ꕥ",
+          emoji: "⚐",
           text: i18n.reportsTitle,
           class: "reports-link enabled"
         })
@@ -1582,7 +1584,7 @@ const renderWikiLink = () => {
     ? [
         navLink({
           href: "/wiki",
-          emoji: "ꔮ",
+          emoji: "¶",
           text: i18n.wikiTitle,
           class: "wiki-link enabled"
         })
@@ -1997,7 +1999,7 @@ const template = (titlePrefix, ...elements) => {
             ul(
               navLink({ href: "/activity", emoji: "ꔙ", text: i18n.activityTitle }),
               renderTrendingLink(),
-              navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
+              navLink({ href: "/search", emoji: "⌕", text: i18n.searchTitle })
             )
           )
         ) : div(
@@ -2007,7 +2009,7 @@ const template = (titlePrefix, ...elements) => {
               ...((getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? [] : (renderAILink() || [])),
               navLink({ href: "/data", emoji: "⚯", text: i18n.dataTitle }),
               renderTagsLink(),
-              navLink({ href: "/search", emoji: "ꔅ", text: i18n.searchTitle })
+              navLink({ href: "/search", emoji: "⌕", text: i18n.searchTitle })
             )
           )
         )

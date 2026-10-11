@@ -10,7 +10,8 @@ Our workflow is basically [GitHub Flow][github-flow] with specific roles:
 - **Maintainers:** Merge patches that reduce the number of problems.
 
 If you have an issue, it's best to open an issue to describe the problem and
-discuss solutions, but don't worry if you've already skipped that step.
+discuss solutions, but don't worry if you've already skipped that step. The
+[reporting template](./REPORTING.md) lists what helps to understand and fix it.
 
 Assuming you already have a [developer install](./install.md) you should be
 able to start editing source code. There are a few useful commands you should

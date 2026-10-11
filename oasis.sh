@@ -34,6 +34,7 @@ PUB admin commands (require the sbot to be running: ./oasis.sh server):
   name <text>              Set this PUB display name
   announce <host> [port]   Publish a PUB address (default port=8008)
   follow <feedId>          Follow another PUB / feed
+  join <invite>            Join another PUB with its invite code
   status                   Show peer / replication status
   gossip                   List known gossip peers
 
@@ -97,7 +98,7 @@ case "$MODE" in
     cd "$CURRENT_DIR/src/backend" || exit 1
     exec node backend.js --public --no-open --host=0.0.0.0 "$@"
     ;;
-  whoami|invite|name|announce|follow|status|gossip)
+  whoami|invite|name|announce|follow|join|status|gossip)
     exec node "$CURRENT_DIR/scripts/oasis-pub.js" "$@"
     ;;
   test|tests)

@@ -452,9 +452,9 @@ const renderClearnetMediaView = ({ kind, item }) => {
 .cn-media-frame{margin:16px 0}
 .cn-media-frame img{max-width:100%;height:auto;border-radius:6px;border:1px solid var(--border);display:block}
 .cn-media-frame audio,.cn-media-frame video{width:100%;max-width:100%;display:block;border-radius:6px;background:#000}
-.cn-media-frame .cn-media-doc{display:inline-block;background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:10px 18px;color:var(--fg);text-decoration:none}
+.cn-media-frame .cn-media-doc{display:inline-block;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:10px 18px;color:var(--fg);text-decoration:none}
 .cn-media-frame .cn-media-doc:hover{border-color:var(--fg)}
-.cn-media-frame .cn-media-doc + .cn-media-doc{margin-left:10px}
+.cn-media-frame .cn-media-docs{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
 `;
   const fileKind = kind === 'document' || kind === 'torrent' || kind === 'file';
   let mediaHtml = '';
@@ -472,7 +472,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
       const originalName = dlName(kind === 'file' ? item.fileName : item.sourceName) || dlName(item.title) || 'file';
       const torrentBlob = kind === 'file' ? blobUrl(item.torrentUrl) : blob;
       const torrentName = `${kind === 'file' ? originalName : (dlName(item.title) || 'download').replace(/\.torrent$/i, '')}.torrent`;
-      mediaHtml = [original ? dlLink(original, originalName) : '', torrentBlob ? dlLink(torrentBlob, torrentName) : ''].filter(Boolean).join('');
+      mediaHtml = `<div class="cn-media-docs">${[original ? dlLink(original, originalName) : '', torrentBlob ? dlLink(torrentBlob, torrentName) : ''].filter(Boolean).join('')}</div>`;
     } else if (kind === 'document') {
       mediaHtml = `<a class="cn-media-doc" href="${blob}" target="_blank" rel="noopener">⇩ ${title}</a>`;
     } else {

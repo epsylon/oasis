@@ -344,9 +344,12 @@ module.exports = [
         return arr;
       };
 
+      let drained = false;
+      try { sbot.db.onDrain('base', () => { drained = true; }); } catch (_) { drained = true; }
       const status = () => {
         const st = (sbot.db.getStatus && sbot.db.getStatus().value) || { log: 0, jit: {}, indexes: {}, progress: 1 };
         return {
+          ready: drained,
           sync: { since: Number(st.log) || 0, plugins: { ...(st.indexes || {}) } },
           jit: { ...(st.jit || {}) },
           progress: typeof st.progress === 'number' ? st.progress : 1,

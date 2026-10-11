@@ -95,11 +95,16 @@ const buildGraphSvg = (me, peers, links = []) => {
 };
 
 const zoomableGraph = (id, svg) => [
-  div({ class: 'graphos-zoom-row' }, a({ href: `#${id}`, id: `${id}-src`, class: 'filter-btn graphos-zoom-btn' }, `\u2922 ${i18n.graphosZoom || 'Enlarge'}`)),
   div({ class: 'graphos-canvas', [RAW_HTML]: svg }),
+  div({ class: 'graphos-zoom-row' }, a({ href: process.env.OASIS_MOBILE === '1' ? `#${id}-focus` : `#${id}`, id: `${id}-src`, class: 'filter-btn graphos-zoom-btn' }, `\u2922 ${i18n.graphosZoom || 'Enlarge'}`)),
   div({ id, class: 'lightbox graphos-lightbox' },
     a({ href: `#${id}-src`, class: 'lightbox-close' }, '\u00d7'),
-    div({ class: 'graphos-canvas-zoom', [RAW_HTML]: svg })
+    div({ class: 'graphos-canvas-zoom' },
+      div({ class: 'graphos-zoom-stage' },
+        div({ class: 'graphos-zoom-svg', [RAW_HTML]: svg }),
+        span({ id: `${id}-focus`, class: 'graphos-zoom-focus' })
+      )
+    )
   )
 ];
 

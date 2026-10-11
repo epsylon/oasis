@@ -3087,7 +3087,7 @@ body > .header {
 }
 .main-column .graphos-zoom-row {
   display: flex !important;
-  justify-content: flex-end !important;
+  justify-content: center !important;
   margin: 8px 0 0 0 !important;
 }
 .main-column .graphos-zoom-row .graphos-zoom-btn {
@@ -3107,6 +3107,7 @@ body > .header {
 .graphos-lightbox .graphos-svg {
   width: 200vw !important;
   max-width: none !important;
+  max-height: none !important;
   height: auto !important;
   min-height: 0 !important;
 }
@@ -3311,4 +3312,516 @@ body > .header {
 .main-column .content-actions .content-action-form.content-action-delete {
   order: -1 !important;
   margin: 0 auto 0 0 !important;
+}
+.main-column .inhabitants-grid {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+.main-column .inhabitants-grid > .inhabitants-card {
+  margin: 0 !important;
+  padding: 10px 8px !important;
+  min-width: 0 !important;
+}
+.main-column .inhabitants-grid .content-actions {
+  justify-content: center !important;
+  gap: 3px !important;
+}
+.main-column .inhabitants-grid .content-actions .btn-singleview {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  font-size: 12px !important;
+}
+.main-column .inhabitants-grid .inhabitant-card,
+.main-column .inhabitants-grid .inhabitant-left {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.main-column .inhabitants-grid .inhabitant-left > a:first-of-type,
+.main-column .inhabitants-grid .inhabitant-photo-details {
+  width: 92px !important;
+  height: 92px !important;
+  min-width: 0 !important;
+  margin: 4px auto 0 !important;
+}
+.main-column .inhabitants-grid .inhabitant-left-name {
+  margin: 0 !important;
+  max-width: 100% !important;
+}
+.main-column .inhabitants-grid .inhabitant-left-name .user-link {
+  display: block !important;
+  max-width: 100% !important;
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.main-column .inhabitants-grid .profile-sensors-box {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 4px !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.main-column .inhabitants-grid .profile-sensors-box > span {
+  display: block !important;
+  margin: 0 !important;
+  padding: 3px 4px !important;
+  font-size: 10.5px !important;
+  line-height: 1.3 !important;
+  text-align: center !important;
+  white-space: normal !important;
+  border-radius: 8px !important;
+}
+.main-column .inhabitants-grid .wallet-line {
+  justify-content: center !important;
+  gap: 4px !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+}
+.main-column .inhabitants-grid .wallet-line .wallet-address {
+  font-size: 9px !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+.main-column .inhabitants-grid .phone-number-line .pm-exposition-chip {
+  font-size: 9px !important;
+  padding: 1px 6px !important;
+}
+.main-column .inhabitants-grid .inhabitant-left-name .status.you {
+  font-size: 11px !important;
+}
+:where(.main-column) div {
+  margin-bottom: 8px;
+  padding: 0;
+}
+:where(.main-column) p {
+  margin-top: 6px;
+  margin-bottom: 6px;
+}
+:where(.main-column) section {
+  margin-bottom: 10px;
+}
+.main-column :is(form, section, div) > br {
+  display: none !important;
+}
+.main-column .card-field > a.card-value.user-link {
+  display: inline-block !important;
+  max-width: 100% !important;
+  background: #FFA500 !important;
+  color: #000 !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  line-height: 1.3 !important;
+  white-space: normal !important;
+  text-decoration: none !important;
+}
+.main-column .content-actions .btn-singleview.btn-spread-on {
+  background: #ffa300 !important;
+  color: #000 !important;
+}
+.main-column .engage-on,
+.main-column .card-engage .engage-on,
+.main-column .card-meta-row .engage-on {
+  background: #ff9900 !important;
+  color: #000 !important;
+  border: 1px solid #e68a00 !important;
+}
+.main-column .engage-on *,
+.main-column .content-actions .btn-singleview.btn-spread-on * {
+  color: inherit !important;
+}
+.main-column .tribe-card-members {
+  margin: 8px 0 !important;
+  padding: 0 !important;
+  text-align: center !important;
+}
+.main-column .tribe-side-actions,
+.main-column .tribe-card-members + form {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  margin: 4px 0 10px !important;
+}
+.main-column .card-tags {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px 14px !important;
+  margin: 6px 0 !important;
+}
+.main-column .doc-export-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  margin: 6px 0 !important;
+}
+.main-column .doc-export-actions form {
+  margin: 0 !important;
+}
+.main-column .calendar-details {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.main-column .calendar-details > .tribe-side,
+.main-column .calendar-details > .tribe-main {
+  display: contents !important;
+}
+.main-column .calendar-details .card-header.activity-card-header {
+  order: -1 !important;
+  margin: 0 !important;
+}
+.main-column .calendar-details .calendar-nav {
+  margin: 8px 0 4px !important;
+}
+.main-column .calendar-details .calendar-grid {
+  margin: 4px 0 8px !important;
+}
+.main-column .tag-table {
+  display: table !important;
+  width: 100% !important;
+  table-layout: auto !important;
+}
+.main-column .tag-table th:last-child,
+.main-column .tag-table td:last-child {
+  width: 1% !important;
+  white-space: nowrap !important;
+  text-align: right !important;
+  padding-right: 10px !important;
+}
+.main-column .tag-table th:first-child,
+.main-column .tag-table td:first-child {
+  width: auto !important;
+  overflow-wrap: anywhere !important;
+}
+.main-column .peers-conn-actions {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+  margin: 8px 0 !important;
+}
+.main-column .peers-conn-actions form {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+}
+.main-column .peers-conn-actions .filter-btn {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 40px !important;
+  padding: 6px 4px !important;
+  font-size: 12px !important;
+  line-height: 1.15 !important;
+  white-space: normal !important;
+  overflow-wrap: normal !important;
+  border-radius: 10px !important;
+  background: #ffa300 !important;
+  color: #111 !important;
+  border: 0 !important;
+}
+.main-column .peers-import-form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+}
+.main-column .peers-import-form .filter-btn {
+  align-self: flex-start !important;
+}
+.main-column .graphos-canvas {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.main-column .graphos-canvas .graphos-svg {
+  min-height: 0 !important;
+  height: auto !important;
+}
+.main-column .graphos-zoom-row {
+  margin: 4px 0 6px 0 !important;
+}
+.main-column .graphos-fed-table,
+.main-column .graphos-fed-table tbody,
+.main-column .graphos-fed-table tr,
+.main-column .graphos-fed-table td {
+  display: block !important;
+  width: 100% !important;
+  border: 0 !important;
+  background: transparent !important;
+  text-align: left !important;
+}
+.main-column .graphos-fed-table tr:first-child {
+  display: none !important;
+}
+.main-column .graphos-fed-table tr {
+  background: #1e1e1e !important;
+  border-radius: 14px !important;
+  padding: 10px 12px !important;
+  margin: 0 0 10px 0 !important;
+}
+.main-column .graphos-fed-table td {
+  padding: 2px 0 !important;
+  font-size: 13px !important;
+}
+.main-column .graphos-fed-table td[data-label]::before {
+  content: attr(data-label) ": " !important;
+  color: #ffa300 !important;
+  font-weight: 600 !important;
+}
+.main-column .card-field:has(> .card-label) {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: baseline !important;
+  gap: 2px 6px !important;
+}
+.main-column .card-field:has(> .card-label) > .card-label,
+.main-column .card-field:has(> .card-label) > .card-value {
+  display: inline !important;
+  width: auto !important;
+  margin: 0 !important;
+}
+.main-column .room-live-panel .room-live-head {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
+  text-align: center !important;
+}
+.main-column .room-live-panel .room-live-head-main {
+  width: 100% !important;
+  text-align: center !important;
+}
+.main-column .tribe-main:has(> .room-live-panel) {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.main-column .tribe-main:has(> .room-live-panel) > .pad-members-details {
+  order: -1 !important;
+  text-align: center !important;
+}
+.main-column .tribe-main:has(> .room-live-panel) > .pm-form-error-msg {
+  order: -2 !important;
+}
+.torrent-table td.torrent-spread-cell,
+.file-table td.torrent-spread-cell {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+}
+.torrent-table td.torrent-spread-cell > form,
+.file-table td.torrent-spread-cell > form {
+  display: inline-flex !important;
+  margin: 0 !important;
+}
+.torrent-table td.torrent-spread-cell .btn-singleview,
+.file-table td.torrent-spread-cell .btn-singleview {
+  width: auto !important;
+  min-width: 0 !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 0 !important;
+  justify-content: flex-start !important;
+  font-size: 15px !important;
+}
+.main-column .tribe-side,
+.main-column .tribe-main {
+  gap: 8px !important;
+}
+.main-column .tribe-side > .tribe-card-members,
+.main-column .tribe-main > .tribe-card-members {
+  margin: 0 !important;
+}
+.main-column .tribe-side > .tribe-info-table,
+.main-column .tribe-main > .tribe-info-table {
+  margin-bottom: 0 !important;
+}
+.main-column .tribe-side-actions {
+  padding: 2px 0 !important;
+  margin: 0 !important;
+}
+.main-column :is(.card-tags, .tribe-side-tags) {
+  gap: 4px 12px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.main-column .calendar-details :is(.div-center, .calendar-interval-block) {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.main-column :is(.card-tags, .tribe-side-tags) .tag-link {
+  margin: 0 !important;
+  padding: 2px 0 !important;
+}
+.main-column form :is(textarea, select, input:not([type="hidden"]):not([type="submit"]):not([type="checkbox"]):not([type="radio"])) {
+  margin-top: 4px !important;
+  margin-bottom: 6px !important;
+}
+.main-column .peers-import-form > :is(label, textarea, input) {
+  margin: 0 !important;
+}
+.main-column .tribe-details:has(> .tribe-main > .card-header .content-actions) > :is(.tribe-side, .tribe-main) {
+  display: contents !important;
+}
+.main-column .tribe-details:has(> .tribe-main > .card-header .content-actions) > .tribe-main > .card-header {
+  order: -1 !important;
+}
+.graphos-lightbox .graphos-zoom-stage {
+  position: relative !important;
+  width: 200vw !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.graphos-lightbox .graphos-zoom-svg {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+.graphos-lightbox .graphos-zoom-focus {
+  position: absolute !important;
+  left: calc(50% - 50vw) !important;
+  top: calc(50% - 50vh) !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  pointer-events: none !important;
+}
+.graphos-lightbox:has(.graphos-zoom-focus:target) {
+  display: flex !important;
+}
+.graphos-lightbox .graphos-canvas-zoom {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: safe center !important;
+  align-items: flex-start !important;
+}
+.graphos-lightbox .graphos-zoom-stage {
+  flex: 0 0 auto !important;
+}
+.main-column .tribe-info-table tr:has(> td.tribe-info-label + td.tribe-info-value) {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: baseline !important;
+  gap: 2px 6px !important;
+  padding: 6px 0 !important;
+  border-bottom: 1px solid #2a2a2a !important;
+}
+.main-column .tribe-info-table tr:has(> td.tribe-info-label + td.tribe-info-value) > td {
+  display: inline !important;
+  width: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+.main-column .tribe-info-table tr:has(> td.tribe-info-label + td.tribe-info-value) > td.tribe-info-label::after {
+  content: ":";
+}
+.main-column .ui-toolbar--filters {
+  justify-content: flex-start !important;
+}
+.main-column .phone-call-panel .phone-call-who > .phone-call-icon {
+  display: none !important;
+}
+.main-column .phone-call-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 10px !important;
+}
+.main-column .phone-call-actions a.phone-speaker-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  margin: 0 !important;
+  padding: 6px 16px !important;
+  font-size: 16px !important;
+  line-height: 19.2px !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+.main-column .phone-call-actions > form {
+  display: flex !important;
+  margin: 0 !important;
+}
+.main-column .phone-call-actions > form > button {
+  margin: 0 !important;
+}
+.main-column .phone-call-panel .phone-call-who {
+  justify-content: center !important;
+}
+.main-column .phone-speaker-btn .phone-ico {
+  color: transparent !important;
+  text-shadow: 0 0 0 #ffa300 !important;
+}
+.main-column .phone-call-actions:has(> a.phone-speaker-btn) {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 10px !important;
+}
+.main-column .phone-call-actions:has(> a.phone-speaker-btn) > * {
+  width: 100% !important;
+  min-width: 0 !important;
+}
+.main-column .phone-call-actions:has(> a.phone-speaker-btn) > form > button,
+.main-column .phone-call-actions:has(> a.phone-speaker-btn) > a {
+  width: 100% !important;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+}
+.main-column .phone-call-actions:has(> a.phone-speaker-btn) > :last-child:nth-child(odd) {
+  grid-column: 1 / -1 !important;
+  justify-self: center !important;
+  width: calc(50% - 5px) !important;
+}
+.main-column .wiki-page > .card-section {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+.main-column .wiki-page > .card-section > * {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+.main-column .wiki-page > .card-section > .shop-title-row {
+  order: -1 !important;
+}
+.main-column .wiki-page .wiki-actions-top {
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 8px !important;
+  padding: 0 !important;
+}
+.main-column .wiki-page .wiki-actions-top > .wiki-actions-left {
+  flex: 0 0 100% !important;
+  justify-content: flex-start !important;
+  margin: 0 !important;
+}
+.main-column .card-engage .comments-summary.engage-on,
+.main-column .card-engage .opinions-summary.engage-on,
+.main-column .card-meta-row .comments-summary-link.engage-on {
+  background: #ff9900 !important;
+  color: #000 !important;
+  border: 1px solid #e68a00 !important;
 }

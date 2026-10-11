@@ -94,12 +94,14 @@ const stepContent = (key, lang, profile, status) => {
       text: i18n.welcomeStepFederationText || "Connect to our pub to meet other inhabitants and start replicating.",
       extra: bootstrap && !bootstrap.running ? renderRestoreStatus(bootstrap) : null,
       action: div({ class: "welcome-action" },
-        invite
-          ? form({ method: "POST", action: "/settings/invite/accept" },
-              input({ type: "hidden", name: "invite", value: invite.code }),
-              button({ type: "submit", class: "filter-btn" }, i18n.welcomeJoinPubButton || "Join Pub")
-            )
-          : a({ href: "/invites", class: "filter-btn" }, i18n.welcomeStepFederationAction || "Go to invites")
+        invite && status && status.canJoin === false
+          ? p({ class: "invites-join-note" }, status.publicMode === true ? i18n.invitesJoinPubMode : i18n.invitesJoinLocalOnly)
+          : invite
+            ? form({ method: "POST", action: "/settings/invite/accept" },
+                input({ type: "hidden", name: "invite", value: invite.code }),
+                button({ type: "submit", class: "filter-btn" }, i18n.welcomeJoinPubButton || "Join Pub")
+              )
+            : a({ href: "/invites", class: "filter-btn" }, i18n.welcomeStepFederationAction || "Go to invites")
       )
     }
   }

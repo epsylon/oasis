@@ -1602,20 +1602,65 @@ async function getLastPublishedTimestamp(userId) {
     return latestByPub;
   }
 
+  async function networkPubIds() {
+    const trusted = await trustedPubIds();
+    const ids = new Set(trusted);
+    const ssb = await openSsb();
+    if (!ssb) return ids;
+    const contacts = await readTyped(ssb, ["contact"], { limit: Math.max(getLogLimit(), 20000) }).catch(() => []);
+    const latest = new Map();
+    for (const m of contacts) {
+      const v = m.value || {};
+      const c = v.content || {};
+      if (c.type !== "contact" || !trusted.has(v.author) || typeof c.contact !== "string") continue;
+      const k = `${v.author} ${c.contact}`;
+      const seq = Number(v.sequence) || 0;
+      const prev = latest.get(k);
+      if (!prev || seq > prev.seq) latest.set(k, { seq, contact: c.contact, federated: c.following === true && c.pub !== true && c.blocking !== true });
+    }
+    for (const { contact, federated } of latest.values()) if (federated) ids.add(contact);
+    return ids;
+  }
+
+  async function listNetworkUbiPubs() {
+    const latestByPub = await scanUbiAnnouncements();
+    const known = await networkPubIds();
+    const out = [];
+    for (const cand of latestByPub.values()) {
+      if (!known.has(cand.pubId) || Date.now() - cand.timestamp > PUB_ANNOUNCE_MAX_AGE_MS || !isValidEcoinAddress(cand.address) || !cand.balanceKnown) continue;
+      out.push(cand);
+    }
+    return out;
+  }
+
   async function listUbiPubsDetailed() {
-    const pubs = (await listUbiPubs()).filter(p => isValidEcoinAddress(p.address));
+    const pubs = await listNetworkUbiPubs();
     if (!pubs.length) return [];
     const ssb = await openSsb();
     const { transfers } = ssb ? await readUbiLedger(ssb) : { transfers: [] };
     const defaultPubId = getDefaultPubId();
     const connected = (await discoverUbiPub()).pubId;
+    const me = isPubNode() && config.keys ? config.keys.id : null;
     return pubs.map(p => {
       const payouts = transfers.filter(t => t.author === p.pubId && isUbiPayoutConcept(t.concept));
       const lastPayoutAt = payouts.reduce((acc, t) => Math.max(acc, Date.parse(t.createdAt || "") || 0), 0);
       const paidOut = payouts.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
       const address = p.address || null;
-      return { ...p, address, lastPayoutAt, paidOut: Number(paidOut.toFixed(6)), payouts: payouts.length, isDefault: p.pubId === defaultPubId, isConnected: p.pubId === connected };
-    });
+      return { ...p, address, lastPayoutAt, paidOut: Number(paidOut.toFixed(6)), payouts: payouts.length, isDefault: p.pubId === defaultPubId, isConnected: p.pubId === connected, isThisNode: !!me && p.pubId === me };
+    }).sort((a, b) => (Number(b.isThisNode || b.isConnected) - Number(a.isThisNode || a.isConnected)) || (b.balance - a.balance));
+  }
+
+  async function listUbiRebalanceSeries(range = "all", explicit = true) {
+    const ssb = await openSsb();
+    if (!ssb) return { points: [], hasAnyData: false, range: normalizeRange(range), bucket: "month" };
+    const { transfers } = await readUbiLedger(ssb);
+    const known = await networkPubIds();
+    const events = transfers
+      .filter(t => String(t.concept || "").startsWith(REBALANCE_CONCEPT) && known.has(t.author))
+      .map(t => ({ ts: Date.parse(t.createdAt || "") || 0, rebalanced: Number(t.amount) || 0 }))
+      .filter(e => e.ts > 0)
+      .sort((a, b) => a.ts - b.ts);
+    return bucketEvents(events, range, explicit, ["rebalanced"]);
   }
 
   async function listUbiCharts(range = "all", explicit = true) {
@@ -1971,8 +2016,9 @@ async function getLastPublishedTimestamp(userId) {
     const fundsHistory = filter === 'overview' ? listFundsHistory(range, explicitRange) : { points: [], hasAny: false, range };
     const wealth = filter === 'exchange' || filter === 'overview' ? await listWealthSeries(range, explicitRange).catch(() => ({ points: [], totals: { distributed: 0, taxes: 0 } })) : { points: [], totals: { distributed: 0, taxes: 0 } };
     const ubiPayments = filter === 'ubi' || filter === 'overview' ? await listUbiPaymentsSeries(range, explicitRange).catch(() => ({ points: [], hasAnyData: false })) : { points: [], hasAnyData: false };
+    const ubiRebalances = filter === 'ubi' ? await listUbiRebalanceSeries(range, explicitRange).catch(() => ({ points: [], hasAnyData: false })) : { points: [], hasAnyData: false };
     return {
-      summary, allocations, epochs, rules: DEFAULT_RULES, taxRules, addresses, exchange, exchangeHistory, taxStats, ubiPubs, ubiCharts, karmaHistory, fundsHistory, wealth, ubiPayments, range, valueRange, valueHasAnyData,
+      summary, allocations, epochs, rules: DEFAULT_RULES, taxRules, addresses, exchange, exchangeHistory, taxStats, ubiPubs, ubiCharts, karmaHistory, fundsHistory, wealth, ubiPayments, ubiRebalances, range, valueRange, valueHasAnyData,
       userEcoinTax: Number((userEcoinTax || 0).toFixed(6)),
       userArchTax: Number((userArchTax || 0).toFixed(6)),
       userTotalTax: Number(userTotalTax.toFixed(6))

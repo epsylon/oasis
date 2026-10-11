@@ -6789,6 +6789,7 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .welcome-skip{text-align:center;margin-top:6px}
 .welcome-skip-link{color:#666;font-size:12px}
 .indexing-progress-block{max-width:640px;margin:24px auto;text-align:center}
+.indexing-message{margin:0 0 14px;font-size:16px;line-height:1.4;color:#ffd700}
 .indexing-progress{width:100%;height:18px}
 .indexing-percent{margin:8px 0 4px;font-size:22px;color:#ffd700}
 .indexing-note{color:#888;font-size:12px;margin:0}
@@ -7235,7 +7236,7 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .content-actions{display:flex;justify-content:right;align-items:center;gap:12px;flex-wrap:wrap;border:none;background:transparent;padding:0}
 .tribe-side .content-actions{flex-wrap:wrap;gap:6px}
 .tribe-side .content-actions .btn-singleview{padding:6px 9px;font-size:1em}
-.trending-card.own-content{box-shadow:inset 3px 0 0 #ffa300}
+.trending-card.own-content,.addr-card.ubi-pub-card.own-content{box-shadow:inset 3px 0 0 #ffa300}
 .trending-dominant-sep{margin:0 8px;opacity:0.5}
 .trending-dominant-text,.trending-total-count{font-weight:700}
 .comment-file-upload{display:flex;flex-direction:column;align-items:flex-start;gap:6px;background:transparent !important;border:0 !important;padding:0 !important;margin:8px 0}
@@ -8852,7 +8853,8 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .oasis-pager-btn:hover,.oasis-pager-btn.active{border-color:#FFD700;color:#FFD700;text-decoration:none}
 .card-title-link{color:inherit;text-decoration:none}
 .card-title-link:hover{text-decoration:underline}
-.graphos-zoom-row{display:flex;justify-content:flex-end;margin:8px 0 0}
-.graphos-lightbox .graphos-canvas-zoom{width:96vw;height:92vh;overflow:auto;background:#111;border:1px solid #2a2a2a;border-radius:8px;box-sizing:border-box}
-.graphos-lightbox .graphos-svg{width:100%;height:auto;min-height:88vh;display:block}
-.graphos-lightbox .lightbox-close{position:absolute;top:10px;right:16px;z-index:2;font-size:28px;text-decoration:none}
+.graphos-zoom-row{display:flex;justify-content:center;margin:8px 0 0;padding:0;border:0;background:none;box-shadow:none}
+.graphos-lightbox .graphos-canvas-zoom{width:96vw;height:92vh;overflow:auto;background:#111;border:1px solid #2a2a2a;border-radius:8px;box-sizing:border-box;padding:0;margin:0}
+.graphos-lightbox .graphos-zoom-stage,.graphos-lightbox .graphos-zoom-svg{padding:0;margin:0;border:0;border-radius:0;background:none;box-shadow:none}
+.graphos-lightbox .graphos-svg{width:100%;height:auto;max-height:calc(92vh - 4px);min-height:0;display:block}
+.graphos-lightbox .lightbox-close{position:fixed;top:14px;right:22px;z-index:10002;font-size:28px;text-decoration:none}

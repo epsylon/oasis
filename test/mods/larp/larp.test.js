@@ -322,6 +322,17 @@ describe('larp: tribe integration', (t) => {
     eq(aView.length, 1, 'exactly one canonical tribe remains for the house');
   });
 
+  t('a node that has only just joined a network does not create its own ACADEMIA when joining it', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await new Promise((res, rej) => A.node.publish({ type: 'contact', contact: B.keypair.id, following: true }, (e) => e ? rej(e) : res()));
+    await A.use('larp').publishJoin('academia');
+    eq(await A.use('larp').getUserHouse(A.keypair.id), 'academia');
+    const created = (await A.use('tribes').listAll()).filter(t => (t.tags || []).includes('larp-ACADEMIA'));
+    eq(created.length, 0, 'it waits for the shared ACADEMIA to arrive instead of creating a duplicate');
+  });
+
   t('ensureHouseTribe collapses pre-existing duplicate ACADEMIA tribes to one', async () => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();

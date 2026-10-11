@@ -4,7 +4,7 @@ const { getConfig } = require('../configs/config-manager.js');
 
 const doctypeString = '<!DOCTYPE html>';
 
-exports.indexingView = ({ percent }) => {
+exports.indexingView = ({ percent, refresh = 10 }) => {
   let metaRefresh;
   try {
     const cfg = getConfig() || {};
@@ -12,6 +12,7 @@ exports.indexingView = ({ percent }) => {
     void theme;
   } catch (_) {}
 
+  const known = percent !== null && percent !== undefined && Number.isFinite(Number(percent));
   const pct = Math.max(0, Math.min(100, Number(percent) || 0));
   const headingText = i18n.indexingTitle || 'Synchronizing';
   const refreshNote = i18n.indexingRefreshNote || 'This page refreshes every 10 seconds.';
@@ -23,10 +24,11 @@ exports.indexingView = ({ percent }) => {
         h2(`❤  ${headingText}`)
       ),
       div({ class: 'indexing-progress-block' },
-        progress({ value: String(pct), max: '100', class: 'indexing-progress' }),
-        p({ class: 'indexing-percent' }, strong(`${pct.toFixed(1)} %`)),
-        p({ class: 'indexing-note' }, refreshNote)
+        p({ class: 'indexing-message' }, `\ud83c\udf34 ${i18n.indexingMessage || 'Oasis is synchronizing the distributed network of nodes. Please wait.'}`),
+        known ? progress({ value: String(pct), max: '100', class: 'indexing-progress' }) : progress({ max: '100', class: 'indexing-progress' }),
+        known ? p({ class: 'indexing-percent' }, strong(`${pct.toFixed(1)} %`)) : null,
+        p({ class: 'indexing-note' }, String(refreshNote).replace('10', String(Number(refresh) || 10)))
       )
     )
-  ).replace('</head>', '<meta http-equiv="refresh" content="10"></head>');
+  ).replace('</head>', `<meta http-equiv="refresh" content="${Number(refresh) || 10}"></head>`);
 };

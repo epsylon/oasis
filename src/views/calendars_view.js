@@ -472,7 +472,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
       ),
       renderModeButtons("all", false, (params && params.modesAvail) || null)
     ),
-    section(div({ class: "tribe-details" }, calSide, calMain))
+    section(div({ class: "tribe-details calendar-details" }, calSide, calMain))
   )
 }
 

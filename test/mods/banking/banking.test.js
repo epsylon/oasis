@@ -286,6 +286,20 @@ describe('banking: UBI rules (no RPC)', (t) => {
     ok(row.lastPayoutAt > 0);
   });
 
+  t('the UBI tab also lists the PUBs federated with yours, while the claim stays with your PUB', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const Q = makePeer(net); const M = makePeer(net); const A = makePeer(net); A.setActor();
+    await joinPub(A, P);
+    P.node.publish({ type: 'contact', contact: Q.keypair.id, following: true }, () => {});
+    P.node.publish({ type: 'contact', contact: M.keypair.id, following: true, pub: true }, () => {});
+    P.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 40, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42A', timestamp: Date.now() }, () => {});
+    Q.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 70, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42B', timestamp: Date.now() }, () => {});
+    M.node.publish({ type: 'pubAvailability', coin: 'ECO', available: true, balance: 900, address: 'EQXcDugPjmxZyGpv6mC6jo2mEBpLDnw42C', timestamp: Date.now() }, () => {});
+    const ids = (await A.use('banking').listUbiPubsDetailed()).map(p => p.pubId);
+    ok(ids.includes(P.keypair.id) && ids.includes(Q.keypair.id), 'your PUB and the PUB it federates with are listed');
+    ok(!ids.includes(M.keypair.id), 'someone your PUB only follows because of an invite is not');
+    eq((await A.use('banking').discoverUbiPub()).pubId, P.keypair.id, 'the claim still goes to your own PUB');
+  });
+
   t('the UBI tab only lists PUBs that publish their ECOin address', async () => {
     const net = makeNetwork(); const P1 = makePeer(net); const P2 = makePeer(net); const A = makePeer(net); A.setActor();
     await joinPub(A, P1); await joinPub(A, P2);

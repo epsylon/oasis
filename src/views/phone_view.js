@@ -52,7 +52,7 @@ const renderCallPanel = (st, now) => {
       silenceButton(pr.id, pr.silenced)
     );
     body = [
-      line(i18n.phoneInCall, ' ', ...inCall, ' ', span({ class: 'phone-call-clock' }, liveClock(st.answeredAt || st.startedAt))),
+      line(...inCall, ' ', span({ class: 'phone-call-clock' }, liveClock(st.answeredAt || st.startedAt))),
       ringing.length ? div({ class: 'phone-call-ringing' }, i18n.phoneCalling, ' ', ...linkList(ringing)) : null,
       st.group ? div({ class: 'phone-contacts phone-call-peers' }, ...st.peers.filter(x => x.phase === 'connected').map(peerRow)) : null,
       actions(

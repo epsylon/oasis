@@ -2517,6 +2517,26 @@ const bankingResult = (ctx, filter, key) => {
   sendErrorPage(ctx, bankingFlashText(k) || k || require('../views/main_views').i18n.actionFailed, { status: 400, to: `/banking?filter=${filter}` });
 };
 const actionFail = (ctx, to) => sendErrorPage(ctx, require('../views/main_views').i18n.actionFailed, { status: 400, ...(to ? { to } : {}) });
+const FEED_BLOB_RE = /\((&[A-Za-z0-9+/]{43}=\.sha256)\)/;
+const postFeedToMastodon = async (text, media) => {
+  try {
+    const mediaIds = [];
+    const blobId = media ? (String(media).match(FEED_BLOB_RE) || [])[1] : null;
+    if (blobId) {
+      const ssbClient = await cooler.open();
+      const buffer = await new Promise((resolve) => pull(ssbClient.blobs.get(blobId), pull.collect((e, chunks) => resolve(e ? null : Buffer.concat(chunks.map(c => Buffer.isBuffer(c) ? c : Buffer.from(c)))))));
+      const type = buffer ? await FileType.fromBuffer(buffer).catch(() => null) : null;
+      if (type && /^(image|video|audio)\//.test(type.mime)) {
+        const uploaded = await fediverseModel.uploadMediaBuffer({ buffer, mimetype: type.mime, filename: `media.${type.ext}` });
+        if (uploaded && uploaded.id) mediaIds.push(uploaded.id);
+      }
+    }
+    await fediverseModel.postStatus({ text, mediaIds });
+    return true;
+  } catch (_) {
+    return false;
+  }
+};
 const failWith = (ctx, key, to) => sendErrorPage(ctx, require('../views/main_views').i18n[key] || require('../views/main_views').i18n.actionFailed, { status: 400, ...(to ? { to } : {}) });
 const inviteCodeFail = (ctx, err) => {
   const t = require('../views/main_views').i18n;
@@ -3018,9 +3038,16 @@ const MODULE_HOME_PATHS = new Set([
 ]);
 
 const INDEXING_LAG_BYTES = 1024 * 1024;
+const STARTUP_WAIT_MS = 1200;
 const indexingLag = (status) => {
   const since = Number(status && status.sync && status.sync.since) || 0;
   return Object.values((status && status.sync && status.sync.plugins) || {}).reduce((max, offset) => Math.max(max, since - (Number(offset) || 0)), 0);
+};
+const startupProgress = (status) => {
+  const since = Number(status && status.sync && status.sync.since) || 0;
+  const plugins = (status && status.sync && status.sync.plugins) || {};
+  if (since <= 0 || !Object.keys(plugins).length) return null;
+  return Math.floor(indexingProgress(status) * 1000) / 10;
 };
 const indexingProgress = (status) => {
   const since = Number(status && status.sync && status.sync.since) || 0;
@@ -7251,7 +7278,7 @@ router
   })
   .get("/invites", async (ctx) => {
     if (!checkMod(ctx, 'invitesMod')) return ctx.redirect('/modules');
-    ctx.body = await invitesView({ deadKeys: await deadPeerKeys() });
+    ctx.body = await invitesView({ deadKeys: await deadPeerKeys(), canJoin: !config.public && isLoopbackRequest(ctx), publicMode: !!config.public });
   })
   .get("/supporters", async (ctx) => {
     const feed = getViewerId();
@@ -7346,16 +7373,16 @@ router
     }
     const censusFeeds = (String(filter || 'ALL').toUpperCase() === 'ALL' && !q && !tag) ? feeds : (await censusOf('feeds', () => feedModel.listFeeds({ filter: 'ALL', q: '', tag: '' })).catch(() => [])).concat(tribeOpen);
     await annotateClearnet('feed', feeds);
-    const pageItems = await renderedPage(async () => feedView(feeds, { filter, q, tag, msg, workspace: uxFeed, trendingTags, activeUsers, spreadMap: new Map(), censusList: censusFeeds, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId() }));
+    const pageItems = await renderedPage(async () => feedView(feeds, { filter, q, tag, msg, workspace: uxFeed, trendingTags, activeUsers, spreadMap: new Map(), censusList: censusFeeds, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId(), mastodon: fediverseModel.hasAccount() }));
     const feedSpreadMap = await spreads.forMessages(pageItems.map(f => f && f.key)).catch(() => new Map());
     await warmAuthorNames(pageItems);
-    ctx.body = feedView(feeds, { filter, q, tag, msg, workspace: uxFeed, trendingTags, activeUsers, spreadMap: feedSpreadMap, censusList: censusFeeds, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId() });
+    ctx.body = feedView(feeds, { filter, q, tag, msg, workspace: uxFeed, trendingTags, activeUsers, spreadMap: feedSpreadMap, censusList: censusFeeds, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId(), mastodon: fediverseModel.hasAccount() });
   })
   .get("/feed/create", async (ctx) => {
     const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
     const tag = typeof ctx.query.tag === "string" ? ctx.query.tag : "";
     const msg = typeof ctx.query.msg === "string" ? ctx.query.msg : "";
-    ctx.body = feedCreateView({ q, tag, msg });
+    ctx.body = feedCreateView({ q, tag, msg, mastodon: fediverseModel.hasAccount() });
   })
   .get("/feed/:feedId", async (ctx) => {
     const feed = await feedModel.getFeedById(ctx.params.feedId);
@@ -7941,6 +7968,8 @@ router
       status.wish = getConfig().wish;
       const job = backupModel.restoreStatus();
       status.bootstrap = job && job.source === 'snapshot' ? job : null;
+      status.canJoin = !config.public && isLoopbackRequest(ctx);
+      status.publicMode = !!config.public;
       if (status.bootstrap) ctx.set('Cache-Control', 'no-store');
       ctx.body = await welcomeView(status, lang, status.profile);
     } catch (error) { sendErrorPage(ctx, error.message || String(error), { status: 500 }); }
@@ -10968,7 +10997,7 @@ router
     const text = ctx.request.body?.text != null ? String(ctx.request.body.text) : "";
     const kept = typeof ctx.request.body?.media === "string" && FEED_MEDIA_MD_RE.test(ctx.request.body.media) ? ctx.request.body.media.trim() : "";
     const fresh = await handleBlobUpload(ctx, 'blob').catch(() => null);
-    ctx.body = feedCreateView({ text, media: fresh ? String(fresh).trim() : kept, clearnet: String(ctx.request.body?.clearnet || '') === '1' });
+    ctx.body = feedCreateView({ text, media: fresh ? String(fresh).trim() : kept, clearnet: String(ctx.request.body?.clearnet || '') === '1', mastodon: fediverseModel.hasAccount(), mastodonOn: String(ctx.request.body?.mastodon || '') === '1' });
   })
   .post("/feed/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     const text = ctx.request.body?.text != null ? stripDangerousTags(String(ctx.request.body.text)) : "";
@@ -10981,10 +11010,14 @@ router
         const t = require('../views/main_views').i18n;
         ctx.state.inlineError = /too long/i.test(String(err.message)) ? t.publishTooLong : t.publishTooShort;
         ctx.status = 400;
-        ctx.body = feedCreateView({ text, media: media || '', clearnet: String(ctx.request.body?.clearnet || '') === '1' });
+        ctx.body = feedCreateView({ text, media: media || '', clearnet: String(ctx.request.body?.clearnet || '') === '1', mastodon: fediverseModel.hasAccount(), mastodonOn: String(ctx.request.body?.mastodon || '') === '1' });
         return;
       }
       throw err;
+    }
+    if (String(ctx.request.body?.mastodon || '') === '1' && fediverseModel.hasAccount() && !(await postFeedToMastodon(text, media))) {
+      failWith(ctx, 'feedMastodonFailed', '/feed?filter=ALL');
+      return;
     }
     ctx.redirect("/feed?filter=ALL&msg=feedPublished");
   })
@@ -14837,8 +14870,15 @@ const middleware = [
     }
     const migration = typeof SSBconfig.migrationStatus === 'function' ? SSBconfig.migrationStatus() : null;
     if (migration && migration.running) { ctx.response.body = indexingView({ percent: migration.percent }); return; }
-    const ssb = await cooler.open(), status = await ssb.status();
-    if (indexingLag(status) > INDEXING_LAG_BYTES) ctx.response.body = indexingView({ percent: Math.floor(indexingProgress(status) * 1000) / 10 });
+    const until = Date.now() + STARTUP_WAIT_MS;
+    const ssb = await Promise.race([cooler.open(), new Promise((resolve) => setTimeout(() => resolve(null), STARTUP_WAIT_MS))]);
+    let status = ssb ? await ssb.status() : { ready: false };
+    while (ssb && status && status.ready === false && Date.now() < until) {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      status = await ssb.status();
+    }
+    if (status && status.ready === false) ctx.response.body = indexingView({ percent: startupProgress(status), refresh: 5 });
+    else if (indexingLag(status) > INDEXING_LAG_BYTES) ctx.response.body = indexingView({ percent: Math.floor(indexingProgress(status) * 1000) / 10 });
     else { try { await next(); } catch (err) {
       const { i18n } = require('../views/main_views');
       if (err.name === 'FileTooLargeError' || (err.message && err.message.includes('maxFileSize'))) {

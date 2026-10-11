@@ -11,6 +11,7 @@ const HOUSE_KEYS = ['academia','solaris','arrakis','terraverde','unsystem','dogm
 const VALID_KEY = (k) => HOUSE_KEYS.includes(String(k || '').toLowerCase());
 
 const TEST_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+const ACADEMIA_GRACE_MS = 10 * 60 * 1000;
 
 const PROFILE_QUESTIONS = [
   {
@@ -174,6 +175,12 @@ function getGoverningPeriodId(now = new Date()) {
 module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
+  const startedAt = Date.now();
+  let academiaRetry = null;
+  const followsSomeone = async (client, me) => {
+    const contacts = await readTyped(client, ['contact']).catch(() => []);
+    return contacts.some((m) => m && m.value && m.value.author === me && m.value.content && m.value.content.following === true);
+  };
 
   const houseTribeTag = (houseKey) => {
     const h = HOUSES[houseKey];
@@ -326,6 +333,13 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
       if (canonical) {
         await redeemPendingAutoInvites().catch(() => {});
         return await findMyHouseTribe(houseKey) || canonical;
+      }
+      if (Date.now() - startedAt < ACADEMIA_GRACE_MS && await followsSomeone(client, me)) {
+        if (!academiaRetry) {
+          academiaRetry = setTimeout(() => { academiaRetry = null; enqueue(runCatchup); }, ACADEMIA_GRACE_MS - (Date.now() - startedAt));
+          if (academiaRetry.unref) academiaRetry.unref();
+        }
+        return null;
       }
       const house = HOUSES[houseKey] || {};
       const tag = houseTribeTag(houseKey);
@@ -819,6 +833,13 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
         const myHouse = await getUserHouse(me).catch(() => null);
         if (myHouse !== c.house) return;
         await issueAutoInvitesForMyHouse().catch(() => {});
+        return;
+      }
+      if (typeof c === 'object' && c.type === 'tribe' && Array.isArray(c.tags) && c.tags.includes(houseTribeTag('academia'))) {
+        if (m.value.author === me) return;
+        const myHouse = await getUserHouse(me).catch(() => null);
+        if (myHouse !== 'academia') return;
+        await ensureHouseTribe('academia').catch(() => {});
         return;
       }
       if (typeof c === 'object' && c.type === 'larpHouseTribeAnchor' && VALID_KEY(c.house)) {

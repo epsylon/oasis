@@ -372,7 +372,7 @@ nav, .sidebar-left nav, .sidebar-right nav, .sidebar-left ul, .sidebar-right ul 
 .ai-nav-result-card a { color: #00FF00 !important; }
 .ai-nav-result-card a:hover { background: #00FF00 !important; color: #000000 !important; }
 .ai-nav-query { color: #00FF00 !important; }
-.trending-card.own-content { box-shadow: inset 3px 0 0 #00FF00; }
+.trending-card.own-content, .addr-card.ubi-pub-card.own-content { box-shadow: inset 3px 0 0 #00FF00; }
 .map-stage { background: #000000 !important; border-color: #00FF00 !important; }
 .map-label-country { fill: #00FF00; stroke: #000000; }
 .map-place-dot { fill: #00FF00; stroke: #000000; }

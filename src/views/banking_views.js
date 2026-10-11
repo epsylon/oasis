@@ -233,7 +233,8 @@ const renderUbiCharts = (charts) => {
   }) : null;
   const out = [
     renderBucketChart("ubi-chart-network", i18n.bankChartNetworkUbiTitle, "ubi", charts && charts.payments, "distributed", i18n.bankChartDistributed, 6),
-    renderRangedChart("ubi-chart-pool", i18n.bankChartPoolTitle, "ubi", (charts && charts.poolRange) || "today", !!(charts && charts.hasPool), poolSvg)
+    renderRangedChart("ubi-chart-pool", i18n.bankChartPoolTitle, "ubi", (charts && charts.poolRange) || "today", !!(charts && charts.hasPool), poolSvg),
+    renderBucketChart("ubi-chart-rebalance", i18n.bankChartRebalanceTitle, "ubi", charts && charts.rebalances, "rebalanced", i18n.bankChartRebalanced, 6)
   ].filter(Boolean);
   return out.length ? div(...out) : null;
 };
@@ -483,9 +484,10 @@ const renderUbiPubs = (pubs, hasValidWallet) => {
   const fmt = (ts) => Number(ts) > 0 ? moment(Number(ts)).format("YYYY/MM/DD HH:mm") : "—";
   if (!pubs.length) return div({ class: "bank-summary" }, p(i18n.bankUbiPubNone));
   return div({ class: "addr-cards ubi-pub-cards" },
-    ...pubs.map(p => div({ class: "addr-card ubi-pub-card" },
+    ...pubs.map(p => div({ class: "addr-card ubi-pub-card" + (p.isThisNode || p.isConnected ? " own-content" : "") },
       div({ class: "addr-card-head" },
         userLink(p.pubId),
+        p.isThisNode || p.isConnected ? span({ class: "status you" }, p.isThisNode ? i18n.bankUbiPubThisNode : i18n.bankUbiPubConnected) : null,
         hasValidWallet && p.address
           ? div({ class: "content-actions" }, form({ method: "GET", action: "/banking/fund", class: "content-action-form" }, input({ type: "hidden", name: "pub", value: p.pubId }), button({ type: "submit", class: "btn-singleview btn-donate", title: i18n.bankDonateEco }, "\u2744")))
           : null
@@ -821,7 +823,7 @@ const renderBankingView = (data, filter, userId, isPub) =>
         ? div(
             renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId, (data.summary || {}).hasValidWallet, (data.summary || {}).ubiAvailability, (data.summary || {}).alreadyRefused, (data.summary || {}).addressPublished, !!(data.exchange && data.exchange.isSynced)),
             renderUbiPubs(data.ubiPubs || [], !!(data.summary || {}).hasValidWallet),
-            renderUbiCharts({ ...(data.ubiCharts || {}), payments: data.ubiPayments })
+            renderUbiCharts({ ...(data.ubiCharts || {}), payments: data.ubiPayments, rebalances: data.ubiRebalances })
           )
         : filter === "exchange"
         ? renderExchange(data.exchange, data.exchangeHistory, data.taxStats, data.wealth, data.range, data.valueRange || data.range, !!data.valueHasAnyData)

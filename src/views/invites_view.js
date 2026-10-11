@@ -34,6 +34,7 @@ const deduplicateByHost = (list) => {
 
 const invitesView = (opts = {}) => {
   const { invitesEnabled } = opts;
+  const canJoin = opts.canJoin !== false;
   let pubs = [];
   let pubsValue = "false";
   let unfollowed = [];
@@ -108,22 +109,26 @@ const invitesView = (opts = {}) => {
       div({ class: 'pubs-section' },
         h2(i18n.invitesPubsTitle),
         p(i18n.invitesPubsHint),
-        form(
-          { action: '/settings/invite/accept', method: 'post' },
-          input({ name: 'invite', type: 'text', placeholder: i18n.invitesPubInviteCodePlaceholder, autofocus: true, required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesAcceptInvite)
-        ),
+        canJoin
+          ? form(
+              { action: '/settings/invite/accept', method: 'post' },
+              input({ name: 'invite', type: 'text', placeholder: i18n.invitesPubInviteCodePlaceholder, autofocus: true, required: true }),
+              br(),
+              button({ type: 'submit' }, i18n.invitesAcceptInvite)
+            )
+          : p({ class: 'invites-join-note' }, opts.publicMode === true ? i18n.invitesJoinPubMode : i18n.invitesJoinLocalOnly),
         br(),
         snhInvite ? div({ class: 'snh-invite-box' },
           h3({ class: 'snh-invite-name' }, snhInvite.name),
           p({ class: 'snh-invite-name' }, snhInvite.description),
           p({ class: 'snh-invite-name' }, renderStyledText(snhInvite.url)),
           snhInvite.createdAt ? p({ class: 'snh-invite-date' }, `${i18n.statsCreatedAt || 'Created'}: ${moment(snhInvite.createdAt).format("YYYY/MM/DD")}`) : null,
-          form({ action: '/settings/invite/accept', method: 'post' },
-            input({ type: 'hidden', name: 'invite', value: snhInvite.code }),
-            button({ type: 'submit', class: 'filter-btn' }, snhInvite.code)
-          )
+          canJoin
+            ? form({ action: '/settings/invite/accept', method: 'post' },
+                input({ type: 'hidden', name: 'invite', value: snhInvite.code }),
+                button({ type: 'submit', class: 'filter-btn' }, snhInvite.code)
+              )
+            : p({ class: 'snh-invite-name' }, snhInvite.code)
         ) : null
       )
     ),

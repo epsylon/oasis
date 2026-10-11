@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const fs = require('fs');
 const path = require('path');
 const ssbConfig = require(path.join(__dirname, '..', 'src', 'server', 'ssb_config'));
 const ssbClient = require(path.join(__dirname, '..', 'src', 'server', 'node_modules', 'ssb-client'));
@@ -19,6 +20,7 @@ const usage = () => {
   console.error('  name <text>                     Set PUB display name');
   console.error('  announce <host> [port]          Publish a pub address (default port=8008)');
   console.error('  follow <feedId>                 Follow another PUB');
+  console.error('  join <invite>                   Join another PUB with its invite code');
   console.error('  status                          Show peer / replication status');
   console.error('  gossip                          List known gossip peers');
   process.exit(1);
@@ -27,6 +29,28 @@ const usage = () => {
 if (!cmd) usage();
 
 const call = (fn, ...a) => new Promise((res, rej) => fn(...a, (e, r) => e ? rej(e) : res(r)));
+
+const toLegacyInvite = (s) => {
+  const t = String(s || '').trim();
+  if (/^[^:]+:\d+:@[^~]+~[^~]+$/.test(t)) return t;
+  const m = t.match(/^(?:net:)?([^:]+):(\d+)~shs:([^~]+)~invite:([^~]+)$/);
+  if (!m) return t;
+  let key = m[3].replace(/^@/, '');
+  if (!/\.ed25519$/.test(key)) key += '.ed25519';
+  return `${m[1]}:${m[2]}:@${key}~${m[4]}`;
+};
+
+const rememberPub = (code) => {
+  const m = String(code || '').match(/^([^:~\s]+):(\d+):(@[A-Za-z0-9+/=_-]+\.ed25519)~/);
+  if (!m) return;
+  const file = path.join(ssbConfig.path, 'gossip.json');
+  let pubs = [];
+  try { pubs = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) {}
+  if (!Array.isArray(pubs)) pubs = [];
+  if (pubs.some((p) => p && p.key === m[3])) return;
+  pubs.push({ host: m[1].toLowerCase(), port: Number(m[2]) || 8008, key: m[3] });
+  fs.writeFileSync(file, JSON.stringify(pubs, null, 2), 'utf8');
+};
 
 ssbClient(ssbConfig.keys, { remote, caps: ssbConfig.caps }).then(async (ssb) => {
   try {
@@ -63,6 +87,14 @@ ssbClient(ssbConfig.keys, { remote, caps: ssbConfig.caps }).then(async (ssb) => 
         const feedId = args[0];
         if (!feedId) { console.error('Missing feedId'); process.exit(1); }
         const r = await call(ssb.publish.bind(ssb), { type: 'contact', contact: feedId, following: true });
+        console.log(JSON.stringify(r, null, 2));
+        break;
+      }
+      case 'join': {
+        if (!args[0]) { console.error('Missing invite code'); process.exit(1); }
+        const code = toLegacyInvite(args[0]);
+        const r = await call(ssb.invite.accept.bind(ssb.invite), code);
+        rememberPub(code);
         console.log(JSON.stringify(r, null, 2));
         break;
       }

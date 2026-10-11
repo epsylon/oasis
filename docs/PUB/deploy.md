@@ -146,6 +146,7 @@ All admin actions go through the launcher itself, which talks to the running Oas
 ./oasis.sh name "<text>"           # set PUB display name
 ./oasis.sh announce <host> [port]  # publish pub address (default port 8008)
 ./oasis.sh follow <feedId>         # follow another PUB / feed
+./oasis.sh join <invite>           # join another PUB with its invite code
 ./oasis.sh status                  # peer / replication overview
 ./oasis.sh gossip                  # known peers
 ```
@@ -192,6 +193,12 @@ Federate so both replicate each other:
 
 ```
 ./oasis.sh follow "@mGrevRCSX4E5dLgmflWBc50Qkn/1RXUAtDaGHOJ8xB4=.ed25519"
+```
+
+A new PUB knows no other PUB yet. With an invite code from a PUB of the network, join it from the terminal; the PUB is added to the list of known PUBs and the rest of the network is learned from there:
+
+```
+./oasis.sh join "<invite code>"
 ```
 
 ## 12) Health checks

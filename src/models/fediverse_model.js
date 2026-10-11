@@ -372,8 +372,15 @@ module.exports = ({ isPublic } = {}) => {
       if (!file || !file.filepath) return null;
       let buf;
       try { buf = fs.readFileSync(file.filepath); } catch (_) { throw new Error('fediverseErrMedia'); }
+      return api.uploadMediaBuffer({ buffer: buf, mimetype: file.mimetype, filename: file.originalFilename });
+    },
+
+    async uploadMediaBuffer({ buffer, mimetype, filename } = {}) {
+      const m = getMastodon();
+      if (!m) throw new Error('fediverseErrAuth');
+      if (!buffer || !buffer.length) return null;
       const fd = new FormData();
-      fd.append('file', new Blob([buf], { type: file.mimetype || 'application/octet-stream' }), file.originalFilename || 'upload');
+      fd.append('file', new Blob([buffer], { type: mimetype || 'application/octet-stream' }), filename || 'upload');
       let res;
       try {
         res = await apiFetch(m.instance, m.token, '/api/v2/media', { method: 'POST', body: fd });

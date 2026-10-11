@@ -32,6 +32,19 @@ const CASE_TITLE_PRESETS = [
   'Governance dispute'
 ];
 
+const PRESET_KEYS = {
+  'Minor conflict': 'courtsPresetMinorConflict',
+  'Moderate conflict': 'courtsPresetModerateConflict',
+  'Severe conflict': 'courtsPresetSevereConflict',
+  'Harassment or abuse': 'courtsPresetHarassment',
+  'Content moderation': 'courtsPresetContentModeration',
+  'Ban or restriction': 'courtsPresetBanRestriction',
+  'Governance dispute': 'courtsPresetGovernanceDispute'
+};
+const presetLabel = (t) => i18n[PRESET_KEYS[t]] || t;
+const caseTitle = (title) => CASE_TITLE_PRESETS.reduce((acc, t) => acc.split(t).join(presetLabel(t)), String(title || ''));
+const statusLabel = (status) => String(i18n[`courtsStatus${String(status || '').toUpperCase()}`] || status || '').toUpperCase();
+
 const FILTERS = [
   { value: 'cases', key: 'courtsFilterCases' },
   { value: 'mycases', key: 'courtsFilterMyCases' },
@@ -87,11 +100,11 @@ const CaseForm = (prefill = {}) =>
         value: prefill.titleSuffix || ''
       }),
       br(),
-      label('Case type'),
+      label(i18n.courtsCaseType),
       br(),
       select(
         { name: 'titlePreset', required: true },
-        CASE_TITLE_PRESETS.map((t) => option({ value: t, ...(prefill.titlePreset === t ? { selected: true } : {}) }, t))
+        CASE_TITLE_PRESETS.map((t) => option({ value: t, ...(prefill.titlePreset === t ? { selected: true } : {}) }, presetLabel(t)))
       ),
       br(),
       br(),
@@ -454,7 +467,7 @@ const CaseCard = (c) => {
       { class: 'card-header' },
       div(
         { class: 'card-header__meta' },
-        h2(c.title || ''),
+        h2(caseTitle(c.title)),
         div({ class: 'card-chips-row' }, CourtsE2EChip()),
         div(
           { class: 'card-field' },
@@ -464,7 +477,7 @@ const CaseCard = (c) => {
         div(
           { class: 'card-field' },
           span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
-          span({ class: 'card-value' }, String(c.status || ''))
+          span({ class: 'card-value' }, statusLabel(c.status))
         ),
         c.answerBy
           ? div(
@@ -672,13 +685,13 @@ const MyCaseCard = (c) => {
     div(
       { class: 'card-field' },
       span({ class: 'card-label' }, i18n.courtsThCase + ': '),
-      span({ class: 'card-value' }, c.title || '')
+      span({ class: 'card-value' }, caseTitle(c.title))
     ),
     div({ class: 'card-chips-row' }, CourtsE2EChip()),
     div(
       { class: 'card-field' },
       span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
-      span({ class: 'card-value' }, String(c.status || ''))
+      span({ class: 'card-value' }, statusLabel(c.status))
     ),
     div(
       { class: 'card-field' },
@@ -826,7 +839,7 @@ const CasesTable = (rows = [], opts = {}) => {
   const bodyRows = rows.map((c) => {
     const role = showRole ? roleTextForCase(c) : '';
     return tr(
-      td({ 'data-label': i18n.courtsThCase }, c.title || ''),
+      td({ 'data-label': i18n.courtsThCase }, caseTitle(c.title)),
       td({ 'data-label': i18n.courtsAccuser },
         c.accuser
           ? a(
@@ -949,7 +962,7 @@ const HistoryList = (rows = []) => {
         span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
         span({ class: 'card-value' }, String(hh.status || ''))
       ),
-      h2(hh.title || ''),
+      h2(caseTitle(hh.title)),
       canShowDescription ? RichTextBlock(hh.description || '') : null,
       form(
         {
@@ -1062,7 +1075,7 @@ const CaseDetailsBlock = (c) => {
       { class: 'card-header' },
       div(
         { class: 'card-header__meta' },
-        h2(c.title || ''),
+        h2(caseTitle(c.title)),
         div({ class: 'card-chips-row' }, CourtsE2EChip()),
         c.method
           ? div(
@@ -1079,7 +1092,7 @@ const CaseDetailsBlock = (c) => {
         div(
           { class: 'card-field' },
           span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
-          span({ class: 'card-value' }, String(c.status || ''))
+          span({ class: 'card-value' }, statusLabel(c.status))
         ),
         c.createdAt
           ? div(
