@@ -46,5 +46,31 @@ const all = [...positive, ...constructive, ...moderation];
 all.positive = positive;
 all.constructive = constructive;
 all.moderation = moderation;
+all.messageTypes = {
+  bookmark: 'bookmarkOpinion',
+  votes: 'votesOpinion',
+  poll: 'pollOpinion',
+  transfer: 'transferOpinion',
+  feed: 'feedOpinion',
+  image: 'imageOpinion',
+  audio: 'audioOpinion',
+  video: 'videoOpinion',
+  document: 'documentOpinion',
+  torrent: 'torrentOpinion',
+  file: 'fileOpinion',
+  industry: 'industryOpinion',
+  project: 'projectOpinion',
+  report: 'reportOpinion',
+  task: 'taskOpinion',
+  event: 'eventOpinion',
+  shopProduct: 'shopOpinion',
+  housing: 'housingOpinion',
+  market: 'marketOpinion',
+  schoolCourse: 'schoolOpinion',
+  podcast: 'podcastOpinion',
+  podcastEpisode: 'podcastOpinion',
+  campaign: 'campaignOpinion',
+  logisticsRoute: 'logisticsOpinion'
+};
 
 module.exports = all;

@@ -4,6 +4,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const longText = require('../backend/long_text');
+const { versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
@@ -360,7 +361,6 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
     const messages = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true });
 
     const tombstoned = buildValidatedTombstoneSet(messages);
-    const replacesMap = new Map();
     const latestByKey = new Map();
 
     for (const msg of messages) {
@@ -368,23 +368,12 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       const c = msg?.value?.content;
       const t = c?.type;
       if (!t || !searchableTypes.includes(t)) continue;
-      if (tombstoned.has(k)) continue;
-      if (c.replaces) replacesMap.set(c.replaces, k);
       latestByKey.set(k, msg);
     }
 
-    for (const [oldId, newId] of Array.from(replacesMap.entries())) {
-      const orig = latestByKey.get(oldId);
-      const repl = latestByKey.get(newId);
-      if (!orig) { replacesMap.delete(oldId); continue; }
-      if (!repl || String(repl?.value?.author) !== String(orig?.value?.author)) {
-        replacesMap.delete(oldId);
-        latestByKey.delete(newId);
-      }
-    }
-
-    for (const oldId of replacesMap.keys()) {
-      latestByKey.delete(oldId);
+    const vg = versionGroups(Array.from(latestByKey.values()).map(versionEntry));
+    for (const k of Array.from(latestByKey.keys())) {
+      if (!vg.roots.has(vg.rootOf(k)) || vg.tipOf(k) !== k || tombstoned.has(k)) latestByKey.delete(k);
     }
 
     const viewerTribeIds = new Set();

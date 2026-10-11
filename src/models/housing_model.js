@@ -2,7 +2,8 @@ const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const categories = require("../backend/opinion_categories")
 const { getConfig } = require("../configs/config-manager.js")
-const { dedupeByPreferring } = require('../backend/dedupe')
+const { dedupeByPreferring, versionGroups } = require('../backend/dedupe')
+const { buildValidatedTombstoneSet } = require('./tombstone_validator')
 const { readTyped, memoIndex } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
@@ -117,12 +118,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
   const readAll = async (ssbClient) => readTyped(ssbClient, HOUSING_MSG_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
 
   const buildIndex = (messages, ssbClient) => {
-    const tomb = new Set()
+    const tomb = buildValidatedTombstoneSet(messages)
     const nodes = new Map()
-    const parent = new Map()
-    const child = new Map()
-    const naiveReplaces = new Map()
-    const requestLatest = new Map()
+    const requestMsgs = []
     const opinionMsgs = []
 
     for (const m of messages) {
@@ -131,11 +129,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const c = v.content
       if (!c || typeof c !== "object") continue
 
-      if (c.type === "tombstone" && c.target) { tomb.add(c.target); continue }
-
       if (c.type === "housing") {
-        nodes.set(key, { key, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
-        if (c.replaces) naiveReplaces.set(key, c.replaces)
+        nodes.set(key, { key, ts: v.timestamp || m.timestamp || 0, seq: v.sequence || 0, c, author: v.author })
         continue
       }
 
@@ -147,41 +142,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (c.type === "housingRequest" && c.housingId) {
         const author = v.author
         if (!author) continue
-        const ts = v.timestamp || m.timestamp || 0
-        const k = `${c.housingId}::${author}`
-        const prev = requestLatest.get(k)
-        if (!prev || ts >= prev.ts) requestLatest.set(k, { ts, value: !!c.value, author, housingId: c.housingId })
+        requestMsgs.push({ ts: v.timestamp || m.timestamp || 0, value: !!c.value, author, housingId: c.housingId })
         continue
       }
     }
-
-    for (const [key, replacesId] of naiveReplaces.entries()) {
-      const node = nodes.get(key)
-      if (!node) continue
-      const orig = nodes.get(replacesId)
-      if (!orig) continue
-      if (String(orig.author) !== String(node.author)) { nodes.delete(key); continue }
-      parent.set(key, replacesId)
-      child.set(replacesId, key)
-    }
-
-    const rootOf = (id) => {
-      let cur = id, guard = 0
-      while (parent.has(cur) && guard++ < 100000) cur = parent.get(cur)
-      return cur
-    }
-
-    const tipOf = (id) => {
-      let cur = id, guard = 0
-      while (child.has(cur) && guard++ < 100000) cur = child.get(cur)
-      return cur
-    }
-
-    const roots = new Set()
-    for (const id of nodes.keys()) roots.add(rootOf(id))
-
-    const tipByRoot = new Map()
-    for (const r of roots) tipByRoot.set(r, tipOf(r))
 
     if (ssbClient) {
       for (const m of messages) {
@@ -192,12 +156,24 @@ module.exports = ({ cooler, tribeCrypto }) => {
           if (!c || c.type !== 'housingRequest' || !c.housingId) continue
           const author = dec.value.author
           if (!author) continue
-          const ts = dec.value.timestamp || m.timestamp || 0
-          const k = `${c.housingId}::${author}`
-          const prev = requestLatest.get(k)
-          if (!prev || ts >= prev.ts) requestLatest.set(k, { ts, value: !!c.value, author, housingId: c.housingId })
+          requestMsgs.push({ ts: dec.value.timestamp || m.timestamp || 0, value: !!c.value, author, housingId: c.housingId })
         } catch {}
       }
+    }
+
+    const vg = versionGroups(Array.from(nodes.values()).map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: typeof n.c.replaces === "string" ? n.c.replaces : null, claimedAuthor: typeof n.c.author === "string" ? n.c.author : null })))
+    const rootOf = vg.rootOf
+    const tipOf = vg.tipOf
+
+    const tipByRoot = new Map()
+    for (const r of vg.roots) tipByRoot.set(r, tipOf(r))
+
+    const requestLatest = new Map()
+    for (const req of requestMsgs) {
+      const housingId = rootOf(req.housingId)
+      const k = `${housingId}::${req.author}`
+      const prev = requestLatest.get(k)
+      if (!prev || req.ts >= prev.ts) requestLatest.set(k, { ...req, housingId })
     }
 
     const requestsByRoot = new Map()
@@ -233,7 +209,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       return { opinions, opinions_inhabitants: voters }
     }
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, tipByRoot, requestsByRoot, everRequestedByRoot, aggregateFor }
+    return { tomb, nodes, vg, rootOf, tipOf, tipByRoot, requestsByRoot, everRequestedByRoot, aggregateFor }
   }
 
   const buildObject = (node, rootId, idx, viewer) => {
@@ -352,7 +328,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
       const idx = buildIndex(await readAll(ssbClient), ssbClient)
       const tip = idx.tipOf(id)
-      if (idx.tomb.has(tip)) throw new Error("Housing not found")
+      if (idx.tomb.has(tip) || idx.vg.isForeignCopy(idx.rootOf(tip))) throw new Error("Housing not found")
       return tip
     },
 
@@ -360,7 +336,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
       const idx = buildIndex(await readAll(ssbClient), ssbClient)
       const tip = idx.tipOf(id)
-      if (idx.tomb.has(tip)) throw new Error("Housing not found")
+      if (idx.tomb.has(tip) || idx.vg.isForeignCopy(idx.rootOf(tip))) throw new Error("Housing not found")
       return idx.rootOf(tip)
     },
 
@@ -368,7 +344,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
       const idx = buildIndex(await readAll(ssbClient), ssbClient)
       const tipId = idx.tipOf(id)
-      if (idx.tomb.has(tipId)) throw new Error("Housing not found")
+      if (idx.tomb.has(tipId) || idx.vg.isForeignCopy(idx.rootOf(tipId))) throw new Error("Housing not found")
       const node = idx.nodes.get(tipId)
       if (!node || !node.c) throw new Error("Housing not found")
       if ((node.author || node.c.author) !== ssbClient.id) throw new Error("Unauthorized")
@@ -430,7 +406,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
       const idx = buildIndex(await readAll(ssbClient), ssbClient)
       const tipId = idx.tipOf(id)
-      if (idx.tomb.has(tipId)) throw new Error("Housing not found")
+      if (idx.tomb.has(tipId) || idx.vg.isForeignCopy(idx.rootOf(tipId))) throw new Error("Housing not found")
       const node = idx.nodes.get(tipId)
       if (!node) throw new Error("Housing not found")
       if ((node.author || node.c.author) !== ssbClient.id) throw new Error("Unauthorized")
@@ -465,7 +441,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const me = ssbClient.id
       const idx = buildIndex(await readAll(ssbClient), ssbClient)
       const tipId = idx.tipOf(id)
-      if (idx.tomb.has(tipId)) throw new Error("Housing not found")
+      if (idx.tomb.has(tipId) || idx.vg.isForeignCopy(idx.rootOf(tipId))) throw new Error("Housing not found")
       const node = idx.nodes.get(tipId)
       if (!node) throw new Error("Housing not found")
       const rootId = idx.rootOf(tipId)
@@ -538,7 +514,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const viewer = viewerId || ssbClient.id
       const idx = memoIndex('housing', await readAll(ssbClient), (m) => buildIndex(m, ssbClient))
       const tipId = idx.tipOf(id)
-      if (idx.tomb.has(tipId)) throw new Error("Housing not found")
+      if (idx.tomb.has(tipId) || idx.vg.isForeignCopy(idx.rootOf(tipId))) throw new Error("Housing not found")
       const node = idx.nodes.get(tipId)
       if (!node) throw new Error("Housing not found")
       const rootId = idx.rootOf(tipId)

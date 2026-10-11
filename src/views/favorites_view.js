@@ -194,12 +194,12 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "", param
         form(
           { method: "GET", action: "/favorites", class: "ui-toolbar ui-toolbar--filters" },
           button(
-            { type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterRecent} (${c.recent || 0})`
-          ),
-          button(
             { type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" },
             `${i18n.favoritesFilterAll} (${total})`
+          ),
+          button(
+            { type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" },
+            `${i18n.favoritesFilterRecent} (${c.recent || 0})`
           ),
           ...FILTER_KINDS.filter((k) => (c[k.value] || 0) > 0).map((k) =>
             button(

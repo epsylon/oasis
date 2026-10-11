@@ -283,8 +283,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
     };
   })();
 
-  const normalizeTribe = (entry) => {
+  const normalizeTribe = (entry, rootEntry) => {
     const c = entry.content;
+    const root = rootEntry || entry;
     return {
       id: entry.id,
       title: c.title || '',
@@ -299,9 +300,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       status: c.status || 'OPEN',
       parentTribeId: c.parentTribeId || null,
       mapUrl: c.mapUrl || '',
-      createdAt: c.createdAt,
+      createdAt: root.content.createdAt,
       updatedAt: c.updatedAt,
-      author: c.author || entry.author,
+      author: root.author,
       _ts: entry._ts
     };
   };
@@ -461,7 +462,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (idx.tombstoned.has(latestId) || idx.effectivelyTombstoned.has(latestId)) throw new Error('Tribe not found');
       const entry = idx.tribes.get(latestId);
       if (!entry) throw new Error('Tribe not found');
-      return normalizeTribe(entry);
+      return normalizeTribe(entry, idx.tribes.get(idx.rootByTip.get(latestId) || latestId));
     },
 
     async listAll() {
@@ -472,7 +473,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (idx.effectivelyTombstoned.has(root) || idx.effectivelyTombstoned.has(tip)) continue;
         const entry = idx.tribes.get(tip);
         if (!entry) continue;
-        items.push(normalizeTribe(entry));
+        items.push(normalizeTribe(entry, idx.tribes.get(root)));
       }
       return items;
     },

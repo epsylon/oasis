@@ -203,9 +203,9 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterMine).toUpperCase())] : []),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.fileFilterFavorites).toUpperCase()
@@ -368,9 +368,9 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
           { method: "GET", action: "/files", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterMine).toUpperCase())] : []),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterAll).toUpperCase()),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.fileFilterFavorites).toUpperCase()

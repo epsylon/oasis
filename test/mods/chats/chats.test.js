@@ -133,6 +133,38 @@ describe('chats: cross-author replaces does not hide content (regression)', (t) 
     eq(viaVersion.length, viaRoot.length, 'same message count regardless of which chain version id is used');
   });
 
+  t('versions republished by other inhabitants fold into the one chat of its author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Plaza', 'first', null, '', 'OPEN', [], null);
+    const base = (await A.use('chats').getChatById(chat.key));
+    const copy = (members, replaces) => ({ type: 'chat', title: 'Plaza', description: 'first', category: '', status: 'OPEN', tags: [], members, invites: [], createdAt: base.createdAt, replaces });
+    const vB = await publishAs(B, copy([A.keypair.id, B.keypair.id], chat.key));
+    const vC = await publishAs(C, copy([A.keypair.id, B.keypair.id, C.keypair.id], vB.key));
+    await publishAs(A, { ...copy([A.keypair.id, B.keypair.id, C.keypair.id], vC.key), description: 'edited' });
+    A.setActor();
+    const list = (await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id })).filter(c => c.title === 'Plaza');
+    eq(list.length, 1, 'a single chat');
+    eq(list[0].author, A.keypair.id, 'shown with its author');
+    eq(list[0].createdAt, base.createdAt, 'and its creation date');
+    eq(list[0].description, 'edited', 'with the latest content of its author');
+    ok([B.keypair.id, C.keypair.id].every(id => list[0].members.includes(id)), 'those who joined stay members');
+    const viaCopy = await A.use('chats').getChatById(vC.key);
+    eq(viaCopy.rootId, list[0].rootId, 'a republished version opens the same chat');
+  });
+
+  t('a republished version cannot change the content of the chat', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const chat = await A.use('chats').createChat('Lonja', 'original', null, '', 'OPEN', [], null);
+    await publishAs(B, { type: 'chat', title: 'Taken', description: 'changed', category: '', status: 'OPEN', tags: [], members: [B.keypair.id], invites: [], createdAt: new Date().toISOString(), replaces: chat.key });
+    A.setActor();
+    const list = await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id });
+    eq(list.length, 1, 'a single chat');
+    eq(list[0].title, 'Lonja');
+    eq(list[0].description, 'original');
+  });
+
   t('a foreign tombstone cannot delete the chat from listing', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor();

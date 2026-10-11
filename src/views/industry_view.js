@@ -26,9 +26,9 @@ const SECTORS = ["software", "hardware", "agriculture", "textile", "energy", "fo
 const POLICIES = ["open", "vote", "invite"]
 
 const FILTERS = [
+  { key: "ALL", i18n: "industryFilterAll", title: "industryAllTitle" },
   { key: "RECENT", i18n: "industryFilterRecent", title: "industryRecentTitle" },
   { key: "MINE", i18n: "industryFilterMine", title: "industryMineTitle" },
-  { key: "ALL", i18n: "industryFilterAll", title: "industryAllTitle" },
   { key: "ACTIVE", i18n: "industryFilterActive", title: "industryActiveTitle" },
   { key: "PAUSED", i18n: "industryFilterPaused", title: "industryPausedTitle" },
   { key: "DISSOLVED", i18n: "industryFilterDissolved", title: "industryDissolvedTitle" },

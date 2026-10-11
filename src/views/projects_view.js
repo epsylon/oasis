@@ -25,9 +25,9 @@ const renderMediaBlob = (value, attrs = {}) => {
 const userId = config.keys.id
 
 const FILTERS = [
+  { key: "ALL", i18n: "projectFilterAll", title: "projectAllTitle" },
   { key: "RECENT", i18n: "projectFilterRecent", title: "projectRecentTitle" },
   { key: "MINE", i18n: "projectFilterMine", title: "projectMineTitle" },
-  { key: "ALL", i18n: "projectFilterAll", title: "projectAllTitle" },
   { key: "APPLIED", i18n: "projectFilterApplied", title: "projectAppliedTitle" },
   { key: "ACTIVE", i18n: "projectFilterActive", title: "projectActiveTitle" },
   { key: "PAUSED", i18n: "projectFilterPaused", title: "projectPausedTitle" },

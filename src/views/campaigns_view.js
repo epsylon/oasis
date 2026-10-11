@@ -9,7 +9,7 @@ const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["RECENT", "MINE", "ALL", "SIGNED", "TOP"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SIGNED", "TOP"];
 const STATUSES = ["OPEN", "ACHIEVED", "CLOSED"];
 const CATEGORIES = ["ENVIRONMENT", "RIGHTS", "HEALTH", "EDUCATION", "INFRASTRUCTURE", "CULTURE", "ECONOMY", "OTHER"];
 

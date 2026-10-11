@@ -1,5 +1,7 @@
 const fs = require('fs')
 const { readTyped } = require('../models/typed_log')
+const { buildValidatedTombstoneSet } = require('../models/tombstone_validator')
+const { versionGroups, versionEntry } = require('../backend/dedupe')
 
 const VECTORS_FILE = 'AI-search-vectors.json'
 const MAX_ITEMS = 4000
@@ -25,8 +27,14 @@ const textOf = (c) => {
 let indexing = null
 
 const indexOnce = async (ssb, { embed, limit }) => {
-  const msgs = await readTyped(ssb, TYPES, { limit }).catch(() => [])
-  const usable = msgs.filter(m => m && m.key && m.value && m.value.content && !m.value.content.replaces && textOf(m.value.content))
+  const msgs = await readTyped(ssb, [...TYPES, 'tombstone'], { limit }).catch(() => [])
+  const tomb = buildValidatedTombstoneSet(msgs)
+  const content = msgs.filter(m => m && m.key && m.value && m.value.content && TYPES.includes(m.value.content.type))
+  const byKey = new Map(content.map(m => [m.key, m]))
+  const vg = versionGroups(content.map(versionEntry))
+  const usable = [...vg.roots].map(r => byKey.get(vg.tipOf(r)))
+    .filter(m => m && !tomb.has(m.key) && textOf(m.value.content))
+    .sort((a, b) => ((a.value.timestamp || 0) - (b.value.timestamp || 0)))
   const newest = usable.slice(-MAX_ITEMS)
   const cache = readVectors()
   let dirty = false

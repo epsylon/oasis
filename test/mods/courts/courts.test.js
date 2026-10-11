@@ -74,3 +74,21 @@ describe('courts: open + list cases', (t) => {
     ok(String(d.status).toUpperCase() !== 'DECIDED', 'forged verdict by a non-judge must not decide the case');
   });
 });
+
+describe('courts: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('a case asked by a foreign version id resolves to the case of its accuser', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    await A.use('courts').openCase({ titleBase: 'fence', respondentInput: B.keypair.id, method: 'JUDGE' });
+    const original = (await A.use('courts').listCases('all'))[0];
+    const b = await pub(B, { ...raw(net, original.id), method: 'MEDIATION', replaces: original.id });
+    const byCopy = await A.use('courts').getCaseById(b.key);
+    ok(byCopy, 'the case is found');
+    eq(byCopy.id, original.id);
+    eq(byCopy.method, 'JUDGE');
+    eq(byCopy.accuser, A.keypair.id);
+    eq((await A.use('courts').listCases('all')).length, 1);
+  });
+});

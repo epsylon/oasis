@@ -251,4 +251,19 @@ describe('ai: semantic search only indexes readable text', (t) => {
     eq(sem.textOf({}), '');
     ok(/bread flour #?tag1/.test(sem.textOf({ title: 'bread', description: 'flour', tags: ['tag1'] }).replace(' tag1', ' #tag1')) || sem.textOf({ title: 'bread', description: 'flour', tags: ['tag1'] }) === 'bread flour tag1');
   });
+
+  t('each item is indexed once, with the latest content of its author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    const publishAs = async (P, content) => { const ssb = await P.cooler.open(); return new Promise((res, rej) => ssb.publish(content, (e, m) => e ? rej(e) : res(m))); };
+    const base = { type: 'job', title: 'Alpha', description: 'carpentry', author: A.keypair.id, createdAt: new Date().toISOString() };
+    const orig = await publishAs(A, base);
+    const copy = await publishAs(B, { ...base, replaces: orig.key });
+    await publishAs(A, { ...base, title: 'Bravo', replaces: copy.key });
+    const ssb = await A.cooler.open();
+    const found = await sem.search(ssb, 'carpentry', { embed: async () => [1, 1], cosine: () => 1 });
+    const jobs = found.filter(r => r.msg.value.content.type === 'job');
+    eq(jobs.length, 1, 'a single result');
+    eq(jobs[0].msg.value.author, A.keypair.id);
+    eq(jobs[0].msg.value.content.title, 'Bravo');
+  });
 });

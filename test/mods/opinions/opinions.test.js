@@ -98,3 +98,43 @@ describe('opinions: only opined content is listed', (t) => {
     }
   });
 });
+
+describe('opinions: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+  const place = (title) => ({ housing_type: 'rent', property_type: 'apartment', title, description: 'd', price: 300, place: 'Sevilla', availableFrom: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10) });
+  const titled = (list, ...titles) => list.filter(m => titles.includes(m.value.content.title));
+
+  t('a chain crossing other authors stays one item with the latest content of its author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('housing').createHousing(place('Loft'));
+    await A.use('opinions').createVote(r.key, 'interesting');
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), title: 'Loft II', replaces: c.key });
+    const list = titled(await A.use('opinions').listOpinions('ALL', ''), 'Loft', 'Loft II');
+    eq(list.length, 1);
+    eq(list[0].value.author, A.keypair.id);
+    eq(list[0].value.content.title, 'Loft II');
+    eq(list[0].value.content.opinions.interesting, 1);
+    B.setActor();
+    eq(titled(await B.use('opinions').listOpinions('MINE', ''), 'Loft', 'Loft II').length, 0);
+  });
+
+  t('a foreign copy next to an edit of the author neither duplicates nor wins, and opinions on it count for the item', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const D = makePeer(net);
+    A.setActor();
+    const r = await A.use('housing').createHousing(place('Barn'));
+    await pub(A, { ...raw(net, r.key), title: 'Barn II', replaces: r.key });
+    const b = await pub(B, { ...raw(net, r.key), title: 'Barn by B', replaces: r.key });
+    D.setActor();
+    await D.use('opinions').createVote(b.key, 'useful');
+    A.setActor();
+    const list = titled(await A.use('opinions').listOpinions('ALL', ''), 'Barn', 'Barn II', 'Barn by B');
+    eq(list.length, 1);
+    eq(list[0].value.content.title, 'Barn II');
+    eq(list[0].value.author, A.keypair.id);
+    eq(list[0].value.content.opinions.useful, 1);
+  });
+});

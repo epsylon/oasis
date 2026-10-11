@@ -2,7 +2,7 @@ const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeByPreferring } = require('../backend/dedupe')
+const { dedupeByPreferring, versionGroups } = require('../backend/dedupe')
 const { readTyped, memoIndex } = require('./typed_log')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
@@ -46,12 +46,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
     readTyped(ssbClient, JOB_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
 
   const buildIndex = (messages, ssbClient) => {
-    const tomb = new Set()
+    const tomb = buildValidatedTombstoneSet(messages)
     const jobNodes = new Map()
-    const parent = new Map()
-    const child = new Map()
-    const naiveReplaces = new Map()
-    const jobSubLatest = new Map()
+    const subMsgs = []
 
     for (const m of messages) {
       const key = m.key
@@ -59,63 +56,17 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const c = v.content
       if (!c) continue
 
-      if (c.type === "tombstone" && c.target) {
-        tomb.add(c.target)
-        continue
-      }
-
       if (c.type === "job") {
-        jobNodes.set(key, { key, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
-        if (c.replaces) naiveReplaces.set(key, c.replaces)
+        jobNodes.set(key, { key, ts: v.timestamp || m.timestamp || 0, seq: v.sequence || 0, c, author: v.author })
         continue
       }
 
       if (c.type === "job_sub" && c.jobId) {
         const author = v.author
         if (!author) continue
-        const ts = v.timestamp || m.timestamp || 0
-        const jobId = c.jobId
-        const k = `${jobId}::${author}`
-        const prev = jobSubLatest.get(k)
-        if (!prev || ts >= prev.ts) jobSubLatest.set(k, { ts, value: !!c.value, author, jobId })
+        subMsgs.push({ ts: v.timestamp || m.timestamp || 0, value: !!c.value, author, jobId: c.jobId })
         continue
       }
-    }
-
-    for (const [key, replacesId] of naiveReplaces.entries()) {
-      const node = jobNodes.get(key)
-      if (!node) continue
-      const orig = jobNodes.get(replacesId)
-      if (!orig) continue
-      if (String(orig.author) !== String(node.author)) { jobNodes.delete(key); continue }
-      parent.set(key, replacesId)
-      child.set(replacesId, key)
-    }
-
-    const rootOf = (id) => {
-      let cur = id
-      while (parent.has(cur)) cur = parent.get(cur)
-      return cur
-    }
-
-    const roots = new Set()
-    for (const id of jobNodes.keys()) roots.add(rootOf(id))
-
-    const tipOf = (id) => {
-      let cur = id
-      while (child.has(cur)) cur = child.get(cur)
-      return cur
-    }
-
-    const tipByRoot = new Map()
-    for (const r of roots) tipByRoot.set(r, tipOf(r))
-
-    const subsByJob = new Map()
-    for (const { jobId, author, value } of jobSubLatest.values()) {
-      if (!subsByJob.has(jobId)) subsByJob.set(jobId, new Set())
-      const set = subsByJob.get(jobId)
-      if (value) set.add(author)
-      else set.delete(author)
     }
 
     if (ssbClient) {
@@ -128,16 +79,30 @@ module.exports = ({ cooler, tribeCrypto }) => {
           if (c.type !== 'job_sub' || !c.jobId) continue
           const author = dec.value.author
           if (!author) continue
-          const ts = dec.value.timestamp || m.timestamp || 0
-          const jobId = c.jobId
-          const k = `${jobId}::${author}`
-          const prev = jobSubLatest.get(k)
-          if (!prev || ts >= prev.ts) jobSubLatest.set(k, { ts, value: !!c.value, author, jobId })
+          subMsgs.push({ ts: dec.value.timestamp || m.timestamp || 0, value: !!c.value, author, jobId: c.jobId })
         } catch {}
       }
     }
 
-    return { tomb, jobNodes, parent, child, rootOf, tipOf, tipByRoot, subsByJob }
+    const vg = versionGroups(Array.from(jobNodes.values()).map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: typeof n.c.replaces === "string" ? n.c.replaces : null, claimedAuthor: typeof n.c.author === "string" ? n.c.author : null })))
+
+    const jobSubLatest = new Map()
+    for (const sub of subMsgs) {
+      const jobId = vg.rootOf(sub.jobId)
+      const k = `${jobId}::${sub.author}`
+      const prev = jobSubLatest.get(k)
+      if (!prev || sub.ts >= prev.ts) jobSubLatest.set(k, { ...sub, jobId })
+    }
+
+    const subsByJob = new Map()
+    for (const { jobId, author, value } of jobSubLatest.values()) {
+      if (!subsByJob.has(jobId)) subsByJob.set(jobId, new Set())
+      const set = subsByJob.get(jobId)
+      if (value) set.add(author)
+      else set.delete(author)
+    }
+
+    return { tomb, jobNodes, vg, subsByJob }
   }
 
   const buildJobObject = (node, rootId, subscribers) => {
@@ -253,26 +218,20 @@ module.exports = ({ cooler, tribeCrypto }) => {
     async resolveCurrentId(jobId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const { tomb, child } = buildIndex(messages, ssbClient)
+      const { tomb, vg } = buildIndex(messages, ssbClient)
 
-      let cur = jobId
-      while (child.has(cur)) cur = child.get(cur)
-      if (tomb.has(cur)) throw new Error("Job not found")
+      const cur = vg.tipOf(jobId)
+      if (tomb.has(cur) || vg.isForeignCopy(vg.rootOf(cur))) throw new Error("Job not found")
       return cur
     },
 
     async resolveRootId(jobId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const { tomb, parent, child } = buildIndex(messages, ssbClient)
+      const { tomb, vg } = buildIndex(messages, ssbClient)
 
-      let tip = jobId
-      while (child.has(tip)) tip = child.get(tip)
-      if (tomb.has(tip)) throw new Error("Job not found")
-
-      let root = tip
-      while (parent.has(root)) root = parent.get(root)
-      return root
+      if (tomb.has(vg.tipOf(jobId)) || vg.isForeignCopy(vg.rootOf(jobId))) throw new Error("Job not found")
+      return vg.rootOf(jobId)
     },
 
     async updateJob(id, jobData) {
@@ -466,7 +425,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const idx = buildIndex(messages, ssbClient)
 
       const jobs = []
-      for (const [rootId, tipId] of idx.tipByRoot.entries()) {
+      for (const rootId of idx.vg.roots) {
+        const tipId = idx.vg.tipOf(rootId)
         if (idx.tomb.has(tipId)) continue
         const node = idx.jobNodes.get(tipId)
         if (!node) continue
@@ -523,12 +483,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
       const idx = memoIndex('jobs', messages, (m) => buildIndex(m, ssbClient))
 
-      let tipId = id
-      while (idx.child.has(tipId)) tipId = idx.child.get(tipId)
-      if (idx.tomb.has(tipId)) throw new Error("Job not found")
-
-      let rootId = tipId
-      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
+      const tipId = idx.vg.tipOf(id)
+      const rootId = idx.vg.rootOf(id)
+      if (idx.tomb.has(tipId) || idx.vg.isForeignCopy(rootId)) throw new Error("Job not found")
 
       const gate = (job) => {
         if (job.visibility === "HIDDEN" && job.author !== viewer) throw new Error("Job not found")
@@ -538,7 +495,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const node = idx.jobNodes.get(tipId)
       if (!node) {
         const msg = await new Promise((r, j) => ssbClient.get(tipId, (e, m) => e ? j(e) : r(m)))
-        if (!msg || !msg.content) throw new Error("Job not found")
+        if (!msg || !msg.content || msg.content.type !== "job" || (msg.content.author && msg.content.author !== msg.author)) throw new Error("Job not found")
         const tmpNode = { key: tipId, ts: msg.timestamp || 0, c: msg.content, author: msg.author }
         const subsSet = idx.subsByJob.get(rootId) || new Set()
         const subs = Array.from(subsSet)

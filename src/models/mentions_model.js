@@ -33,6 +33,7 @@ const writeSeen = (keys, ts) => {
 };
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const TEXT_FIELDS = ['text', 'description', 'title', 'concept', 'question', 'rules', 'message', 'body', 'subject'];
@@ -96,10 +97,10 @@ module.exports = ({ cooler }) => {
         ? scanCache.fresh
         : (() => {
       const tomb = buildValidatedTombstoneSet(messages);
+      const vg = versionGroups(messages.filter(m => { const c = m && m.value && m.value.content; return c && typeof c === 'object' && c.type && !SKIP_TYPES.has(c.type); }).map(versionEntry));
 
       const out = [];
       const seen = new Set();
-      const replaced = new Set();
       for (const m of messages) {
         const v = m && m.value;
         const c = v && v.content;
@@ -110,7 +111,7 @@ module.exports = ({ cooler }) => {
         if (Array.isArray(c.recps) || Array.isArray(v.content && v.content.recps)) continue;
         if (c.tribeId && c.type !== 'tribe') continue;
         if (String(v.author) === String(myFeedId)) continue;
-        if (typeof c.replaces === 'string') replaced.add(c.replaces);
+        if (vg.tipOf(m.key) !== m.key || !vg.roots.has(vg.rootOf(m.key))) continue;
         if (!mentionsList(c, myFeedId) && !mentionsText(c, myFeedId)) continue;
         if (seen.has(m.key)) continue;
         seen.add(m.key);
@@ -127,10 +128,9 @@ module.exports = ({ cooler }) => {
         });
       }
 
-      const result = out.filter(x => !replaced.has(x.key));
       scanCache.fingerprint = fingerprint;
-      scanCache.fresh = result;
-      return result;
+      scanCache.fresh = out;
+      return out;
         })();
       const q = String(opts.q || '').trim().toLowerCase();
       let list = q

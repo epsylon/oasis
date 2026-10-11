@@ -7,6 +7,7 @@ const agendaConfigPath = require('../configs/state-manager').statePath('agenda-c
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
+const { versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 function readAgendaConfig() {
@@ -33,8 +34,7 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
 
     const tomb = buildValidatedTombstoneSet(msgs);
     const nodes = new Map();
-    const parent = new Map();
-    const child = new Map();
+    const versions = [];
 
     for (const m of msgs) {
       const k = m.key;
@@ -45,25 +45,12 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
       if (c.type !== targetType) continue;
       if (c.encryptedPayload) continue;
       nodes.set(k, { key: k, ts: v.timestamp || 0, author: v.author, content: c });
-      if (c.replaces) parent.set(k, c.replaces);
+      versions.push(versionEntry(m));
     }
 
-    for (const [k, p] of Array.from(parent.entries())) {
-      const cn = nodes.get(k);
-      const pn = nodes.get(p);
-      if (!pn) { parent.delete(k); continue; }
-      if (!cn || String(cn.author) !== String(pn.author)) { parent.delete(k); nodes.delete(k); }
-    }
-    for (const [k, p] of parent.entries()) child.set(p, k);
-
-    const rootOf = (id) => { let cur = id; while (parent.has(cur) && nodes.has(parent.get(cur))) cur = parent.get(cur); return cur; };
-
+    const vg = versionGroups(versions);
     const groups = new Map();
-    for (const id of nodes.keys()) {
-      const r = rootOf(id);
-      if (!groups.has(r)) groups.set(r, new Set());
-      groups.get(r).add(id);
-    }
+    for (const r of vg.roots) groups.set(r, new Set(vg.groups.get(r).filter(id => !vg.isForeign(id))));
 
     const statusOrder = ['FOR SALE', 'OPEN', 'RESERVED', 'CLOSED', 'SOLD'];
     const sIdx = s => statusOrder.indexOf(String(s || '').toUpperCase());
@@ -74,8 +61,8 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
       const items = Array.from(ids).map(id => nodes.get(id)).filter(n => n && !tomb.has(n.key));
       if (!items.length) continue;
 
-      let tipId = Array.from(ids).find(id => !child.has(id));
-      let tip = tipId ? nodes.get(tipId) : items.reduce((a, b) => a.ts > b.ts ? a : b);
+      const tip = nodes.get(vg.tipOf(root));
+      if (tomb.has(tip.key)) continue;
 
       if (targetType === 'market') {
         let chosen = items[0];

@@ -100,3 +100,59 @@ describe('trending: opinion + list', (t) => {
     await throwsAsync(() => A.use('trending').createVote(raw.key, 'interesting'), /Voting not allowed/);
   });
 });
+
+describe('trending: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+  const place = (title) => ({ housing_type: 'rent', property_type: 'apartment', title, description: 'd', price: 300, place: 'Sevilla', availableFrom: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10) });
+  const titled = (filtered, ...titles) => filtered.filter(m => titles.includes(m.value.content.title));
+
+  t('a chain crossing other authors stays one item with the latest content of its author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('housing').createHousing(place('Loft'));
+    await A.use('trending').createVote(r.key, 'interesting');
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), title: 'Loft II', replaces: c.key });
+    const list = titled((await A.use('trending').listTrending('ALL')).filtered, 'Loft', 'Loft II');
+    eq(list.length, 1);
+    eq(list[0].value.author, A.keypair.id);
+    eq(list[0].value.content.title, 'Loft II');
+    ok(list[0].value.content.opinions_inhabitants.includes(A.keypair.id));
+    B.setActor();
+    eq(titled((await B.use('trending').listTrending('MINE')).filtered, 'Loft', 'Loft II').length, 0);
+  });
+
+  t('a foreign copy next to an edit of the author neither duplicates nor wins, and opinions on it count for the item', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const D = makePeer(net);
+    A.setActor();
+    const r = await A.use('housing').createHousing(place('Barn'));
+    await pub(A, { ...raw(net, r.key), title: 'Barn II', replaces: r.key });
+    const b = await pub(B, { ...raw(net, r.key), title: 'Barn by B', replaces: r.key });
+    D.setActor();
+    await D.use('trending').createVote(b.key, 'useful');
+    A.setActor();
+    const list = titled((await A.use('trending').listTrending('ALL')).filtered, 'Barn', 'Barn II', 'Barn by B');
+    eq(list.length, 1);
+    eq(list[0].value.content.title, 'Barn II');
+    eq(list[0].value.author, A.keypair.id);
+    ok(list[0].value.content.opinions_inhabitants.includes(D.keypair.id));
+  });
+
+  t('a tombstone by another inhabitant does not remove the item', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('housing').createHousing(place('Hut'));
+    await A.use('trending').createVote(r.key, 'interesting');
+    await pub(B, { type: 'tombstone', target: r.key, deletedAt: new Date().toISOString() });
+    eq(titled((await A.use('trending').listTrending('ALL')).filtered, 'Hut').length, 1);
+  });
+
+  t('a foreign copy whose original is not loaded never shows as an item', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await pub(B, { type: 'housing', author: A.keypair.id, title: 'Ghost', opinions: { interesting: 1 }, opinions_inhabitants: [B.keypair.id], replaces: '%missing00000000000000000000000000000000000.sha256', createdAt: new Date().toISOString() });
+    eq(titled((await A.use('trending').listTrending('ALL')).filtered, 'Ghost').length, 0);
+  });
+});

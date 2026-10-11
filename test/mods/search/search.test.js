@@ -150,3 +150,42 @@ describe('search: what each Wish level lets through', (t) => {
     eq(again.lanPeers().size, 1, 'invalid ids are ignored');
   });
 });
+
+describe('search: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+  const place = (title) => ({ housing_type: 'rent', property_type: 'apartment', title, description: 'd', price: 300, place: 'Sevilla', availableFrom: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10) });
+
+  t('a chain crossing other authors is found once, by its author, with its latest content', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('housing').createHousing(place('Quokkaloft'));
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), title: 'Quokkaloft II', replaces: c.key });
+    const results = await A.use('search').search({ query: 'quokkaloft', types: [] });
+    eq(results.housing.length, 1);
+    eq(results.housing[0].value.author, A.keypair.id);
+    eq(results.housing[0].value.content.title, 'Quokkaloft II');
+  });
+
+  t('a foreign version never changes what is found', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('housing').createHousing(place('Wombatbarn'));
+    await pub(B, { ...raw(net, r.key), title: 'Wombatbarn by B', replaces: r.key });
+    const results = await A.use('search').search({ query: 'wombatbarn', types: [] });
+    eq(results.housing.length, 1);
+    eq(results.housing[0].value.content.title, 'Wombatbarn');
+    eq(results.housing[0].value.author, A.keypair.id);
+  });
+
+  t('an edit that retires the previous version is still found once', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const r = await A.use('bookmarks').createBookmark('https://example.org/edited', [], 'numbatword first', '');
+    await A.use('bookmarks').updateBookmarkById(r.key, { description: 'numbatword second' });
+    const results = await A.use('search').search({ query: 'numbatword', types: [] });
+    eq(results.bookmark.length, 1);
+    eq(results.bookmark[0].value.content.description, 'numbatword second');
+  });
+});

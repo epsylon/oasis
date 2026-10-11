@@ -163,6 +163,41 @@ describe('tribes: invite + join', (t) => {
     ok((await tmA.getTribeById(r.key)).members.includes(B.keypair.id), 'an invited inhabitant joins as usual');
   });
 
+  t('a member version cannot change the tribe author or creation date', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tmA = A.use('tribes');
+    const r = await tmA.createTribe('Hall', '', null, '', [], false, 'strict', null, 'OPEN', '');
+    const created = (await tmA.getTribeById(r.key)).createdAt;
+    const code = await tmA.generateInvite(r.key);
+    B.setActor();
+    await B.use('tribes').joinByInvite(code);
+    const tip = net.log.filter(m => m.value.content && m.value.content.type === 'tribe').pop();
+    eq(tip.value.author, B.keypair.id);
+    const ssbB = await B.cooler.open();
+    const forged = { ...tip.value.content, replaces: tip.key, author: B.keypair.id, createdAt: '2000-01-01T00:00:00.000Z', updatedAt: new Date().toISOString() };
+    delete forged.joinedWith;
+    await new Promise((res, rej) => ssbB.publish(forged, (e) => e ? rej(e) : res()));
+    for (const P of [A, B]) {
+      P.setActor();
+      await P.use('tribes').forceSync();
+      const tribe = await P.use('tribes').getTribeById(r.key);
+      ok(tribe.members.includes(B.keypair.id), 'B stays a member');
+      eq(tribe.author, A.keypair.id, 'the author is the creator');
+      eq(tribe.createdAt, created, 'the creation date is the original one');
+      eq((await P.use('tribes').listAll())[0].author, A.keypair.id);
+    }
+    B.setActor();
+    await throwsAsync(() => B.use('tribes').generateInvite(r.key), 'Only the author');
+    A.setActor();
+    await tmA.updateTribeById(r.key, { title: 'Great Hall' });
+    const updated = await tmA.getTribeById(r.key);
+    eq(updated.title, 'Great Hall');
+    eq(updated.author, A.keypair.id);
+    eq(updated.createdAt, created);
+  });
+
   t('B cannot join with wrong code', async () => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net);
@@ -376,5 +411,80 @@ describe('tribes: a tribe with a long history', (t) => {
     notOk(after.some(x => x.title === 'Long'), 'the deleted tribe is gone');
     notOk(after.some(x => x.title === 'Child'), 'and its sub-tribe with it');
     void sub;
+  });
+});
+
+describe('tribes: content versions republished by other members', (t) => {
+  const setup = async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('tribes').createTribe('Guild', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    for (const P of [B, C]) {
+      A.setActor();
+      const code = await A.use('tribes').generateInvite(r.key);
+      P.setActor();
+      await P.use('tribes').joinByInvite(code);
+    }
+    A.setActor();
+    return { net, A, B, C, tribeId: r.key };
+  };
+  const body = (P, net, key) => P.tribeCrypto.unwrapMsg(net.log.find(m => m.key === key).value.content, P.tribeCrypto.buildFingerprintIndex()).body;
+  const repost = (P, tribeId, b) => new Promise((res, rej) => P.node.publish(P.tribeCrypto.wrapMsg(b, P.tribeCrypto.getKey(tribeId)), (e, m) => e ? rej(e) : res(m)));
+
+  t('a chain crossing other members stays one item with the latest content of its author', async () => {
+    const { net, A, B, C, tribeId } = await setup();
+    const created = await A.use('tribesContent').create(tribeId, 'event', { title: 'Fair', description: 'd', date: '2099-01-01' });
+    const b = await repost(B, tribeId, { ...body(B, net, created.key), replaces: created.key });
+    const c = await repost(C, tribeId, { ...body(C, net, b.key), replaces: b.key });
+    await repost(A, tribeId, { ...body(A, net, c.key), title: 'Fair II', replaces: c.key });
+    const items = (await A.use('tribesContent').listByTribe(tribeId, 'event')).filter(i => i.title === 'Fair' || i.title === 'Fair II');
+    eq(items.length, 1);
+    eq(items[0].author, A.keypair.id);
+    eq(items[0].title, 'Fair II');
+    const byCopy = await A.use('tribesContent').getById(c.key);
+    eq(byCopy.id, items[0].id);
+    eq(byCopy.originId, items[0].originId);
+  });
+
+  t('attending through a foreign version lands on the item', async () => {
+    const { net, A, B, tribeId } = await setup();
+    const created = await A.use('tribesContent').create(tribeId, 'event', { title: 'Dance', description: 'd', date: '2099-01-01' });
+    const b = await repost(B, tribeId, { ...body(B, net, created.key), replaces: created.key });
+    B.setActor();
+    await B.use('tribesContent').toggleAttendee(b.key);
+    A.setActor();
+    const items = (await A.use('tribesContent').listByTribe(tribeId, 'event')).filter(i => i.title === 'Dance');
+    eq(items.length, 1);
+    ok(items[0].attendees.includes(B.keypair.id));
+  });
+
+  t('a foreign version never changes the item', async () => {
+    const { net, A, B, tribeId } = await setup();
+    const created = await A.use('tribesContent').create(tribeId, 'event', { title: 'Market day', description: 'd', date: '2099-01-01' });
+    await repost(B, tribeId, { ...body(B, net, created.key), title: 'Market day by B', replaces: created.key });
+    const items = (await A.use('tribesContent').listByTribe(tribeId, 'event')).filter(i => i.title === 'Market day' || i.title === 'Market day by B');
+    eq(items.length, 1);
+    eq(items[0].title, 'Market day');
+    eq(items[0].author, A.keypair.id);
+  });
+});
+
+describe('tribes: deleting content reached through a foreign version', (t) => {
+  t('the author deletes the item even when asked by the id of a copy', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('tribes').createTribe('Club', '', null, '', [], true, 'strict', null, 'OPEN', '');
+    const code = await A.use('tribes').generateInvite(r.key);
+    B.setActor();
+    await B.use('tribes').joinByInvite(code);
+    A.setActor();
+    const created = await A.use('tribesContent').create(r.key, 'event', { title: 'Meetup', description: 'd', date: '2099-01-01' });
+    const env = net.log.find(m => m.key === created.key).value.content;
+    const body = B.tribeCrypto.unwrapMsg(env, B.tribeCrypto.buildFingerprintIndex()).body;
+    const b = await new Promise((res, rej) => B.node.publish(B.tribeCrypto.wrapMsg({ ...body, replaces: created.key }, B.tribeCrypto.getKey(r.key)), (e, m) => e ? rej(e) : res(m)));
+    await A.use('tribesContent').deleteById(b.key);
+    eq((await A.use('tribesContent').listByTribe(r.key, 'event')).filter(i => i.title === 'Meetup').length, 0);
   });
 });

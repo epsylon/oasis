@@ -252,8 +252,6 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     const nodes = new Map()
     const parent = new Map()
     const child = new Map()
-    const strictParent = new Map()
-    const strictChild = new Map()
     const authorByKey = new Map()
     const tombRequests = []
     const memberMsgs = []
@@ -266,15 +264,10 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       if (c.type === "tombstone" && c.target) { tombRequests.push({ target: c.target, author: v.author }); continue }
       if (c.type === "padMember" && c.target) { memberMsgs.push({ target: c.target, member: c.member, on: c.on !== false, author: v.author, ts: v.timestamp || m.timestamp || 0, code: typeof c.code === "string" ? c.code : "", keyProof: typeof c.keyProof === "string" ? c.keyProof : "" }); continue }
       if (c.type === "pad") {
-        nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
+        nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, seq: v.sequence || 0, c, author: v.author })
         authorByKey.set(k, v.author)
         if (c.replaces) { parent.set(k, c.replaces); child.set(c.replaces, k) }
       }
-    }
-
-    for (const [k, node] of nodes) {
-      const t = node.c.replaces
-      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) { strictParent.set(k, t); strictChild.set(t, k) } }
     }
 
     for (const t of tombRequests) {
@@ -284,25 +277,26 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
 
     const rootOf = (id) => { let cur = id, g = 0; while (parent.has(cur) && g++ < 100000) cur = parent.get(cur); return cur }
     const tipOf = (id) => { let cur = id, g = 0; while (child.has(cur) && g++ < 100000) cur = child.get(cur); return cur }
-    const strictRootOf = (id) => { let cur = id, g = 0; while (strictParent.has(cur) && g++ < 100000) cur = strictParent.get(cur); return cur }
-    const contentTipOf = (root) => {
-      const rn = nodes.get(root)
-      if (!rn) return root
-      let cur = root, best = root, g = 0
-      const seen = new Set()
-      while (child.has(cur) && !seen.has(cur) && g++ < 100000) {
-        seen.add(cur)
-        const next = child.get(cur)
-        const n = nodes.get(next)
-        if (!n) break
-        if (n.author === rn.author && !tomb.has(next)) best = next
-        cur = next
-      }
-      return best
+    const rootMemo = new Map()
+    const groupRootOf = (id) => {
+      if (rootMemo.has(id)) return rootMemo.get(id)
+      let cur = id, g = 0
+      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur)
+      rootMemo.set(id, cur)
+      return cur
     }
+    const ownerTip = new Map()
+    for (const [k, n] of nodes) {
+      const r = groupRootOf(k)
+      const rn = nodes.get(r)
+      if (!rn || n.author !== rn.author) continue
+      const prev = ownerTip.has(r) ? nodes.get(ownerTip.get(r)) : null
+      if (!prev || n.seq > prev.seq || (n.seq === prev.seq && n.ts >= prev.ts)) ownerTip.set(r, k)
+    }
+    const contentTipOf = (root) => ownerTip.get(root) || root
 
     const roots = new Set()
-    for (const id of nodes.keys()) roots.add(strictRootOf(id))
+    for (const id of nodes.keys()) roots.add(groupRootOf(id))
 
     const invitesOf = (root) => {
       const out = []
@@ -323,7 +317,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     const codeClaimsByRoot = new Map()
     for (const mm of memberMsgs) {
       if (!nodes.has(mm.target)) continue
-      const r = strictRootOf(mm.target)
+      const r = groupRootOf(mm.target)
       const ownerAuthor = nodes.get(r) && nodes.get(r).author
       if (!ownerAuthor) continue
       const self = mm.member === mm.author
@@ -353,6 +347,16 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       return !!(set && set.has(code))
     }
 
+    for (const [k, n] of nodes) {
+      const r = groupRootOf(k)
+      const rn = nodes.get(r)
+      if (!rn || n.author === rn.author || !Array.isArray(n.c.members) || !selfJoinAllowed(r, { member: n.author })) continue
+      if (!memberByRoot.has(r)) memberByRoot.set(r, new Map())
+      const m2 = memberByRoot.get(r)
+      const p = m2.get(n.author)
+      if (!p || n.ts >= p.ts) m2.set(n.author, { on: n.c.members.includes(n.author), ts: n.ts })
+    }
+
     const resolveMembers = (root) => {
       const ownerNode = nodes.get(root)
       const oc = ownerNode ? ownerNode.c : {}
@@ -364,7 +368,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     const tipByRoot = new Map()
     for (const r of roots) tipByRoot.set(r, contentTipOf(r))
 
-    return { tomb, nodes, parent, child, rootOf, tipOf, strictRootOf, contentTipOf, tipByRoot, resolveMembers, isCodeConsumed, codeClaims }
+    return { tomb, nodes, parent, child, rootOf, tipOf, groupRootOf, contentTipOf, tipByRoot, resolveMembers, isCodeConsumed, codeClaims }
   }
 
   const decryptPadFields = (c, rootId, tribeKeys) => {
@@ -461,7 +465,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      const root = idx.strictRootOf(id)
+      const root = idx.groupRootOf(id)
       const tip = idx.contentTipOf(root)
       if (idx.tomb.has(tip)) throw new Error("Not found")
       return root
@@ -471,7 +475,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      const root = idx.strictRootOf(id)
+      const root = idx.groupRootOf(id)
       const tip = idx.contentTipOf(root)
       if (idx.tomb.has(tip)) throw new Error("Not found")
       return tip
@@ -701,7 +705,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = memoIndex('pads', messages, buildIndex)
-      const root = idx.strictRootOf(id)
+      const root = idx.groupRootOf(id)
       const tip = idx.contentTipOf(root)
       if (idx.tomb.has(tip)) return null
       const node = idx.nodes.get(tip)

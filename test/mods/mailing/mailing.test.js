@@ -1,4 +1,4 @@
-const { eq, ok, notOk } = require('../../helpers/assert');
+const { eq, ok, notOk, throwsAsync } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
 const subscribe = async (peer, id) => { peer.setActor(); await peer.use('subscriptions').setSubscription(id, 'mailing', true); };
@@ -122,6 +122,78 @@ describe('mailing: CLOSED lists are encrypted and invisible to outsiders', (t) =
     C.setActor();
     notOk(await C.use('mailing').getListById(r.key), 'a removed member loses access');
     eq((await C.use('mailing').listAll({ filter: 'closed' })).length, 0);
+  });
+});
+
+describe('mailing: only the list author changes or deletes a list', (t) => {
+  const backdated = async (fn) => {
+    const realNow = Date.now;
+    Date.now = () => realNow() - 30 * 86400000;
+    try { return await fn(); } finally { Date.now = realNow; }
+  };
+  const publishPrivate = async (P, content, recps) => {
+    const ssb = await P.cooler.open();
+    return new Promise((res, rej) => ssb.private.publish(content, recps, (e, r) => e ? rej(e) : res(r)));
+  };
+
+  t('a member cannot delete a closed list; its author can', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('mailing').createList({ title: 'Circle', listType: 'CLOSED', members: [B.keypair.id, C.keypair.id] });
+    const tipId = (await A.use('mailing').getListById(r.key)).tipId;
+    const recps = [A.keypair.id, B.keypair.id, C.keypair.id];
+    await publishPrivate(B, { type: 'mailingList', listId: r.key, title: 'Circle', status: 'DELETED', author: B.keypair.id, replaces: tipId, private: true }, recps);
+    await publishPrivate(B, { type: 'mailingList', listId: r.key, title: 'Circle', status: 'DELETED', author: A.keypair.id, private: true }, recps);
+    for (const P of [A, B, C]) {
+      P.setActor();
+      const list = await P.use('mailing').getListById(r.key);
+      ok(list, 'the list survives a member deleting it');
+      eq(list.author, A.keypair.id);
+    }
+    A.setActor();
+    await A.use('mailing').deleteList(r.key);
+    for (const P of [A, B, C]) {
+      P.setActor();
+      notOk(await P.use('mailing').getListById(r.key), 'the author deletes it for everyone');
+    }
+  });
+
+  t('a backdated version from a member does not take over a closed list', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('mailing').createList({ title: 'Circle', listType: 'CLOSED', members: [B.keypair.id, C.keypair.id] });
+    const recps = [A.keypair.id, B.keypair.id, C.keypair.id];
+    await backdated(() => publishPrivate(B, { type: 'mailingList', listId: r.key, title: 'Hijack', listType: 'CLOSED', status: 'ACTIVE', members: [B.keypair.id], author: B.keypair.id, createdAt: new Date(Date.now()).toISOString(), private: true }, recps));
+    for (const P of [A, B, C]) {
+      P.setActor();
+      const list = await P.use('mailing').getListById(r.key);
+      ok(list, 'the list is still visible to its members');
+      eq(list.author, A.keypair.id, 'the creator keeps the list');
+      eq(list.title, 'Circle');
+      eq(list.participantCount, 3);
+    }
+    B.setActor();
+    await throwsAsync(() => B.use('mailing').updateList(r.key, { title: 'Hijack' }), 'Only the author');
+    A.setActor();
+    await A.use('mailing').updateList(r.key, { title: 'Inner circle' });
+    C.setActor();
+    eq((await C.use('mailing').getListById(r.key)).title, 'Inner circle', 'the author still updates it');
+  });
+
+  t('a backdated version from another inhabitant does not take over an open list', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('mailing').createList({ title: 'Neighbours', listType: 'OPEN' });
+    const ssbB = await B.cooler.open();
+    await backdated(() => new Promise((res, rej) => ssbB.publish({ type: 'mailingList', title: 'Hijack', listType: 'OPEN', status: 'ARCHIVED', author: B.keypair.id, replaces: r.key }, (e) => e ? rej(e) : res())));
+    for (const P of [A, B]) {
+      P.setActor();
+      const list = await P.use('mailing').getListById(r.key);
+      eq(list.author, A.keypair.id);
+      eq(list.title, 'Neighbours'); eq(list.status, 'ACTIVE');
+    }
+    B.setActor();
+    await throwsAsync(() => B.use('mailing').updateList(r.key, { title: 'Hijack' }), 'Only the author');
   });
 });
 

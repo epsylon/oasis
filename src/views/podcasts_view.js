@@ -8,7 +8,7 @@ const { config } = require("../server/SSB_server.js");
 
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["RECENT", "MINE", "ALL", "TOP", "VIEWERS"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "TOP", "VIEWERS"];
 const CATEGORIES = ["NEWS", "MUSIC", "TALK", "EDUCATION", "TECH", "CULTURE", "COMMUNITY", "OASIS", "OTHER"];
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();

@@ -1,6 +1,11 @@
 const { eq, ok, notOk, throwsAsync } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
+const publishAs = async (peer, content) => {
+  const ssb = await peer.cooler.open();
+  return new Promise((res, rej) => ssb.publish(content, (err, msg) => err ? rej(err) : res(msg)));
+};
+
 describe('tasks: create + list + assign', (t) => {
   t('A creates task', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
@@ -137,5 +142,36 @@ describe('tasks: permissions + validation', (t) => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('tasks').createTask('S', '', '2030-01-01', '2030-01-05', 'LOW', '', [], 'public');
     await throwsAsync(() => A.use('tasks').updateTaskStatus(r.key, 'BOGUS'), /Invalid status/);
+  });
+});
+
+describe('tasks: versions republished by other inhabitants', (t) => {
+  t('foreign versions in the chain do not duplicate the item and the author edit after them wins', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('tasks').createTask('Original', '', '2030-01-01', '2030-01-05', 'LOW', '', [], 'public');
+    const raw = net.log.find(m => m.key === r.key).value.content;
+    const vB = await publishAs(B, { ...raw, replaces: r.key });
+    const vC = await publishAs(C, { ...raw, replaces: vB.key });
+    await publishAs(A, { ...raw, title: 'Edited', replaces: vC.key });
+    const list = await A.use('tasks').listAll();
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Edited');
+    const viaC = await A.use('tasks').getTaskById(vC.key);
+    eq(viaC.rootId, list[0].rootId);
+    eq(viaC.title, 'Edited');
+  });
+
+  t('a foreign version with a changed title does not change the item', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('tasks').createTask('Original', '', '2030-01-01', '2030-01-05', 'LOW', '', [], 'public');
+    const raw = net.log.find(m => m.key === r.key).value.content;
+    await publishAs(B, { ...raw, title: 'Hijacked', replaces: r.key });
+    const list = await A.use('tasks').listAll();
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Original');
   });
 });

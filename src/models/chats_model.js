@@ -151,7 +151,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         continue
       }
       if (c.type === "chat") {
-        nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
+        nodes.set(k, { key: k, ts: v.timestamp || m.timestamp || 0, seq: v.sequence || 0, c, author: v.author })
         authorByKey.set(k, v.author)
         if (c.replaces) { parent.set(k, c.replaces); child.set(c.replaces, k) }
       } else if (c.type === "chatMessage") {
@@ -160,24 +160,28 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       }
     }
 
-    const strictParent = new Map()
-    const strictChild = new Map()
-    for (const [c1, p1] of parent.entries()) {
-      const childNode = nodes.get(c1)
-      const parentNode = nodes.get(p1)
-      if (childNode && parentNode && childNode.author === parentNode.author) {
-        strictParent.set(c1, p1)
-        strictChild.set(p1, c1)
-      }
-    }
-
     for (const t of tombRequests) {
       const targetAuthor = authorByKey.get(t.target)
       if (targetAuthor && t.author === targetAuthor) tomb.add(t.target)
     }
 
-    const rootOf = (id) => { let cur = id; while (strictParent.has(cur)) cur = strictParent.get(cur); return cur }
-    const tipOf = (id) => { let cur = id; while (strictChild.has(cur)) cur = strictChild.get(cur); return cur }
+    const rootMemo = new Map()
+    const rootOf = (id) => {
+      if (rootMemo.has(id)) return rootMemo.get(id)
+      let cur = id, g = 0
+      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur)
+      rootMemo.set(id, cur)
+      return cur
+    }
+    const ownerTip = new Map()
+    for (const [k, n] of nodes) {
+      const r = rootOf(k)
+      const rn = nodes.get(r)
+      if (!rn || n.author !== rn.author) continue
+      const prev = ownerTip.has(r) ? nodes.get(ownerTip.get(r)) : null
+      if (!prev || n.seq > prev.seq || (n.seq === prev.seq && n.ts >= prev.ts)) ownerTip.set(r, k)
+    }
+    const tipOf = (id) => { const r = rootOf(id); return ownerTip.get(r) || r }
 
     const roots = new Set()
     for (const id of nodes.keys()) roots.add(rootOf(id))
@@ -227,6 +231,17 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
 
     const rawRootOf = (id) => { let cur = id, g = 0; while (parent.has(cur) && g++ < 100000) cur = parent.get(cur); return cur }
 
+    for (const [f, fNode] of nodes) {
+      const r = rootOf(f)
+      if (!nodes.has(r) || fNode.author === nodes.get(r).author) continue
+      const opened = decryptChatContent(fNode.c, r)
+      if (opened.undecryptable || !Array.isArray(opened.c && opened.c.members)) continue
+      if (!memberByRoot.has(r)) memberByRoot.set(r, new Map())
+      const perMember = memberByRoot.get(r)
+      const prev = perMember.get(fNode.author)
+      if (!prev || fNode.ts >= prev.ts) perMember.set(fNode.author, { on: opened.c.members.includes(fNode.author), ts: fNode.ts })
+    }
+
     const reactionByKey = new Map()
     for (const r of reactMsgs) {
       const rk = `${r.target}|${r.author}|${r.emoji}`
@@ -239,7 +254,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       if (!prev || pm.ts >= prev.ts) pinByTarget.set(pm.target, pm)
     }
 
-    return { tomb, nodes, parent: strictParent, child: strictChild, rawParent: parent, rawChild: child, rawRootOf, rootOf, tipOf, tipByRoot, msgNodes, memberByRoot, consumedByRoot, isCodeConsumed, codeClaims, reactionByKey, pinByTarget }
+    return { tomb, nodes, rawRootOf, rootOf, tipOf, tipByRoot, msgNodes, memberByRoot, consumedByRoot, isCodeConsumed, codeClaims, reactionByKey, pinByTarget }
   }
 
   const resolveKeyChainSets = (chatRootId) => {
@@ -448,11 +463,8 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
-      if (idx.tomb.has(tip)) throw new Error("Not found")
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
+      const root = idx.rootOf(id)
+      if (idx.tomb.has(idx.tipOf(root))) throw new Error("Not found")
       return root
     },
 
@@ -460,8 +472,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const tip = idx.tipOf(idx.rootOf(id))
       if (idx.tomb.has(tip)) throw new Error("Not found")
       return tip
     },
@@ -548,8 +559,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
 
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let rootId = tipId
-      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
+      const rootId = idx.rootOf(tipId)
       const node = { key: tipId, c, author: item.author, ts: item.timestamp || 0 }
       const chat = buildChat(node, rootId, idx)
       if (!chat) throw new Error("Invalid chat")
@@ -620,11 +630,9 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const userId = ssbClient.id
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const root = idx.rootOf(id)
+      const tip = idx.tipOf(root)
       if (idx.tomb.has(tip)) throw new Error("Not found")
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
 
       const node = idx.nodes.get(tip)
       if (!node) throw new Error("Not found")
@@ -659,15 +667,12 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const messages = await readAll(ssbClient)
       const idx = memoIndex('chats', messages, buildIndex)
 
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const root = idx.rootOf(id)
+      const tip = idx.tipOf(root)
       if (idx.tomb.has(tip)) return null
 
       const node = idx.nodes.get(tip)
       if (!node || node.c.type !== "chat") return null
-
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
 
       const chat = buildChat(node, root, idx)
       if (!chat) return null

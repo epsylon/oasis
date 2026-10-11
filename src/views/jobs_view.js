@@ -26,9 +26,9 @@ const renderMediaBlob = (value, attrs = {}) => {
 const userId = config.keys.id
 
 const FILTERS = [
+  { key: "ALL", i18n: "jobsFilterAll", title: "jobsAllTitle" },
   { key: "RECENT", i18n: "jobsFilterRecent", title: "jobsRecentTitle" },
   { key: "MINE", i18n: "jobsFilterMine", title: "jobsMineTitle" },
-  { key: "ALL", i18n: "jobsFilterAll", title: "jobsAllTitle" },
   { key: "TOP", i18n: "jobsFilterTop", title: "jobsTopTitle" },
   { key: "APPLIED", i18n: "jobsFilterApplied", title: "jobsAppliedTitle" },
   { key: "REMOTE", i18n: "jobsFilterRemote", title: "jobsRemoteTitle" },

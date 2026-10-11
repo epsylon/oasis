@@ -246,9 +246,9 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
         form(
           { method: "GET", action: "/tasks" },
           ...(emptyMod ? [] : [
+          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
           ...(taskChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterRecent).toUpperCase())] : []),
           ...(taskChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMine).toUpperCase())] : []),
-          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
           ...(taskChipVisible("assigned") ? [button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAssigned).toUpperCase())] : []),
           ...(taskChipVisible("open") ? [button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterOpen).toUpperCase())] : []),
           ...(taskChipVisible("in-progress") ? [button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterInProgress).toUpperCase())] : []),
@@ -346,9 +346,9 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
     { class: "filters" },
     form(
       { method: "GET", action: "/tasks" },
+      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
       ...(taskChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterRecent).toUpperCase())] : []),
       ...(taskChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMine).toUpperCase())] : []),
-      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
       ...(taskChipVisible("assigned") ? [button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAssigned).toUpperCase())] : []),
       ...(taskChipVisible("open") ? [button({ type: "submit", name: "filter", value: "open", class: currentFilter === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterOpen).toUpperCase())] : []),
       ...(taskChipVisible("in-progress") ? [button({ type: "submit", name: "filter", value: "in-progress", class: currentFilter === "in-progress" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterInProgress).toUpperCase())] : []),

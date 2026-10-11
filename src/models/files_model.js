@@ -3,7 +3,7 @@ const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { readTyped, memoIndex } = require("./typed_log");
 
-const { dedupeBy, norm } = require('../backend/dedupe');
+const { dedupeBy, norm, versionGroups } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -64,9 +64,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   const buildIndex = (messages) => {
     const tomb = new Set();
     const nodes = new Map();
-    const parent = new Map();
-    const child = new Map();
-    const strictChild = new Map();
     const authorByKey = new Map();
     const tombRequests = [];
     const opinionMsgs = [];
@@ -89,49 +86,24 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const ts = v.timestamp || m.timestamp || 0;
       let sizeBytes = 0;
       try { sizeBytes = Buffer.byteLength(JSON.stringify(v), "utf8"); } catch (_) { sizeBytes = 0; }
-      nodes.set(k, { key: k, ts, c, sizeBytes, author: v.author });
+      nodes.set(k, { key: k, ts, seq: v.sequence || 0, c, sizeBytes, author: v.author });
       authorByKey.set(k, v.author);
-
-      if (c.replaces) {
-        parent.set(k, c.replaces);
-        child.set(c.replaces, k);
-      }
     }
 
-    for (const [k, node] of nodes) {
-      const t = node.c.replaces;
-      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
-    }
-
-    const rootOf = (id) => {
-      let cur = id, g = 0;
-      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
-      return cur;
-    };
-
-    const contentTipOf = (root) => {
-      let cur = root, g = 0;
-      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
-      const n = nodes.get(cur), rn = nodes.get(root);
-      return (n && rn && n.author === rn.author) ? cur : root;
-    };
+    const vg = versionGroups([...nodes.values()].map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: n.c.replaces || null, claimedAuthor: typeof n.c.author === "string" ? n.c.author : null })));
+    const rootOf = vg.rootOf;
+    const contentTipOf = vg.tipOf;
 
     for (const t of tombRequests) {
       const targetAuthor = authorByKey.get(t.target);
       if (targetAuthor && t.author === targetAuthor) tomb.add(t.target);
     }
 
-    const roots = new Set();
-    for (const id of nodes.keys()) roots.add(rootOf(id));
-
     const opinionsByRoot = new Map();
     for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
 
     const tipByRoot = new Map();
-    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
-
-    const forward = new Map();
-    for (const [newId, oldId] of parent.entries()) forward.set(oldId, newId);
+    for (const r of vg.roots) tipByRoot.set(r, contentTipOf(r));
 
     const resolveGroup = (root) => {
       const contentTip = contentTipOf(root);
@@ -148,7 +120,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       return { contentTip, contentNode, opinions, voters };
     };
 
-    return { tomb, nodes, parent, child, rootOf, tipByRoot, forward, resolveGroup };
+    return { tomb, nodes, rootOf, tipByRoot, resolveGroup };
   };
 
   const buildFile = (node, rootId, viewerId, agg) => {
@@ -200,12 +172,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(unwrapForIndex(messages));
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
-      if (idx.tomb.has(tip)) throw new Error("File not found");
-
-      let root = tip;
-      while (idx.parent.has(root)) root = idx.parent.get(root);
+      const root = idx.rootOf(id);
+      if (idx.tomb.has(idx.tipByRoot.get(root) || id)) throw new Error("File not found");
       return root;
     },
 
@@ -359,6 +327,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const idx = await memoIndex('files', messages, async (m) => { const built = buildIndex(unwrapForIndex(m)); await decryptIndexNodes(built); return built; });
 
       const root = idx.rootOf(id);
+      if (idx.nodes.has(root) && !idx.tipByRoot.has(root)) throw new Error("File not found");
       const agg = idx.resolveGroup(root);
       if (agg.contentNode && !idx.tomb.has(agg.contentTip)) return buildFile(agg.contentNode, root, viewer, agg);
 

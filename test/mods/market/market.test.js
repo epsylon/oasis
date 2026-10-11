@@ -188,3 +188,35 @@ describe('market: ratings', (t) => {
     ok(failed);
   });
 });
+
+describe('market: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('a chain crossing other authors stays one item with the latest content of its seller', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('market').createItem('exchange', 'Kettle', 'd', null, 10, [], 'OPEN', inDays(20), false, 1, '');
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), title: 'Kettle II', replaces: c.key });
+    const list = (await A.use('market').listAllItems('all')).filter(x => x.title === 'Kettle' || x.title === 'Kettle II');
+    eq(list.length, 1);
+    eq(list[0].seller, A.keypair.id);
+    eq(list[0].title, 'Kettle II');
+    const byCopy = await A.use('market').getItemById(c.key);
+    eq(byCopy.rootId, list[0].rootId);
+    eq(byCopy.id, list[0].id);
+  });
+
+  t('a foreign version never changes the item', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('market').createItem('exchange', 'Toaster', 'd', null, 10, [], 'OPEN', inDays(20), false, 1, '');
+    await pub(B, { ...raw(net, r.key), title: 'Toaster by B', replaces: r.key });
+    const list = (await A.use('market').listAllItems('all')).filter(x => x.title === 'Toaster' || x.title === 'Toaster by B');
+    eq(list.length, 1);
+    eq(list[0].title, 'Toaster');
+    eq(list[0].seller, A.keypair.id);
+  });
+});

@@ -1,6 +1,6 @@
 const pull = require("../server/node_modules/pull-stream");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('../backend/dedupe');
+const { dedupeBy, norm, versionGroups } = require('../backend/dedupe');
 const { readTyped, memoIndex } = require('./typed_log');
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
@@ -44,9 +44,6 @@ module.exports = ({ cooler }) => {
   const buildIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages);
     const nodes = new Map();
-    const parent = new Map();
-    const child = new Map();
-    const strictChild = new Map();
     const opinionMsgs = [];
 
     for (const m of messages) {
@@ -62,40 +59,15 @@ module.exports = ({ cooler }) => {
       const ts = v.timestamp || m.timestamp || 0;
       let sizeBytes = 0;
       try { sizeBytes = Buffer.byteLength(JSON.stringify(v), 'utf8'); } catch (_) { sizeBytes = 0; }
-      nodes.set(k, { key: k, ts, c, sizeBytes, author: v.author });
-
-      if (c.replaces) {
-        parent.set(k, c.replaces);
-        child.set(c.replaces, k);
-      }
+      nodes.set(k, { key: k, ts, seq: v.sequence || 0, c, sizeBytes, author: v.author });
     }
 
-    for (const [k, node] of nodes) {
-      const t = node.c.replaces;
-      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
-    }
-
-    const rootOf = (id) => {
-      let cur = id, g = 0;
-      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
-      return cur;
-    };
-
-    const contentTipOf = (root) => {
-      let cur = root, g = 0;
-      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
-      const n = nodes.get(cur), rn = nodes.get(root);
-      return (n && rn && n.author === rn.author) ? cur : root;
-    };
-
-    const roots = new Set();
-    for (const id of nodes.keys()) roots.add(rootOf(id));
+    const vg = versionGroups([...nodes.values()].map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: n.c.replaces || null, claimedAuthor: typeof n.c.author === "string" ? n.c.author : null })));
+    const rootOf = vg.rootOf;
+    const contentTipOf = vg.tipOf;
 
     const opinionsByRoot = new Map();
     for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
-
-    const forward = new Map();
-    for (const [newId, oldId] of parent.entries()) forward.set(oldId, newId);
 
     const resolveGroup = (root) => {
       const contentTip = contentTipOf(root);
@@ -113,9 +85,9 @@ module.exports = ({ cooler }) => {
     };
 
     const tipByRoot = new Map();
-    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
+    for (const r of vg.roots) tipByRoot.set(r, contentTipOf(r));
 
-    return { tomb, nodes, parent, child, rootOf, tipByRoot, forward, resolveGroup };
+    return { tomb, nodes, rootOf, tipByRoot, resolveGroup };
   };
 
   const buildAudio = (node, rootId, viewerId, agg) => {
@@ -132,7 +104,7 @@ module.exports = ({ cooler }) => {
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       tags: tagsArr,
-      author: c.author,
+      author: node.author,
       title: c.title || "",
       description: c.description || "",
       license: c.license || "",
@@ -164,12 +136,8 @@ module.exports = ({ cooler }) => {
       const messages = await getAllMessages(ssbClient);
       const idx = buildIndex(messages);
 
-      let tip = id;
-      while (idx.forward.has(tip)) tip = idx.forward.get(tip);
-      if (idx.tomb.has(tip)) throw new Error("Audio not found");
-
-      let root = tip;
-      while (idx.parent.has(root)) root = idx.parent.get(root);
+      const root = idx.rootOf(id);
+      if (idx.tomb.has(idx.tipByRoot.get(root) || id)) throw new Error("Audio not found");
       return root;
     },
 
@@ -365,7 +333,7 @@ module.exports = ({ cooler }) => {
 
       const rootId = idx.rootOf(id);
       const agg = idx.resolveGroup(rootId);
-      if (!agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error("Audio not found");
+      if (!idx.tipByRoot.has(rootId) || !agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error("Audio not found");
 
       return buildAudio(agg.contentNode, rootId, viewer, agg);
     },

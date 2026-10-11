@@ -580,3 +580,40 @@ describe('rooms: model', (t) => {
     eq(await A.use('rooms').getRoomById(r.key), null, 'deleting removes it');
   });
 });
+
+describe('rooms: versions republished by other inhabitants', (t) => {
+  t('fold into the one room of its author, with its latest content', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('rooms').createRoom({ title: 'Agora', description: 'talk', status: 'OPEN' });
+    const original = net.log.find(m => m.key === r.key).value.content;
+    const publishCopy = async (P, extra) => {
+      const ssb = await P.cooler.open();
+      return new Promise((res, rej) => ssb.publish({ ...original, ...extra }, (e, m) => e ? rej(e) : res(m)));
+    };
+    const vB = await publishCopy(B, { members: [A.keypair.id, B.keypair.id], replaces: r.key });
+    const vC = await publishCopy(C, { members: [A.keypair.id, B.keypair.id, C.keypair.id], replaces: vB.key });
+    await publishCopy(A, { title: 'Renamed', replaces: vC.key });
+    A.setActor();
+    const list = (await A.use('rooms').listAll({ filter: 'all', viewerId: A.keypair.id })).filter(x => x.rootId === r.key || x.key === r.key || x.title === original.title || x.title === 'Renamed');
+    eq(list.length, 1, 'a single room');
+    eq(list[0].author, A.keypair.id, 'shown with its author');
+    eq(list[0].title, 'Renamed', 'with the latest content of its author');
+    ok([B.keypair.id, C.keypair.id].every(id => list[0].members.includes(id)), 'those who joined stay members');
+    const viaCopy = await A.use('rooms').getRoomById(vC.key);
+    eq(viaCopy.rootId, r.key, 'a republished version opens the same room');
+  });
+
+  t('cannot change the content of the room', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('rooms').createRoom({ title: 'Agora', description: 'talk', status: 'OPEN' });
+    const original = net.log.find(m => m.key === r.key).value.content;
+    const ssbB = await B.cooler.open();
+    await new Promise((res, rej) => ssbB.publish({ ...original, title: 'Taken', members: [B.keypair.id], replaces: r.key }, (e, m) => e ? rej(e) : res(m)));
+    A.setActor();
+    const list = await A.use('rooms').listAll({ filter: 'all', viewerId: A.keypair.id });
+    eq(list.length, 1, 'a single room');
+    eq(list[0].title, original.title);
+  });
+});

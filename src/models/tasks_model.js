@@ -4,7 +4,7 @@ const { normalizeImages, normalizeVideo } = require('./media_gallery');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, memoIndex } = require('./typed_log');
-const { dedupeBy, norm } = require('../backend/dedupe');
+const { dedupeBy, norm, versionGroups } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, pmModel }) => {
@@ -36,9 +36,6 @@ module.exports = ({ cooler, pmModel }) => {
   const buildIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages);
     const nodes = new Map();
-    const parent = new Map();
-    const child = new Map();
-    const strictChild = new Map();
     const opinionMsgs = [];
     const assignMsgs = [];
 
@@ -54,34 +51,12 @@ module.exports = ({ cooler, pmModel }) => {
       if (c.type !== 'task') continue;
 
       const ts = v.timestamp || m.timestamp || 0;
-      nodes.set(k, { key: k, ts, c, author: v.author });
-
-      if (c.replaces) {
-        parent.set(k, c.replaces);
-        child.set(c.replaces, k);
-      }
+      nodes.set(k, { key: k, ts, seq: v.sequence || 0, c, author: v.author });
     }
 
-    for (const [k, node] of nodes) {
-      const t = node.c.replaces;
-      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
-    }
-
-    const rootOf = (id) => {
-      let cur = id, g = 0;
-      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
-      return cur;
-    };
-
-    const contentTipOf = (root) => {
-      let cur = root, g = 0;
-      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
-      const n = nodes.get(cur), rn = nodes.get(root);
-      return (n && rn && n.author === rn.author) ? cur : root;
-    };
-
-    const roots = new Set();
-    for (const id of nodes.keys()) roots.add(rootOf(id));
+    const vg = versionGroups([...nodes.values()].map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: n.c.replaces || null, claimedAuthor: typeof n.c.author === 'string' ? n.c.author : null })));
+    const rootOf = vg.rootOf;
+    const contentTipOf = vg.tipOf;
 
     const opinionsByRoot = new Map();
     for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
@@ -114,9 +89,9 @@ module.exports = ({ cooler, pmModel }) => {
     };
 
     const tipByRoot = new Map();
-    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
+    for (const r of vg.roots) tipByRoot.set(r, contentTipOf(r));
 
-    return { tomb, nodes, parent, child, rootOf, tipByRoot, resolveGroup };
+    return { tomb, nodes, rootOf, tipByRoot, resolveGroup };
   };
 
   const buildTask = (node, rootId, agg, now) => {
@@ -136,6 +111,11 @@ module.exports = ({ cooler, pmModel }) => {
       opinions_inhabitants: voters,
       status
     };
+  };
+
+  const currentTipId = async (ssb, id) => {
+    const idx = buildIndex(await getAllMessages(ssb));
+    return idx.tipByRoot.get(idx.rootOf(id)) || id;
   };
 
   return {
@@ -182,9 +162,10 @@ module.exports = ({ cooler, pmModel }) => {
     async deleteTaskById(taskId) {
       const ssb = await openSsb();
       const userId = ssb.id;
-      const task = await new Promise((res, rej) => ssb.get(taskId, (err, task) => err ? rej(new Error('Task not found')) : res(task)));
+      const tipId = await currentTipId(ssb, taskId);
+      const task = await new Promise((res, rej) => ssb.get(tipId, (err, task) => err ? rej(new Error('Task not found')) : res(task)));
       if (task.content.author !== userId) throw new Error('Not the author');
-      const tombstone = { type: 'tombstone', target: taskId, deletedAt: new Date().toISOString(), author: userId };
+      const tombstone = { type: 'tombstone', target: tipId, deletedAt: new Date().toISOString(), author: userId };
       return new Promise((res, rej) => ssb.publish(tombstone, (err, result) => err ? rej(err) : res(result)));
     },
 
@@ -195,8 +176,9 @@ module.exports = ({ cooler, pmModel }) => {
       const keys = Object.keys(updatedData || {}).filter(k => updatedData[k] !== undefined);
       if (keys.length === 1 && keys[0] === 'assignees') return this.toggleAssignee(taskId);
 
+      const tipId = await currentTipId(ssb, taskId);
       const old = await new Promise((res, rej) =>
-        ssb.get(taskId, (err, msg) => err || !msg ? rej(new Error('Task not found')) : res(msg))
+        ssb.get(tipId, (err, msg) => err || !msg ? rej(new Error('Task not found')) : res(msg))
       );
 
       const c = old.content;
@@ -259,7 +241,7 @@ module.exports = ({ cooler, pmModel }) => {
         video: updatedData.video !== undefined ? normalizeVideo(updatedData.video) : normalizeVideo(c.video),
         assignees: nextAssignees,
         updatedAt: new Date().toISOString(),
-        replaces: taskId
+        replaces: tipId
       };
 
       return new Promise((res, rej) => ssb.publish(updated, (err, result) => err ? rej(err) : res(result)));
@@ -278,7 +260,7 @@ module.exports = ({ cooler, pmModel }) => {
       const idx = memoIndex('tasks', messages, buildIndex);
       const rootId = idx.rootOf(taskId);
       const agg = idx.resolveGroup(rootId);
-      if (!agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error('Task not found');
+      if (!idx.tipByRoot.has(rootId) || !agg.contentNode || idx.tomb.has(agg.contentTip)) throw new Error('Task not found');
       return buildTask(agg.contentNode, rootId, agg, now);
     },
 

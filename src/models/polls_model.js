@@ -2,6 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, memoIndex } = require('./typed_log');
+const { versionGroups } = require('../backend/dedupe');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -62,26 +63,30 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
   const buildIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages);
     const nodes = new Map();
-    const replaced = new Map();
     const votesByRoot = new Map();
     const opinionsByRoot = new Map();
     const closedRoots = new Set();
     const commentsByRoot = new Map();
-    const authorByKey = new Map();
+    const others = [];
 
     for (const m of messages) {
       const v = m && m.value;
       const c = v && v.content;
       if (!c || typeof c !== 'object') continue;
-      authorByKey.set(m.key, v.author);
+      if (c.type === POLL_TYPE) nodes.set(m.key, { key: m.key, author: v.author, seq: v.sequence || 0, ts: v.timestamp || m.timestamp || 0, c });
+      else others.push(m);
+    }
 
-      if (c.type === POLL_TYPE) {
-        nodes.set(m.key, { key: m.key, author: v.author, ts: v.timestamp || m.timestamp || 0, c });
-        if (typeof c.replaces === 'string') replaced.set(c.replaces, m.key);
-        continue;
-      }
+    const vg = versionGroups(Array.from(nodes.values()).map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: typeof n.c.replaces === 'string' ? n.c.replaces : null, claimedAuthor: typeof n.c.author === 'string' ? n.c.author : null })));
+    const rootOf = vg.rootOf;
+    const tipOf = vg.tipOf;
+
+    for (const m of others) {
+      const v = m.value;
+      const c = v.content;
       if (c.type === VOTE_TYPE && typeof c.target === 'string') {
-        const entry = votesByRoot.get(c.target) || new Map();
+        const target = rootOf(c.target);
+        const entry = votesByRoot.get(target) || new Map();
         const list = entry.get(v.author) || [];
         list.push({
           ts: v.timestamp || m.timestamp || 0,
@@ -89,53 +94,30 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
           encryptedChoices: typeof c.encryptedChoices === 'string' ? c.encryptedChoices : null
         });
         entry.set(v.author, list);
-        votesByRoot.set(c.target, entry);
+        votesByRoot.set(target, entry);
         continue;
       }
       if (c.type === OPINION_TYPE && typeof c.target === 'string') {
-        const entry = opinionsByRoot.get(c.target) || { counts: {}, voters: [] };
+        const target = rootOf(c.target);
+        const entry = opinionsByRoot.get(target) || { counts: {}, voters: [] };
         if (!entry.voters.includes(v.author)) {
           entry.voters.push(v.author);
           entry.counts[c.category] = (entry.counts[c.category] || 0) + 1;
         }
-        opinionsByRoot.set(c.target, entry);
+        opinionsByRoot.set(target, entry);
         continue;
       }
       if (c.type === 'pollClose' && typeof c.target === 'string') {
-        closedRoots.add(`${v.author}|${c.target}`);
+        closedRoots.add(`${v.author}|${rootOf(c.target)}`);
         continue;
       }
       if (c.type === 'post' && typeof c.root === 'string') {
-        commentsByRoot.set(c.root, (commentsByRoot.get(c.root) || 0) + 1);
+        const target = rootOf(c.root);
+        commentsByRoot.set(target, (commentsByRoot.get(target) || 0) + 1);
       }
     }
 
-    const rootOf = (key) => {
-      let cur = key;
-      const seen = new Set();
-      while (nodes.has(cur) && nodes.get(cur).c.replaces && !seen.has(cur)) {
-        seen.add(cur);
-        const next = nodes.get(cur).c.replaces;
-        if (!nodes.has(next)) break;
-        cur = next;
-      }
-      return cur;
-    };
-
-    const tipOf = (root) => {
-      let cur = root;
-      const seen = new Set();
-      while (replaced.has(cur) && !seen.has(cur)) {
-        seen.add(cur);
-        const next = replaced.get(cur);
-        const node = nodes.get(next);
-        if (!node || node.author !== nodes.get(cur).author) break;
-        cur = next;
-      }
-      return cur;
-    };
-
-    return { tomb, nodes, replaced, votesByRoot, opinionsByRoot, closedRoots, commentsByRoot, rootOf, tipOf };
+    return { tomb, nodes, vg, votesByRoot, opinionsByRoot, closedRoots, commentsByRoot, rootOf, tipOf };
   };
 
   const isExpired = (c) => {
@@ -225,8 +207,6 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
     const ssbClient = await openSsb();
     const messages = await getAllMessages(ssbClient);
     const idx = memoIndex('polls', messages, buildIndex);
-    const roots = new Set();
-    for (const key of idx.nodes.keys()) roots.add(idx.rootOf(key));
 
     const keyCache = new Map();
     const keysFor = async (c) => {
@@ -240,7 +220,7 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
     };
 
     const list = [];
-    for (const rootId of roots) {
+    for (const rootId of idx.vg.roots) {
       const tipId = idx.tipOf(rootId);
       if (idx.tomb.has(tipId) || idx.tomb.has(rootId)) continue;
       const node = idx.nodes.get(tipId);

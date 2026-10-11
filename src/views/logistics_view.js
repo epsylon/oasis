@@ -7,7 +7,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["RECENT", "MINE", "ALL", "BOOKED", "HISTORY", "TOP"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "BOOKED", "HISTORY", "TOP"];
 const KIND_FILTERS = ["TRIPS", "SHIPMENTS"];
 const MODE_FILTERS = ["OFFERS", "REQUESTS"];
 const DATE_FILTERS = ["UPCOMING", "PAST", "CLOSED"];

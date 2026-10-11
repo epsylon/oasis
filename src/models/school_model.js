@@ -3,6 +3,7 @@ const moment = require("../server/node_modules/moment")
 const { getConfig } = require("../configs/config-manager.js")
 const { readTyped, memoIndex } = require("./typed_log")
 const { buildValidatedTombstoneSet } = require("./tombstone_validator")
+const { versionGroups } = require("../backend/dedupe")
 const opinionCategories = require("../backend/opinion_categories")
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
@@ -61,9 +62,6 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     const courseNodes = new Map()
     const lessonNodes = new Map()
     const certNodes = new Map()
-    const parent = new Map()
-    const child = new Map()
-    const naiveReplaces = new Map()
     const lessonReplaces = new Map()
     const enrollLatest = new Map()
     const transferAgg = new Map()
@@ -92,8 +90,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       if (c.type === "tombstone") continue
 
       if (c.type === "schoolCourse") {
-        courseNodes.set(key, { key, ts: v.timestamp || m.timestamp || 0, c, author: v.author })
-        if (c.replaces) naiveReplaces.set(key, c.replaces)
+        courseNodes.set(key, { key, ts: v.timestamp || m.timestamp || 0, seq: v.sequence || 0, c, author: v.author })
         continue
       }
 
@@ -221,16 +218,6 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       for (const ck of chain) transferAgg.set(ck, bill)
     }
 
-    for (const [key, replacesId] of naiveReplaces.entries()) {
-      const node = courseNodes.get(key)
-      if (!node) continue
-      const orig = courseNodes.get(replacesId)
-      if (!orig) continue
-      if (String(orig.author) !== String(node.author)) { courseNodes.delete(key); continue }
-      parent.set(key, replacesId)
-      child.set(replacesId, key)
-    }
-
     const lessonParent = new Map()
     for (const [key, target] of lessonReplaces.entries()) {
       const node = lessonNodes.get(key)
@@ -245,23 +232,12 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       return cur
     }
 
-    const rootOf = (id) => {
-      let cur = id
-      while (parent.has(cur)) cur = parent.get(cur)
-      return cur
-    }
-
-    const tipOf = (id) => {
-      let cur = id
-      while (child.has(cur)) cur = child.get(cur)
-      return cur
-    }
-
-    const roots = new Set()
-    for (const id of courseNodes.keys()) roots.add(rootOf(id))
+    const vg = versionGroups(Array.from(courseNodes.values()).map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: typeof n.c.replaces === "string" ? n.c.replaces : null, claimedAuthor: typeof n.c.author === "string" ? n.c.author : null })))
+    const rootOf = vg.rootOf
+    const tipOf = vg.tipOf
 
     const tipByRoot = new Map()
-    for (const r of roots) tipByRoot.set(r, tipOf(r))
+    for (const r of vg.roots) tipByRoot.set(r, tipOf(r))
 
     const courseAuthorOf = (id) => { const n = courseNodes.get(rootOf(id)); return n ? n.author : null }
     for (const [key, node] of lessonNodes.entries()) if (courseAuthorOf(node.c.courseId) !== node.author) lessonNodes.delete(key)
@@ -275,8 +251,9 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
 
     const enrollByCourse = new Map()
     for (const { courseId, author, value, transferId, keyProof } of enrollLatest.values()) {
-      if (!enrollByCourse.has(courseId)) enrollByCourse.set(courseId, new Map())
-      const enrollments = enrollByCourse.get(courseId)
+      const root = rootOf(courseId)
+      if (!enrollByCourse.has(root)) enrollByCourse.set(root, new Map())
+      const enrollments = enrollByCourse.get(root)
       if (value) enrollments.set(author, { transferId, keyProof: keyProof || null })
       else enrollments.delete(author)
     }
@@ -319,7 +296,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       }
     }
 
-    return { tomb, courseNodes, lessonNodes, certNodes, examNodes, parent, child, rootOf, tipOf, tipByRoot, enrollByCourse, transferAgg, grantsByCourse, opinionsByCourse, progressByCourse, examResultLatest, lessonRootOf, lessonChildOf, questionNodes, chatByCourse }
+    return { tomb, courseNodes, lessonNodes, certNodes, examNodes, vg, rootOf, tipOf, tipByRoot, enrollByCourse, transferAgg, grantsByCourse, opinionsByCourse, progressByCourse, examResultLatest, lessonRootOf, lessonChildOf, questionNodes, chatByCourse }
   }
 
   const keyProofFor = (keyHex, studentId) => {
@@ -487,26 +464,20 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     async resolveCurrentId(courseId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const { tomb, child } = indexOf(messages, ssbClient)
+      const { tomb, vg } = indexOf(messages, ssbClient)
 
-      let cur = courseId
-      while (child.has(cur)) cur = child.get(cur)
-      if (tomb.has(cur)) throw new Error("Course not found")
+      const cur = vg.tipOf(courseId)
+      if (tomb.has(cur) || vg.isForeignCopy(vg.rootOf(cur))) throw new Error("Course not found")
       return cur
     },
 
     async resolveRootId(courseId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const { tomb, parent, child } = indexOf(messages, ssbClient)
+      const { tomb, vg } = indexOf(messages, ssbClient)
 
-      let tip = courseId
-      while (child.has(tip)) tip = child.get(tip)
-      if (tomb.has(tip)) throw new Error("Course not found")
-
-      let root = tip
-      while (parent.has(root)) root = parent.get(root)
-      return root
+      if (tomb.has(vg.tipOf(courseId)) || vg.isForeignCopy(vg.rootOf(courseId))) throw new Error("Course not found")
+      return vg.rootOf(courseId)
     },
 
     async updateCourse(id, data) {
@@ -1436,12 +1407,9 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       const messages = await readAll(ssbClient)
       const idx = indexOf(messages, ssbClient)
 
-      let tipId = id
-      while (idx.child.has(tipId)) tipId = idx.child.get(tipId)
-      if (idx.tomb.has(tipId)) throw new Error("Course not found")
-
-      let rootId = tipId
-      while (idx.parent.has(rootId)) rootId = idx.parent.get(rootId)
+      const tipId = idx.tipOf(id)
+      const rootId = idx.rootOf(id)
+      if (idx.tomb.has(tipId) || idx.vg.isForeignCopy(rootId)) throw new Error("Course not found")
 
       const node = idx.courseNodes.get(tipId)
       if (!node) throw new Error("Course not found")

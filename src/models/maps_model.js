@@ -216,7 +216,7 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       if (c.type !== "map") continue;
 
       const ts = v.timestamp || m.timestamp || 0;
-      nodes.set(k, { key: k, ts, c, author: v.author });
+      nodes.set(k, { key: k, ts, seq: v.sequence || 0, c, author: v.author });
       authorByKey.set(k, v.author);
 
       if (c.replaces) {
@@ -244,21 +244,15 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       return cur;
     };
 
-    const contentTipOf = (root) => {
-      const rn = nodes.get(root);
-      if (!rn) return root;
-      let cur = root, best = root, g = 0;
-      const seen = new Set();
-      while (child.has(cur) && !seen.has(cur) && g++ < 100000) {
-        seen.add(cur);
-        const next = child.get(cur);
-        const n = nodes.get(next);
-        if (!n) break;
-        if (n.author === rn.author && !tomb.has(next)) best = next;
-        cur = next;
-      }
-      return best;
-    };
+    const ownerTip = new Map();
+    for (const [k, n] of nodes) {
+      const r = rootOf(k);
+      const rn = nodes.get(r);
+      if (!rn || n.author !== rn.author) continue;
+      const prev = ownerTip.has(r) ? nodes.get(ownerTip.get(r)) : null;
+      if (!prev || n.seq > prev.seq || (n.seq === prev.seq && n.ts >= prev.ts)) ownerTip.set(r, k);
+    }
+    const contentTipOf = (root) => ownerTip.get(root) || root;
 
     for (const t of tombRequests) {
       const targetAuthor = authorByKey.get(t.target);
@@ -323,6 +317,16 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const set = consumedByRoot.get(root);
       return !!(set && set.has(code));
     };
+
+    for (const [k, n] of nodes) {
+      const r = rootOf(k);
+      const rn = nodes.get(r);
+      if (!rn || n.author === rn.author || !Array.isArray(n.c.members) || !selfJoinAllowed(r, { member: n.author })) continue;
+      if (!memberByRoot.has(r)) memberByRoot.set(r, new Map());
+      const m2 = memberByRoot.get(r);
+      const prev = m2.get(n.author);
+      if (!prev || n.ts >= prev.ts) m2.set(n.author, { on: n.c.members.includes(n.author), ts: n.ts });
+    }
 
     const resolveMembers = (root) => {
       const ownerNode = nodes.get(root);
@@ -662,8 +666,8 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const idx = buildIndex(unwrapForIndex(messages));
       await decryptIndexNodes(idx);
 
-      let tipId = mapId;
-      while (idx.forward.has(tipId)) tipId = idx.forward.get(tipId);
+      const rootId = idx.rootOf(mapId);
+      const tipId = idx.contentTipOf(rootId);
       if (idx.tomb.has(tipId)) throw new Error("Map not found");
 
       const node = idx.nodes.get(tipId);
@@ -672,12 +676,11 @@ module.exports = ({ cooler, tribeCrypto, mapCrypto, tribesModel }) => {
       const mapDecrypted = await decryptIfTribe(node.c);
       assertReadable(mapDecrypted, "Map");
       const mapType = mapDecrypted.mapType || node.c.mapType || "SINGLE";
-      const mapAuthor = mapDecrypted.author || node.c.author;
+      const mapAuthor = node.author;
       if (mapType === "SINGLE") throw new Error("Map does not allow markers");
       if (mapType === "CLOSED" && mapAuthor !== userId) throw new Error("Only the map creator can add markers");
 
       const now = new Date().toISOString();
-      const rootId = idx.rootOf(tipId);
       let content = {
         type: "mapMarker",
         mapId: rootId,

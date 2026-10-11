@@ -405,3 +405,46 @@ describe('polls: what you see once you have voted', (t) => {
     ok(html.includes(String(require('../../../src/views/main_views').i18n.pollNoVotesYet)), 'it says there are no votes yet');
   });
 });
+
+describe('polls: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('a chain crossing other authors stays one poll with the latest content of its author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('polls').createPoll({ question: 'Lunch?', options: ['Yes', 'No'] });
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), question: 'Dinner?', replaces: c.key });
+    const list = (await A.use('polls').listAll('ALL')).filter(p => p.question === 'Lunch?' || p.question === 'Dinner?');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].question, 'Dinner?');
+    const byCopy = await A.use('polls').getPollById(c.key);
+    eq(byCopy.id, list[0].id);
+    eq(byCopy.tipId, list[0].tipId);
+  });
+
+  t('a foreign version never changes the poll', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('polls').createPoll({ question: 'Tea?', options: ['Yes', 'No'] });
+    await pub(B, { ...raw(net, r.key), question: 'Coffee?', replaces: r.key });
+    const list = (await A.use('polls').listAll('ALL')).filter(p => p.question === 'Tea?' || p.question === 'Coffee?');
+    eq(list.length, 1);
+    eq(list[0].question, 'Tea?');
+    eq(list[0].author, A.keypair.id);
+  });
+
+  t('an edit by the author is not hidden behind a later foreign version', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('polls').createPoll({ question: 'Walk?', options: ['Yes', 'No'] });
+    await A.use('polls').updatePoll(r.key, { question: 'Run?' });
+    await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const list = (await A.use('polls').listAll('ALL')).filter(p => p.question === 'Walk?' || p.question === 'Run?');
+    eq(list.length, 1);
+    eq(list[0].question, 'Run?');
+  });
+});

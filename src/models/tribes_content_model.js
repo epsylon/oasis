@@ -4,6 +4,7 @@ const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const tribeLogLimit = Math.max(logLimit, 100000);
 const { readTyped } = require('./typed_log');
 const longText = require('../backend/long_text');
+const { versionGroups } = require('../backend/dedupe');
 const TRIBE_LOG_TYPES = ['tribe', 'tribe-msg', 'tribe-keys-distrib', 'tribe-invite-msg', 'tribe-invite-tombstone', 'tribe-open-invite-tombstone', 'tombstone', 'contact'];
 
 const VALID_CONTENT_TYPES = ['event', 'task', 'report', 'votation', 'forum', 'forum-reply', 'market', 'job', 'project', 'media', 'feed', 'pixelia'];
@@ -105,28 +106,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       for (let i = collabMsgs.length - 1; i >= 0; i--) if (afterLeaving(collabMsgs[i].author, collabMsgs[i].ts, collabMsgs[i].seq)) collabMsgs.splice(i, 1);
     }
 
-    const naiveNext = new Map();
-    const strictNext = new Map();
-    for (const [key, node] of content) {
-      const t = node.body.replaces;
-      if (!t) continue;
-      naiveNext.set(t, key);
-      const orig = content.get(t);
-      if (orig && orig.author === node.author) strictNext.set(t, key);
-    }
-    for (const [t, key] of Array.from(naiveNext.entries())) {
-      const orig = content.get(t);
-      if (!orig) { naiveNext.delete(t); continue; }
-      const node = content.get(key);
-      if (!node || node.author !== orig.author) { naiveNext.delete(t); content.delete(key); }
-    }
-    const naivePrev = new Map();
-    for (const [t, key] of naiveNext) naivePrev.set(key, t);
-    const followTo = (start, nextMap) => { let x = start, g = 0; while (nextMap.has(x) && g++ < 100000) x = nextMap.get(x); return x; };
-    const rootOf = (key) => { let x = key, g = 0; while (naivePrev.has(x) && content.has(naivePrev.get(x)) && g++ < 100000) x = naivePrev.get(x); return x; };
-
-    const roots = new Set();
-    for (const [key, node] of content) { const t = node.body.replaces; if (!t || !content.has(t)) roots.add(key); }
+    const vg = versionGroups([...content].map(([key, node]) => ({ key, author: node.author, seq: node.seq, ts: node.ts, replaces: typeof node.body.replaces === 'string' ? node.body.replaces : null, claimedAuthor: typeof node.body.author === 'string' ? node.body.author : null })));
 
     const tombstoned = new Set();
     for (const t of tombRequests) { const orig = content.get(t.target); if (orig && t.author === orig.author) tombstoned.add(t.target); }
@@ -135,7 +115,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const getCB = (root) => { if (!collabByRoot.has(root)) collabByRoot.set(root, { vote: new Map(), attend: new Map(), assign: new Map(), refeed: new Set(), opinion: new Map() }); return collabByRoot.get(root); };
     for (const cm of collabMsgs) {
       if (!content.has(cm.target)) continue;
-      const a = getCB(rootOf(cm.target));
+      const a = getCB(vg.rootOf(cm.target));
       if (cm.sub === 'vote' && Number.isInteger(cm.option)) { if (!a.vote.has(cm.author)) a.vote.set(cm.author, cm.option); }
       else if (cm.sub === 'attend') { const p = a.attend.get(cm.author); if (!p || cm.ts >= p.ts) a.attend.set(cm.author, { on: cm.on !== false, ts: cm.ts }); }
       else if (cm.sub === 'assign') { const p = a.assign.get(cm.author); if (!p || cm.ts >= p.ts) a.assign.set(cm.author, { on: cm.on !== false, ts: cm.ts }); }
@@ -147,8 +127,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const tipOf = new Map();
     const EMPTY = { vote: new Map(), attend: new Map(), assign: new Map(), refeed: new Set(), opinion: new Map() };
 
-    for (const root of roots) {
-      const contentTip = followTo(root, strictNext);
+    for (const root of vg.roots) {
+      const contentTip = vg.tipOf(root);
       const tipNode = content.get(contentTip);
       if (!tipNode) continue;
       const body = tipNode.body;
@@ -180,8 +160,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       for (const [au, cat] of a.opinion) if (!opInh.has(au)) { opInh.add(au); opinions[cat] = (opinions[cat] || 0) + 1; }
       item.opinions_inhabitants = [...opInh]; item.opinions = opinions;
 
-      let cur = root, g = 0; tipOf.set(root, contentTip);
-      while (naiveNext.has(cur) && g++ < 100000) { cur = naiveNext.get(cur); tipOf.set(cur, contentTip); }
+      for (const k of (vg.groups.get(root) || [root])) tipOf.set(k, contentTip);
 
       if (tombstoned.has(contentTip)) continue;
       if (targetRootId && body.rootId !== targetRootId) continue;
@@ -267,7 +246,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         k: 'tribe-content',
         rootId,
         contentType: existing.contentType,
-        replaces: contentId,
+        replaces: existing.id || contentId,
         title: data.title !== undefined ? data.title : existing.title,
         description: data.description !== undefined ? data.description : existing.description,
         status: data.status !== undefined ? data.status : existing.status,
@@ -309,7 +288,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const body = {
         k: 'tombstone',
         rootId,
-        target: contentId,
+        target: existing.id || contentId,
         author: client.id,
         deletedAt: new Date().toISOString()
       };

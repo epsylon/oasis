@@ -18,7 +18,7 @@ const FILTER_LABELS = {
   school: i18n.typeSchool || 'SCHOOL'
 };
 
-const BASE_FILTERS = ['recent', 'mine', 'all', 'tombstone', 'logs'];
+const BASE_FILTERS = ['all', 'recent', 'mine', 'tombstone', 'logs'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'school', 'parliament', 'courts'];
 const CAT_BLOCK2  = ['pub', 'tribe', 'about', 'contact', 'curriculum', 'vote', 'aiExchange'];
 const CAT_BLOCK3  = ['banking', 'job', 'housing', 'market', 'project', 'industry', 'transfer', 'feed', 'post', 'pixelia', 'shop', 'gameScore'];
@@ -448,7 +448,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
   const qs = toQueryString(filter, s);
   const censusBlocks = Array.isArray(extras && extras.censusBlocks) ? extras.censusBlocks : blocks;
   const chipVisible = (mode) => mode === filter || filterBlocks(censusBlocks, mode, userId).length > 0;
-  const baseChips = ['recent', 'mine', 'all', ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
+  const baseChips = ['all', 'recent', 'mine', ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
 
   return template(
     i18n.blockchain,

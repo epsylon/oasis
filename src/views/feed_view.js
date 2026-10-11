@@ -257,7 +257,7 @@ exports.feedView = (feeds, opts = "ALL") => {
     successBanner,
     div(
       { class: "mode-buttons-row" },
-      ...(emptyMod ? [] : generateFilterButtons(["RECENT", "MINE", "ALL", "TOP"].filter(feedChip), filter, "/feed", extra)),
+      ...(emptyMod ? [] : generateFilterButtons(["ALL", "RECENT", "MINE", "TOP"].filter(feedChip), filter, "/feed", extra)),
       form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button filter-btn" }, i18n.createFeedTitle || "Create Feed"))
     ),
     emptyMod ? null : div(
@@ -332,9 +332,9 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
         { class: "filters" },
         form(
           { method: "GET", action: "/feed", class: "ui-toolbar ui-toolbar--filters" },
+          button({ type: "submit", name: "filter", value: "ALL", class: "filter-btn" }, i18n.ALLButton || "ALL"),
           ...(feedChip("RECENT") ? [button({ type: "submit", name: "filter", value: "RECENT", class: "filter-btn" }, i18n.RECENTButton || "RECENT")] : []),
           ...(feedChip("MINE") ? [button({ type: "submit", name: "filter", value: "MINE", class: "filter-btn" }, i18n.MINEButton || "MINE")] : []),
-          button({ type: "submit", name: "filter", value: "ALL", class: "filter-btn" }, i18n.ALLButton || "ALL"),
           button({ type: "submit", name: "filter", value: "TOP", class: "filter-btn" }, i18n.TOPButton || "TOP"),
           form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button" }, i18n.createFeedTitle || "Create Feed"))
         )

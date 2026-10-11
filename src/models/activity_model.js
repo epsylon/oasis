@@ -4,6 +4,7 @@ const ssbRef = require('../server/node_modules/ssb-ref');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildVoteTally } = require('../backend/vote_tally');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
+const { versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const safeFeedId = (v) => {
@@ -366,17 +367,23 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
 
       const forgedParentOf = new Map();
       const forgedFeedContent = new Map();
+      const vg = versionGroups(Array.from(idToAction.values()).map(a => versionEntry({ key: a.id, value: { ...(rawById.get(a.id) || {}).value, content: a.content } })));
       for (const [child, parent] of Array.from(parentOf.entries())) {
         const ca = idToAction.get(child);
-        const pa = idToAction.get(parent);
-        if (!pa) { parentOf.delete(child); continue; }
-        if (!ca || String(ca.author) !== String(pa.author)) {
+        if (vg.isOrphan(child)) {
+          parentOf.delete(child);
+          if (vg.isForeignCopy(child)) { idToAction.delete(child); rawById.delete(child); }
+          continue;
+        }
+        if (!ca || vg.isForeign(child)) {
           forgedParentOf.set(child, parent);
           if (ca && ca.type === 'feed') forgedFeedContent.set(child, ca.content || {});
           parentOf.delete(child);
           idToAction.delete(child);
           rawById.delete(child);
+          continue;
         }
+        if (vg.isForeign(parent)) parentOf.set(child, vg.rootOf(child));
       }
 
       const replacedIds = new Set(parentOf.values());

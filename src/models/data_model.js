@@ -3,6 +3,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
 const { isContentVisibleTo } = require('./content_visibility');
+const { versionGroups, versionEntry } = require('../backend/dedupe');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -127,7 +128,7 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
     const tomb = buildValidatedTombstoneSet(messages);
 
     const candidates = new Map();
-    const parentOf = new Map();
+    const versions = [];
     const follows = new Map();
     const followers = new Map();
     const aboutTerms = new Set();
@@ -145,26 +146,31 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
         if (v.author === viewerId && c.about === viewerId && typeof c.description === 'string') for (const t of descTerms(c)) aboutTerms.add(norm(t));
         continue;
       }
-      if (tomb.has(m.key)) continue;
       if (c.tribeId && c.type !== 'tribe') continue;
       const kind = KIND_BY_TYPE[c.type];
       if (!kind) continue;
+      versions.push(versionEntry(m));
+      if (tomb.has(m.key)) continue;
       if (!isContentVisibleTo(c.type, c, viewerId, v.author)) continue;
-      if (typeof c.replaces === 'string') parentOf.set(m.key, c.replaces);
       candidates.set(m.key, { key: m.key, author: v.author, ts: v.timestamp || m.timestamp || 0, kind, c });
     }
 
-    const rootOf = (key) => {
-      const seen = new Set();
-      let cur = key;
-      while (parentOf.has(cur) && !seen.has(cur)) { seen.add(cur); cur = parentOf.get(cur); }
-      return cur;
-    };
+    const vg = versionGroups(versions);
     const latestByRoot = new Map();
-    for (const cand of candidates.values()) {
-      const root = rootOf(cand.key);
-      const prev = latestByRoot.get(root);
-      if (!prev || cand.ts >= prev.ts) latestByRoot.set(root, { ...cand, key: root });
+    for (const root of vg.roots) {
+      const tip = candidates.get(vg.tipOf(root));
+      if (!tip) continue;
+      if (tip.kind !== 'tribes') { latestByRoot.set(root, { ...tip, key: root }); continue; }
+      const members = new Set(Array.isArray(tip.c.members) ? tip.c.members : []);
+      const lastByAuthor = new Map();
+      for (const k of vg.groups.get(root)) {
+        const n = candidates.get(k);
+        if (!n || n.author === tip.author || n.ts < tip.ts) continue;
+        const prev = lastByAuthor.get(n.author);
+        if (!prev || n.ts >= prev.ts) lastByAuthor.set(n.author, n);
+      }
+      for (const [a, n] of lastByAuthor) { if (Array.isArray(n.c.members) && n.c.members.includes(a)) members.add(a); else members.delete(a); }
+      latestByRoot.set(root, { ...tip, key: root, c: { ...tip.c, members: [...members] } });
     }
 
     const nodes = [];
@@ -178,8 +184,8 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
         id: node.key,
         kind: node.kind,
         ctype: KINDS[node.kind] ? KINDS[node.kind].type : '',
-        author: node.c.author || node.author,
-        title: titleOf(node.kind, node.c, node.c.author || node.author),
+        author: node.author,
+        title: titleOf(node.kind, node.c, node.author),
         terms,
         termSet: new Set(terms),
         coreTermSet: new Set(coreTerms),

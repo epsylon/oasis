@@ -427,3 +427,49 @@ describe('activity: phone events stay in the phone module', (t) => {
     ok(!feed.some(a => a.content && a.content.private === true), 'nothing private ever becomes a card');
   });
 });
+
+describe('activity: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+  const offer = (A, title) => A.use('jobs').createJob({ title, description: 'd', location: 'remote', job_type: 'freelancer', job_time: 'partial', vacants: 1, salary: '', requirements: '', tags: [], status: 'OPEN' });
+  const jobs = (feed, ...titles) => feed.filter(a => a.type === 'job' && titles.includes(a.content && a.content.title));
+
+  t('a chain crossing other authors is one action, by its author, with its latest content', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await offer(A, 'Baker');
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), title: 'Baker II', replaces: c.key });
+    A.use('activity').invalidateCache();
+    const list = jobs(await A.use('activity').listFeed('all'), 'Baker', 'Baker II');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].content.title, 'Baker II');
+  });
+
+  t('a foreign copy whose original is gone stays hidden, an own version whose original is gone stays', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const missing = '%missing00000000000000000000000000000000000.sha256';
+    const b = await pub(B, { type: 'job', title: 'Ghost', author: A.keypair.id, status: 'OPEN', replaces: missing, createdAt: new Date().toISOString() });
+    await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { type: 'job', title: 'Lonely', author: A.keypair.id, status: 'OPEN', replaces: missing, createdAt: new Date().toISOString() });
+    A.use('activity').invalidateCache();
+    const feed = await A.use('activity').listFeed('all');
+    eq(jobs(feed, 'Ghost').length, 0);
+    eq(jobs(feed, 'Lonely').length, 1);
+  });
+
+  t('a foreign version never changes the action', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await offer(A, 'Cook');
+    await pub(B, { ...raw(net, r.key), title: 'Cook by B', replaces: r.key });
+    A.use('activity').invalidateCache();
+    const list = jobs(await A.use('activity').listFeed('all'), 'Cook', 'Cook by B');
+    eq(list.length, 1);
+    eq(list[0].content.title, 'Cook');
+    eq(list[0].author, A.keypair.id);
+  });
+});

@@ -1,6 +1,11 @@
 const { eq, ok, throwsAsync } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
+const publishAs = async (peer, content) => {
+  const ssb = await peer.cooler.open();
+  return new Promise((res, rej) => ssb.publish(content, (err, msg) => err ? rej(err) : res(msg)));
+};
+
 const BLOB = '[t](&torrent00000000000000000000000000000000000000000000.sha256)';
 
 describe('torrents: create + list + opinion', (t) => {
@@ -101,5 +106,36 @@ describe('torrents: opinions validation', (t) => {
     const r = await A.use('torrents').createTorrent(BLOB, [], 'T', '', 1, null);
     await A.use('torrents').createOpinion(r.key, 'interesting');
     await throwsAsync(() => A.use('torrents').createOpinion(r.key, 'necessary'), /already voted/i);
+  });
+});
+
+describe('torrents: versions republished by other inhabitants', (t) => {
+  t('foreign versions in the chain do not duplicate the item and the author edit after them wins', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('torrents').createTorrent(BLOB, [], 'Original', '', 1, null);
+    const raw = net.log.find(m => m.key === r.key).value.content;
+    const vB = await publishAs(B, { ...raw, replaces: r.key });
+    const vC = await publishAs(C, { ...raw, replaces: vB.key });
+    await publishAs(A, { ...raw, title: 'Edited', replaces: vC.key });
+    const list = await A.use('torrents').listAll('all');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Edited');
+    const viaC = await A.use('torrents').getTorrentById(vC.key, A.keypair.id);
+    eq(viaC.rootId, list[0].rootId);
+    eq(viaC.title, 'Edited');
+  });
+
+  t('a foreign version with a changed title does not change the item', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('torrents').createTorrent(BLOB, [], 'Original', '', 1, null);
+    const raw = net.log.find(m => m.key === r.key).value.content;
+    await publishAs(B, { ...raw, title: 'Hijacked', replaces: r.key });
+    const list = await A.use('torrents').listAll('all');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Original');
   });
 });

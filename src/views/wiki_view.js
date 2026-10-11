@@ -7,7 +7,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const FILTERS = ["recent", "mine", "all", "linked"];
+const FILTERS = ["all", "recent", "mine", "linked"];
 
 const pageHref = (idOrSlug, tribeId = null) =>
   `/wiki/${encodeURIComponent(idOrSlug)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`;

@@ -283,6 +283,52 @@ describe('data: privacy and versions', (t) => {
   });
 });
 
+describe('data: versions republished by other inhabitants', (t) => {
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('a chain crossing other authors is suggested once, by its author, with its latest content', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net); const V = makePeer(net);
+    V.setActor(); await publishAs(V, cv(['solder']));
+    A.setActor();
+    const first = await publishAs(A, { type: 'job', title: 'first title', tags: ['solder'], tasks: [], author: A.keypair.id, createdAt: new Date().toISOString() });
+    const b = await publishAs(B, { ...raw(net, first.key), replaces: first.key });
+    const c = await publishAs(C, { ...raw(net, b.key), replaces: b.key });
+    await publishAs(A, { ...raw(net, c.key), title: 'second title', replaces: c.key });
+
+    V.setActor();
+    const { matches } = await V.use('data').listMatches('JOBS');
+    eq(matches.length, 1, 'one card for the whole version group');
+    eq(matches[0].title, 'second title', 'with the latest version of its author');
+    eq(matches[0].author, A.keypair.id, 'attributed to its author');
+    eq(matches[0].id, first.key, 'identified by its root');
+  });
+
+  t('a foreign version never changes the suggestion', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const V = makePeer(net);
+    V.setActor(); await publishAs(V, cv(['solder']));
+    A.setActor();
+    const first = await publishAs(A, { type: 'job', title: 'own title', tags: ['solder'], tasks: [], author: A.keypair.id, createdAt: new Date().toISOString() });
+    await publishAs(B, { ...raw(net, first.key), title: 'copied title', replaces: first.key });
+
+    V.setActor();
+    const { matches } = await V.use('data').listMatches('JOBS');
+    eq(matches.length, 1, 'one card');
+    eq(matches[0].title, 'own title', 'the content of its author');
+    eq(matches[0].author, A.keypair.id, 'attributed to its author');
+  });
+
+  t('joining a tribe through a version of my own still makes its members my tribe mates', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const V = makePeer(net);
+    A.setActor();
+    const tribe = await publishAs(A, { type: 'tribe', title: 'gardeners', isAnonymous: false, members: [A.keypair.id], author: A.keypair.id, createdAt: new Date().toISOString() });
+    await new Promise(r => setTimeout(r, 5));
+    V.setActor();
+    await publishAs(V, { ...raw(net, tribe.key), members: [A.keypair.id, V.keypair.id], replaces: tribe.key });
+    const { byAuthor } = await V.use('data').authorAffinities();
+    ok(byAuthor.get(A.keypair.id).reasons.includes('tribe'), 'the founder is a tribe mate');
+  });
+});
+
 describe('data: rendering', (t) => {
   t('reason chips render as filters and mark the active one', async () => {
     const { dataView } = require('../../../src/views/data_view');

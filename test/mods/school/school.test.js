@@ -1158,3 +1158,47 @@ describe('school: invitation codes come from the teacher', (t) => {
     ok(!c.students.includes(D.keypair.id) && !c.pending.some(p => p.author === D.keypair.id), 'nobody got in through it');
   });
 });
+
+describe('school: versions republished by other inhabitants', (t) => {
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('a chain crossing other authors stays one course with the latest content of its teacher', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course({ title: 'Pottery' }));
+    const b = await publishAs(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await publishAs(C, { ...raw(net, b.key), replaces: b.key });
+    await publishAs(A, { ...raw(net, c.key), title: 'Pottery II', replaces: c.key });
+    const list = (await A.use('school').listCourses('ALL', A.keypair.id, {})).filter(x => x.title === 'Pottery' || x.title === 'Pottery II');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Pottery II');
+    const byCopy = await A.use('school').getCourseById(c.key, A.keypair.id);
+    eq(byCopy.rootId, list[0].rootId);
+    eq(byCopy.id, list[0].id);
+  });
+
+  t('enrolling through a foreign version lands on the course', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course({ title: 'Weaving' }));
+    const b = await publishAs(B, { ...raw(net, r.key), replaces: r.key });
+    B.setActor();
+    await B.use('school').enroll(b.key);
+    A.setActor();
+    const list = (await A.use('school').listCourses('ALL', A.keypair.id, {})).filter(x => x.title === 'Weaving');
+    eq(list.length, 1);
+    ok(list[0].students.includes(B.keypair.id));
+  });
+
+  t('a foreign version never changes the course', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('school').createCourse(course({ title: 'Carving' }));
+    await publishAs(B, { ...raw(net, r.key), title: 'Carving by B', replaces: r.key });
+    const list = (await A.use('school').listCourses('ALL', A.keypair.id, {})).filter(x => x.title === 'Carving' || x.title === 'Carving by B');
+    eq(list.length, 1);
+    eq(list[0].title, 'Carving');
+    eq(list[0].author, A.keypair.id);
+  });
+});

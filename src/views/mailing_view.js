@@ -6,7 +6,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["RECENT", "MINE", "ALL", "SUBSCRIBED"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUBSCRIBED"];
 const TYPE_FILTERS = ["OPEN", "CLOSED"];
 const STATUS_FILTERS = ["ACTIVE", "ARCHIVED"];
 const HISTORY_MODES = ["DATE", "THREADS", "INHABITANTS"];

@@ -4,6 +4,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
 const { buildVoteResults } = require('../backend/vote_tally');
+const { versionGroups } = require('../backend/dedupe');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const CASE_ANSWER_DAYS = 7;
@@ -294,27 +295,24 @@ if (c.type === type) {
     for (const m of msgs) {
       const c = m.value?.content || m.content;
       if (!c || c.type !== 'courtsCase') continue;
-      nodes.set(m.key || m.id, { key: m.key || m.id, author: m.value?.author, c });
+      nodes.set(m.key || m.id, { key: m.key || m.id, author: m.value?.author, seq: m.value?.sequence || 0, ts: m.value?.timestamp || m.timestamp || 0, c });
     }
-    const strictNext = new Map(), strictPrev = new Map();
-    for (const [k, n] of nodes) {
-      const t = n.c.replaces;
-      if (t) { const o = nodes.get(t); if (o && o.author === n.author) { strictNext.set(t, k); strictPrev.set(k, t); } }
-    }
-    return { nodes, strictNext, strictPrev };
+    const vg = versionGroups([...nodes.values()].map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: typeof n.c.replaces === 'string' ? n.c.replaces : null, claimedAuthor: typeof n.c.accuser === 'string' ? n.c.accuser : null })));
+    return { nodes, vg };
   }
 
   function strictCaseBase(msgs, id, idxIn) {
     const idx = idxIn || collectCaseNodes(msgs);
-    const { nodes, strictNext, strictPrev } = idx;
+    const { nodes, vg } = idx;
     const tomb = buildValidatedTombstoneSet(msgs);
     let startKey = nodes.has(id) ? id : null;
     if (!startKey) {
       for (const [k, n] of nodes) { if (String(n.c.rootCaseId || '') === id) { startKey = k; break; } }
     }
     if (!startKey) return null;
-    let root = startKey, g = 0; while (strictPrev.has(root) && g++ < 100000) root = strictPrev.get(root);
-    let tip = root; g = 0; while (strictNext.has(tip) && g++ < 100000) tip = strictNext.get(tip);
+    const root = vg.rootOf(startKey);
+    if (vg.isForeignCopy(root)) return null;
+    const tip = vg.tipOf(root);
     if (tomb.has(tip) || tomb.has(root)) return null;
     const node = nodes.get(tip);
     if (!node) return null;

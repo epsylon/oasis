@@ -11,7 +11,7 @@ const userId = config.keys.id;
 const CATEGORIES = ["WEATHER", "INFRASTRUCTURE", "HEALTH", "SECURITY", "LOST", "NEIGHBORHOOD"];
 const SEVERITIES = ["UNVERIFIED", "LOW", "MEDIUM", "HIGH"];
 const STATUSES = ["ACTIVE", "RESOLVED", "EXPIRED"];
-const BASE_FILTERS = ["RECENT", "MINE", "ALL"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE"];
 const EXPIRES = ["1d", "3d", "7d", "30d"];
 
 const catLabel = (c) => String(i18n[`emergencyCategory${c.charAt(0) + c.slice(1).toLowerCase()}`] || c).toUpperCase();

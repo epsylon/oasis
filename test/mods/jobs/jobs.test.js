@@ -102,3 +102,58 @@ describe('jobs: visibility (public / hidden)', (t) => {
     eq(list.find(j => j.title === 'FlipJob'), undefined);
   });
 });
+
+describe('jobs: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+  const offer = (A, title) => A.use('jobs').createJob({ title, description: 'd', location: 'remote', job_type: 'freelancer', job_time: 'partial', vacants: 1, salary: '', requirements: '', tags: [], status: 'OPEN' });
+
+  t('a chain crossing other authors stays one job with the latest content of its author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await offer(A, 'Baker');
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), title: 'Baker II', replaces: c.key });
+    const list = (await A.use('jobs').listJobs('ALL', A.keypair.id, {})).filter(j => j.title === 'Baker' || j.title === 'Baker II');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Baker II');
+    const byCopy = await A.use('jobs').getJobById(c.key, A.keypair.id);
+    eq(byCopy.rootId, list[0].rootId);
+    eq(byCopy.id, list[0].id);
+  });
+
+  t('subscribing through a foreign version lands on the job', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await offer(A, 'Painter');
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    B.setActor();
+    await B.use('jobs').subscribeToJob(b.key, B.keypair.id);
+    A.setActor();
+    const list = (await A.use('jobs').listJobs('ALL', A.keypair.id, {})).filter(j => j.title === 'Painter');
+    eq(list.length, 1);
+    ok(list[0].subscribers.includes(B.keypair.id));
+  });
+
+  t('a foreign version never changes the job', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await offer(A, 'Cook');
+    await pub(B, { ...raw(net, r.key), title: 'Cook by B', replaces: r.key });
+    const list = (await A.use('jobs').listJobs('ALL', A.keypair.id, {})).filter(j => j.title === 'Cook' || j.title === 'Cook by B');
+    eq(list.length, 1);
+    eq(list[0].title, 'Cook');
+    eq(list[0].author, A.keypair.id);
+  });
+
+  t('somebody else cannot delete the job', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await offer(A, 'Tailor');
+    await pub(B, { type: 'tombstone', target: r.key, deletedAt: new Date().toISOString(), author: B.keypair.id });
+    const job = await A.use('jobs').getJobById(r.key, A.keypair.id);
+    eq(job.title, 'Tailor');
+  });
+});

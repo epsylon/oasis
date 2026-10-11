@@ -7,7 +7,7 @@ const { config } = require("../server/SSB_server.js")
 
 const userId = config.keys.id
 const ROOM_MAX = 50
-const MODES = ["recent", "mine", "all", "live", "open", "invite", "closed"]
+const MODES = ["all", "recent", "mine", "live", "open", "invite", "closed"]
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const roomHref = (room) => `/rooms/${encodeURIComponent(room.rootId)}`

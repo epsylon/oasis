@@ -144,3 +144,35 @@ describe('tags: mine and recent', (t) => {
     ok(tag.lastTs > 0);
   });
 });
+
+describe('tags: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('copies by other inhabitants count once, as the author own, with the latest tags of the author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('bookmarks').createBookmark('https://tags.test/chain', ['quolltag'], 'first', '');
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), tags: ['quolltag', 'dunnarttag'], replaces: c.key });
+    const all = await A.use('tags').listTags('all');
+    eq(find(all, 'quolltag').count, 1);
+    eq(find(all, 'quolltag').mine, 1);
+    eq(find(all, 'dunnarttag').count, 1);
+    B.setActor();
+    notOk(find(await B.use('tags').listTags('mine'), 'quolltag'));
+    C.setActor();
+    notOk(find(await C.use('tags').listTags('mine'), 'quolltag'));
+  });
+
+  t('a foreign version never adds its tags', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('bookmarks').createBookmark('https://tags.test/foreign', ['kowaritag'], 'first', '');
+    await pub(B, { ...raw(net, r.key), tags: ['kowaritag', 'bilbytag'], replaces: r.key });
+    const all = await A.use('tags').listTags('all');
+    eq(find(all, 'kowaritag').count, 1);
+    notOk(find(all, 'bilbytag'));
+  });
+});

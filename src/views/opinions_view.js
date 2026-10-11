@@ -363,7 +363,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
     });
 
   const title = i18n.opinionsTitle;
-  const baseFilters = ['RECENT', 'MINE', 'ALL', 'TOP'];
+  const baseFilters = ['ALL', 'RECENT', 'MINE', 'TOP'];
   const emptyOps = (Array.isArray(allItems) ? allItems : items).length === 0 && !String(q || '').trim();
 
   const seenDocs = new Set();

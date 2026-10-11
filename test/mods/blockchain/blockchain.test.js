@@ -108,3 +108,39 @@ describe('blockchain: computeStats (explorer stats panel)', (t) => {
     eq(s.topAuthors[0].author, '@a');
   });
 });
+
+describe('blockchain: live version of items republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('in a chain crossing other authors only the latest version of the author is live', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('bookmarks').createBookmark('https://chain.test/x', [], 'first', '');
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    const a2 = await pub(A, { ...raw(net, c.key), description: 'second', replaces: c.key });
+    const blocks = await A.use('blockchain').listBlockchain('all', A.keypair.id, {});
+    const flag = (key) => blocks.find(x => x.id === key).isReplaced;
+    eq(flag(r.key), true);
+    eq(flag(b.key), true);
+    eq(flag(c.key), true);
+    eq(flag(a2.key), false);
+    eq((await A.use('blockchain').getBlockById(a2.key, A.keypair.id)).isReplaced, false);
+    eq((await A.use('blockchain').getBlockById(c.key, A.keypair.id)).isReplaced, true);
+  });
+
+  t('a foreign copy never makes the original look replaced nor becomes live', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('bookmarks').createBookmark('https://chain.test/y', [], 'first', '');
+    const b = await pub(B, { ...raw(net, r.key), description: 'by B', replaces: r.key });
+    const orphan = await pub(B, { ...raw(net, r.key), replaces: '%missing00000000000000000000000000000000000.sha256' });
+    const blocks = await A.use('blockchain').listBlockchain('all', A.keypair.id, {});
+    const flag = (key) => blocks.find(x => x.id === key).isReplaced;
+    eq(flag(r.key), false);
+    eq(flag(b.key), true);
+    eq(flag(orphan.key), true);
+    eq((await A.use('blockchain').getBlockById(r.key, A.keypair.id)).isReplaced, false);
+  });
+});

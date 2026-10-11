@@ -582,3 +582,57 @@ describe('housing: the public web page', (t) => {
     notOk(page.includes(B.keypair.id), 'no requester');
   });
 });
+
+describe('housing: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('a chain crossing other authors stays one place with the latest content of its author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await create(A, { title: 'Attic' });
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), title: 'Attic II', replaces: c.key });
+    const list = (await A.use('housing').listHousing('ALL', A.keypair.id, {})).filter(h => h.title === 'Attic' || h.title === 'Attic II');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Attic II');
+    const byCopy = await A.use('housing').getHousingById(c.key, A.keypair.id);
+    eq(byCopy.rootId, list[0].rootId);
+    eq(byCopy.id, list[0].id);
+  });
+
+  t('a request through a foreign version lands on the place', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await create(A, { title: 'Loft' });
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    B.setActor();
+    await B.use('housing').requestHousing(b.key);
+    A.setActor();
+    const list = (await A.use('housing').listHousing('ALL', A.keypair.id, {})).filter(h => h.title === 'Loft');
+    eq(list.length, 1);
+    ok(list[0].requests.includes(B.keypair.id));
+  });
+
+  t('a foreign version never changes the place', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await create(A, { title: 'Cabin' });
+    await pub(B, { ...raw(net, r.key), title: 'Cabin by B', replaces: r.key });
+    const list = (await A.use('housing').listHousing('ALL', A.keypair.id, {})).filter(h => h.title === 'Cabin' || h.title === 'Cabin by B');
+    eq(list.length, 1);
+    eq(list[0].title, 'Cabin');
+    eq(list[0].author, A.keypair.id);
+  });
+
+  t('somebody else cannot delete the place', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await create(A, { title: 'Barn' });
+    await pub(B, { type: 'tombstone', target: r.key, deletedAt: new Date().toISOString(), author: B.keypair.id });
+    const item = await A.use('housing').getHousingById(r.key, A.keypair.id);
+    eq(item.title, 'Barn');
+  });
+});

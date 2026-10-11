@@ -3,7 +3,7 @@ const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
-const { dedupeBy, mergeDuplicatesBy, norm } = require('../backend/dedupe');
+const { dedupeBy, mergeDuplicatesBy, norm, versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const FEED_TEXT_MIN = Number(getConfig().feed?.minLength ?? 1);
@@ -40,11 +40,8 @@ module.exports = ({ cooler }) => {
   const buildIndex = async (ssbClient) => {
     const messages = await getAllMessages(ssbClient);
 
-    const forward = new Map();
-    const replacedIds = new Set();
     const tombstoned = buildValidatedTombstoneSet(messages);
     const feedsById = new Map();
-    const authorById = new Map();
     const actions = [];
     const opinionMsgs = [];
 
@@ -59,7 +56,6 @@ module.exports = ({ cooler }) => {
       }
       if (c.type === "feed") {
         feedsById.set(k, msg);
-        authorById.set(k, msg?.value?.author);
         continue;
       }
       if (c.type === "feed-action") {
@@ -68,24 +64,8 @@ module.exports = ({ cooler }) => {
       }
     }
 
-    for (const [k, msg] of feedsById) {
-      const t = msg?.value?.content?.replaces;
-      if (!t) continue;
-      if (authorById.get(t) === authorById.get(k)) {
-        forward.set(t, k);
-        replacedIds.add(t);
-      }
-    }
-
-    const resolve = (id) => {
-      let cur = id;
-      const seen = new Set();
-      while (forward.has(cur) && !seen.has(cur)) {
-        seen.add(cur);
-        cur = forward.get(cur);
-      }
-      return cur;
-    };
+    const vg = versionGroups(Array.from(feedsById.values()).map(versionEntry));
+    const resolve = (id) => vg.tipOf(id);
 
     const actionsByRoot = new Map();
     for (const a of actions) {
@@ -105,7 +85,7 @@ module.exports = ({ cooler }) => {
       opinionsByTip.get(tip).push(op);
     }
 
-    return { resolve, tombstoned, feedsById, replacedIds, actionsByRoot, opinionsByTip };
+    return { resolve, vg, tombstoned, feedsById, actionsByRoot, opinionsByTip };
   };
 
   const resolveCurrentId = async (id) => {
@@ -146,6 +126,7 @@ module.exports = ({ cooler }) => {
     const userId = ssbClient.id;
 
     const idx = await buildIndex(ssbClient);
+    if (idx.vg.isForeignCopy(idx.vg.rootOf(contentId))) throw new Error("Invalid feed");
     const tipId = idx.resolve(contentId);
 
     let msg;
@@ -216,6 +197,7 @@ module.exports = ({ cooler }) => {
     const userId = ssbClient.id;
 
     const idx = await buildIndex(ssbClient);
+    if (idx.vg.isForeignCopy(idx.vg.rootOf(contentId))) throw new Error("Invalid feed");
     const tipId = idx.resolve(contentId);
 
     const msg = idx.feedsById.get(tipId);
@@ -249,30 +231,22 @@ module.exports = ({ cooler }) => {
       return !!c && c.type === "feed" && isValidFeedText(c.text);
     };
 
-    let tips = Array.from(idx.feedsById.values()).filter(
+    let tips = Array.from(idx.vg.roots).map((r) => idx.feedsById.get(idx.resolve(r))).filter(
       (m) =>
-        !idx.replacedIds.has(m.key) &&
+        !!m &&
         !idx.tombstoned.has(m.key) &&
         isValidFeedMsg(m)
     );
 
     const textEditedEver = (m) => {
-      const seen = new Set();
-      let cur = m;
-      let lastText = cur?.value?.content?.text;
-      while (cur?.value?.content?.replaces) {
-        const prevId = cur.value.content.replaces;
-        if (!prevId || seen.has(prevId)) break;
-        seen.add(prevId);
-        const prev = idx.feedsById.get(prevId);
-        if (!prev) break;
-        if (prev?.value?.author !== cur?.value?.author) break;
-        const prevText = prev?.value?.content?.text;
-        if (typeof lastText === "string" && typeof prevText === "string" && lastText !== prevText) return true;
-        cur = prev;
-        lastText = prevText;
+      const root = idx.vg.rootOf(m.key);
+      const owner = idx.feedsById.get(root)?.value?.author;
+      const texts = new Set();
+      for (const k of (idx.vg.groups.get(root) || [])) {
+        const v = idx.feedsById.get(k)?.value;
+        if (v && v.author === owner && typeof v.content?.text === "string") texts.add(v.content.text);
       }
-      return false;
+      return texts.size > 1;
     };
 
     const materialize = (feedMsg) => {
@@ -388,7 +362,7 @@ module.exports = ({ cooler }) => {
     const ssbClient = await openSsb();
     const idx = await buildIndex(ssbClient);
     const currentId = idx.resolve(feedId);
-    if (idx.tombstoned.has(currentId)) return null;
+    if (idx.tombstoned.has(currentId) || idx.vg.isForeignCopy(idx.vg.rootOf(currentId))) return null;
     const msg = idx.feedsById.get(currentId);
     if (!msg) return null;
     const actions = idx.actionsByRoot.get(currentId) || [];

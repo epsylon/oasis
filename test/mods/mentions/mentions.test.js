@@ -206,3 +206,34 @@ describe('mentions: a feed post from somebody else', (t) => {
     eq(list.length, 0, 'talking to yourself never notifies you');
   });
 });
+
+describe('mentions: versions republished by other inhabitants', (t) => {
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('a chain crossing other authors is one mention, by its author, with its latest content', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net); const V = makePeer(net);
+    A.setActor();
+    const r = await publishAs(A, { type: 'event', title: 'Picnic', description: `bring ${V.keypair.id}`, author: A.keypair.id, createdAt: new Date().toISOString() });
+    const b = await publishAs(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await publishAs(C, { ...raw(net, b.key), replaces: b.key });
+    await publishAs(A, { ...raw(net, c.key), title: 'Picnic II', replaces: c.key });
+    V.setActor();
+    const list = await V.use('mentions').listMentions('ALL');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Picnic II');
+  });
+
+  t('a foreign copy neither hides the original nor shows up as the copier mention', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const V = makePeer(net);
+    A.setActor();
+    const r = await publishAs(A, { type: 'event', title: 'Fair', description: `see ${V.keypair.id}`, author: A.keypair.id, createdAt: new Date().toISOString() });
+    await publishAs(B, { ...raw(net, r.key), title: 'Fair by B', replaces: r.key });
+    V.setActor();
+    const list = await V.use('mentions').listMentions('ALL');
+    eq(list.length, 1);
+    eq(list[0].key, r.key);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Fair');
+  });
+});

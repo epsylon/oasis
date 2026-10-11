@@ -5,6 +5,7 @@ const opinionCategories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES, requestScope } = require('./typed_log');
 const { buildVoteTally } = require('../backend/vote_tally');
+const { versionGroups, versionEntry } = require('../backend/dedupe');
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -33,9 +34,7 @@ module.exports = ({ cooler }) => {
     const messages = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true });
 
     const tombstoned = buildValidatedTombstoneSet(messages);
-    const replaces = new Map();
     const itemsById = new Map();
-    const authorOf = new Map();
     const opinionMsgs = [];
 
     for (const m of messages) {
@@ -43,54 +42,26 @@ module.exports = ({ cooler }) => {
       const c = m.value?.content;
       if (!c) continue;
 
-      if (c.type === 'tombstone' && c.target) {
-        tombstoned.add(c.target);
-        itemsById.delete(c.target);
-        continue;
-      }
-
-      if (k) authorOf.set(k, m.value?.author);
+      if (c.type === 'tombstone') continue;
 
       if (typeof c.type === 'string' && c.type.endsWith('Opinion') && c.target) {
         opinionMsgs.push({ target: c.target, author: m.value?.author, category: c.category });
         continue;
       }
 
-      if (c.opinions && !tombstoned.has(k) && !['task', 'event', 'report'].includes(c.type)) {
-        if (c.replaces) replaces.set(c.replaces, k);
-        itemsById.set(k, m);
-      }
+      if (c.opinions && !['task', 'event', 'report'].includes(c.type)) itemsById.set(k, m);
 
-      if (c.type === 'feed' && !tombstoned.has(k) && !itemsById.has(k)) {
-        if (c.replaces) replaces.set(c.replaces, k);
-        itemsById.set(k, m);
-      }
+      if (c.type === 'feed' && !itemsById.has(k)) itemsById.set(k, m);
     }
 
-    for (const [replacedId, newId] of Array.from(replaces.entries())) {
-      const oldAuthor = authorOf.get(replacedId);
-      const newMsg = itemsById.get(newId);
-      if (oldAuthor === undefined) { replaces.delete(replacedId); continue; }
-      if (!newMsg || String(newMsg.value?.author) !== String(oldAuthor)) {
-        replaces.delete(replacedId);
-        itemsById.delete(newId);
-        continue;
-      }
-      itemsById.delete(replacedId);
+    const vg = versionGroups(Array.from(itemsById.values()).map(versionEntry));
+    for (const k of Array.from(itemsById.keys())) {
+      if (!vg.roots.has(vg.rootOf(k)) || vg.tipOf(k) !== k || tombstoned.has(k)) itemsById.delete(k);
     }
 
-    const tipToChain = new Map();
-    for (const [oldId, newId] of replaces.entries()) {
-      let tip = newId; let g = 0;
-      while (replaces.has(tip) && g++ < 100000) tip = replaces.get(tip);
-      if (!tipToChain.has(tip)) tipToChain.set(tip, new Set([tip]));
-      tipToChain.get(tip).add(oldId); tipToChain.get(tip).add(newId);
-    }
-    const idToTip = new Map();
-    for (const [tip, chain] of tipToChain.entries()) for (const id of chain) idToTip.set(id, tip);
     const opinionByTip = new Map();
     for (const op of opinionMsgs) {
-      const tip = idToTip.get(op.target) || op.target;
+      const tip = vg.tipOf(op.target);
       if (!opinionByTip.has(tip)) opinionByTip.set(tip, { opinions: {}, voters: new Set() });
       const agg = opinionByTip.get(tip);
       if (agg.voters.has(op.author)) continue;
@@ -247,31 +218,12 @@ module.exports = ({ cooler }) => {
 
     const inhabitants = Array.isArray(msg.content.opinions_inhabitants) ? msg.content.opinions_inhabitants : [];
     if (inhabitants.includes(userId)) throw new Error('Already voted');
+    const otype = categories.messageTypes[type];
+    if (!otype) throw new Error('Voting not allowed on this content type');
 
-    const tombstone = {
-      type: 'tombstone',
-      target: contentId,
-      deletedAt: new Date().toISOString(),
-      author: userId
-    };
-
-    const updated = {
-      ...msg.content,
-      opinions: {
-        ...(msg.content.opinions || {}),
-        [category]: ((msg.content.opinions && msg.content.opinions[category]) || 0) + 1
-      },
-      opinions_inhabitants: inhabitants.concat(userId),
-      updatedAt: new Date().toISOString(),
-      replaces: contentId
-    };
-
-    await new Promise((res, rej) => {
-      ssbClient.publish(tombstone, err => err ? rej(err) : res());
-    });
-
+    const content = { type: otype, target: contentId, category, createdAt: new Date().toISOString() };
     return new Promise((res, rej) => {
-      ssbClient.publish(updated, (err, result) => err ? rej(err) : res(result));
+      ssbClient.publish(content, (err, result) => err ? rej(err) : res(result));
     });
   };
 

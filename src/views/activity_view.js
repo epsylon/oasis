@@ -2064,9 +2064,9 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const desc = i18n.activityDesc;
 
   const activityTypes = [
+    { type: 'all',       label: i18n.allButton },
     { type: 'recent',    label: i18n.typeRecent },
     { type: 'mine',      label: i18n.mineButton },
-    { type: 'all',       label: i18n.allButton },
     { type: 'top',       label: i18n.typeTop },
     { type: 'inhabitants', label: i18n.typeInhabitants },
     { type: 'tribe',     label: i18n.typeTribe },
@@ -2250,28 +2250,28 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   }
 
   const MODULE_SUB_FILTERS = {
-    audio:   { url: '/audios',     filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
-    video:   { url: '/videos',     filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
-    image:   { url: '/images',     filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
-    document:{ url: '/documents',  filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
-    bookmark:{ url: '/bookmarks',  filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
-    torrent: { url: '/torrents',   filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
-    file: { url: '/files',   filters: ['recent', 'mine', 'all', 'top', 'favorites'] },
-    map:     { url: '/maps',       filters: ['recent', 'mine', 'all'] },
-    forum:   { url: '/forum',      filters: ['recent', 'mine', 'all', 'top'] },
-    event:   { url: '/events',     filters: ['recent', 'mine', 'all', 'top'] },
+    audio:   { url: '/audios',     filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
+    video:   { url: '/videos',     filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
+    image:   { url: '/images',     filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
+    document:{ url: '/documents',  filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
+    bookmark:{ url: '/bookmarks',  filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
+    torrent: { url: '/torrents',   filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
+    file: { url: '/files',   filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
+    map:     { url: '/maps',       filters: ['all', 'recent', 'mine'] },
+    forum:   { url: '/forum',      filters: ['all', 'recent', 'mine', 'top'] },
+    event:   { url: '/events',     filters: ['all', 'recent', 'mine', 'top'] },
     task:    { url: '/tasks',      filters: ['all', 'mine', 'assigned', 'open', 'closed'] },
-    votes:   { url: '/votes',      filters: ['recent', 'mine', 'all', 'top'] },
+    votes:   { url: '/votes',      filters: ['all', 'recent', 'mine', 'top'] },
     transfer:{ url: '/transfers',  filters: ['all', 'mine', 'pending', 'unconfirmed', 'closed'] },
     market:  { url: '/market',     filters: ['all', 'mine', 'exchange', 'auctions', 'for sale', 'sold'] },
-    shop:    { url: '/shops',      filters: ['recent', 'mine', 'all'] },
+    shop:    { url: '/shops',      filters: ['all', 'recent', 'mine'] },
     job:     { url: '/jobs',       filters: ['ALL', 'MINE', 'REMOTE', 'PRESENCIAL', 'OPEN', 'CLOSED'] },
     project: { url: '/projects',   filters: ['all', 'mine', 'active', 'completed'] },
     industry:{ url: '/industry',   filters: ['ALL', 'MINE', 'ACTIVE', 'PAUSED', 'DISSOLVED', 'BLUEPRINTS', 'BUILDS', 'MEMBER', 'RULES'] },
     chat:    { url: '/chats',      filters: ['all', 'mine'] },
     pad:     { url: '/pads',       filters: ['all', 'mine'] },
     calendar:{ url: '/calendars',  filters: ['all', 'mine'] },
-    report:  { url: '/reports',    filters: ['recent', 'mine', 'all'] },
+    report:  { url: '/reports',    filters: ['all', 'recent', 'mine'] },
     curriculum:{ url: '/cv',       filters: ['view', 'edit'] }
   };
 
@@ -2288,7 +2288,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
       emptyAct ? null : div({ class: 'activity-filter-chips' },
         (() => {
           const ORDER = [
-            'recent', 'mine', 'all', 'top',
+            'all', 'recent', 'mine', 'top',
             'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts', 'emergency',
             'votes', 'event', 'calendar', 'task', 'report', 'campaign',
             'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'logistics',

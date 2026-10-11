@@ -54,3 +54,30 @@ describe('agenda: housing', (t) => {
     ok(items.every(i => i.type === 'housing'));
   });
 });
+
+describe('agenda: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+
+  t('a chain crossing other authors is one item, by its author, with its latest content', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('reports').createReport('Leak', 'd', 'BUGS', null, [], 'low', {});
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), title: 'Leak II', replaces: c.key });
+    const { items } = await A.use('agenda').listAgenda('reports');
+    const list = items.filter(i => i.title === 'Leak' || i.title === 'Leak II');
+    eq(list.length, 1);
+    eq(list[0].author, A.keypair.id);
+    eq(list[0].title, 'Leak II');
+  });
+
+  t('a foreign copy whose original is gone never lands on the agenda', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    await pub(B, { type: 'report', title: 'Ghost', description: 'd', category: 'BUGS', author: A.keypair.id, replaces: '%missing00000000000000000000000000000000000.sha256', createdAt: new Date().toISOString() });
+    const { items } = await A.use('agenda').listAgenda('reports');
+    eq(items.filter(i => i.title === 'Ghost').length, 0);
+  });
+});

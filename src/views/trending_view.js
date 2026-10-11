@@ -298,7 +298,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
-  const baseFilters = ['RECENT', 'MINE', 'ALL', 'TOP'];
+  const baseFilters = ['ALL', 'RECENT', 'MINE', 'TOP'];
   const contentFilters = [
     ['votes', 'event', 'task', 'report'],
     ['feed', 'project', 'industry', 'shopProduct', 'transfer'],

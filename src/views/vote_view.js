@@ -312,9 +312,9 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
         form(
           { method: "GET", action: "/votes" },
           ...(emptyMod ? [] : [
+          button({ type: "submit", name: "filter", value: "all", class: mode === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterAll).toUpperCase()),
           ...(voteChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: mode === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterRecent).toUpperCase())] : []),
           ...(voteChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: mode === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterMine).toUpperCase())] : []),
-          button({ type: "submit", name: "filter", value: "all", class: mode === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterAll).toUpperCase()),
           ...(voteChip("open") ? [button({ type: "submit", name: "filter", value: "open", class: mode === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterOpen).toUpperCase())] : []),
           ...(voteChip("closed") ? [button({ type: "submit", name: "filter", value: "closed", class: mode === "closed" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterClosed).toUpperCase())] : []),
           ]),

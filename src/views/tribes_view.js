@@ -248,7 +248,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
 
   const modeButtons = div({ class: 'tribe-mode-buttons' },
     ...(emptyMod ? [] : [
-    ['recent','mine','all','membership','subtribes','top','gallery'].filter(tribeChip).map(f =>
+    ['all','recent','mine','membership','subtribes','top','gallery'].filter(tribeChip).map(f =>
     form({ method: 'GET', action: '/tribes' },
       input({ type: 'hidden', name: 'filter', value: f }),
       button({ type: 'submit', class: filter === f ? 'filter-btn active' : 'filter-btn' },
@@ -871,7 +871,7 @@ const renderFeedComposeForm = (tribe) =>
     )
   );
 
-const FEED_MODES = ['RECENT', 'MINE', 'ALL', 'TOP'];
+const FEED_MODES = ['ALL', 'RECENT', 'MINE', 'TOP'];
 const renderFeedTribeView = (feedItems, tribe, query = {}) => {
   const feed = asList(feedItems);
   const member = isTribeMember(tribe);
@@ -915,7 +915,7 @@ const EVENT_MODES = {
   year: e => moment(e.date).isBetween(moment(), moment().add(1, 'year'), null, '[]'),
   archived: e => tribeStatusOf(e) === 'CLOSED'
 };
-const EVENT_MODE_LIST = ['recent', 'mine', 'all', 'today', 'week', 'month', 'year', 'archived'];
+const EVENT_MODE_LIST = ['all', 'recent', 'mine', 'today', 'week', 'month', 'year', 'archived'];
 
 const renderTribeEventCard = (tribe, e, member, returnTo) => {
   const tribeUrl = tribeUrlOf(tribe);
@@ -988,7 +988,7 @@ const TASK_MODES = {
   closed: t => tribeStatusOf(t) === 'CLOSED',
   ...Object.fromEntries(TASK_PRIORITIES.map(pr => [`priority-${pr.toLowerCase()}`, t => String(t.priority || '').toUpperCase() === pr]))
 };
-const TASK_MODE_LIST = ['recent', 'mine', 'all', 'assigned', 'open', 'in-progress', 'closed', ...TASK_PRIORITIES.map(pr => `priority-${pr.toLowerCase()}`)];
+const TASK_MODE_LIST = ['all', 'recent', 'mine', 'assigned', 'open', 'in-progress', 'closed', ...TASK_PRIORITIES.map(pr => `priority-${pr.toLowerCase()}`)];
 const taskModeLabel = (m) => {
   if (m === 'in-progress') return i18n.taskFilterInProgress;
   if (m === 'priority-critical') return i18n.tribePriorityCritical;
@@ -1065,7 +1065,7 @@ const toVoteShape = (v) => {
   return { ...v, question: v.title, createdBy: v.author, options, votes: counts, totalVotes };
 };
 const VOTE_MODES = openClosedModes(v => tribeStatusOf(v) === 'CLOSED');
-const VOTE_MODE_LIST = ['recent', 'mine', 'all', 'open', 'closed'];
+const VOTE_MODE_LIST = ['all', 'recent', 'mine', 'open', 'closed'];
 
 const renderTribeVotationCard = (tribe, v, member, returnTo) => {
   const tribeUrl = tribeUrlOf(tribe);
@@ -1139,7 +1139,7 @@ const POLL_MODES = {
   VOTED: pl => !!pl.hasVoted || asList(pl.myChoices).length > 0,
   OPEN: pl => tribeStatusOf(pl) === 'OPEN', CLOSED: pl => tribeStatusOf(pl) === 'CLOSED'
 };
-const POLL_MODE_LIST = ['RECENT', 'MINE', 'ALL', 'TOP', 'VOTED', 'OPEN', 'CLOSED'];
+const POLL_MODE_LIST = ['ALL', 'RECENT', 'MINE', 'TOP', 'VOTED', 'OPEN', 'CLOSED'];
 const pollModeLabel = (m) => i18n[`pollFilter${capFirst(m.toLowerCase())}`];
 
 const renderTribePollsSection = (tribe, items, query = {}) => {
@@ -1279,7 +1279,7 @@ const renderForumSection = (tribe, items, query = {}) => {
   const present = new Set(threads.map(t => t.category).filter(Boolean));
   const visible = (m) => FORUM_CATEGORIES.includes(m) ? (present.has(m) || m === filter) : tribeChipVisible(threads, filter, modes)(m);
   const labelOf = (m) => FORUM_CATEGORIES.includes(m) ? forumCatLabel(m) : i18n[`forumFilter${capFirst(m)}`];
-  const chips = renderTribeModeChips(tribe, 'forum', { modes: ['recent', 'mine', 'all', 'top', ...FORUM_CATEGORIES], filter: isCreate ? 'create' : filter, labelOf, visible, emptyMod, create: member ? { label: i18n.forumCreateButton } : null });
+  const chips = renderTribeModeChips(tribe, 'forum', { modes: ['all', 'recent', 'mine', 'top', ...FORUM_CATEGORIES], filter: isCreate ? 'create' : filter, labelOf, visible, emptyMod, create: member ? { label: i18n.forumCreateButton } : null });
 
   if (isCreate) {
     return div({ class: 'tribe-content-list' }, header, chips,
@@ -1353,7 +1353,7 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
   const tribeUrl = tribeUrlOf(tribe);
   const header = renderTribeSectionHeader(i18n[cfg.title], i18n[cfg.description]);
   const emptyMod = !isCreate && moduleIsEmpty(media, filter, 'all', q);
-  const chips = renderTribeModeChips(tribe, cfg.key, { modes: ['recent', 'mine', 'all', 'top'], filter: isCreate ? 'create' : filter, labelOf: m => i18n[`${cfg.filter}${capFirst(m)}`], visible: tribeChipVisible(media, filter, BASE_MODES), emptyMod, create: member ? { label: i18n[cfg.create] } : null });
+  const chips = renderTribeModeChips(tribe, cfg.key, { modes: ['all', 'recent', 'mine', 'top'], filter: isCreate ? 'create' : filter, labelOf: m => i18n[`${cfg.filter}${capFirst(m)}`], visible: tribeChipVisible(media, filter, BASE_MODES), emptyMod, create: member ? { label: i18n[cfg.create] } : null });
 
   if (isCreate) {
     const common = [
@@ -1411,7 +1411,7 @@ const renderStandaloneSection = (tribe, sectionKey, items, query, cfg) => {
   const filter = String(query.filter || 'all').toLowerCase();
   const q = String(query.q || '').trim();
   const modes = cfg.modes || BASE_MODES;
-  const modeList = cfg.modeList || ['recent', 'mine', 'all'];
+  const modeList = cfg.modeList || ['all', 'recent', 'mine'];
   const header = renderTribeSectionHeader(cfg.title, cfg.description);
   const emptyMod = moduleIsEmpty(list, filter, 'all', q);
   const chips = renderTribeModeChips(tribe, sectionKey, {
@@ -1466,7 +1466,7 @@ const closedByFlag = (it) => !!it.isClosed || String(it.status || '').toUpperCas
 const renderTribePadsSection = (tribe, pads, query = {}) =>
   renderStandaloneSection(tribe, 'pads', pads, query, {
     title: i18n.tribeSectionPads || 'PADS', description: i18n.padsDescription, createAction: '/pads', createLabel: i18n.tribePadCreate || 'Create Pad',
-    modes: openClosedModes(closedByFlag), modeList: ['recent', 'mine', 'all', 'open', 'closed'],
+    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'open', 'closed'],
     labelOf: m => i18n[`padFilter${capFirst(m)}`], placeholder: i18n.padSearchPlaceholder, empty: i18n.tribePadsEmpty || i18n.padsNoItems,
     stats: (list) => renderModuleStatsBy(list, pd => pd.isClosed ? 'CLOSED' : String(pd.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.padStatusOpen }, { value: 'INVITE-ONLY', label: i18n.padStatusInviteOnly }, { value: 'CLOSED', label: i18n.padStatusClosed }]),
     render: (list) => div({ class: 'tribe-grid pads-grid' }, ...list.map(pd => renderPadCard(pd, 'all', null)))
@@ -1475,7 +1475,7 @@ const renderTribePadsSection = (tribe, pads, query = {}) =>
 const renderTribeChatsSection = (tribe, chats, query = {}) =>
   renderStandaloneSection(tribe, 'chats', chats, query, {
     title: i18n.tribeSectionChats || 'CHATS', description: i18n.modulesChatsDescription, createAction: '/chats', createLabel: i18n.tribeChatCreate || 'Create Chat',
-    modes: openClosedModes(closedByFlag), modeList: ['recent', 'mine', 'all', 'open', 'closed'],
+    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'open', 'closed'],
     labelOf: m => i18n[`chatFilter${capFirst(m)}`], placeholder: i18n.chatSearchPlaceholder, empty: i18n.tribeChatsEmpty || i18n.chatNoItems,
     stats: (list) => renderModuleStatsBy(list, c => String(c.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.chatStatusOpen }, { value: 'INVITE-ONLY', label: i18n.chatStatusInviteOnly }, { value: 'CLOSED', label: i18n.chatStatusClosed }]),
     render: (list) => div({ class: 'tribe-grid' }, ...list.map(c => renderChatCard(c, 'all', { q: query.q || '' })))
@@ -1484,7 +1484,7 @@ const renderTribeChatsSection = (tribe, chats, query = {}) =>
 const renderTribeCalendarsSection = (tribe, calendars, query = {}) =>
   renderStandaloneSection(tribe, 'calendars', calendars, query, {
     title: i18n.tribeSectionCalendars || 'CALENDARS', description: i18n.calendarsDescription, createAction: '/calendars', createLabel: i18n.tribeCalendarCreate || 'Create Calendar',
-    modes: openClosedModes(closedByFlag), modeList: ['recent', 'mine', 'all', 'open', 'closed'],
+    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'open', 'closed'],
     labelOf: m => i18n[`calendarFilter${capFirst(m)}`], placeholder: i18n.calendarSearchPlaceholder, empty: i18n.tribeCalendarsEmpty || i18n.calendarsNoItems,
     stats: (list) => openClosedStats(list, closedByFlag, i18n.calendarStatusOpen, i18n.calendarStatusClosed),
     render: (list) => div({ class: 'tribe-grid' }, ...list.map(c => renderCalendarCard(c, null)))
@@ -1501,7 +1501,7 @@ const renderTribeWikiSectionPage = (tribe, pages, query = {}) => {
     renderTribeSectionHeader(i18n.tribeSectionWiki || 'WIKI', i18n.wikiDescription),
     div({ class: 'mode-buttons-row' },
       ...(emptyMod ? [] : [
-        ...['recent', 'mine', 'all'].filter(tribeChipVisible(list, filter, BASE_MODES)).map(m =>
+        ...['all', 'recent', 'mine'].filter(tribeChipVisible(list, filter, BASE_MODES)).map(m =>
           form({ method: 'GET', action: tribeUrlOf(tribe) },
             input({ type: 'hidden', name: 'section', value: 'wiki' }),
             input({ type: 'hidden', name: 'filter', value: m }),
@@ -1540,7 +1540,7 @@ const renderTribeRoomsSectionPage = (tribe, sectionData, query = {}) => {
   const toolbar = div({ class: 'tribe-content-list' },
     renderTribeSectionHeader(i18n.tribeSectionRooms || 'ROOMS', i18n.roomsDescription),
     renderTribeModeChips(tribe, 'rooms', {
-      modes: ['recent', 'mine', 'all', 'live', 'open', 'closed'], filter, labelOf: m => i18n[`roomFilter${capFirst(m)}`], visible: tribeChipVisible(rooms, filter, modes), emptyMod,
+      modes: ['all', 'recent', 'mine', 'live', 'open', 'closed'], filter, labelOf: m => i18n[`roomFilter${capFirst(m)}`], visible: tribeChipVisible(rooms, filter, modes), emptyMod,
       create: member ? { action: '/rooms', hidden: { filter: 'create', tribeId: tribe.id }, label: i18n.tribeRoomCreate } : null
     }),
     emptyMod ? null : renderTribeSearchRow(tribe, 'rooms', filter, q, roomStatsBy(shown), i18n.roomSearchPlaceholder)

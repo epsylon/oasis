@@ -111,3 +111,56 @@ describe('feed: content author can delete forged copies', (t) => {
     ok(String(mine.value.content.text).includes('&' + 'A'.repeat(43)), 'the attachment travels with it');
   });
 });
+
+describe('feed: versions republished by other inhabitants', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const raw = (net, key) => net.log.find(m => m.key === key).value.content;
+  const textOf = (m) => m.value?.content?.text || '';
+
+  t('a chain crossing other authors stays one post with the latest text of its author', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('feed').createFeed('river walk', []);
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    const c = await pub(C, { ...raw(net, b.key), replaces: b.key });
+    await pub(A, { ...raw(net, c.key), text: 'river walk at dawn', replaces: c.key });
+    const feeds = (await A.use('feed').listFeeds('ALL')).filter(m => textOf(m) === 'river walk' || textOf(m) === 'river walk at dawn');
+    eq(feeds.length, 1);
+    eq(feeds[0].value.author, A.keypair.id);
+    eq(textOf(feeds[0]), 'river walk at dawn');
+    const byCopy = await A.use('feed').getFeedById(c.key);
+    eq(byCopy.key, feeds[0].key);
+    B.setActor();
+    const mine = (await B.use('feed').listFeeds('MINE')).filter(m => textOf(m).startsWith('river walk'));
+    eq(mine.length, 0, 'the copy is not the copier own post');
+    const seenByB = (await B.use('feed').listFeeds('ALL')).filter(m => textOf(m).startsWith('river walk'));
+    eq(seenByB.length, 1);
+    eq(seenByB[0].value.author, A.keypair.id);
+  });
+
+  t('a foreign version never changes the post', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('feed').createFeed('mountain view', []);
+    await pub(B, { ...raw(net, r.key), text: 'mountain view by B', replaces: r.key });
+    const feeds = (await A.use('feed').listFeeds('ALL')).filter(m => textOf(m).startsWith('mountain view'));
+    eq(feeds.length, 1);
+    eq(textOf(feeds[0]), 'mountain view');
+    eq(feeds[0].value.author, A.keypair.id);
+  });
+
+  t('refeeds and opinions through a foreign version land on the post', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const r = await A.use('feed').createFeed('lake swim', []);
+    const b = await pub(B, { ...raw(net, r.key), replaces: r.key });
+    C.setActor();
+    await C.use('feed').createRefeed(b.key);
+    await C.use('feed').addOpinion(b.key, 'interesting');
+    A.setActor();
+    const feeds = (await A.use('feed').listFeeds('ALL')).filter(m => textOf(m) === 'lake swim');
+    eq(feeds.length, 1);
+    eq(feeds[0].value.content.refeeds, 1);
+    eq(feeds[0].value.content.opinions.interesting, 1);
+  });
+});

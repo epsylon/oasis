@@ -3,6 +3,7 @@ const config = require('../server/ssb_config');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readContentWindow, requestScope, logTip } = require('./typed_log');
+const { versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
@@ -42,16 +43,10 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   const hasBlob = async (ssbClient, url) =>
     new Promise(resolve => ssbClient.blobs.has(url, (err, has) => resolve(!err && has)));
 
-  const isClosedSold = s =>
-    String(s || '').toUpperCase() === 'SOLD' || String(s || '').toUpperCase() === 'CLOSED';
-
-  const projectRank = (status) => {
-    const S = String(status || '').toUpperCase();
-    if (S === 'COMPLETED') return 3;
-    if (S === 'ACTIVE') return 2;
-    if (S === 'PAUSED') return 1;
-    if (S === 'CANCELLED') return 0;
-    return -1;
+  const isReplacedBlock = (vg, tombstoned, block) => {
+    const c = block.content;
+    const rootDeleted = !c.replaces && c?.type === 'forum' && c.root && tombstoned.has(c.root);
+    return vg.tipOf(block.id) !== block.id || vg.isForeignCopy(block.id) || tombstoned.has(block.id) || !!rootDeleted;
   };
 
   const safeDecode = (s) => {
@@ -144,7 +139,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
     const tombstoned = buildValidatedTombstoneSet(results);
     const idToBlock = new Map();
-    const referencedAsReplaces = new Set();
+    const versions = [];
 
     const nameByFeedId = new Map();
 
@@ -183,59 +178,17 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
         continue;
       }
-      if (c.replaces) referencedAsReplaces.add(c.replaces);
+      versions.push(versionEntry({ key: k, value: { ...msg.value, content: c } }));
       idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
     }
 
-    const tipBlocks = [];
-    for (const [id, block] of idToBlock.entries()) {
-      if (!referencedAsReplaces.has(id) && block.content.replaces) tipBlocks.push(block);
-    }
-    for (const [id, block] of idToBlock.entries()) {
-      if (!block.content.replaces && !referencedAsReplaces.has(id)) tipBlocks.push(block);
-    }
+    const vg = versionGroups(versions);
 
-    const groups = {};
-    for (const block of tipBlocks) {
-      const ancestor = block.content.replaces || block.id;
-      if (!groups[ancestor]) groups[ancestor] = [];
-      groups[ancestor].push(block);
-    }
-
-    const liveTipIds = new Set();
-    for (const groupBlocks of Object.values(groups)) {
-      let best = groupBlocks[0];
-      for (const block of groupBlocks) {
-        if (block.type === 'market') {
-          if (isClosedSold(block.content.status) && !isClosedSold(best.content.status)) {
-            best = block;
-          } else if ((block.content.status === best.content.status) && block.ts > best.ts) {
-            best = block;
-          }
-        } else if (block.type === 'project') {
-          const br = projectRank(best.content.status);
-          const cr = projectRank(block.content.status);
-          if (cr > br || (cr === br && block.ts > best.ts)) best = block;
-        } else if (block.type === 'job' || block.type === 'forum') {
-          if (block.ts > best.ts) best = block;
-        } else {
-          if (block.ts > best.ts) best = block;
-        }
-      }
-      liveTipIds.add(best.id);
-    }
-
-    const blockData = Array.from(idToBlock.values()).map(block => {
-      const c = block.content;
-      const rootDeleted = c?.type === 'forum' && c.root && tombstoned.has(c.root);
-      return {
-        ...block,
-        isTombstoned: tombstoned.has(block.id),
-        isReplaced: c.replaces
-          ? (!liveTipIds.has(block.id) || tombstoned.has(block.id))
-          : referencedAsReplaces.has(block.id) || tombstoned.has(block.id) || rootDeleted
-      };
-    });
+    const blockData = Array.from(idToBlock.values()).map(block => ({
+      ...block,
+      isTombstoned: tombstoned.has(block.id),
+      isReplaced: isReplacedBlock(vg, tombstoned, block)
+    }));
 
     return blockData;
   }
@@ -311,7 +264,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const me = userId || config.keys.id;
       const tombstoned = buildValidatedTombstoneSet(results);
       const idToBlock = new Map();
-      const referencedAsReplaces = new Set();
+      const versions = [];
       const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
       const accessibleTribeIds = await buildAccessibleTribeIds();
 
@@ -341,46 +294,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
           idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
           continue;
         }
-        if (c.replaces) referencedAsReplaces.add(c.replaces);
+        versions.push(versionEntry({ key: k, value: { ...msg.value, content: c } }));
         idToBlock.set(k, { id: k, author, ts: msg.value.timestamp, type: c.type, content: c, size: Buffer.byteLength(JSON.stringify(msg.value), 'utf8') });
-      }
-
-      const tipBlocks = [];
-      for (const [bid, block] of idToBlock.entries()) {
-        if (!referencedAsReplaces.has(bid) && block.content.replaces) tipBlocks.push(block);
-      }
-      for (const [bid, block] of idToBlock.entries()) {
-        if (!block.content.replaces && !referencedAsReplaces.has(bid)) tipBlocks.push(block);
-      }
-
-      const groups = {};
-      for (const block of tipBlocks) {
-        const ancestor = block.content.replaces || block.id;
-        if (!groups[ancestor]) groups[ancestor] = [];
-        groups[ancestor].push(block);
-      }
-
-      const liveTipIds = new Set();
-      for (const groupBlocks of Object.values(groups)) {
-        let best = groupBlocks[0];
-        for (const block of groupBlocks) {
-          if (block.type === 'market') {
-            if (isClosedSold(block.content.status) && !isClosedSold(best.content.status)) {
-              best = block;
-            } else if ((block.content.status === best.content.status) && block.ts > best.ts) {
-              best = block;
-            }
-          } else if (block.type === 'project') {
-            const br = projectRank(best.content.status);
-            const cr = projectRank(block.content.status);
-            if (cr > br || (cr === br && block.ts > best.ts)) best = block;
-          } else if (block.type === 'job' || block.type === 'forum') {
-            if (block.ts > best.ts) best = block;
-          } else {
-            if (block.ts > best.ts) best = block;
-          }
-        }
-        liveTipIds.add(best.id);
       }
 
       const block = idToBlock.get(id);
@@ -391,12 +306,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         if (!valid) return null;
       }
 
-      const c = block.content;
-      const rootDeleted = c?.type === 'forum' && c.root && tombstoned.has(c.root);
       const isTombstoned = tombstoned.has(block.id);
-      const isReplaced = c.replaces
-        ? (!liveTipIds.has(block.id) || tombstoned.has(block.id))
-        : referencedAsReplaces.has(block.id) || tombstoned.has(block.id) || rootDeleted;
+      const isReplaced = isReplacedBlock(versionGroups(versions), tombstoned, block);
 
       return { ...block, isTombstoned, isReplaced };
     }

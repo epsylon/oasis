@@ -256,9 +256,9 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
         form(
           { method: "GET", action: "/events" },
           ...(emptyMod ? [] : [
+          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
           ...(eventChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterRecent).toUpperCase())] : []),
           ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
-          button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
           ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),
           ...(eventChipVisible("week") ? [button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase())] : []),
           ...(eventChipVisible("month") ? [button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase())] : []),
@@ -422,9 +422,9 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     { class: "filters" },
     form(
       { method: "GET", action: "/events" },
+      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
       ...(eventChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterRecent).toUpperCase())] : []),
       ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
-      button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
       ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),
       ...(eventChipVisible("week") ? [button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase())] : []),
       ...(eventChipVisible("month") ? [button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase())] : []),

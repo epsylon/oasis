@@ -4,7 +4,7 @@ const { getConfig } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator')
 const { readTyped, memoIndex } = require('./typed_log')
-const { dedupeByPreferring, norm } = require('../backend/dedupe')
+const { dedupeByPreferring, norm, versionGroups } = require('../backend/dedupe')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const N = (s) => String(s || "").toUpperCase().replace(/\s+/g, "_")
@@ -82,31 +82,16 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (c.type === "marketPurchase") { purchases.push({ target: c.target, author: m.value.author, ts: (m.value && m.value.timestamp) || 0 }); continue }
       if (c.type === "marketOpinion" && c.target) { opinionMsgs.push({ target: c.target, author: m.value.author, category: c.category }); continue }
       if (c.type !== "market") continue
-      nodes.set(m.key, { key: m.key, ts: (m.value && m.value.timestamp) || m.timestamp || 0, c, author: m.value.author })
+      nodes.set(m.key, { key: m.key, ts: (m.value && m.value.timestamp) || m.timestamp || 0, seq: m.value.sequence || 0, c, author: m.value.author })
     }
-    const naivePrev = new Map(), strictNext = new Map()
-    for (const [key, n] of nodes) {
-      const t = n.c.replaces
-      if (!t) continue
-      naivePrev.set(key, t)
-    }
-    for (const [child, parent] of Array.from(naivePrev.entries())) {
-      const cn = nodes.get(child)
-      const pn = nodes.get(parent)
-      if (!pn) { naivePrev.delete(child); continue }
-      if (!cn || cn.author !== pn.author) { naivePrev.delete(child); nodes.delete(child); continue }
-      strictNext.set(parent, child)
-    }
-    return { tomb, nodes, bids, purchases, opinionMsgs, naivePrev, strictNext }
+    const vg = versionGroups(Array.from(nodes.values()).map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: typeof n.c.replaces === "string" ? n.c.replaces : null, claimedAuthor: typeof n.c.seller === "string" ? n.c.seller : null })))
+    return { tomb, nodes, bids, purchases, opinionMsgs, vg }
   }
 
   const resolveGroups = (idx) => {
-    const { tomb, nodes, bids, purchases, opinionMsgs, naivePrev, strictNext } = idx
-    const rootOf = (key) => { let x = key, g = 0; while (naivePrev.has(x) && nodes.has(naivePrev.get(x)) && g++ < 100000) x = naivePrev.get(x); return x }
-    const followStrict = (key) => { let x = key, g = 0; while (strictNext.has(x) && g++ < 100000) x = strictNext.get(x); return x }
+    const { tomb, nodes, bids, purchases, opinionMsgs, vg } = idx
+    const rootOf = vg.rootOf
 
-    const groups = new Map()
-    for (const key of nodes.keys()) { const r = rootOf(key); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(key) }
     const bidsByRoot = new Map()
     for (const bd of bids) { if (!nodes.has(bd.target)) continue; const r = rootOf(bd.target); if (!bidsByRoot.has(r)) bidsByRoot.set(r, []); bidsByRoot.get(r).push(bd) }
     const soldByRoot = new Map()
@@ -127,13 +112,12 @@ module.exports = ({ cooler, tribeCrypto }) => {
     }
 
     const out = new Map()
-    for (const [root, keys] of groups) {
+    for (const root of vg.roots) {
+      const keys = vg.groups.get(root) || [root]
       const rootNode = nodes.get(root)
       const sellerId = rootNode ? rootNode.author : null
       const sellerKeys = keys.filter(k => { const n = nodes.get(k); return n && n.author === sellerId })
-      let tip = followStrict(root)
-      const tipNode0 = nodes.get(tip)
-      if (!tipNode0 || tipNode0.author !== sellerId) tip = root
+      const tip = vg.tipOf(root)
       if (tomb.has(tip)) continue
       let best = nodes.get(tip)
       if (!best) continue
@@ -224,10 +208,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
     async resolveCurrentId(itemId) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const { tomb, strictNext } = buildMarketIndex(messages)
-      let cur = itemId, g = 0
-      while (strictNext.has(cur) && g++ < 100000) cur = strictNext.get(cur)
-      if (tomb.has(cur)) throw new Error("Item not found")
+      const { tomb, vg } = buildMarketIndex(messages)
+      const cur = vg.tipOf(itemId)
+      if (tomb.has(cur) || vg.isForeignCopy(vg.rootOf(cur))) throw new Error("Item not found")
       return cur
     },
 
@@ -431,8 +414,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const messages = await readAll(ssbClient)
 
       const idx = memoIndex('market', messages, buildMarketIndex)
-      const rootOf = (key) => { let x = key, g = 0; while (idx.naivePrev.has(x) && idx.nodes.has(idx.naivePrev.get(x)) && g++ < 100000) x = idx.naivePrev.get(x); return x }
-      const grp = resolveGroups(idx).get(rootOf(itemId))
+      const grp = resolveGroups(idx).get(idx.vg.rootOf(itemId))
       if (!grp) return null
       const { tip, rootId, best, statusN, poll, soldCount, buyers, opinions, voters } = grp
 
@@ -534,11 +516,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const messages = await readAll(ssbClient)
-      const groups = resolveGroups(buildMarketIndex(messages))
-      let group = null
-      for (const g of groups.values()) {
-        if (g.rootId === itemId || g.tip === itemId) { group = g; break }
-      }
+      const idx = buildMarketIndex(messages)
+      const group = resolveGroups(idx).get(idx.vg.rootOf(itemId))
       if (!group) throw new Error("Item not found")
       if (group.best.author === userId) throw new Error("You cannot rate your own item")
       if ((group.voters || []).includes(userId)) throw new Error("Already voted")
@@ -597,8 +576,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildMarketIndex(messages)
-      const rootOf = (key) => { let x = key, g = 0; while (idx.naivePrev.has(x) && idx.nodes.has(idx.naivePrev.get(x)) && g++ < 100000) x = idx.naivePrev.get(x); return x }
-      const grp = resolveGroups(idx).get(rootOf(itemId))
+      const grp = resolveGroups(idx).get(idx.vg.rootOf(itemId))
       if (!grp) throw new Error("Item not found")
       const c = grp.best.c
 

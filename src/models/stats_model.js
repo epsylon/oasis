@@ -5,6 +5,7 @@ const ssbDirOf = () => require('../server/ssb_config').path;
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
+const { versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const DISK_USAGE_TTL_MS = 10 * 60 * 1000;
 
@@ -374,15 +375,15 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const scopedMsgs = filter === 'MINE' ? allMsgs.filter(m => m.value.author === userId) : allMsgs;
 
     const byType = {};
-    const parentOf = {};
+    const versionsOf = {};
     for (const t of types) {
       byType[t] = new Map();
-      parentOf[t] = new Map();
+      versionsOf[t] = [];
     }
 
     const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
     const accessibleTribeIds = await buildAccessibleTribeIds();
-    for (const m of scopedMsgs) {
+    for (const m of allMsgs) {
       const k = m.key;
       let c = m.value.content;
       if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
@@ -402,27 +403,20 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       let theType = c.type;
       if (!types.includes(theType)) continue;
       byType[theType].set(k, { key: k, ts: m.value.timestamp, content: c, author: m.value.author });
-      if (c.replaces) parentOf[theType].set(k, c.replaces);
+      versionsOf[theType].push(versionEntry({ key: k, value: { ...m.value, content: c } }));
     }
 
-    const findRoot = (t, id) => {
-      let cur = id;
-      const pMap = parentOf[t];
-      while (pMap.has(cur)) cur = pMap.get(cur);
-      return cur;
-    };
+    const vgOf = {};
+    for (const t of types) vgOf[t] = versionGroups(versionsOf[t]);
+    const findRoot = (t, id) => vgOf[t].rootOf(id);
 
     const tipOf = {};
     for (const t of types) {
       tipOf[t] = new Map();
-      const pMap = parentOf[t];
-      const fwd = new Map();
-      for (const [child, parent] of pMap.entries()) fwd.set(parent, child);
       const allMap = byType[t];
-      const roots = new Set(Array.from(allMap.keys()).map(id => findRoot(t, id)));
-      for (const root of roots) {
-        let tip = root;
-        while (fwd.has(tip)) tip = fwd.get(tip);
+      for (const root of vgOf[t].roots) {
+        if (filter === 'MINE' && allMap.get(root).author !== userId) continue;
+        const tip = vgOf[t].tipOf(root);
         if (tombTargets.has(tip)) continue;
         const node = allMap.get(tip) || allMap.get(root);
         if (node) tipOf[t].set(root, node);
@@ -470,7 +464,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       }
       content[t] = vals.length || 0;
       const embedded = vals.filter(e => Array.isArray(e.opinions_inhabitants) && e.opinions_inhabitants.length > 0).length || 0;
-      const external = t === 'tribe' ? 0 : Array.from(tipOf[t].keys()).filter(root => opinionTargets.has(root)).length;
+      const external = t === 'tribe' ? 0 : Array.from(tipOf[t].keys()).filter(root => vgOf[t].groups.get(root).some(id => opinionTargets.has(id))).length;
       opinions[t] = Math.max(embedded, external);
     }
 

@@ -2,7 +2,7 @@ const pull = require('../server/node_modules/pull-stream');
 const { normalizeImages, normalizeVideo } = require('./media_gallery');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { dedupeBy, norm } = require('../backend/dedupe');
+const { dedupeBy, norm, versionGroups } = require('../backend/dedupe');
 const { readTyped, memoIndex } = require('./typed_log');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -58,9 +58,6 @@ module.exports = ({ cooler }) => {
   const buildIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages);
     const nodes = new Map();
-    const parent = new Map();
-    const child = new Map();
-    const strictChild = new Map();
     const confirms = [];
     const opinionMsgs = [];
 
@@ -76,46 +73,24 @@ module.exports = ({ cooler }) => {
       if (c.type !== 'report') continue;
 
       const ts = v.timestamp || m.timestamp || 0;
-      nodes.set(k, { key: k, ts, c, author: v.author });
-
-      if (c.replaces) {
-        parent.set(k, c.replaces);
-        child.set(c.replaces, k);
-      }
+      nodes.set(k, { key: k, ts, seq: v.sequence || 0, c, author: v.author });
     }
 
-    for (const [k, node] of nodes) {
-      const t = node.c.replaces;
-      if (t) { const orig = nodes.get(t); if (orig && orig.author === node.author) strictChild.set(t, k); }
-    }
-
-    const rootOf = (id) => {
-      let cur = id, g = 0;
-      while (parent.has(cur) && nodes.has(parent.get(cur)) && g++ < 100000) cur = parent.get(cur);
-      return cur;
-    };
-
-    const contentTipOf = (root) => {
-      let cur = root, g = 0;
-      while (strictChild.has(cur) && g++ < 100000) cur = strictChild.get(cur);
-      const n = nodes.get(cur), rn = nodes.get(root);
-      return (n && rn && n.author === rn.author) ? cur : root;
-    };
-
-    const roots = new Set();
-    for (const id of nodes.keys()) roots.add(rootOf(id));
+    const vg = versionGroups([...nodes.values()].map(n => ({ key: n.key, author: n.author, seq: n.seq, ts: n.ts, replaces: n.c.replaces || null, claimedAuthor: typeof n.c.author === 'string' ? n.c.author : null })));
+    const rootOf = vg.rootOf;
+    const contentTipOf = vg.tipOf;
 
     const confirmsByRoot = new Map(), opinionsByRoot = new Map();
     for (const cf of confirms) { if (!nodes.has(cf.target)) continue; const r = rootOf(cf.target); if (!confirmsByRoot.has(r)) confirmsByRoot.set(r, []); confirmsByRoot.get(r).push(cf); }
     for (const op of opinionMsgs) { if (!nodes.has(op.target)) continue; const r = rootOf(op.target); if (!opinionsByRoot.has(r)) opinionsByRoot.set(r, []); opinionsByRoot.get(r).push(op); }
 
     const tipByRoot = new Map();
-    for (const r of roots) tipByRoot.set(r, contentTipOf(r));
+    for (const r of vg.roots) tipByRoot.set(r, contentTipOf(r));
 
     const resolveGroup = (root) => {
       const contentTip = contentTipOf(root);
       const contentNode = nodes.get(contentTip) || nodes.get(root);
-      if (!contentNode) return null;
+      if (!contentNode || !tipByRoot.has(root)) return null;
       const rootAuthor = nodes.get(root) ? nodes.get(root).author : null;
       const lc = contentNode.c || {};
 
@@ -123,8 +98,7 @@ module.exports = ({ cooler }) => {
       const voterSet = new Set(ensureArray(lc.opinions_inhabitants));
       const confirmSet = new Set(ensureArray(lc.confirmations));
 
-      const groupKeys = []; { let x = root, g = 0; groupKeys.push(x); while (child.has(x) && g++ < 100000) { x = child.get(x); groupKeys.push(x); } }
-      for (const k of groupKeys) {
+      for (const k of (vg.groups.get(root) || [root])) {
         const n = nodes.get(k); if (!n) continue; if (n.author !== rootAuthor) continue; const c = n.c || {};
         for (const cb of ensureArray(c.confirmations)) confirmSet.add(cb);
         for (const vv of ensureArray(c.opinions_inhabitants)) voterSet.add(vv);
@@ -148,7 +122,7 @@ module.exports = ({ cooler }) => {
       };
     };
 
-    return { tomb, nodes, parent, child, rootOf, tipByRoot, resolveGroup };
+    return { tomb, nodes, rootOf, tipByRoot, resolveGroup };
   };
 
   const buildReport = (node, agg) => {

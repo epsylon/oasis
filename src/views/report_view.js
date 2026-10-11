@@ -382,9 +382,9 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
         { class: "filters" },
         ...(emptyMod ? [] : [form(
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
+          ...chipBtn("all", i18n.reportsFilterAll),
           ...chipBtn("recent", i18n.reportsFilterRecent),
           ...chipBtn("mine", i18n.reportsFilterMine),
-          ...chipBtn("all", i18n.reportsFilterAll),
           ...chipBtn("top", i18n.reportsFilterTop),
           ...chipBtn("features", i18n.reportsFilterFeatures),
           ...chipBtn("bugs", i18n.reportsFilterBugs),
@@ -607,9 +607,9 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
         { class: "filters" },
         form(
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
+          button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
           ...(reportChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: btnClass("recent") }, String(i18n.reportsFilterRecent).toUpperCase())] : []),
           ...(reportChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase())] : []),
-          button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
           button({ type: "submit", name: "filter", value: "top", class: btnClass("top") }, String(i18n.reportsFilterTop).toUpperCase()),
           ...(reportChip("features") ? [button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, String(i18n.reportsFilterFeatures).toUpperCase())] : []),
           ...(reportChip("bugs") ? [button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, String(i18n.reportsFilterBugs).toUpperCase())] : []),
