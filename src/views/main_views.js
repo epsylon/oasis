@@ -203,10 +203,7 @@ const CLEARNET_PATHS = { blogs: 'blog', wiki: 'wiki', market: 'market', audios: 
 let clearnetBaseCache = null;
 const clearnetBase = () => {
   if (clearnetBaseCache !== null) return clearnetBaseCache;
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'configs', 'snh-invite-code.json'), 'utf8'));
-    clearnetBaseCache = String(raw.url || '').replace(/\/+$/, '');
-  } catch (_) { clearnetBaseCache = ''; }
+  clearnetBaseCache = String((require('../configs/config-manager.js').defaultInvite() || {}).url || '').replace(/\/+$/, '');
   return clearnetBaseCache;
 };
 const clearnetHrefFor = (viewHref, blockId, title) => {
@@ -365,6 +362,8 @@ exports.CONTENT_FAV_KIND = CONTENT_FAV_KIND;
 exports.CONTENT_SPREADABLE = CONTENT_SPREADABLE;
 exports.CONTENT_TORRENTABLE = CONTENT_TORRENTABLE;
 exports.contentDeleteAction = contentDeleteAction;
+exports.THEMES = [['Dark-SNH', 'Dark-SNH'], ['Clear-SNH', 'Clear-SNH'], ['Purple-SNH', 'Purple-SNH'], ['Matrix-SNH', 'Matrix-SNH'], ['OasisMobile', 'Oasis-Mobile']];
+exports.WIZARD_THEMES = exports.THEMES.filter(([value]) => value !== 'OasisMobile');
 
 const renderDocumentActions = (kind, id, leadingNodes = []) => {
   const base = id ? `/${kind}/${encodeURIComponent(id)}` : `/${kind}`;

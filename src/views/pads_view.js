@@ -329,7 +329,7 @@ exports.singlePadView = async (pad, entries, params) => {
       : null,
     !isAuthor && pad.status === "INVITE-ONLY" && !isMember
       ? div({ class: "pad-invite-section" },
-          a({ class: "tribe-action-btn", href: "/invites#invites-pads" }, i18n.tribeEnterInvite)
+          a({ class: "tribe-action-btn", href: "/invites?filter=others" }, i18n.tribeEnterInvite)
         )
       : null,
     details({ class: "pad-members-details", ...(pad.members.length <= 8 ? { open: true } : {}) },

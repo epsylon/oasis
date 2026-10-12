@@ -2,7 +2,7 @@ const { div, h2, h3, h4, p, section, button, form, a, span, br, hr, textarea, in
 const { renderStyledText } = require("../backend/renderStyledText")
 const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views")
 const { renderMapEmbed } = require("./maps_view")
-const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
+const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 
@@ -46,19 +46,22 @@ const renderCalendarStatusChip = (cal) => {
 }
 
 const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
-  const href = `/calendars/${encodeURIComponent(cal.rootId)}`
+  const origin = cal.tribeOrigin || null
+  const href = origin ? origin.href : `/calendars/${encodeURIComponent(cal.rootId)}`
   const chips = [
     renderCalendarStatusChip(cal),
-    renderEncryptedChip(i18n),
+    origin ? renderTribeOriginChip(origin) : renderEncryptedChip(i18n),
     renderLifespanChip(cal.lifetime, i18n),
-    cal.clearnet === true && clearnetEligible(cal) ? renderReachChip(true, i18n, calClearnetHref(cal)) : null,
+    !origin && cal.clearnet === true && clearnetEligible(cal) ? renderReachChip(true, i18n, calClearnetHref(cal)) : null,
     cal.subscriptionIn === true
       ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
       : (cal.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
   return div({ class: "tribe-card" },
     div({ class: "card-header activity-card-header" },
-      renderContentActions(cal.rootId, href, { spread: spreadInfo || null, author: cal.author, favKind: 'calendars', isFavorite: cal.isFavorite, reportTitle: cal.title, deleteAction: String(cal.author) === String(userId) ? contentDeleteAction('calendar', cal.rootId) : undefined })
+      renderContentActions(cal.rootId, href, origin
+        ? { author: cal.author, reportTitle: cal.title }
+        : { spread: spreadInfo || null, author: cal.author, favKind: 'calendars', isFavorite: cal.isFavorite, reportTitle: cal.title, deleteAction: String(cal.author) === String(userId) ? contentDeleteAction('calendar', cal.rootId) : undefined })
     ),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
@@ -68,9 +71,14 @@ const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
       cal.deadline
         ? p({ class: "job-meta-line" }, `${i18n.calendarDeadlineLabel || "Deadline"}: ${moment(cal.deadline).format("YYYY/MM/DD HH:mm")}`)
         : null,
-      div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${cal.participants.length}`)
-      )
+      origin && Array.isArray(cal.dates) && cal.dates.length
+        ? div(...cal.dates.map(d => p({ class: "job-meta-line" }, `📅 ${moment(d.date).format("YYYY/MM/DD HH:mm")}${d.label ? ` · ${d.label}` : ""}`)))
+        : null,
+      origin
+        ? null
+        : div({ class: "tribe-card-members" },
+            span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${cal.participants.length}`)
+          )
     )
   )
 }
@@ -326,7 +334,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           )
         : null,
       !isAuthor && !isParticipant && calendar.status !== "OPEN"
-        ? a({ class: "tribe-action-btn", href: "/invites#invites-calendars" }, i18n.tribeEnterInvite)
+        ? a({ class: "tribe-action-btn", href: "/invites?filter=others" }, i18n.tribeEnterInvite)
         : null,
       !isAuthor && isParticipant
         ? form({ method: "POST", action: `/calendars/leave/${encodeURIComponent(calendar.rootId)}` },

@@ -31,12 +31,16 @@ Modes:
 PUB admin commands (require the sbot to be running: ./oasis.sh server):
   whoami                   Print this PUB id
   invite [N]               Create an invite code (default uses=1)
+  invites                  Show how many invites this PUB created and how many are used
   name <text>              Set this PUB display name
   announce <host> [port]   Publish a PUB address (default port=8008)
   follow <feedId>          Follow another PUB / feed
   join <invite>            Join another PUB with its invite code
   status                   Show peer / replication status
   gossip                   List known gossip peers
+
+Works with the sbot stopped too (restart Oasis to apply):
+  hops [N]                 Show or set how many hops this node replicates (0-6)
 
 GUI options (forwarded to the backend):
   --host=<ip>           Hostname / IP to listen on (default: localhost; 0.0.0.0 on a VPS).
@@ -63,6 +67,8 @@ Examples:
   ./oasis.sh server --port=3000
   ./oasis.sh test
   ./oasis.sh invite 100
+  ./oasis.sh invites
+  ./oasis.sh hops 1
   ./oasis.sh name "My PUB"
   ./oasis.sh announce mypub.example.com
   ./oasis.sh --host=0.0.0.0 --port=8080 --no-open
@@ -98,7 +104,7 @@ case "$MODE" in
     cd "$CURRENT_DIR/src/backend" || exit 1
     exec node backend.js --public --no-open --host=0.0.0.0 "$@"
     ;;
-  whoami|invite|name|announce|follow|join|status|gossip)
+  whoami|invite|invites|name|announce|follow|join|status|gossip|hops)
     exec node "$CURRENT_DIR/scripts/oasis-pub.js" "$@"
     ;;
   test|tests)

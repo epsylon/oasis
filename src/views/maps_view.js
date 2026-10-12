@@ -5,7 +5,7 @@ const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/r
 
 const moment = require("../server/node_modules/moment");
 const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
-const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
+const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
 const { searchPlaces, nearestPlace } = require("../maps/map_data");
@@ -398,25 +398,28 @@ const renderMarkersList = (markers, mapObj, ctx = {}) => {
 };
 
 const renderMapCard = exports.renderMapCard = (mapObj, filter, params = {}) => {
-  const returnTo = buildReturnTo(filter, params);
+  const returnTo = params.returnTo || buildReturnTo(filter, params);
   const markerCount = safeArr(mapObj.markers).length + 1;
 
   const thumbMarkers = [{ lat: mapObj.lat, lng: mapObj.lng }].concat(
     safeArr(mapObj.markers).map((m) => ({ lat: m.lat, lng: m.lng })));
 
+  const origin = mapObj.tribeOrigin || null;
   const chips = [
     renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase()),
-    renderEncryptedChip(i18n),
+    origin ? renderTribeOriginChip(origin) : renderEncryptedChip(i18n),
     renderLifespanChip(mapObj.lifetime, i18n),
-    mapObj.clearnet === true && clearnetEligible(mapObj) ? renderReachChip(true, i18n, mapClearnetHref(mapObj)) : null
+    !origin && mapObj.clearnet === true && clearnetEligible(mapObj) ? renderReachChip(true, i18n, mapClearnetHref(mapObj)) : null
   ].filter(Boolean);
 
   const isOwn = mapObj.author && String(mapObj.author) === String(userId);
-  const href = `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}`;
+  const href = origin ? origin.href : `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}`;
   return div({ class: "tribe-card" + (isOwn ? " own-content" : "") },
     div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(mapObj.key, href, { spread: params.spreadMap && params.spreadMap.get(mapObj.key) || null, author: mapObj.author, favKind: 'maps', isFavorite: mapObj.isFavorite, reportTitle: mapObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('map', mapObj.key) : undefined })
+      renderContentActions(mapObj.key, href, origin
+        ? { author: mapObj.author, reportTitle: mapObj.title }
+        : { spread: params.spreadMap && params.spreadMap.get(mapObj.key) || null, author: mapObj.author, favKind: 'maps', isFavorite: mapObj.isFavorite, reportTitle: mapObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('map', mapObj.key) : undefined })
     ),
     div({ class: "tribe-card-image-wrapper map-card-thumb" },
       a({ href }, renderMap(thumbMarkers, null, 0, { thumb: true, singleZoom: 5 }))
@@ -564,7 +567,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
     ),
     (String(mapObj.author) !== String(userId) && !mapObj.tribeId && mapObj.mapType !== "OPEN")
       ? div({ class: "tribe-side-actions" },
-          a({ class: "tribe-action-btn", href: "/invites#invites-maps" }, i18n.tribeEnterInvite)
+          a({ class: "tribe-action-btn", href: "/invites?filter=others" }, i18n.tribeEnterInvite)
         )
       : null,
     renderDocumentActions('maps', mapObj.key),

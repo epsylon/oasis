@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, select, option, input, br, a, lab
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
-const { template, selectedLanguage, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel } = require('./main_views');
+const { template, selectedLanguage, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel, THEMES } = require('./main_views');
 const i18nBase = require("../client/assets/translations/i18n");
 const { WORKFLOWS, currentWorkflow } = require('../models/workflows_model');
 const { renderVerificationReport, renderRebuildReport } = require('./backup_view');
@@ -43,13 +43,7 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
   const currentPmVisibility = currentConfig.pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
   const currentPhone = currentConfig.phone && typeof currentConfig.phone === 'object' ? currentConfig.phone : {};
 
-  const themeElements = [
-    option({ value: "Dark-SNH", ...(theme === "Dark-SNH" ? { selected: true } : {})}, "Dark-SNH"),
-    option({ value: "Clear-SNH", ...(theme === "Clear-SNH" ? { selected: true } : {})}, "Clear-SNH"),
-    option({ value: "Purple-SNH", ...(theme === "Purple-SNH" ? { selected: true } : {})}, "Purple-SNH"),
-    option({ value: "Matrix-SNH", ...(theme === "Matrix-SNH" ? { selected: true } : {})}, "Matrix-SNH"),
-    option({ value: "OasisMobile", ...(theme === "OasisMobile" ? { selected: true } : {})}, "Oasis-Mobile")
-  ];
+  const themeElements = THEMES.map(([value, name]) => option({ value, ...(theme === value ? { selected: true } : {}) }, name));
 
   const activeWorkflow = currentWorkflow(currentConfig) || '';
   const modOn = (name) => (currentConfig.modules || {})[`${name}Mod`] === 'on';

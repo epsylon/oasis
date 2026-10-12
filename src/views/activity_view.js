@@ -1130,16 +1130,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                           );
                         })
                       )
-                  : p(i18n.marketNoBids),
-                form({ method: "POST", action: `/market/bid/${encodeURIComponent(action.id)}` },
-                  input({ type: "number", name: "bidAmount", step: "0.000001", min: "0.000001", placeholder: i18n.marketYourBid, required: true }),
-                  br(),
-                  button({ class: "buy-btn", type: "submit" }, i18n.marketPlaceBidButton)
-                )
-              ) : "",
-          item_type === 'exchange' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
-            ? form({ method: "POST", action: `/market/buy/${encodeURIComponent(action.id)}` },
-                button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
+                  : p(i18n.marketNoBids)
               ) : ""
         )
       );

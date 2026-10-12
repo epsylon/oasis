@@ -77,6 +77,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `banking/banking-confirm-notice.json` | The same, for contracts waiting for your confirmation. |
 | `content/content_favorites.json` | What you marked as a favourite, by content type. |
 | `content/follow_state.json` | Follow requests pending and accepted, with the moment of the last one. |
+| `content/invites-used.json` | The latest invitations you used, with what you joined and when. |
 | `content/agenda-config.json` | How you arranged your Agenda. |
 | `content/blob-access.json` | When each downloaded blob was last opened. The media cache (Settings → Media cache) uses it to decide what to drop first once the quota is exceeded. |
 | `content/snapshot.oasissn`, `content/snapshot-recent.oasissn` | Only on a PUB: the copies of its log (every feed whole, and the recently active feeds; private messages as ciphertext) that newcomers receive over the SSB connection when they join, so they can start right away. Rebuilt periodically. |

@@ -2,8 +2,8 @@ const { existsSync, readFileSync, writeFileSync, unlinkSync } = require('fs');
 const { join } = require('path');
 
 const localpackage = join(__dirname, '../server/package.json');
-const remoteUrl = 'https://code.03c8.net/KrakensLab/oasis/raw/master/src/server/package.json'; // Official SNH-Oasis
-const remoteUrl2 = 'https://raw.githubusercontent.com/epsylon/oasis/refs/heads/main/src/server/package.json'; // Mirror SNH-Oasis
+const remoteUrl = 'https://code.03c8.net/KrakensLab/oasis/raw/master/src/server/package.json';
+const remoteUrl2 = 'https://raw.githubusercontent.com/epsylon/oasis/refs/heads/main/src/server/package.json';
 
 let printed = false;
 const repoRoot = join(__dirname, '..', '..');
@@ -86,7 +86,7 @@ async function diffVersion(body, callback) {
       callback("required");
     } else {
       if (existsSync(updateFlagPath)) unlinkSync(updateFlagPath);
-      callback("");  // no updates required
+      callback("");
     }
   } catch (error) {
     console.error("Error comparing versions:", error.message);

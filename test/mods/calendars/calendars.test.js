@@ -461,3 +461,31 @@ describe('calendars: the dates have to add up', (t) => {
     eq(ok1, 'accepted', 'a recurrence that ends inside the calendar is fine');
   });
 });
+
+describe('calendars: inside a tribe', (t) => {
+  t('the author edits and deletes a tribe calendar', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const tribe = await A.use('tribes').createTribe('Huerto', 'd', null, '', [], false, 'open', null, 'OPEN', '');
+    const cal = await A.use('calendars').createCalendar({ title: 'Riego', status: 'OPEN', deadline: '2026-12-31T10:00', tags: '', firstDate: '2026-12-01T10:00', firstDateLabel: 'uno', tribeId: tribe.key });
+    await A.use('calendars').updateCalendarById(cal.key, { title: 'Riego de otoño' });
+    const edited = await A.use('calendars').getCalendarById(cal.key);
+    eq(edited.title, 'Riego de otoño');
+    eq(edited.tribeId, tribe.key, 'the edit stays in the tribe');
+    ok(!net.log.some(m => JSON.stringify(m.value.content).includes('Riego de otoño')), 'and travels encrypted');
+    await A.use('calendars').deleteCalendarById(cal.key);
+    eq(await A.use('calendars').getCalendarById(cal.key), null, 'deleting removes it');
+  });
+
+  t('another member cannot edit or delete it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    const tribe = await A.use('tribes').createTribe('Huerto', 'd', null, '', [], false, 'open', null, 'OPEN', '');
+    const cal = await A.use('calendars').createCalendar({ title: 'Riego', status: 'OPEN', deadline: '2026-12-31T10:00', tags: '', firstDate: '2026-12-01T10:00', firstDateLabel: 'uno', tribeId: tribe.key });
+    B.setActor();
+    let refused = 0;
+    try { await B.use('calendars').updateCalendarById(cal.key, { title: 'Otro' }); } catch (_) { refused++; }
+    try { await B.use('calendars').deleteCalendarById(cal.key); } catch (_) { refused++; }
+    eq(refused, 2);
+    A.setActor();
+    eq((await A.use('calendars').getCalendarById(cal.key)).title, 'Riego');
+  });
+});

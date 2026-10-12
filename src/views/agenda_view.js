@@ -87,16 +87,11 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
   if (item.type === 'event') {
     body.push(timeChip(item.date), metaLine(item.location), parseFloat(item.price || 0) > 0 ? priceChip(`${item.price} ECO`) : null,
       item.url ? p({ class: 'job-meta-line' }, a({ href: safeExternalHref(item.url), target: "_blank", rel: "noopener noreferrer" }, item.url)) : null);
-    if (filter !== 'discarded') extraActions.push(form({ method: 'POST', action: `/events/attend/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
-      button({ type: 'submit', class: 'tribe-action-btn' }, String(i18n.eventAttendButton).toUpperCase())));
   }
 
   if (item.type === 'task') {
     chips.push(chip(item.status, statusKind(item.status)), chip(item.priority, 'closed'));
     body.push(timeChip(item.startTime), timeChip(item.endTime), metaLine(item.location));
-    const assigned = Array.isArray(item.assignees) && item.assignees.includes(userId);
-    if (filter !== 'discarded') extraActions.push(form({ method: 'POST', action: `/tasks/assign/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
-      button({ type: 'submit', class: 'tribe-action-btn' }, String(assigned ? i18n.taskUnassignButton : i18n.taskAssignButton).toUpperCase())));
   }
 
   if (item.type === 'transfer') {
@@ -141,11 +136,6 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
           : (item.subscribers && typeof item.subscribers.length === 'number' ? Array.from(item.subscribers) : []));
     chips.push(chip(item.status, statusKind(item.status)), chip(item.job_type), chip(item.languages), chip(`${i18n.jobVacants}: ${item.vacants}`));
     body.push(metaLine(item.location), priceChip(`${item.salary} ECO`), countLine(i18n.jobSubscribers, subs.length));
-    const subscribed = subs.includes(userId);
-    if (filter !== 'discarded' && !subscribed && String(item.status).toUpperCase() !== 'CLOSED' && item.author !== userId) {
-      extraActions.push(form({ method: 'POST', action: `/jobs/subscribe/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
-        button({ type: 'submit', class: 'tribe-action-btn' }, String(i18n.jobSubscribeButton).toUpperCase())));
-    }
   }
 
   if (item.type === 'industry') {

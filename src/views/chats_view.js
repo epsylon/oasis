@@ -487,7 +487,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
     ),
     !isMember && chat.status === "INVITE-ONLY"
       ? div({ class: "chat-join-section" },
-          a({ class: "tribe-action-btn", href: "/invites#invites-chats" }, i18n.tribeEnterInvite)
+          a({ class: "tribe-action-btn", href: "/invites?filter=others" }, i18n.tribeEnterInvite)
         )
       : null,
     !isRestrictedInviteOnly && safeArr(chat.tags).length

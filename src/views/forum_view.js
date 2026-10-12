@@ -364,7 +364,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
                   button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeRemoveInvitation))
               : null,
             (forum.isPrivate && forum.author !== userId)
-              ? a({ class: 'tribe-action-btn', href: '/invites#invites-forums' }, i18n.tribeEnterInvite)
+              ? a({ class: 'tribe-action-btn', href: '/invites?filter=others' }, i18n.tribeEnterInvite)
               : null
           ),
           (forum.subscription && sharesForum)

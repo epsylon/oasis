@@ -44,6 +44,12 @@ if (!fs.existsSync(serverConfigFilePath)) {
 }
 const readServerConfig = () => mergeDeep(readJsonFile(defaultServerConfigPath) || {}, readJsonFile(serverConfigFilePath) || {});
 const saveServerConfig = (patch) => writeStateFile(serverConfigFilePath, JSON.stringify(mergeDeep(readJsonFile(serverConfigFilePath) || {}, patch), null, 2));
+const inviteCodesPath = path.join(__dirname, 'invite-codes.json');
+const readInviteCodes = () => {
+  const raw = readJsonFile(inviteCodesPath);
+  return (Array.isArray(raw) ? raw : raw ? [raw] : []).filter((e) => e && typeof e.code === 'string' && e.code.trim());
+};
+const defaultInvite = () => readInviteCodes()[0] || null;
 if (!fs.existsSync(configFilePath) && fs.existsSync(legacyConfigPath)) {
   try { writeConfigFile(fs.readFileSync(legacyConfigPath, 'utf8')); } catch (_) {}
 }
@@ -181,4 +187,6 @@ module.exports = {
   saveConfig,
   readServerConfig,
   saveServerConfig,
+  readInviteCodes,
+  defaultInvite,
 };

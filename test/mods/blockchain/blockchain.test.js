@@ -144,3 +144,18 @@ describe('blockchain: live version of items republished by other inhabitants', (
     eq((await A.use('blockchain').getBlockById(r.key, A.keypair.id)).isReplaced, false);
   });
 });
+
+describe('blockchain: searching by author', (t) => {
+  t('an id or a name finds only that inhabitant\'s blocks', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    const publishAs = async (P, content) => { const ssb = await P.cooler.open(); return new Promise((res, rej) => ssb.publish(content, (e, m) => e ? rej(e) : res(m))); };
+    await publishAs(A, { type: 'about', about: A.keypair.id, name: 'Marina' });
+    await publishAs(A, { type: 'post', text: 'from A' });
+    await publishAs(B, { type: 'post', text: 'from B' });
+    A.setActor();
+    const byId = await A.use('blockchain').listBlockchain('all', A.keypair.id, { author: A.keypair.id });
+    ok(byId.length > 0 && byId.every(b => b.author === A.keypair.id));
+    const byName = await A.use('blockchain').listBlockchain('all', A.keypair.id, { author: 'marina' });
+    ok(byName.length > 0 && byName.every(b => b.author === A.keypair.id));
+  });
+});

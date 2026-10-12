@@ -625,6 +625,14 @@ describe('phone: numbers', (t) => {
     eq(numbers.normalizeNumber('@abc.ed25519'), null);
   });
 
+  t('a number pasted with the phone icon or any separator is still a number', () => {
+    eq(numbers.normalizeNumber('✆ 482-913'), '482-913');
+    eq(numbers.normalizeNumber('482–913'), '482-913');
+    eq(numbers.normalizeNumber('482.913'), '482-913');
+    eq(numbers.normalizeNumber(' 482\u00a0913 '), '482-913');
+    eq(numbers.normalizeNumber('abc482913'), null);
+  });
+
   t('a number resolves only among known people, the ones you follow first', () => {
     const seen = new Map();
     let pair = null;

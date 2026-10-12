@@ -312,10 +312,8 @@ describe('shops: reversible open/close (E2E migration)', (t) => {
     const shop = await A.use('shops').createShop('Flip', '', '', null, '', '', [], 'OPEN', '');
     await A.use('shops').createProduct(shop.key, 'Widget', 'd', null, 9, 4, false);
     ok(!(await A.use('shops').getShopById(shop.key)).encrypted, 'starts public/cleartext');
-    // non-member sees it while public
     B.setActor();
     ok((await B.use('shops').listAll({ filter: 'all', viewerId: B.keypair.id })).find(s => s.rootId === shop.key), 'visible while public');
-    // close -> encrypts
     A.setActor();
     await A.use('shops').setShopVisibility(shop.key, 'CLOSED');
     const closed = await A.use('shops').getShopById(shop.key);
@@ -323,11 +321,9 @@ describe('shops: reversible open/close (E2E migration)', (t) => {
     eq(closed.title, 'Flip', 'owner still reads it');
     const prodClosed = await A.use('shops').listProducts(shop.key);
     ok(prodClosed.find(p => p.title === 'Widget'), 'owner reads products after close');
-    // non-member no longer sees it
     B.setActor();
     ok(!(await B.use('shops').listAll({ filter: 'all', viewerId: B.keypair.id })).find(s => s.rootId === shop.key), 'hidden after close');
     eq((await B.use('shops').listProducts(shop.key)).length, 0, 'products hidden after close');
-    // reopen -> cleartext, visible again
     A.setActor();
     await A.use('shops').setShopVisibility(shop.key, 'OPEN');
     ok(!(await A.use('shops').getShopById(shop.key)).encrypted, 'cleartext again after reopen');
@@ -343,15 +339,12 @@ describe('shops: reversible open/close (E2E migration)', (t) => {
     A.setActor();
     const shop = await A.use('shops').createShop('Rot', '', '', null, '', '', [], 'CLOSED', '');
     const first = await A.use('shops').generateInvite(shop.key);
-    // open then close again -> new key minted
     await A.use('shops').setShopVisibility(shop.key, 'OPEN');
     await A.use('shops').setShopVisibility(shop.key, 'CLOSED');
-    // B redeems the OLD code: it resolves a key, but it's the stale one -> cannot read current content
     B.setActor();
     await B.use('shops').joinByCode(first.code).catch(() => {});
     const seen = (await B.use('shops').listAll({ filter: 'all', viewerId: B.keypair.id })).find(s => s.rootId === shop.key);
     ok(!seen, 'old code does not grant access to re-keyed shop');
-    // a fresh code works
     A.setActor();
     const fresh = await A.use('shops').generateInvite(shop.key);
     B.setActor();
@@ -382,19 +375,16 @@ describe('shops: My Orders end-to-end (seller creates shop+item, buyer buys)', (
   t('buyer sees the purchase in My Orders with full details and live status', async () => {
     const net = makeNetwork(); const seller = makePeer(net); const buyer = makePeer(net);
 
-    // 1) Seller creates a shop and uploads an item
     seller.setActor();
     const shop = await seller.use('shops').createShop('Seller Shop', 'we sell stuff', 'long desc', null, 'https://shop', 'Madrid', ['retail'], 'OPEN', '');
     const product = await seller.use('shops').createProduct(shop.key, 'Cool Widget', 'a cool widget', null, 12.5, 3, false);
 
-    // 2) Buyer places an order (this is what feeds "My Orders")
     buyer.setActor();
     const order = await buyer.use('shops').createPurchaseOrder(product.key, {
       deliveryAddress: '42 Buyer St', contact: 'buyer@mail', notes: 'ring twice'
     });
     ok(order, 'order created');
 
-    // 3) My Orders (buyer) shows it with all details; starts PENDING
     const myOrders = await buyer.use('shops').listMyPurchases();
     eq(myOrders.length, 1, 'buyer has exactly one order in My Orders');
     const mine = myOrders[0];
@@ -406,7 +396,6 @@ describe('shops: My Orders end-to-end (seller creates shop+item, buyer buys)', (
     eq(mine.notes, 'ring twice');
     eq(mine.status, 'PENDING', 'starts PENDING');
 
-    // 4) Seller's Orders view shows the incoming order + pending badge
     seller.setActor();
     const received = await seller.use('shops').listShopOrders(shop.key);
     eq(received.length, 1);
@@ -414,19 +403,16 @@ describe('shops: My Orders end-to-end (seller creates shop+item, buyer buys)', (
     eq(received[0].deliveryAddress, '42 Buyer St');
     eq(await seller.use('shops').countPendingOrders(shop.key), 1, 'one pending order');
 
-    // 5) Seller accepts -> buyer's My Orders reflects ACCEPTED
     await seller.use('shops').setOrderStatus(order.key, 'ACCEPTED');
     buyer.setActor();
     eq((await buyer.use('shops').listMyPurchases())[0].status, 'ACCEPTED');
 
-    // 6) Seller: payment received -> shipped
     seller.setActor();
     await seller.use('shops').setOrderStatus(order.key, 'PAID');
     await seller.use('shops').setOrderStatus(order.key, 'SHIPPED');
     buyer.setActor();
     eq((await buyer.use('shops').listMyPurchases())[0].status, 'SHIPPED');
 
-    // 7) Buyer confirms received (the button shown on My Orders) -> RECEIVED
     await buyer.use('shops').setOrderStatus(order.key, 'RECEIVED');
     eq((await buyer.use('shops').listMyPurchases())[0].status, 'RECEIVED');
     seller.setActor();

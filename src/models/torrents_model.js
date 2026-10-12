@@ -211,7 +211,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const oldDec = await decryptIfTribe(oldMsg.content);
       if (!oldDec || oldDec.type !== "torrent") throw new Error("Torrent not found");
       assertReadable(oldDec, "Torrent");
-      if ((oldDec.author || oldMsg.content.author) !== userId) throw new Error("Not the author");
+      if (oldMsg.author !== userId) throw new Error("Not the author");
       const aggTorrent = await this.getTorrentById(id, userId);
       if (aggTorrent && Object.keys(aggTorrent.opinions || {}).some(k => (aggTorrent.opinions[k] || 0) > 0)) throw new Error("Cannot edit torrent after it has received opinions.");
 
@@ -231,7 +231,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         opinions: oldDec.opinions || {},
         opinions_inhabitants: oldDec.opinions_inhabitants || [],
         author: oldDec.author || userId,
-        ...(oldMsg.content.tribeId ? { tribeId: oldMsg.content.tribeId } : {}),
+        ...((oldDec.tribeId || oldMsg.content.tribeId) ? { tribeId: oldDec.tribeId || oldMsg.content.tribeId } : {}),
         createdAt: oldDec.createdAt,
         updatedAt: now
       };
@@ -255,7 +255,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (!msg) throw new Error("Torrent not found");
       const dec = await decryptIfTribe(msg.content);
       if (!dec || dec.type !== "torrent") throw new Error("Torrent not found");
-      if ((dec.author || msg.content.author) !== userId) throw new Error("Not the author");
+      if (msg.author !== userId) throw new Error("Not the author");
 
       const tombstone = await tombFor(tipId, dec.tribeId || msg.content.tribeId, userId);
 

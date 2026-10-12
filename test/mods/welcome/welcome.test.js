@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { eq, ok, notOk } = require('../../helpers/assert');
+const { eq, ok, notOk, deepEq } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
 const factory = require('../../../src/models/onboarding_model');
@@ -43,7 +43,7 @@ describe('welcome: it only greets a brand new node', (t) => {
     ok(onboarding.firstContactSeen(), 'but the first contact is still recorded');
   });
 
-  t('the first launch writes the flag and opens the guide', () => {
+  t('the first launch writes the flag and leaves a reminder instead of opening the guide', () => {
     const { onboarding, peer, dir } = setup();
     ok(onboarding.begin(peer.keypair.id));
     ok(onboarding.isVisible(), 'the banner appears');
@@ -51,24 +51,6 @@ describe('welcome: it only greets a brand new node', (t) => {
     ok(flag.startsWith(peer.keypair.id), 'the feed id stays on the first line');
     ok(flag.includes('welcome=pending'));
     ok(onboarding.firstContactSeen(peer.keypair.id), 'the welcome PM will not be sent again');
-  });
-});
-
-describe('welcome: the guide opens itself on the first visit', (t) => {
-  t('a fresh node wants the guide opened once, and never again after it was shown', () => {
-    const { onboarding, peer } = setup();
-    ok(onboarding.begin(peer.keypair.id));
-    ok(onboarding.shouldOpen(), 'the first visit goes to the guide');
-    ok(onboarding.markOpened());
-    notOk(onboarding.shouldOpen(), 'the next visit lands on the home page');
-    ok(onboarding.isVisible(), 'while the reminder stays until the guide is closed or completed');
-  });
-
-  t('a closed guide never opens itself', () => {
-    const { onboarding, peer } = setup();
-    onboarding.begin(peer.keypair.id);
-    onboarding.dismiss();
-    notOk(onboarding.shouldOpen());
   });
 });
 
@@ -94,23 +76,35 @@ describe('welcome: nothing is mandatory', (t) => {
 });
 
 describe('welcome: the steps', (t) => {
-  t('language, interface, wish and configuration are recorded in the same flag file', async () => {
+  t('type, use and appearance are recorded in the same flag file', async () => {
     const { onboarding, peer, dir } = setup();
     onboarding.begin(peer.keypair.id);
-    eq((await onboarding.status()).steps.language, false);
-    onboarding.markStep('language');
-    onboarding.markStep('wish');
-    onboarding.markStep('workflow');
+    eq((await onboarding.status()).steps.theme, false);
     onboarding.markStep('ux');
+    onboarding.markStep('workflow');
+    onboarding.markStep('theme');
     const status = await onboarding.status();
-    ok(status.steps.language);
-    ok(status.steps.wish);
+    ok(status.steps.ux);
     ok(status.steps.workflow);
-    ok(status.steps.ux, 'the chosen UX is recorded there too');
-    eq(status.done, 4);
-    eq(status.total, 8);
+    ok(status.steps.theme);
+    eq(status.done, 3);
+    eq(status.total, 6);
     notOk(onboarding.markStep('whatever'), 'an unknown step is refused');
-    ok(flagOf(dir).includes('step=language'));
+    notOk(onboarding.markStep('language'), 'and so are the steps the guide no longer has');
+    ok(flagOf(dir).includes('step=theme'));
+  });
+
+  t('keeping the Oasis ID or staying without federation also completes those steps', async () => {
+    const { onboarding, peer } = setup();
+    onboarding.begin(peer.keypair.id);
+    const before = await onboarding.status();
+    notOk(before.steps.profile);
+    notOk(before.steps.community);
+    ok(onboarding.markStep('profile'));
+    ok(onboarding.markStep('community'));
+    const after = await onboarding.status();
+    ok(after.steps.profile, 'no name nor picture is a valid choice');
+    ok(after.steps.community, 'and so is not joining any PUB');
   });
 
   t('the profile step reads the real profile of the inhabitant', async () => {
@@ -128,30 +122,27 @@ describe('welcome: the steps', (t) => {
     eq((await onboarding.status()).steps.profile, false);
   });
 
-  t('the federation step reads that the inhabitant reached somebody', async () => {
+  t('the community step reads that the inhabitant reached somebody', async () => {
     const net = makeNetwork();
     const A = makePeer(net); const B = makePeer(net);
     A.setActor();
     const onboarding = factory({ cooler: A.cooler, ssbPath: freshDir() });
     onboarding.begin(A.keypair.id);
-    eq((await onboarding.status()).steps.federation, false, 'alone at first');
+    eq((await onboarding.status()).steps.community, false, 'alone at first');
     await publish(A, { type: 'contact', contact: B.keypair.id, following: true });
-    ok((await onboarding.status()).steps.federation);
+    ok((await onboarding.status()).steps.community);
   });
 
-  t('backups are no longer a step of the guide', () => {
-    notOk(factory.STEPS.includes('backup'));
-    const i = factory.STEPS.indexOf('wish');
-    eq(factory.STEPS[i + 1], 'workflow', 'the wish is asked right before choosing a configuration');
-    ok(i < factory.STEPS.indexOf('federation'), 'and both come before joining the network');
+  t('the guide goes identity, type, use, appearance, community and welcome', () => {
+    deepEq(factory.STEPS, ['profile', 'ux', 'workflow', 'theme', 'community', 'greeting']);
   });
 
   t('steps of disabled modules are left out of the count', async () => {
     const { onboarding, peer } = setup();
     onboarding.begin(peer.keypair.id);
-    onboarding.markStep('language');
+    onboarding.markStep('theme');
     await publish(peer, { type: 'about', about: peer.keypair.id, name: 'Alice' });
-    const status = await onboarding.status({ federation: false, larp: false, wish: false, workflow: false, greeting: false, ux: false });
+    const status = await onboarding.status({ community: false, workflow: false, greeting: false, ux: false });
     eq(status.total, 2, 'only the steps that this node can do');
     eq(status.done, 2);
     ok(status.complete, 'the guide can be completed without them');
@@ -164,16 +155,14 @@ describe('welcome: the steps', (t) => {
     const dir = freshDir();
     const onboarding = factory({ cooler: A.cooler, ssbPath: dir });
     onboarding.begin(A.keypair.id);
-    onboarding.markStep('language');
-    onboarding.markStep('wish');
-    onboarding.markStep('workflow');
     onboarding.markStep('ux');
+    onboarding.markStep('workflow');
+    onboarding.markStep('theme');
     await publish(A, { type: 'about', about: A.keypair.id, name: 'Alice' });
     await publish(A, { type: 'contact', contact: B.keypair.id, following: true });
     await publish(A, { type: 'feed', text: 'Hello, I have just arrived.' });
-    await publish(A, { type: 'larpJoinHouse', house: 'academia' });
     const status = await onboarding.status();
-    eq(status.done, 8);
+    eq(status.done, 6);
     ok(status.complete);
     notOk(onboarding.isVisible(), 'the banner disappears on its own');
     ok(flagOf(dir).includes('welcome=done'));
@@ -194,24 +183,6 @@ describe('welcome: the greeting', (t) => {
     onboarding.begin(peer.keypair.id);
     await publish(peer, { type: 'feed', text: '   ' });
     eq((await onboarding.status()).steps.greeting, false);
-  });
-});
-
-describe('welcome: the L.A.R.P. step', (t) => {
-  t('joining the Academy completes it', async () => {
-    const { onboarding, peer } = setup();
-    onboarding.begin(peer.keypair.id);
-    eq((await onboarding.status()).steps.larp, false, 'not playing yet');
-    await publish(peer, { type: 'larpJoinHouse', house: 'academia' });
-    ok((await onboarding.status()).steps.larp, 'the Academy counts');
-  });
-
-  t('leaving the game undoes it', async () => {
-    const { onboarding, peer } = setup();
-    onboarding.begin(peer.keypair.id);
-    await publish(peer, { type: 'larpJoinHouse', house: 'academia' });
-    await publish(peer, { type: 'larpLeaveLarp' });
-    eq((await onboarding.status()).steps.larp, false, 'whoever leaves is not in a house');
   });
 });
 

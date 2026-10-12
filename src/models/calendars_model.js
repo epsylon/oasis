@@ -162,7 +162,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
 
   const decryptScoped = async (content, rootId) => {
     if (!content) return content
-    if (content.tribeId) return await decryptIfTribe(content)
+    if (content.tribeId || (tribeCrypto && tribeCrypto.isTribeMsg(content))) return await decryptIfTribe(content)
     return decryptCalendarRoot(content, rootId)
   }
 
@@ -393,11 +393,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
-      if (idx.tomb.has(tip)) throw new Error("Not found")
-      let root = tip
-      while (idx.parent.has(root)) root = idx.parent.get(root)
+      const root = idx.rootOf(id)
+      if (idx.tomb.has(idx.contentTipOf(root))) throw new Error("Not found")
       return root
     },
 
@@ -405,8 +402,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
-      let tip = id
-      while (idx.child.has(tip)) tip = idx.child.get(tip)
+      const tip = idx.contentTipOf(idx.rootOf(id))
       if (idx.tomb.has(tip)) throw new Error("Not found")
       return tip
     },
@@ -540,11 +536,9 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         ssbClient.get(tipId, (err, it) => err ? reject(err) : resolve(it))
       })
       if (!item || !item.content) throw new Error("Calendar not found")
-      const oldDec = item.content.tribeId
-        ? await decryptIfTribe(item.content)
-        : decryptCalendarRoot(item.content, rootId)
+      const oldDec = await decryptScoped(item.content, rootId)
       assertReadable(oldDec, "Calendar")
-      if ((oldDec.author || item.content.author) !== userId) throw new Error("Not the author")
+      if (item.author !== userId) throw new Error("Not the author")
       const nextDeadline = data.deadline !== undefined ? data.deadline : (oldDec.deadline || "")
       if (nextDeadline !== (oldDec.deadline || "")) assertCalendarDates({ deadline: nextDeadline })
       let updated = {
@@ -557,17 +551,17 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         author: oldDec.author || userId,
         participants: oldDec.participants || [userId],
         invites: Array.isArray(oldDec.invites) ? oldDec.invites : [],
-        ...(item.content.tribeId ? { tribeId: item.content.tribeId } : {}),
+        ...(oldDec.tribeId ? { tribeId: oldDec.tribeId } : {}),
         createdAt: oldDec.createdAt,
         updatedAt: new Date().toISOString(),
         replaces: tipId
       }
-      const closing = !item.content.tribeId && String(oldDec.status || "OPEN").toUpperCase() === "OPEN" && updated.status === "CLOSED"
+      const closing = !oldDec.tribeId && String(oldDec.status || "OPEN").toUpperCase() === "OPEN" && updated.status === "CLOSED"
       if (closing) {
         updated.invites = updated.invites.filter(inv => !(inv && typeof inv === "object" && inv.public === true))
         try { await rotateCalendarKey(rootId, (updated.participants || []).filter(p => p !== userId)) } catch (_) {}
       }
-      if (item.content.tribeId) updated = await encryptIfTribe(updated)
+      if (updated.tribeId) updated = await encryptIfTribe(updated)
       else updated = encryptStandalone(updated, rootId)
       const result = await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
@@ -584,8 +578,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const rootId = await this.resolveRootId(id)
       const dec = await decryptScoped(item.content, rootId)
       assertReadable(dec, "Calendar")
-      const contentAuthor = (dec && dec.author) || (typeof item.content === 'object' && item.content.author)
-      if (contentAuthor !== userId) throw new Error("Not the author")
+      if (item.author !== userId) throw new Error("Not the author")
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
       return new Promise((resolve, reject) => ssbClient.publish(tombstone, e => e ? reject(e) : resolve()))
     },
@@ -847,9 +840,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const userId = ssbClient.id
       const item = await new Promise((resolve, reject) => ssbClient.get(noteId, (e, it) => e ? reject(e) : resolve(it)))
       if (!item || !item.content) throw new Error("Note not found")
-      const noteRoot = item.content.calendarId || null
-      const dec = await decryptScoped(item.content, noteRoot)
-      if (((dec && dec.author) || item.content.author) !== userId) throw new Error("Not the author")
+      if (item.author !== userId) throw new Error("Not the author")
       return new Promise((resolve, reject) => {
         ssbClient.publish({ type: "tombstone", target: noteId, deletedAt: new Date().toISOString(), author: userId }, (e, msg) => e ? reject(e) : resolve(msg))
       })
@@ -1032,9 +1023,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       if (opts.public && typeof invite !== "object") invite = { code, public: true }
       const tipId = await this.resolveCurrentId(calendarId)
       const item = await new Promise((resolve, reject) => ssbClient.get(tipId, (e, it) => e ? reject(e) : resolve(it)))
-      const dec = item.content.tribeId
-        ? await decryptIfTribe(item.content)
-        : decryptCalendarRoot(item.content, cal.rootId)
+      const dec = await decryptScoped(item.content, cal.rootId)
+      assertReadable(dec, "Calendar")
       const invites = [...(Array.isArray(dec.invites) ? dec.invites : []), invite]
       let updated = {
         type: "calendar",
@@ -1046,12 +1036,12 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         author: dec.author,
         participants: Array.isArray(dec.participants) ? dec.participants : [userId],
         invites,
-        ...(item.content.tribeId ? { tribeId: item.content.tribeId } : {}),
+        ...(dec.tribeId ? { tribeId: dec.tribeId } : {}),
         createdAt: dec.createdAt,
         updatedAt: new Date().toISOString(),
         replaces: tipId
       }
-      if (item.content.tribeId) updated = await encryptIfTribe(updated)
+      if (updated.tribeId) updated = await encryptIfTribe(updated)
       else updated = encryptStandalone(updated, cal.rootId)
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
@@ -1079,9 +1069,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       if (cal.author !== userId) throw new Error("Only the author can remove invites")
       const tipId = await this.resolveCurrentId(calendarId)
       const item = await new Promise((resolve, reject) => ssbClient.get(tipId, (e, it) => e ? reject(e) : resolve(it)))
-      const dec = item.content.tribeId
-        ? await decryptIfTribe(item.content)
-        : decryptCalendarRoot(item.content, cal.rootId)
+      const dec = await decryptScoped(item.content, cal.rootId)
+      assertReadable(dec, "Calendar")
       const invites = (Array.isArray(dec.invites) ? dec.invites : []).filter(inv => !(typeof inv === "object" && inv.public === true))
       let updated = {
         type: "calendar",
@@ -1093,17 +1082,17 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         author: dec.author,
         participants: Array.isArray(dec.participants) ? dec.participants : [userId],
         invites,
-        ...(item.content.tribeId ? { tribeId: item.content.tribeId } : {}),
+        ...(dec.tribeId ? { tribeId: dec.tribeId } : {}),
         createdAt: dec.createdAt,
         updatedAt: new Date().toISOString(),
         replaces: tipId
       }
-      if (item.content.tribeId) updated = await encryptIfTribe(updated)
+      if (updated.tribeId) updated = await encryptIfTribe(updated)
       else updated = encryptStandalone(updated, cal.rootId)
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
       await new Promise((resolve, reject) => ssbClient.publish(tombstone, e => e ? reject(e) : resolve()))
-      if (!item.content.tribeId) await rotateCalendarKey(cal.rootId, Array.isArray(cal.participants) ? cal.participants : [])
+      if (!dec.tribeId) await rotateCalendarKey(cal.rootId, Array.isArray(cal.participants) ? cal.participants : [])
     },
 
     async joinByInvite(code) {
@@ -1153,9 +1142,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       }
       const tipId = await this.resolveCurrentId(matched.rootId)
       const item = await new Promise((resolve, reject) => ssbClient.get(tipId, (e, it) => e ? reject(e) : resolve(it)))
-      const dec = item.content.tribeId
-        ? await decryptIfTribe(item.content)
-        : decryptCalendarRoot(item.content, matched.rootId)
+      const dec = await decryptScoped(item.content, matched.rootId)
+      assertReadable(dec, "Calendar")
       const isPublicInvite = typeof matchedInvite === "object" && matchedInvite.public === true
       const invites = isPublicInvite
         ? (Array.isArray(dec.invites) ? dec.invites : [])
@@ -1173,12 +1161,12 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         author: dec.author,
         participants: [...(Array.isArray(dec.participants) ? dec.participants : []), userId],
         invites,
-        ...(item.content.tribeId ? { tribeId: item.content.tribeId } : {}),
+        ...(dec.tribeId ? { tribeId: dec.tribeId } : {}),
         createdAt: dec.createdAt,
         updatedAt: new Date().toISOString(),
         replaces: tipId
       }
-      if (item.content.tribeId) updated = await encryptIfTribe(updated)
+      if (updated.tribeId) updated = await encryptIfTribe(updated)
       else updated = encryptStandalone(updated, matched.rootId)
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }

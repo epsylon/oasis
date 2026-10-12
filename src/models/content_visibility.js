@@ -8,7 +8,7 @@ const isPrivateFlag = (v) => {
 
 const isContentVisibleTo = (type, c, viewer, author = null) => {
   if (!c || typeof c !== 'object') return false;
-  if (c.encryptedPayload || c.encryptedQuestion || c.encryptedText) return false;
+  if (c.encrypted === true || c.encryptedPayload || c.encryptedQuestion || c.encryptedText) return false;
   const owner = String(author || c.author || '') === String(viewer);
   switch (type) {
     case 'task': return !isPrivateFlag(c.isPublic) || owner || arr(c.assignees).includes(viewer);

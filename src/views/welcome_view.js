@@ -1,254 +1,140 @@
-const fs = require("fs")
-const path = require("path")
-const { form, button, div, h2, p, section, a, span, select, option, label, input, textarea, img } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { form, button, div, h2, p, section, a, span, select, option, label, input, textarea, img, details, summary } = require("../server/node_modules/hyperaxe")
+const { template, i18n, WIZARD_THEMES } = require("./main_views")
 const { renderRestoreStatus } = require("./backup_view")
+const { renderSuggestedPub } = require("./invites_view")
 const { config } = require("../server/SSB_server.js")
 const { WIZARD_WORKFLOWS } = require("../models/workflows_model")
-
-const WISH_LEVELS = [
-  { value: "whole", name: "settingsWishWhole", hint: "welcomeWishHint_whole" },
-  { value: "mutuals", name: "settingsWishMutuals", hint: "welcomeWishHint_mutuals" },
-  { value: "only-lan", name: "settingsWishOnlyLan", hint: "welcomeWishHint_lan" },
-  { value: "local", name: "settingsWishLocal", hint: "welcomeWishHint_local" }
-]
 
 const FEED_TEXT_MIN = Number(config?.feed?.minLength ?? 1)
 const FEED_TEXT_MAX = Number(config?.feed?.maxLength ?? 280)
 
-const LANGUAGES = [
-  ["English", "en"],
-  ["Español", "es"],
-  ["Français", "fr"],
-  ["Euskara", "eu"],
-  ["Català", "ca"],
-  ["Galego", "gl"],
-  ["Deutsch", "de"],
-  ["Italiano", "it"],
-  ["Português", "pt"],
-  ["中文", "zh"],
-  ["العربية", "ar"],
-  ["हिन्दी", "hi"],
-  ["Русский", "ru"]
-]
-
-const snhInvite = () => {
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "configs", "snh-invite-code.json"), "utf8"))
-    if (!raw || !raw.code) return null
-    return { name: String(raw.name || "").trim(), code: String(raw.code) }
-  } catch (_) {
-    return null
-  }
+const SECTIONS = {
+  profile: ["welcomeStepIdentity", "welcomeHintIdentity"],
+  ux: ["welcomeStepType", "welcomeHintType"],
+  workflow: ["welcomeStepUse", "welcomeHintUse"],
+  theme: ["welcomeStepLook", "welcomeHintLook"],
+  community: ["welcomeStepCommunity", "welcomeHintCommunity"],
+  greeting: ["welcomeStepIntro", "welcomeHintIntro"]
 }
 
-const stepChip = (done) => span(
-  { class: done ? "welcome-chip welcome-chip-done" : "welcome-chip" },
-  done ? `✓ ${i18n.welcomeStepDone || "done"}` : (i18n.welcomeStepPending || "pending")
+const submitRow = (text) => div({ class: "welcome-action" }, button({ type: "submit" }, text))
+
+const pickCard = (name, value, current, title, image) => label({ class: "welcome-ux-option" },
+  input({ type: "radio", name, value, ...(value === current ? { checked: true } : {}) }),
+  img({ src: image, class: "welcome-ux-shot", alt: title }),
+  span({ class: "welcome-ux-label" }, title)
 )
 
-const linkAction = (href, label) => div({ class: "welcome-action" },
-  a({ href, class: "filter-btn" }, label)
-)
-
-const languageAction = (lang) => form({ method: "POST", action: "/language", class: "welcome-action welcome-language-form" },
-  select({ name: "language" }, LANGUAGES.map(([label, code]) => option({ value: code, ...(code === lang ? { selected: true } : {}) }, label))),
-  button({ type: "submit", class: "filter-btn" }, i18n.setLanguage || "Set Language")
-)
-
-const stepContent = (key, lang, profile, status) => {
-  if (key === "language") return {
-    title: i18n.welcomeStepLanguageTitle || "Choose your language",
-    text: i18n.welcomeStepLanguageText || "Oasis speaks different languages. You can change it whenever you want.",
-    action: languageAction(lang)
-  }
-  if (key === "profile") return {
-    title: i18n.welcomeStepProfileTitle || "Edit your profile",
-    text: i18n.welcomeStepProfileText || "Pick a name, add a description and set a picture so other inhabitants can recognise you.",
-    action: form({ method: "POST", action: "/welcome/profile", enctype: "multipart/form-data", class: "welcome-profile-form" },
-      label(i18n.profileName || "Name"),
-      input({ type: "text", name: "name", maxlength: "80", value: profile.name || "", required: true }),
-      label(i18n.profileDescription || "Description"),
-      textarea({ name: "description", rows: "3", maxlength: "600" }, profile.description || ""),
-      label(i18n.profileImage || "Image"),
-      img({ loading: 'lazy', class: "welcome-profile-avatar", src: profile.image ? `/image/256/${encodeURIComponent(profile.image)}` : "/assets/images/default-avatar.png" }),
-      input({ type: "file", name: "image", accept: "image/*" }),
-      div({ class: "welcome-action" },
-        button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepProfileAction || "Save Profile")
-      )
-    )
-  }
-  if (key === "federation") {
-    const invite = snhInvite()
-    const bootstrap = status && status.bootstrap
-    if (bootstrap && bootstrap.running) {
-      return {
-        title: invite && invite.name ? `${i18n.welcomeJoinPub || "Join"} ${invite.name}` : (i18n.welcomeStepFederationTitle || "Join Main Network"),
-        text: i18n.welcomeBootstrapRunning || "Loading the pub's snapshot. The pub is joined as soon as it finishes.",
-        extra: renderRestoreStatus(bootstrap),
-        action: null
-      }
-    }
-    return {
-      title: invite && invite.name ? `${i18n.welcomeJoinPub || "Join"} ${invite.name}` : (i18n.welcomeStepFederationTitle || "Join Main Network"),
-      text: i18n.welcomeStepFederationText || "Connect to our pub to meet other inhabitants and start replicating.",
-      extra: bootstrap && !bootstrap.running ? renderRestoreStatus(bootstrap) : null,
-      action: div({ class: "welcome-action" },
-        invite && status && status.canJoin === false
-          ? p({ class: "invites-join-note" }, status.publicMode === true ? i18n.invitesJoinPubMode : i18n.invitesJoinLocalOnly)
-          : invite
-            ? form({ method: "POST", action: "/settings/invite/accept" },
-                input({ type: "hidden", name: "invite", value: invite.code }),
-                button({ type: "submit", class: "filter-btn" }, i18n.welcomeJoinPubButton || "Join Pub")
-              )
-            : a({ href: "/invites", class: "filter-btn" }, i18n.welcomeStepFederationAction || "Go to invites")
-      )
-    }
-  }
-  if (key === "larp") return {
-    title: i18n.welcomeStepLarpTitle || "Join \"The Academy\"",
-    text: i18n.welcomeStepLarpText || "Join our live action role playing game.",
-    action: div({ class: "welcome-action" },
-      form({ method: "POST", action: "/larp/join" },
-        input({ type: "hidden", name: "house", value: "academia" }),
-        input({ type: "hidden", name: "returnTo", value: "/welcome" }),
-        button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepLarpAction || "Join L.A.R.P.")
-      )
-    )
-  }
+const stepAction = (key, profile, status) => {
+  if (key === "profile") return form({ method: "POST", action: "/welcome/profile", enctype: "multipart/form-data", class: "welcome-profile-form" },
+    label(i18n.profileName),
+    input({ type: "text", name: "name", maxlength: "80", value: profile.name || "", placeholder: profile.name || String(profile.id || "").slice(1, 9) }),
+    label(i18n.profileImage),
+    profile.image ? img({ loading: "lazy", class: "welcome-profile-avatar", src: `/image/256/${encodeURIComponent(profile.image)}` }) : null,
+    input({ type: "file", name: "image", accept: "image/*" }),
+    submitRow(i18n.welcomeStepProfileAction)
+  )
   if (key === "ux") {
     let cfg = {}
     try { cfg = require("../configs/config-manager.js").getConfig() || {} } catch (_) {}
     const cur = ["ainav", "chats", "feed", "phone"].includes(cfg.ux?.current) ? cfg.ux.current : "blocks"
-    const chatsOn = cfg.modules?.chatsMod === "on"
-    const aiOn = cfg.modules?.aiNavMod === "on"
-    const phoneOn = cfg.modules?.phoneMod !== "off"
-    const uxCard = (value, title, image) => label({ class: "welcome-ux-option" },
-      input({ type: "radio", name: "ux", value, ...(value === cur ? { checked: true } : {}) }),
-      img({ src: image, class: "welcome-ux-shot", alt: title }),
-      span({ class: "welcome-ux-label" }, title)
+    return form({ method: "POST", action: "/welcome/ux", class: "welcome-ux-form" },
+      div({ class: "welcome-ux-grid" },
+        pickCard("ux", "blocks", cur, i18n.uxModeMenus, "/assets/images/ux-blocks.png"),
+        cfg.modules?.aiNavMod === "on" ? pickCard("ux", "ainav", cur, i18n.uxModeAINav, "/assets/images/ux-ainav.png") : null,
+        cfg.modules?.chatsMod === "on" ? pickCard("ux", "chats", cur, i18n.uxModeChats, "/assets/images/ux-chats.png") : null,
+        pickCard("ux", "feed", cur, i18n.uxModeFeed, "/assets/images/ux-feed.png"),
+        cfg.modules?.phoneMod !== "off" ? pickCard("ux", "phone", cur, i18n.phoneTitle, "/assets/images/ux-phone.png") : null
+      ),
+      submitRow(i18n.welcomeStepUxAction)
     )
-    return {
-      title: i18n.welcomeStepUxTitle || "Choose your interface",
-      text: i18n.welcomeStepUxText || "Pick how Oasis should look. You can change it later in Settings.",
-      action: form({ method: "POST", action: "/welcome/ux", class: "welcome-ux-form" },
-        div({ class: "welcome-ux-grid" },
-          uxCard("blocks", i18n.uxModeMenus || "Blocks", "/assets/images/ux-blocks.png"),
-          aiOn ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null,
-          chatsOn ? uxCard("chats", i18n.uxModeChats || "Conversations", "/assets/images/ux-chats.png") : null,
-          uxCard("feed", i18n.uxModeFeed || "Microblogging", "/assets/images/ux-feed.png"),
-          phoneOn ? uxCard("phone", i18n.phoneTitle || "Phone", "/assets/images/ux-phone.png") : null
-        ),
-        div({ class: "welcome-action" },
-          button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepUxAction || "Save View")
-        )
-      )
-    }
-  }
-  if (key === "wish") {
-    const current = WISH_LEVELS.some(w => w.value === (status && status.wish)) ? status.wish : "whole"
-    return {
-      title: i18n.welcomeStepWishTitle || "What level of exposure do you want in your experience?",
-      text: i18n.welcomeStepWishText || "This is your WISH: it decides whose content reaches you.",
-      action: form({ method: "POST", action: "/welcome/wish", class: "welcome-choices-form" },
-        div({ class: "welcome-choices" },
-          WISH_LEVELS.map(w => label({ class: "welcome-choice" },
-            input({ type: "radio", name: "wish", value: w.value, ...(w.value === current ? { checked: true } : {}) }),
-            span({ class: "welcome-choice-name" }, i18n[w.name] || w.value),
-            span({ class: "welcome-choice-hint" }, i18n[w.hint] || "")
-          ))
-        ),
-        div({ class: "welcome-action" },
-          button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepWishAction || "Save my wish")
-        )
-      )
-    }
   }
   if (key === "workflow") {
-    const selected = status && WIZARD_WORKFLOWS.includes(status.workflow) ? status.workflow : "full"
-    return {
-      title: i18n.welcomeStepWorkflowTitle || "What's the use for OASIS you have in mind?",
-      text: i18n.welcomeStepWorkflowText || "Pick the configuration that fits you and only the useful modules stay on.",
-      action: form({ method: "POST", action: "/welcome/workflow", class: "welcome-choices-form" },
-        div({ class: "welcome-choices" },
-          WIZARD_WORKFLOWS.map(k => label({ class: "welcome-choice" },
-            input({ type: "radio", name: "workflow", value: k, ...(k === selected ? { checked: true } : {}) }),
-            span({ class: "welcome-choice-name" }, k === "full" ? (i18n.welcomeWorkflow_full || "Default") : (i18n[`workflow_${k}`] || k)),
-            span({ class: "welcome-choice-hint" }, i18n[`welcomeWorkflowHint_${k}`] || "")
-          ))
-        ),
-        div({ class: "welcome-action" },
-          button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepWorkflowAction || "Use this configuration")
-        )
-      )
-    }
+    const selected = WIZARD_WORKFLOWS.includes(status.workflow) ? status.workflow : "full"
+    return form({ method: "POST", action: "/welcome/workflow", class: "welcome-select-form" },
+      select({ name: "workflow" },
+        WIZARD_WORKFLOWS.map(k => option({ value: k, ...(k === selected ? { selected: true } : {}) }, k === "full" ? i18n.welcomeWorkflow_full : (i18n[`workflow_${k}`] || k)))
+      ),
+      submitRow(i18n.welcomeStepWorkflowAction)
+    )
   }
-  return {
-    title: i18n.welcomeStepGreetingTitle || "Send a \"Hello world!\"",
-    text: i18n.welcomeStepGreetingText || "Send a message so other inhabitants can discover you.",
-    action: form({ method: "POST", action: "/welcome/greeting", class: "welcome-greeting-form" },
-      textarea({
-        name: "text",
-        required: true,
-        minlength: String(FEED_TEXT_MIN),
-        maxlength: String(FEED_TEXT_MAX),
-        rows: 4,
-        cols: 50,
-        placeholder: i18n.feedPlaceholder
-      }),
+  if (key === "theme") return form({ method: "POST", action: "/welcome/theme", class: "welcome-ux-form" },
+    div({ class: "welcome-ux-grid" },
+      WIZARD_THEMES.map(([value, name]) => pickCard("theme", value, status.theme, name, `/assets/images/theme-${value.toLowerCase()}.png`))
+    ),
+    submitRow(i18n.welcomeStepThemeAction)
+  )
+  if (key === "community") {
+    const pubs = Array.isArray(status.pubs) ? status.pubs : []
+    const bootstrap = status.bootstrap
+    const canJoin = status.canJoin !== false
+    return form({ method: "POST", action: "/welcome/community", class: "welcome-community-form" },
+      bootstrap && bootstrap.running ? p(i18n.welcomeBootstrapRunning) : null,
+      bootstrap ? renderRestoreStatus(bootstrap) : null,
+      pubs.length && !canJoin
+        ? p({ class: "invites-join-note" }, status.publicMode === true ? i18n.invitesJoinPubMode : i18n.invitesJoinLocalOnly)
+        : null,
+      ...pubs.map(entry => label({ class: "welcome-pick" },
+        canJoin && !entry.exhausted ? input({ type: "checkbox", name: "pub", value: entry.code }) : null,
+        renderSuggestedPub(entry, false)
+      )),
+      !pubs.length ? div({ class: "welcome-action" }, a({ href: "/invites", class: "filter-btn" }, i18n.invites)) : null,
       div({ class: "welcome-action" },
-        button({ type: "submit", class: "filter-btn" }, i18n.welcomeStepGreetingAction || "Send Feed")
+        canJoin && pubs.some(e => !e.exhausted) ? button({ type: "submit", name: "action", value: "join" }, i18n.welcomeJoinPubs) : null,
+        button({ type: "submit", name: "action", value: "skip" }, i18n.welcomeNoFederation)
       )
     )
   }
+  return form({ method: "POST", action: "/welcome/greeting", class: "welcome-greeting-form" },
+    textarea({
+      name: "text",
+      required: true,
+      minlength: String(FEED_TEXT_MIN),
+      maxlength: String(FEED_TEXT_MAX),
+      rows: 4,
+      cols: 50,
+      placeholder: i18n.welcomePmSubject
+    }),
+    submitRow(i18n.welcomeStepGreetingAction)
+  )
 }
 
-exports.welcomeView = async (status, currentLanguage, profile = {}) => {
-  const steps = (status && status.steps) || {}
-  const usable = (status && status.usable) || []
-  const lang = String(currentLanguage || "en")
-  const bootstrapping = !!(status && status.bootstrap && status.bootstrap.running)
-
+exports.welcomeView = async (status, profile = {}) => {
+  const steps = status.steps || {}
+  const usable = status.usable || []
+  const opened = usable.find(key => !steps[key])
   const html = template(
-    i18n.welcomeTitle || "Welcome",
+    i18n.welcomeTitle,
     section(
       div({ class: "tags-header module-header-line" },
-        h2(i18n.welcomeTitle || "Welcome"),
-        p(i18n.welcomeDescription || "A few things worth doing before you start.")
+        h2(i18n.welcomeTitle),
+        p(i18n.welcomeDescription)
       ),
-      div({ class: "welcome-progress" },
-        p(span({ class: "welcome-progress-label" }, `${i18n.welcomeProgress || "Completed"}: `), `${status.done}/${status.total}`),
-        status.pending
-          ? form({ method: "POST", action: "/welcome/dismiss" },
-              button({ type: "submit", class: "filter-btn" }, i18n.welcomeSkip || "Skip for now")
-            )
-          : null
-      ),
-      status.complete
-        ? div({ class: "welcome-complete" },
-            h2(i18n.welcomeCompleteTitle || "All set."),
-            p(i18n.welcomeCompleteText || "Your node is ready. The network grows with the people you follow."),
-            div({ class: "welcome-action" }, a({ href: "/inhabitants", class: "filter-btn" }, i18n.welcomeFindPeople || "Find inhabitants"))
+      status.pending
+        ? form({ method: "POST", action: "/welcome/dismiss", class: "welcome-action" },
+            input({ type: "hidden", name: "returnTo", value: "/" }),
+            button({ type: "submit" }, i18n.welcomeSkip)
           )
-        : null,
-      div({ class: "welcome-steps" },
-        usable.map((key, idx) => {
-          const done = steps[key] === true
-          const content = stepContent(key, lang, profile || {}, status)
-          return div({ id: `step-${key}`, class: done ? "welcome-step welcome-step-done" : "welcome-step" },
-            div({ class: "welcome-step-head" },
-              span({ class: "welcome-step-number" }, String(idx + 1)),
-              h2({ class: "welcome-step-title" }, content.title),
-              stepChip(done)
-            ),
-            content.text ? p({ class: "welcome-step-text" }, content.text) : null,
-            content.extra || null,
-            content.action,
-            content.note ? p({ class: "welcome-step-note" }, content.note) : null
+        : null
+    ),
+    status.complete
+      ? section(
+          div({ class: "welcome-complete" },
+            h2(i18n.welcomeCompleteTitle),
+            p(i18n.welcomeCompleteText),
+            div({ class: "welcome-action" }, a({ href: "/inhabitants", class: "filter-btn" }, i18n.welcomeFindPeople))
           )
-        })
+        )
+      : null,
+    ...usable.map(key => section(
+      details({ id: `step-${key}`, class: "welcome-step", ...(key === opened ? { open: true } : {}) },
+        summary(
+          h2(`${steps[key] ? "✓ " : ""}${i18n[SECTIONS[key][0]]}`),
+          span({ class: "welcome-step-text" }, i18n[SECTIONS[key][1]])
+        ),
+        stepAction(key, profile || {}, status)
       )
-    )
+    ))
   )
-  return bootstrapping ? html.replace('</head>', '<meta http-equiv="refresh" content="5"></head>') : html
+  return status.bootstrap && status.bootstrap.running ? html.replace('</head>', '<meta http-equiv="refresh" content="5"></head>') : html
 }

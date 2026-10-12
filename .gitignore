@@ -14,5 +14,5 @@ src/configs/*
 !src/configs/shared-state.js
 !src/configs/state-manager.js
 !src/configs/server-config.json
-!src/configs/snh-invite-code.json
+!src/configs/invite-codes.json
 test/results/

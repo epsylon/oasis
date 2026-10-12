@@ -435,6 +435,17 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       ssbClient.publish(content, (e, res) => e ? reject(e) : resolve(res))
     })
 
+  const decryptTribeChats = async (idx) => {
+    if (!tribeCrypto || !tribesModel || typeof tribeCrypto.decryptFromTribe !== "function") return idx
+    for (const [k, n] of idx.nodes) {
+      const c = n.c || {}
+      if (!c.encryptedPayload || !c.tribeId) continue
+      const dec = await tribeCrypto.decryptFromTribe(c, tribesModel).catch(() => null)
+      if (dec && !dec._undecryptable) idx.nodes.set(k, { ...n, c: dec })
+    }
+    return idx
+  }
+
   const collectChats = (idx) => {
     const out = []
     for (const [rootId, tipId] of idx.tipByRoot.entries()) {
@@ -665,7 +676,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     async getChatById(id) {
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
-      const idx = memoIndex('chats', messages, buildIndex)
+      const idx = await decryptTribeChats(memoIndex('chats', messages, buildIndex))
 
       const root = idx.rootOf(id)
       const tip = idx.tipOf(root)
@@ -683,7 +694,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const ssbClient = await openSsb()
       const uid = viewerId || ssbClient.id
       const messages = await readAll(ssbClient)
-      const idx = buildIndex(messages)
+      const idx = await decryptTribeChats(buildIndex(messages))
       const now = Date.now()
 
       let list = chatCollab.visibleThenCollapsed(collectChats(idx), uid)

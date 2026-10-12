@@ -488,3 +488,123 @@ describe('tribes: deleting content reached through a foreign version', (t) => {
     eq((await A.use('tribesContent').listByTribe(r.key, 'event')).filter(i => i.title === 'Meetup').length, 0);
   });
 });
+
+describe('tribes: chats inside a tribe', (t) => {
+  t('a chat created in a tribe shows its title to the members, and to nobody else', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const tribe = await A.use('tribes').createTribe('Huerto', 'd', null, '', [], true, 'strict', null, 'OPEN', '');
+    const chat = await A.use('chats').createChat('Riego', 'turnos', null, '', 'OPEN', [], tribe.key);
+    const mine = (await A.use('chats').listAll({ filter: 'all', viewerId: A.keypair.id })).find(c => c.rootId === chat.key);
+    ok(mine, 'the chat is listed');
+    eq(mine.title, 'Riego');
+    eq((await A.use('chats').getChatById(chat.key)).title, 'Riego');
+    ok(!JSON.stringify(net.log.find(m => m.key === chat.key).value.content).includes('Riego'), 'the title travels encrypted');
+    C.setActor();
+    const seen = (await C.use('chats').listAll({ filter: 'all', viewerId: C.keypair.id })).find(c => c.rootId === chat.key);
+    ok(!seen || seen.title !== 'Riego', 'an outsider does not read it');
+  });
+});
+
+describe('tribes: open invitations', (t) => {
+  t('an open invitation is shown, lets an outsider join, and coexists with single ones', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tribe = await A.use('tribes').createTribe('Plaza', 'd', null, '', [], true, 'open', null, 'OPEN', '');
+    await A.use('tribes').generateInvite(tribe.key);
+    const code = await A.use('tribes').generateOpenInvite(tribe.key);
+    eq((await A.use('tribes').getOpenInvite(tribe.key)).code, code, 'the open invitation is found');
+    let second = false;
+    try { await A.use('tribes').generateOpenInvite(tribe.key); } catch (_) { second = true; }
+    ok(second, 'only one open invitation at a time');
+    ok(await A.use('tribes').generateInvite(tribe.key), 'single invitations keep working');
+    await A.use('tribesContent').create(tribe.key, 'feed', { description: 'bienvenida' });
+    B.setActor();
+    await B.use('tribes').joinByInvite(code);
+    ok((await B.use('tribes').getTribeById(tribe.key)).members.includes(B.keypair.id), 'the outsider is now a member');
+    ok((await B.use('tribesContent').listByTribe(tribe.key, 'feed')).some(i => i.description === 'bienvenida'), 'and reads the tribe');
+    A.setActor();
+    await A.use('tribes').removeOpenInvite(tribe.key);
+    eq(await A.use('tribes').getOpenInvite(tribe.key), null, 'removing it closes it');
+    const C = makePeer(net);
+    C.setActor();
+    let refused = false;
+    try { await C.use('tribes').joinByInvite(code); } catch (_) { refused = true; }
+    ok(refused, 'a removed open invitation no longer lets anyone in');
+  });
+
+  t('an outsider sees the open invitation of a public tribe and joins with it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tribe = await A.use('tribes').createTribe('Ágora', 'd', null, '', [], false, 'strict', null, 'OPEN', '');
+    const code = await A.use('tribes').generateOpenInvite(tribe.key);
+    B.setActor();
+    const seen = await B.use('tribes').getOpenInvite(tribe.key);
+    eq(seen && seen.code, code, 'the outsider sees it');
+    await B.use('tribes').joinByInvite(seen.code);
+    ok((await B.use('tribes').getTribeById(tribe.key)).members.includes(B.keypair.id), 'and joins');
+  });
+
+  t('the open invitation of a private tribe is only readable by its members', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tribe = await A.use('tribes').createTribe('Cueva', 'd', null, '', [], true, 'strict', null, 'OPEN', '');
+    const code = await A.use('tribes').generateOpenInvite(tribe.key);
+    ok(!net.log.some(m => JSON.stringify(m.value.content).includes(code)), 'the code is not written in clear');
+    eq((await A.use('tribes').getOpenInvite(tribe.key)).code, code, 'members still see it');
+    B.setActor();
+    eq(await B.use('tribes').getOpenInvite(tribe.key), null, 'an outsider cannot read it');
+    await B.use('tribes').joinByInvite(code);
+    ok((await B.use('tribes').getTribeById(tribe.key)).members.includes(B.keypair.id), 'whoever receives the code joins');
+    A.setActor();
+    await A.use('tribes').removeOpenInvite(tribe.key);
+    eq(await A.use('tribes').getOpenInvite(tribe.key), null, 'and it can be removed');
+  });
+
+  t('only its creator or the tribe creator can withdraw an open invitation', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const S = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tribe = await A.use('tribes').createTribe('Lonja', 'd', null, '', [], false, 'strict', null, 'OPEN', '');
+    const code = await A.use('tribes').generateOpenInvite(tribe.key);
+    const rec = await A.use('tribes').getOpenInvite(tribe.key);
+    const ssbS = await S.cooler.open();
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-open-invite-tombstone', v: 1, target: rec.markerKey, ts: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-invite-tombstone', v: 1, target: rec.inviteKey, ts: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    B.setActor();
+    eq((await B.use('tribes').getOpenInvite(tribe.key) || {}).code, code, 'a stranger cannot hide it');
+    await B.use('tribes').joinByInvite(code);
+    ok((await B.use('tribes').getTribeById(tribe.key)).members.includes(B.keypair.id), 'nor stop it from working');
+  });
+
+  t('a code can be looked at without joining the tribe it opens', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tribe = await A.use('tribes').createTribe('Mirador', 'd', null, '', ['larp-x'], true, 'strict', null, 'OPEN', '');
+    const code = await A.use('tribes').generateInvite(tribe.key);
+    B.setActor();
+    const seen = await B.use('tribes').previewInvite(code);
+    eq(seen && seen.title, 'Mirador', 'it tells which tribe the code opens');
+    ok(seen.tags.includes('larp-x'), 'and its tags');
+    eq(await B.use('tribes').previewInvite('f'.repeat(32)), null, 'an unknown code opens nothing');
+    let visible = true;
+    try { visible = !!(await B.use('tribes').getTribeById(tribe.key)); } catch (_) { visible = false; }
+    notOk(visible, 'looking does not let the outsider in');
+    await B.use('tribes').joinByInvite(code);
+    ok((await B.use('tribes').getTribeById(tribe.key)).members.includes(B.keypair.id), 'the code still works afterwards');
+  });
+
+  t('an open code once published in clear no longer opens a private tribe', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const tribe = await A.use('tribes').createTribe('Bodega', 'd', null, '', [], true, 'strict', null, 'OPEN', '');
+    const root = await A.use('tribes').getRootId(tribe.key);
+    const code = 'a'.repeat(32);
+    const salt = A.tribeCrypto.generateInviteSalt();
+    const ssbA = await A.cooler.open();
+    const inv = await new Promise((res, rej) => ssbA.publish({ type: 'tribe-invite-msg', v: 1, multi: 1, ch: A.tribeCrypto.hashInviteCode(code, salt), s: salt, ek: A.tribeCrypto.encryptChainForInvite([root], code, salt) }, (e, r) => e ? rej(e) : res(r)));
+    await new Promise((res, rej) => ssbA.publish({ type: 'tribe-open-invite', v: 1, rootId: root, code, inviteKey: inv.key, by: A.keypair.id, createdAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
+    eq(await A.use('tribes').getOpenInvite(tribe.key), null, 'it is not offered');
+    B.setActor();
+    await throwsAsync(() => B.use('tribes').joinByInvite(code), /invalid or expired/i, 'and it does not let anyone in');
+  });
+});

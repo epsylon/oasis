@@ -206,6 +206,8 @@ const sanitizeMessages = (msgs) => Array.isArray(msgs) ? msgs.map(sanitizeMsgTex
 
 const parseBool01 = v => String(Array.isArray(v) ? v[v.length - 1] : v || '') === '1';
 const ERROR_PATTERNS = [
+  [/invalid or expired invite code|invite already used|could not decrypt invite/i, 'inviteCodeInvalid'],
+  [/already a (member|participant)/i, 'inviteAlreadyMember'],
   [/^forbidden\.?$/i, 'errorForbidden'],
   [/not found/i, 'errorNotFound'],
   [/\bis closed\b/i, 'errorClosed'],
@@ -327,6 +329,12 @@ const settleWithin = (promise, ms) => new Promise((resolve) => {
   const timer = setTimeout(resolve, ms);
   Promise.resolve(promise).then(() => { clearTimeout(timer); resolve(); }, () => { clearTimeout(timer); resolve(); });
 });
+const LOG_SETTLE_MS = 3000;
+const settleLogWrites = async () => {
+  const ssb = await cooler.open().catch(() => null);
+  if (!ssb || !ssb.activity || typeof ssb.activity.tail !== 'function') return;
+  await settleWithin(new Promise((resolve) => { try { ssb.activity.tail(1, { fresh: true }, () => resolve()); } catch (_) { resolve(); } }), LOG_SETTLE_MS);
+};
 const refreshDonatableAuthors = async () => {
   try {
     const wallets = await bankingModel.scanAllWalletsSSB().catch(() => ({}));
@@ -862,7 +870,6 @@ const tribeRepliesFor = async (item) => item && item.contentType === 'forum' ? (
 const publishTribeExposure = async (item, level, replies = []) => {
   const r = await tribesContentModel.publishExposure(item, level, replies);
   clearnetTribesCache = { at: 0, data: null };
-  openTribeItemsCache = { at: 0, data: null };
   return r;
 };
 const tribeExposeCreated = async (ctx, tribe, created) => {
@@ -877,6 +884,83 @@ const tribeRefreshExposure = async (contentId) => {
   const level = await tribesContentModel.levelOf(item).catch(() => 'tribe');
   if (level === 'tribe') return;
   await publishTribeExposure(item, level, await tribeRepliesFor(item)).catch(() => {});
+};
+const TRIBE_MODULE_SNAPSHOTS = {
+  calendar: async (id) => {
+    const c = await calendarsModel.getCalendarById(id).catch(() => null);
+    if (!c || !c.tribeId || c.encrypted) return null;
+    const since = Date.now() - 86400000;
+    const dates = (await calendarsModel.getDatesForCalendar(c.rootId).catch(() => []))
+      .filter(d => d && d.date && (Date.parse(d.date) || 0) >= since)
+      .sort((a, b) => (Date.parse(a.date) || 0) - (Date.parse(b.date) || 0))
+      .slice(0, 30)
+      .map(d => ({ date: d.date, label: String(d.label || '') }));
+    return { origin: c.rootId, tribeId: c.tribeId, author: c.author, createdAt: c.createdAt, updatedAt: c.updatedAt, snap: { title: c.title, status: c.status, deadline: c.deadline, tags: c.tags, dates } };
+  },
+  map: async (id) => {
+    const m = await mapsModel.getMapById(id, getViewerId()).catch(() => null);
+    if (!m || !m.tribeId || m.encrypted) return null;
+    const markers = (m.markers || []).slice(0, 100).map(k => ({ lat: Number(k.lat) || 0, lng: Number(k.lng) || 0, label: String(k.label || '') }));
+    return { origin: m.rootId || m.key, tribeId: m.tribeId, author: m.author, createdAt: m.createdAt, updatedAt: m.updatedAt, snap: { title: m.title, description: m.description, lat: m.lat, lng: m.lng, tags: m.tags, markers } };
+  },
+  wiki: async (id) => {
+    const pg = await wikiModel.getPage(id).catch(() => null);
+    if (!pg || !pg.tribeId) return null;
+    return { origin: pg.rootId || pg.id, tribeId: pg.tribeId, author: pg.author, createdAt: pg.createdAt, updatedAt: pg.updatedAt, snap: { title: pg.title, description: pg.body, license: pg.license, tags: pg.tags } };
+  }
+};
+const SNAPSHOT_SHAPES = {
+  map: (x) => ({ key: x.id, rootId: x.id, title: x.title || '', description: x.description || '', lat: Number(x.lat) || 0, lng: Number(x.lng) || 0, markers: Array.isArray(x.markers) ? x.markers : [], tags: Array.isArray(x.tags) ? x.tags : [], mapType: 'SINGLE', members: [], invites: [], author: x.author || '', createdAt: x.createdAt || new Date(Number(x._ts) || 0).toISOString(), updatedAt: x.updatedAt || null, tribeOrigin: x.tribeOrigin }),
+  calendar: (x) => ({ key: x.id, rootId: x.id, title: x.title || '', status: x.status || 'OPEN', deadline: x.deadline || '', tags: Array.isArray(x.tags) ? x.tags : [], mapUrl: '', participants: [], invites: [], dates: Array.isArray(x.dates) ? x.dates : [], author: x.author || '', createdAt: x.createdAt || new Date(Number(x._ts) || 0).toISOString(), updatedAt: x.updatedAt || null, tribeOrigin: x.tribeOrigin }),
+  wiki: (x) => ({ id: x.id, rootId: x.id, slug: '', title: x.title || '', body: x.description || '', license: x.license || '', tags: Array.isArray(x.tags) ? x.tags : [], versions: [], links: [], aliases: [], author: x.author || '', createdAt: x.createdAt || new Date(Number(x._ts) || 0).toISOString(), updatedAt: x.updatedAt || null, tribeOrigin: x.tribeOrigin })
+};
+const tribeModuleItem = async (id, type = null) => {
+  for (const [contentType, load] of Object.entries(TRIBE_MODULE_SNAPSHOTS)) {
+    if (type && type !== contentType) continue;
+    const got = await load(id).catch(() => null);
+    if (!got) continue;
+    const rootId = await tribesModel.getRootId(got.tribeId).catch(() => got.tribeId);
+    return { ...got.snap, contentType, id: got.origin, originId: got.origin, rootId, author: got.author, createdAt: got.createdAt, updatedAt: got.updatedAt };
+  }
+  return null;
+};
+const TRIBE_MODULE_ROUTES = [
+  { re: /^\/calendars\/(update|delete|add-date)\/([^/]+)$/, type: 'calendar' },
+  { re: /^\/calendars\/delete-date\/([^/]+)$/, type: 'calendar', fromBody: 'calendarId' },
+  { re: /^\/maps\/(update|delete)\/([^/]+)$/, type: 'map' },
+  { re: /^\/maps\/([^/]+)\/marker$/, type: 'map', group: 1 },
+  { re: /^\/maps\/marker\/delete\/([^/]+)$/, type: 'map', marker: true },
+  { re: /^\/wiki\/(update|restore|delete)\/([^/]+)$/, type: 'wiki' }
+];
+const markerMapId = async (markerId) => {
+  const ssb = await cooler.open();
+  const msg = await new Promise((resolve) => ssb.get(markerId, (err, m) => resolve(err ? null : m)));
+  let c = msg && msg.content;
+  if (c && c.encryptedPayload && tribeCrypto) c = await tribeCrypto.decryptFromTribe(c, tribesModel).catch(() => c);
+  return c && typeof c.mapId === 'string' ? c.mapId : null;
+};
+const syncTribeModuleExposure = async (ctx, next) => {
+  const route = ctx.method === 'POST' ? TRIBE_MODULE_ROUTES.find(x => x.re.test(ctx.path)) : null;
+  if (!route) return next();
+  const m = ctx.path.match(route.re);
+  const raw = (s) => { try { return decodeURIComponent(s); } catch (_) { return s; } };
+  let id = route.fromBody ? null : raw(m[route.group || m.length - 1]);
+  if (route.marker) id = await markerMapId(id).catch(() => null);
+  const isDelete = !route.marker && m[1] === 'delete';
+  const before = id && isDelete ? await tribeModuleItem(id, route.type).catch(() => null) : null;
+  await next();
+  if (route.fromBody) id = String((ctx.request.body || {})[route.fromBody] || '') || null;
+  if (!id) return;
+  try {
+    if (isDelete) {
+      if (before && (await tribesContentModel.levelOf(before)) !== 'tribe') await publishTribeExposure(before, 'tribe');
+      return;
+    }
+    const item = await tribeModuleItem(id, route.type);
+    if (!item) return;
+    const level = await tribesContentModel.levelOf(item);
+    if (level !== 'tribe') await publishTribeExposure(item, level);
+  } catch (_) {}
 };
 const withdrawTribeExposures = async (tribeId) => {
   const ids = new Set([await tribesModel.getRootId(tribeId).catch(() => tribeId)]);
@@ -913,11 +997,9 @@ const getClearnetTribes = async () => {
   clearnetTribesCache = { at: Date.now(), data: out };
   return out;
 };
-const TRIBE_SECTION_OF = { event: 'events', task: 'tasks', votation: 'votations', forum: 'forum', feed: 'feed', report: 'reports', market: 'market', job: 'jobs', project: 'projects' };
+const TRIBE_SECTION_OF = { event: 'events', task: 'tasks', votation: 'votations', forum: 'forum', feed: 'feed', report: 'reports', market: 'market', job: 'jobs', project: 'projects', calendar: 'calendars', map: 'maps', wiki: 'wiki' };
 const TRIBE_MEDIA_SECTION = { image: 'images', audio: 'audios', video: 'videos', document: 'documents', bookmark: 'bookmarks', torrent: 'torrents' };
-let openTribeItemsCache = { at: 0, data: null };
 const getOpenTribeItems = async () => {
-  if (openTribeItemsCache.data && Date.now() - openTribeItemsCache.at < 30000) return openTribeItemsCache.data;
   const state = await tribesContentModel.exposureState().catch(() => new Map());
   const titles = new Map();
   const out = [];
@@ -935,10 +1017,16 @@ const getOpenTribeItems = async () => {
     const href = `${tribeHref}?section=${section}${s.contentType === 'forum' ? `&thread=${encodeURIComponent(e.origin)}` : ''}`;
     out.push({ ...s, id: e.origin, key: e.origin, rootId: e.origin, _ts: e.ts, tribeOrigin: { tribeId: e.tribeId, title: tribeTitle, href, tribeHref, level: e.level, openedBy: e.by } });
   }
-  openTribeItemsCache = { at: Date.now(), data: out };
   return out;
 };
 const tribeItemsFor = async (contentType, mediaType = null) => (await getOpenTribeItems().catch(() => [])).filter(x => x.contentType === contentType && (!mediaType || x.mediaType === mediaType));
+const openTribeListFor = async (contentType, filter, q, fields) => {
+  const f = String(filter || 'all').toLowerCase();
+  if (!['all', 'recent', 'mine'].includes(f)) return [];
+  const uid = getViewerId();
+  const list = (await tribeItemsFor(contentType)).filter(t => (f !== 'mine' || t.author === uid) && (f !== 'recent' || (Date.parse(t.createdAt) || Number(t._ts) || 0) >= Date.now() - 86400000));
+  return applyTextSearch(list.map(SNAPSHOT_SHAPES[contentType]), q, fields);
+};
 const buildClearnetIndex = async () => {
   const all = await inhabitantsModel.listInhabitants({ filter: 'all', includeInactive: true }).catch(() => []);
   const out = [];
@@ -958,7 +1046,8 @@ const buildClearnetIndex = async () => {
 const getClearnetIndex = async (force = false) => {
   if (!force && clearnetIndexCache.data && Date.now() - clearnetIndexCache.ts < CLEARNET_INDEX_TTL_MS) return clearnetIndexCache.data;
   if (!clearnetIndexCache.building) {
-    clearnetIndexCache.building = buildClearnetIndex().then(data => { clearnetIndexCache = { ts: Date.now(), data, building: null }; return data; }).catch(() => { clearnetIndexCache.building = null; return clearnetIndexCache.data || []; });
+    const slot = clearnetIndexCache;
+    slot.building = buildClearnetIndex().then(data => { if (clearnetIndexCache === slot) clearnetIndexCache = { ts: Date.now(), data, building: null }; return data; }).catch(() => { slot.building = null; return slot.data || []; });
   }
   return clearnetIndexCache.building;
 };
@@ -1365,15 +1454,100 @@ const sendFeedQr = async (ctx) => {
   }
   };
 
-const QR_JOIN_MODS = {
-  school:    { mod: 'schoolMod',    join: async (code) => { const { courseId } = await schoolModel.joinByInvite(code); return `/school/course/${encodeURIComponent(courseId)}`; } },
-  forum:     { mod: 'forumMod',     join: async (code) => { const { forumId } = await forumModel.joinByInvite(code); return `/forum/${encodeURIComponent(forumId)}`; } },
-  maps:      { mod: 'mapsMod',      join: async (code) => { const mapId = await mapsModel.joinByInvite(code); return `/maps/${encodeURIComponent(mapId)}`; } },
-  events:    { mod: 'eventsMod',    join: async (code) => { const { eventId } = await eventsModel.joinByInvite(code); return `/events/${encodeURIComponent(eventId)}`; } },
+const INVITE_JOINERS = {
+  tribes:    { mod: 'tribesMod',    join: async (code, ctx) => {
+    const preview = await tribesModel.previewInvite(code);
+    if (!preview) throw new Error('Invalid or expired invite code');
+    if ((preview.tags || []).some((t) => String(t).startsWith('larp-')) && checkMod(ctx, 'larpMod')) {
+      const r = await larpModel.redeemHouseInvite(code);
+      if (!r || !r.ok) throw new Error('Invite already used');
+      return `/larp/${encodeURIComponent(r.house)}`;
+    }
+    return `/tribe/${encodeURIComponent(await tribesModel.joinByInvite(code))}`;
+  } },
   chats:     { mod: 'chatsMod',     join: async (code) => { const chatKey = await chatsModel.joinByInvite(code); return `/chats/${encodeURIComponent(chatKey)}`; } },
   pads:      { mod: 'padsMod',      join: async (code) => { const padId = await padsModel.joinByInvite(code); return `/pads/${encodeURIComponent(padId)}`; } },
   rooms:     { mod: 'roomsMod',     join: async (code) => { const roomId = await roomsModel.joinByInvite(code); return `/rooms/${encodeURIComponent(roomId)}`; } },
-  calendars: { mod: 'calendarsMod', join: async (code) => { const calId = await calendarsModel.joinByInvite(code); return `/calendars/${encodeURIComponent(calId)}`; } }
+  calendars: { mod: 'calendarsMod', join: async (code) => { const calId = await calendarsModel.joinByInvite(code); return `/calendars/${encodeURIComponent(calId)}`; } },
+  events:    { mod: 'eventsMod',    join: async (code) => { const { eventId } = await eventsModel.joinByInvite(code); return `/events/${encodeURIComponent(eventId)}`; } },
+  forum:     { mod: 'forumMod',     join: async (code) => { const { forumId } = await forumModel.joinByInvite(code); return `/forum/${encodeURIComponent(forumId)}`; } },
+  school:    { mod: 'schoolMod',    join: async (code) => { const { courseId } = await schoolModel.joinByInvite(code); return `/school/course/${encodeURIComponent(courseId)}`; } },
+  maps:      { mod: 'mapsMod',      join: async (code) => { const mapId = await mapsModel.joinByInvite(code); return `/maps/${encodeURIComponent(mapId)}`; } },
+  shops:     { mod: 'shopsMod',     join: async (code) => { const { shopId } = await shopsModel.joinByCode(code); return `/shops/${encodeURIComponent(shopId)}`; } }
+};
+const FEED_ID_RE = /^@[A-Za-z0-9+/_\-]{43}=\.ed25519$/;
+const PUB_INVITE_RE = /~shs:|:\d+:@[A-Za-z0-9+/=_-]+\.ed25519~/;
+const joinPub = async (invite) => {
+  const pubKey = (invite.match(/@[A-Za-z0-9+/=_-]{43,}\.ed25519/) || [])[0] || null;
+  if (pubKey) {
+    try {
+      const gossip = JSON.parse(fs.readFileSync(path.join(ssbConfig.path, 'gossip.json'), 'utf8') || '[]');
+      let unfollowed = [];
+      try { unfollowed = JSON.parse(fs.readFileSync(stateFilePath('gossip_unfollowed.json'), 'utf8') || '[]'); } catch (_) {}
+      const activePub = Array.isArray(gossip) && gossip.some(p => p && p.key === pubKey) && !unfollowed.some(u => u && u.key === pubKey);
+      if (activePub) return 'invitesAlreadyFederated';
+    } catch (_) {}
+  }
+  if (/\.onion\b/i.test(invite) && !(await torUsable())) return 'peersTorMissing';
+  let joined = false;
+  try { await meta.acceptInvite(invite); joined = true; } catch (_) {}
+  if (!joined) return 'inviteCodeInvalid';
+  rememberJoinedPub(invite);
+  bootstrapFromPub(invite);
+  if (pubKey) {
+    const listed = require('../configs/config-manager').readInviteCodes().find((e) => pubInvites.parseInvite(e.code).pub === pubKey);
+    await recordInviteUse('pubs', `/author/${encodeURIComponent(pubKey)}`, listed ? listed.name : '');
+  }
+  return null;
+};
+const acceptPubInvite = async (ctx, invite) => {
+  const error = await joinPub(invite);
+  if (error) { failWith(ctx, error, error === 'inviteCodeInvalid' ? undefined : '/invites'); return; }
+  safeRefererRedirect(ctx, "/invites");
+};
+const followInhabitant = async (ctx, feedId) => {
+  try {
+    const name = await about.name(feedId);
+    if (!name || name === feedId.slice(1, 9)) { ctx.redirect(`/search?query=${encodeURIComponent(feedId)}`); return; }
+    const ssb = await cooler.open();
+    await new Promise((res, rej) => ssb.publish({ type: 'contact', contact: feedId, following: true }, (e) => e ? rej(e) : res()));
+    await recordInviteUse('inhabitants', `/author/${encodeURIComponent(feedId)}`, name);
+    ctx.redirect(`/author/${encodeURIComponent(feedId)}`);
+  } catch (_) {
+    ctx.redirect(`/search?query=${encodeURIComponent(feedId)}`);
+  }
+};
+const INVITE_NO_MATCH = /invalid or expired invite code|crypto unavailable/i;
+const INVITES_USED_MAX = 10;
+const INVITE_TITLE = {
+  tribes: async (id) => (await tribesModel.getTribeById(id)).title,
+  houses: async (id) => (larpModel.getHouse(id) || {}).name,
+  chats: async (id) => (await chatsModel.getChatById(id)).title,
+  pads: async (id) => (await padsModel.getPadById(id)).title,
+  rooms: async (id) => (await roomsModel.getRoomById(id)).title,
+  calendars: async (id) => (await calendarsModel.getCalendarById(id)).title,
+  events: async (id) => (await eventsModel.getEventById(id)).title,
+  forum: async (id) => (await forumModel.getForumById(id)).title,
+  school: async (id) => (await schoolModel.getCourseById(id)).title,
+  maps: async (id) => (await mapsModel.getMapById(id, getViewerId())).title,
+  shops: async (id) => (await shopsModel.getShopById(id)).title,
+  inhabitants: async (id) => about.name(id),
+  pubs: async (id) => about.name(id)
+};
+const readInvitesUsed = () => {
+  try {
+    const list = JSON.parse(fs.readFileSync(stateFilePath('invites-used.json'), 'utf8'));
+    return Array.isArray(list) ? list : [];
+  } catch (_) { return []; }
+};
+const recordInviteUse = async (kind, href, title = '') => {
+  try {
+    const k = String(href).startsWith('/larp/') ? 'houses' : kind;
+    const id = decodeURIComponent(String(href).split('?')[0].split('/').pop());
+    const name = title || (INVITE_TITLE[k] ? await INVITE_TITLE[k](id).catch(() => '') : '');
+    const list = [{ kind: k, href, title: String(name || ''), at: new Date().toISOString() }, ...readInvitesUsed().filter((e) => e && e.href !== href)].slice(0, INVITES_USED_MAX);
+    fs.writeFileSync(stateFilePath('invites-used.json'), JSON.stringify(list));
+  } catch (_) {}
 };
 const getUserTribeIds = async (uid) => {
   const allTribes = await tribesModel.listAll().catch(() => []);
@@ -1987,6 +2161,37 @@ const opinionsModel = require('../models/opinions_model')({ cooler, isPublic: co
 const tasksModel = require('../models/tasks_model')({ cooler, isPublic: config.public, pmModel });
 const votesModel = require('../models/votes_model')({ cooler, isPublic: config.public });
 const ssbConfig = require('../server/ssb_config');
+const pubInvites = require('../models/pub_invites');
+const PUB_PROBE_TIMEOUT_MS = 3000;
+const pubAnswers = (host, port) => new Promise((resolve) => {
+  const socket = require('net').connect({ host, port: Number(port) || 8008 });
+  const done = (ok) => { socket.destroy(); resolve(ok); };
+  socket.setTimeout(PUB_PROBE_TIMEOUT_MS, () => done(false));
+  socket.once('connect', () => done(true));
+  socket.once('error', () => done(false));
+});
+const suggestedPubs = async ({ probe = false } = {}) => {
+  const known = new Set();
+  try {
+    for (const p of JSON.parse(fs.readFileSync(path.join(ssbConfig.path, 'gossip.json'), 'utf8') || '[]')) {
+      const k = peerHealth.canonicalKey(p && p.key);
+      if (k) known.add(k);
+    }
+  } catch (_) {}
+  const ssb = await cooler.open();
+  const signals = await peerSignals(ssb).catch(() => null);
+  const offline = !!config.offline || getConfig().networkPaused === true || process.env.OASIS_NETWORK_PAUSED === '1';
+  const listed = require('../configs/config-manager').readInviteCodes()
+    .map((e) => ({ e, ...pubInvites.parseInvite(e.code) }))
+    .filter((x) => !known.has(x.pub));
+  const answers = await Promise.all(listed.map((x) => {
+    if (signals && signals.live.has(x.pub)) return true;
+    if (signals && signals.unreachable(x.pub)) return false;
+    return probe && !offline && x.host && !/\.onion$/i.test(x.host) ? pubAnswers(x.host, x.port) : true;
+  }));
+  const entries = listed.filter((_, i) => answers[i]).map((x) => x.e);
+  return pubInvites.readStatus(ssb, entries).catch(() => entries.map((e) => ({ ...e, invites: null, exhausted: false })));
+};
 const tribeCrypto = require('../models/crypto')(ssbConfig.path, 'tribes');
 const onboardingModel = require('../models/onboarding_model')({ cooler, ssbPath: ssbConfig.path });
 const chatCrypto = require('../models/crypto')(ssbConfig.path, 'chats');
@@ -2071,11 +2276,8 @@ const createTorrentForFile = async (ctx, blobMarkdown, { title }) => {
   } catch (_) { return null; }
 };
 const clearnetPublicBase = () => {
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'configs', 'snh-invite-code.json'), 'utf8'));
-    const u = String(raw.url || '').replace(/\/+$/, '');
-    return /^https?:\/\//i.test(u) ? u : '';
-  } catch (_) { return ''; }
+  const u = String((require('../configs/config-manager').defaultInvite() || {}).url || '').replace(/\/+$/, '');
+  return /^https?:\/\//i.test(u) ? u : '';
 };
 const buildTorrentFromBlob = async (blobId, name, baseUrls = []) => {
   const bencode = require('../server/node_modules/bencode');
@@ -2494,6 +2696,13 @@ const enterRoom = async (room) => {
   const current = await roomsModel.liveState().catch(() => null);
   if (current && current.ref === room.rootId) return null;
   if (current && current.ref) await roomsModel.leave().catch(() => {});
+  if (room.author === uid && room.hub === uid) {
+    const occ = await roomsModel.occupancy(room).catch(() => null);
+    if (!occ || !occ.count) {
+      const moved = await roomsModel.rehomeHub(room.rootId).catch(() => null);
+      if (moved) room = (await roomsModel.getRoomById(room.rootId).catch(() => null)) || room;
+    }
+  }
   try {
     await roomsModel.join(room);
     return null;
@@ -2540,7 +2749,7 @@ const postFeedToMastodon = async (text, media) => {
 const failWith = (ctx, key, to) => sendErrorPage(ctx, require('../views/main_views').i18n[key] || require('../views/main_views').i18n.actionFailed, { status: 400, ...(to ? { to } : {}) });
 const inviteCodeFail = (ctx, err) => {
   const t = require('../views/main_views').i18n;
-  sendErrorPage(ctx, /already a member/i.test(String(err && err.message)) ? t.inviteAlreadyMember : t.inviteCodeInvalid, { status: 400 });
+  sendErrorPage(ctx, /already a (member|participant)/i.test(String(err && err.message)) ? t.inviteAlreadyMember : t.inviteCodeInvalid, { status: 400 });
 };
 const roomErrorMessage = (code) => {
   const t = require('../views/main_views').i18n;
@@ -2723,7 +2932,7 @@ const favAction = async (ctx, kind, action) => {
     if (rootId) await contentFavorites[action + 'Favorite'](kind, rootId);
   } catch (_) {}
   const home = kind === 'shopProducts' ? '/shops' : `/${kind}`;
-  ctx.redirect(safeReturnTo(ctx, home, [home]));
+  ctx.redirect(safeReturnTo(ctx, home, [home, '/tribe/']));
 };
 const voteFormError = (ctx, mode, id, err, body = {}) => {
   const t = require('../views/main_views').i18n;
@@ -3306,7 +3515,7 @@ const tombstoneOwnMessage = async (ctx, accepts) => {
 };
 const suggestionTitle = async (m) => {
   const raw = String((m && m.title) || '').trim();
-  if (raw && !/^[%@&][A-Za-z0-9+/]{43}=/.test(raw)) return raw;
+  if (raw && !/^[%@&][A-Za-z0-9+/]{43}=/.test(raw) && !/^[0-9a-f]{32,}$/i.test(raw)) return raw;
   const who = m && m.author ? await about.name(m.author).catch(() => null) : null;
   const name = who && !/^[%@&]?[A-Za-z0-9+/]{20,}/.test(who) ? `@${String(who).replace(/^@/, '')}` : '';
   if (m && m.kind === 'inhabitants') return name || require('../views/main_views').i18n.typeCurriculum || 'CV';
@@ -3439,6 +3648,13 @@ const listConnectionPeers = async () => {
     })
     .sort((a, b) => (a.state === 'connected' ? -1 : 1) - (b.state === 'connected' ? -1 : 1));
 };
+const peerSignals = async (ssb) => {
+  const { dbPeers, failures } = await peerFailures(ssb);
+  const live = new Set(Object.keys(ssb.peers || {}).filter(k => Array.isArray(ssb.peers[k]) && ssb.peers[k].length).map(k => peerHealth.canonicalKey(k)));
+  const lastErrors = await readPeerLastErrors();
+  const unreachable = (key) => !live.has(key) && (!!lastErrors[key] || peerHealth.isDead({ key, failures: failures.get(key) || 0 }));
+  return { dbPeers, failures, live, lastErrors, unreachable };
+};
 const federationState = async () => {
   const ssb = await cooler.open();
   const myId = ssb.id;
@@ -3454,13 +3670,11 @@ const federationState = async () => {
   };
   const pubMsgs = await new Promise((res) => { try { pull(ssb.messagesByType({ type: 'pub' }), pull.collect((e, a) => res(e ? [] : a))); } catch (_) { res([]); } });
   for (const m of pubMsgs) { const ad = m && m.value && m.value.content && m.value.content.address; if (ad) addAddr(ad.key, ad.host, ad.port); }
-  const { dbPeers, failures } = await peerFailures(ssb);
+  const { dbPeers, failures, live, lastErrors } = await peerSignals(ssb);
   for (const [addr, data] of dbPeers || []) { const mm = String(addr || '').match(/^(?:net|onion):([^:~]+):(\d+)/); if (data && mm) addAddr(data.key, mm[1], mm[2]); }
   for (const g of readJSON(gossipPath)) if (g) addAddr(g.key, g.host, g.port);
-  const live = new Set(Object.keys(ssb.peers || {}).filter(k => Array.isArray(ssb.peers[k]) && ssb.peers[k].length).map(k => peerHealth.canonicalKey(k)));
   const graph = await new Promise((res) => { try { ssb.friends.graph((err, g) => res(err ? {} : (g || {}))); } catch (_) { res({}); } });
   const follows = (a, b) => !!(graph[a] && graph[a][b] >= 0);
-  const lastErrors = await readPeerLastErrors();
   const rows = await Promise.all(pubIds.map(async (key) => {
     const where = [...(addrs.get(key) || [])];
     const onion = where.filter(w => /\.onion:/i.test(w)).length;
@@ -4163,7 +4377,6 @@ router
   })
   .get("/", async (ctx) => {
     const currentConfig = getConfig();
-    if (!config.public && onboardingModel.shouldOpen()) { ctx.redirect('/welcome'); return; }
     if (currentConfig.ux?.current === "ainav") {
       const { ainavHomeView } = require("../views/main_views");
       let recentTags = [];
@@ -4509,21 +4722,11 @@ router
       actionFail(ctx);
     }
   })
-  .post('/school/join-code', koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
-    const code = String((ctx.request.body || {}).code || '').trim();
-    try {
-      const { courseId } = await schoolModel.joinByInvite(code);
-      ctx.redirect(`/school/course/${encodeURIComponent(courseId)}`);
-    } catch (err) {
-      sendErrorPage(ctx, err && err.message ? err.message : 'Invalid or expired invite code', { status: 400 });
-    }
-  })
   .get('/qr-invite-code/:mod/:code', async (ctx) => {
     try {
       const mod = String(ctx.params.mod || '');
       const code = String(ctx.params.code || '');
-      if (!QR_JOIN_MODS[mod] || !/^[A-Za-z0-9]{4,128}$/.test(code)) { ctx.status = 404; ctx.body = ''; return; }
+      if (!INVITE_JOINERS[mod] || !/^[A-Za-z0-9]{4,128}$/.test(code)) { ctx.status = 404; ctx.body = ''; return; }
       const QRCode = require('../server/node_modules/qrcode');
       const targetUrl = `${QR_ACTION_BASE}/qr-action/join/${mod}/${encodeURIComponent(code)}`;
       const buf = await QRCode.toBuffer(targetUrl, { type: 'png', width: 240, margin: 1, errorCorrectionLevel: 'M' });
@@ -4538,21 +4741,20 @@ router
     ctx.redirect('/settings');
   })
   .get('/qr-action/join/:mod/:code', async (ctx) => {
-    const entry = QR_JOIN_MODS[String(ctx.params.mod || '')];
+    const entry = INVITE_JOINERS[String(ctx.params.mod || '')];
     if (!entry) { ctx.status = 404; ctx.body = ''; return; }
     if (!checkMod(ctx, entry.mod)) { ctx.redirect('/modules'); return; }
     confirmPage(ctx, { message: require('../views/main_views').i18n.confirmJoinText, action: `/qr-action/join/${encodeURIComponent(ctx.params.mod)}/${encodeURIComponent(String(ctx.params.code || '').trim())}`, backHref: `/${encodeURIComponent(ctx.params.mod)}` });
   })
   .post('/qr-action/join/:mod/:code', koaBody(), async (ctx) => {
-    const entry = QR_JOIN_MODS[String(ctx.params.mod || '')];
+    const entry = INVITE_JOINERS[String(ctx.params.mod || '')];
     if (!entry) { ctx.status = 404; ctx.body = ''; return; }
     if (!checkMod(ctx, entry.mod)) { ctx.redirect('/modules'); return; }
     const code = String(ctx.params.code || '').trim();
-    try {
-      ctx.redirect(await entry.join(code));
-    } catch (err) {
-      sendErrorPage(ctx, err && err.message ? err.message : 'Invalid or expired invite code', { status: 400 });
-    }
+    let href;
+    try { href = await entry.join(code, ctx); } catch (err) { inviteCodeFail(ctx, err); return; }
+    await recordInviteUse(String(ctx.params.mod), href);
+    ctx.redirect(href);
   })
   .get('/qr-action/follow/:feedId', async (ctx) => {
     const feedId = decodeURIComponent(ctx.params.feedId || '');
@@ -4920,7 +5122,7 @@ router
     const fav = await contentFavorites.getFavoriteSet('maps');
     let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
-    enriched = enriched.filter(x => !x.tribeId);
+    enriched = enriched.filter(x => !x.tribeId).concat(tribeId ? [] : await openTribeListFor('map', filter, q, ['title', 'description', 'tags', 'author']));
     enriched = await applyListFilters(enriched, ctx);
     try { enriched = await lifetime.enrichAndFilter(enriched, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
     const spreadMap = await spreads.forMessages(pageOf(ctx, enriched).map(x => x && (x.key || x.id)));
@@ -6144,6 +6346,16 @@ router
       return;
     }
     const section = ctx.query.section || 'activity';
+    const tribeViewerIsMember = await tribesModel.isTribeMember(uid, tribe.id).catch(() => false);
+    const withTribeReach = async (list, idOf) => {
+      const st = await reachStateNow();
+      return list.map(x => { const e = st.get(idOf(x)); return { ...x, reach: e ? e.level : 'tribe', exposedBy: e && e.level !== 'tribe' ? e.by : null }; });
+    };
+    const exposedModuleItems = async (contentType) => {
+      const list = await tribesContentModel.listExposed(tribe.id, contentType, 'oasis', await reachStateNow()).catch(() => []);
+      const sectionHref = `/tribe/${encodeURIComponent(tribe.id)}?section=${TRIBE_SECTION_OF[contentType]}`;
+      return list.map(x => SNAPSHOT_SHAPES[contentType]({ ...x, tribeOrigin: { tribeId: tribe.rootId, title: tribe.title, href: sectionHref, tribeHref: `/tribe/${encodeURIComponent(tribe.id)}`, level: x.reach, openedBy: x.exposedBy } }));
+    };
     const contentTypeMap = { events: 'event', tasks: 'task', reports: 'report', votations: 'votation', market: 'market', jobs: 'job', projects: 'project', media: 'media' };
     const mediaSections = { 'media-audio': 'media', 'media-video': 'media', 'media-images': 'media', 'media-documents': 'media', 'media-bookmarks': 'media', 'images': 'media', 'audios': 'media', 'videos': 'media', 'documents': 'media', 'bookmarks': 'media' };
     let sectionData = null;
@@ -6283,9 +6495,9 @@ router
         tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
       ]);
       const tribeChainSet = new Set(tribeChain);
-      sectionData = allMaps.filter(m => tribeChainSet.has(m.tribeId));
+      sectionData = tribeViewerIsMember ? await withTribeReach(allMaps.filter(m => tribeChainSet.has(m.tribeId)), m => m.rootId || m.key) : await exposedModuleItems('map');
     } else if (section === 'wiki') {
-      sectionData = await wikiModel.listPages({ tribeId: tribe.id, viewerId: uid }).catch(() => []);
+      sectionData = tribeViewerIsMember ? await withTribeReach(await wikiModel.listPages({ tribeId: tribe.id, viewerId: uid }).catch(() => []), pg => pg.rootId || pg.id) : await exposedModuleItems('wiki');
     } else if (section === 'pads') {
       const [allPads, tribeChain] = await Promise.all([
         padsModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
@@ -6314,7 +6526,7 @@ router
         tribesModel.getChainIds(tribe.id).catch(() => [tribe.id])
       ]);
       const tribeChainSet = new Set(tribeChain);
-      sectionData = allCals.filter(c => tribeChainSet.has(c.tribeId));
+      sectionData = tribeViewerIsMember ? await withTribeReach(allCals.filter(c => tribeChainSet.has(c.tribeId)), c => c.rootId) : await exposedModuleItems('calendar');
     } else if (section === 'files') {
       const [allFiles, tribeChain] = await Promise.all([
         filesModel.listAll({ filter: 'all', viewerId: uid }).catch(() => []),
@@ -6451,7 +6663,7 @@ router
   .get('/activity', async ctx => {
     const filter = qf(ctx), userId = getViewerId();
     const q = String((ctx.query && ctx.query.q) || '');
-    let allActions = await activityModel.listFeed('all');
+    let allActions = (await activityModel.listFeed('all')).slice();
     const settleActions = async (list) => {
       await Promise.all((list || []).map(async (action) => {
         if (action.type === 'pad') {
@@ -6851,7 +7063,7 @@ router
       const oi = await tribesModel.getOpenInvite(ctx.params.id).catch(() => null);
       if (!oi) { ctx.status = 404; ctx.body = ''; return; }
       const QRCode = require('../server/node_modules/qrcode');
-      const joinUrl = `${QR_ACTION_BASE}/tribes/open-invite/join/${encodeURIComponent(ctx.params.id)}`;
+      const joinUrl = `${QR_ACTION_BASE}/qr-action/join/tribes/${encodeURIComponent(oi.code)}`;
       const buf = await QRCode.toBuffer(joinUrl, { type: 'png', width: 240, margin: 1, errorCorrectionLevel: 'M' });
       ctx.set('Content-Type', 'image/png');
       ctx.set('Cache-Control', 'no-store');
@@ -7179,7 +7391,7 @@ router
     const ret = String((ctx.request.body && ctx.request.body.returnTo) || '').trim();
     let result = null;
     try { result = await larpModel.redeemHouseInvite(code); } catch (_) { result = null; }
-    if (result && result.ok) return ctx.redirect(`/larp/${encodeURIComponent(result.house)}`);
+    if (result && result.ok) { await recordInviteUse('houses', `/larp/${encodeURIComponent(result.house)}`); return ctx.redirect(`/larp/${encodeURIComponent(result.house)}`); }
     const back = isLocalPath(ret) ? ret : '/larp';
     failWith(ctx, 'inviteCodeInvalid', back);
   })
@@ -7218,8 +7430,7 @@ router
     const houseKey = String((ctx.request.body && ctx.request.body.house) || '').toLowerCase();
     if (houseKey !== 'academia') { ctx.redirect('/larp'); return; }
     try { await larpModel.publishJoin('academia'); } catch (_) { return actionFail(ctx); }
-    const larpReturnTo = String((ctx.request.body && ctx.request.body.returnTo) || '');
-    ctx.redirect(larpReturnTo === '/welcome' ? '/welcome' : '/larp/academia');
+    ctx.redirect(safeReturnTo(ctx, '/larp/academia', ['/tribe/']));
   })
   .post("/larp/leave", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
@@ -7254,7 +7465,10 @@ router
   })
   .get("/invites", async (ctx) => {
     if (!checkMod(ctx, 'invitesMod')) return ctx.redirect('/modules');
-    ctx.body = await invitesView({ deadKeys: await deadPeerKeys(), canJoin: !config.public && isLoopbackRequest(ctx), publicMode: !!config.public });
+    const filter = String(ctx.query.filter || '').toLowerCase() === 'others' ? 'others' : 'pubs';
+    const pubs = filter === 'pubs';
+    const inviteCodes = pubs ? await suggestedPubs({ probe: true }).catch(() => []) : [];
+    ctx.body = await invitesView({ filter, deadKeys: pubs ? await deadPeerKeys() : new Set(), canJoin: !config.public && isLoopbackRequest(ctx), publicMode: !!config.public, inviteCodes, invitesUsed: pubs ? [] : readInvitesUsed() });
   })
   .get("/supporters", async (ctx) => {
     const feed = getViewerId();
@@ -7921,28 +8135,27 @@ router
     ctx.body = await forumPageBody(ctx, forumId, isReply ? ctx.params.forumId : null);
   })
   .get('/welcome', async (ctx) => {
-    try { onboardingModel.markOpened(); } catch (_) {}
-    const lang = ctx.cookies.get('language') || getConfig().language || 'en';
     const available = {
-      language: true,
       profile: true,
-      federation: checkMod(ctx, 'invitesMod'),
-      larp: checkMod(ctx, 'larpMod'),
       ux: true,
-      greeting: checkMod(ctx, 'feedMod'),
-      wish: true,
-      workflow: isLoopbackRequest(ctx)
+      workflow: isLoopbackRequest(ctx),
+      theme: true,
+      community: checkMod(ctx, 'invitesMod'),
+      greeting: checkMod(ctx, 'feedMod')
     };
     try {
       const status = await onboardingModel.status(available);
       status.workflow = workflowsModel.currentWorkflow(getConfig());
-      status.wish = getConfig().wish;
-      const job = backupModel.restoreStatus();
-      status.bootstrap = job && job.source === 'snapshot' ? job : null;
-      status.canJoin = !config.public && isLoopbackRequest(ctx);
-      status.publicMode = !!config.public;
-      if (status.bootstrap) ctx.set('Cache-Control', 'no-store');
-      ctx.body = await welcomeView(status, lang, status.profile);
+      status.theme = (getConfig().themes || {}).current || 'Dark-SNH';
+      if (status.usable.includes('community')) {
+        const job = backupModel.restoreStatus();
+        status.bootstrap = job && job.source === 'snapshot' ? job : null;
+        status.canJoin = !config.public && isLoopbackRequest(ctx);
+        status.publicMode = !!config.public;
+        status.pubs = await suggestedPubs({ probe: true }).catch(() => []);
+        if (status.bootstrap) ctx.set('Cache-Control', 'no-store');
+      }
+      ctx.body = await welcomeView(status, status.profile);
     } catch (error) { sendErrorPage(ctx, error.message || String(error), { status: 500 }); }
   })
   .post('/welcome/profile', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
@@ -7953,11 +8166,10 @@ router
       ? await promisesFs.readFile(imageFile.filepath).catch(() => undefined)
       : undefined;
     try {
-      await post.publishProfileEdit({
-        name: stripDangerousTags(String(body.name || '')).trim(),
-        description: stripDangerousTags(String(body.description || '')).trim(),
-        image
-      });
+      const { profile } = await onboardingModel.status();
+      const name = stripDangerousTags(String(body.name || '')).trim() || profile.name;
+      if (!name && !image) { onboardingModel.markStep('profile'); ctx.redirect('/welcome'); return; }
+      await post.publishProfileEdit({ name, description: profile.description, image });
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }); return; }
     ctx.redirect('/welcome');
   })
@@ -7982,14 +8194,6 @@ router
     try { onboardingModel.markStep('ux'); } catch (_) {}
     ctx.redirect('/welcome');
   })
-  .post('/welcome/wish', koaBody(), async (ctx) => {
-    const cfg = getConfig();
-    const v = String((ctx.request.body || {}).wish || '').trim();
-    cfg.wish = WISH_LEVELS.includes(v) ? v : 'whole';
-    saveConfig(cfg);
-    try { onboardingModel.markStep('wish'); } catch (_) {}
-    ctx.redirect('/welcome#step-workflow');
-  })
   .post('/welcome/workflow', koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
     const workflow = workflowsModel.wizardWorkflow(String((ctx.request.body || {}).workflow || '').trim());
@@ -8001,8 +8205,36 @@ router
     try { onboardingModel.markStep('workflow'); } catch (_) {}
     ctx.redirect('/welcome');
   })
+  .post('/welcome/community', koaBody(), async (ctx) => {
+    const body = ctx.request.body || {};
+    const listed = new Set(require('../configs/config-manager').readInviteCodes().map((e) => e.code));
+    const codes = [].concat(body.pub || []).map(String).filter((c) => listed.has(c));
+    if (body.action === 'skip' || !codes.length) {
+      try { onboardingModel.markStep('community'); } catch (_) {}
+      ctx.redirect('/welcome');
+      return;
+    }
+    if (config.public || !isLoopbackRequest(ctx)) { failWith(ctx, 'invitesJoinLocalOnly', '/welcome'); return; }
+    let failed = false;
+    for (const code of codes) if (await joinPub(code)) failed = true;
+    if (failed) { failWith(ctx, 'inviteCodeInvalid', '/welcome'); return; }
+    ctx.redirect('/welcome');
+  })
+  .post('/welcome/theme', koaBody(), async (ctx) => {
+    const wanted = String((ctx.request.body || {}).theme || '').trim();
+    const theme = require('../views/main_views').WIZARD_THEMES.some(([value]) => value === wanted) ? wanted : null;
+    if (theme) {
+      const cfg = getConfig();
+      cfg.themes = { ...(cfg.themes || {}), current: theme };
+      saveConfig(cfg);
+      ctx.cookies.set("theme", theme, { httpOnly: true, sameSite: 'strict', secure: ctx.secure });
+      try { onboardingModel.markStep('theme'); } catch (_) {}
+    }
+    ctx.redirect('/welcome');
+  })
   .post('/welcome/dismiss', koaBody(), async (ctx) => {
     try { onboardingModel.dismiss(); } catch (_) {}
+    if ((ctx.request.body || {}).returnTo === '/') { ctx.redirect('/'); return; }
     safeRefererRedirect(ctx, '/');
   })
   .post('/ai/suggestion/dismiss', koaBody(), async (ctx) => {
@@ -8989,7 +9221,7 @@ router
     const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
     const shop = await shopsModel.getShopById(ctx.params.shopId);
     if (!shop) { ctx.redirect('/shops'); return; }
-    if (shop.encrypted && shop.undecryptable && shop.author !== getViewerId()) { ctx.redirect('/invites#invites-shops'); return; }
+    if (shop.encrypted && shop.undecryptable && shop.author !== getViewerId()) { ctx.redirect('/invites?filter=others'); return; }
     const fav = await contentFavorites.getFavoriteSet('shops');
     const [rawProducts, comments, mapData] = await Promise.all([shopsModel.listProducts(shop.rootId || shop.key), getVoteComments(shop.key), resolveMapUrl(shop.mapUrl)]);
     const favShopProducts = await contentFavorites.getFavoriteSet('shopProducts').catch(() => new Set());
@@ -9140,7 +9372,7 @@ router
       return;
     }
     const favWiki = await contentFavorites.getFavoriteSet('wiki');
-    const pages = (await wikiModel.listPages({ tribeId, filter, q, viewerId: uid })).map(x => ({ ...x, isFavorite: favWiki.has(String(x.id)) }));
+    const pages = (await wikiModel.listPages({ tribeId, filter, q, viewerId: uid })).map(x => ({ ...x, isFavorite: favWiki.has(String(x.id)) })).concat(tribeId ? [] : await openTribeListFor('wiki', filter, q, ['title', 'body', 'tags', 'author']));
     const censusList = (filter === "all" && !q) ? pages : wikiCensus.map(x => ({ ...x, isFavorite: favWiki.has(String(x.id)) }));
     const shownList = await applyWishScope(pages);
     const spreadMap = await spreads.forMessages(pageOf(ctx, shownList).map(x => x && x.id));
@@ -9325,6 +9557,7 @@ router
     const fav = await contentFavorites.getFavoriteSet('calendars');
     const enriched = calendars.filter(c => !c.tribeId).map(c => ({ ...c, isFavorite: fav.has(String(c.rootId)) }));
     let finalList = filter === "favorites" ? enriched.filter(c => c.isFavorite) : enriched;
+    if (!tribeId) finalList = finalList.concat(await openTribeListFor('calendar', filter, q, ['title', 'tags', 'author']));
     finalList = await applyListFilters(finalList, ctx);
     try { finalList = await lifetime.enrichAndFilter(finalList, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
     const spreadMap = await spreads.forMessages(pageOf(ctx, finalList).map(x => x && (x.rootId || x.key || x.id)));
@@ -10861,16 +11094,6 @@ router
     try { await forumModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(safeReturnTo(ctx, `/forum/${encodeURIComponent(ctx.params.id)}`, ['/forum']));
   })
-  .post('/forum/join-code', koaBody(), async ctx => {
-    if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
-    const code = String((ctx.request.body || {}).code || '').trim();
-    try {
-      const { forumId } = await forumModel.joinByInvite(code);
-      ctx.redirect(safeReturnTo(ctx, `/forum/${encodeURIComponent(forumId)}`, ['/forum']));
-    } catch (e) {
-      inviteCodeFail(ctx, e);
-    }
-  })
   .post('/backup/keys/export', koaBody(), async (ctx) => {
     if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
     const pw = ctx.request.body.password;
@@ -11122,7 +11345,7 @@ router
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
     }
     await mapsModel.deleteMapById(ctx.params.id);
-    ctx.redirect(safeReturnTo(ctx, '/maps?filter=mine', ['/maps']));
+    ctx.redirect(safeReturnTo(ctx, '/maps?filter=mine', ['/maps', '/tribe/']));
   })
   .post("/maps/marker/delete/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
@@ -11149,16 +11372,6 @@ router
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
     try { await mapsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/maps/${encodeURIComponent(ctx.params.id)}`);
-  })
-  .post("/maps/join-code", koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
-    const code = String((ctx.request.body || {}).code || "").trim();
-    try {
-      const mapId = await mapsModel.joinByInvite(code);
-      ctx.redirect(`/maps/${encodeURIComponent(mapId)}`);
-    } catch (e) {
-      inviteCodeFail(ctx, e);
-    }
   })
   .post("/maps/join/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
@@ -11464,12 +11677,6 @@ router
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
     ctx.body = await renderInvitePage(await tribesModel.generateInvite(ctx.request.body.tribeId));
   })
-  .post('/tribes/join-code', koaBody(), async ctx => {
-    if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
-    try { await tribesModel.joinByInvite(ctx.request.body.inviteCode); }
-    catch (e) { inviteCodeFail(ctx, e); return; }
-    ctx.redirect('/tribes?filter=membership')
-  })
   .post('/tribes/leave/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
     await tribesModel.leaveTribe(ctx.params.id)
@@ -11492,7 +11699,8 @@ router
     const tribeId = ctx.request.body.tribeId;
     try {
       const oi = await tribesModel.getOpenInvite(tribeId);
-      if (oi && oi.code) await tribesModel.joinByInvite(oi.code);
+      if (!oi || !oi.code) { inviteCodeFail(ctx); return; }
+      await recordInviteUse('tribes', `/tribe/${encodeURIComponent(await tribesModel.joinByInvite(oi.code))}`);
     } catch (e) { if (!/already a member/i.test(String(e && e.message))) { actionFail(ctx, `/tribe/${encodeURIComponent(tribeId)}`); return; } }
     ctx.redirect(`/tribe/${encodeURIComponent(tribeId)}`);
   })
@@ -11696,10 +11904,10 @@ router
     if (!tribe || !(await tribesModel.isTribeMember(getViewerId(), tribe.id))) { ctx.status = 403; ctx.redirect('/tribes'); return; }
     const level = readTribeReach(ctx.request.body);
     if (!(await tribeReachAllowed(tribe.id)) && level !== 'tribe') { failWith(ctx, 'tribeReachPrivate', tribeRedirect); return; }
-    const item = await tribesContentModel.getById(ctx.params.contentId).catch(() => null);
     const tribeRoot = await tribesModel.getRootId(tribe.id).catch(() => tribe.id);
+    const item = (await tribesContentModel.getById(ctx.params.contentId).catch(() => null)) || await tribeModuleItem(ctx.params.contentId).catch(() => null);
     if (!item || item.rootId !== tribeRoot || item.contentType === 'forum-reply') { ctx.redirect(tribeRedirect); return; }
-    try { await publishTribeExposure(item, level, level === 'tribe' ? [] : await tribeRepliesFor(item)); } catch (_) { actionFail(ctx, tribeRedirect); return; }
+    try { await publishTribeExposure(item, level, level === 'tribe' || TRIBE_MODULE_SNAPSHOTS[item.contentType] ? [] : await tribeRepliesFor(item)); } catch (_) { actionFail(ctx, tribeRedirect); return; }
     ctx.redirect(tribeRedirect);
   })
   .post('/tribe/:id/content/:contentId/opinion/:category', koaBody(), async ctx => {
@@ -12280,16 +12488,6 @@ router
     if (!checkMod(ctx, 'eventsMod')) { ctx.redirect('/modules'); return; }
     try { await eventsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(safeReturnTo(ctx, `/events/${encodeURIComponent(ctx.params.id)}`, ['/events']));
-  })
-  .post('/events/join-code', koaBody(), async ctx => {
-    if (!checkMod(ctx, 'eventsMod')) { ctx.redirect('/modules'); return; }
-    const code = String((ctx.request.body || {}).code || '').trim();
-    try {
-      const { eventId } = await eventsModel.joinByInvite(code);
-      ctx.redirect(safeReturnTo(ctx, `/events/${encodeURIComponent(eventId)}`, ['/events']));
-    } catch (e) {
-      inviteCodeFail(ctx, e);
-    }
   })
   .post('/events/:eventId/comments', koaBodyMiddleware, async ctx => commentAction(ctx, 'events', 'eventId'))
   .post('/votes/create', koaBody(), async ctx => {
@@ -12925,19 +13123,9 @@ router
     let dest = ctx.params.id;
     try {
       const oi = await shopsModel.getOpenInvite(ctx.params.id);
-      if (oi && oi.code) { const r = await shopsModel.joinByCode(oi.code); if (r && r.shopId) dest = r.shopId; }
+      if (oi && oi.code) { const r = await shopsModel.joinByCode(oi.code); if (r && r.shopId) { dest = r.shopId; await recordInviteUse('shops', `/shops/${encodeURIComponent(dest)}`); } }
     } catch (e) { if (!/already a member/i.test(String(e && e.message))) { actionFail(ctx, `/shops/${encodeURIComponent(dest)}`); return; } }
     ctx.redirect(`/shops/${encodeURIComponent(dest)}`);
-  })
-  .post("/shops/join-code", koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
-    const code = String((ctx.request.body || {}).code || '').trim();
-    try {
-      const { shopId } = await shopsModel.joinByCode(code);
-      ctx.redirect(safeReturnTo(ctx, `/shops/${encodeURIComponent(shopId)}`, ['/shops']));
-    } catch (e) {
-      inviteCodeFail(ctx, e);
-    }
   })
   .post("/shops/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'shops', 'add'))
   .post("/shopProducts/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'shopProducts', 'add'))
@@ -13063,16 +13251,6 @@ router
     const chatId = ctx.request.body.chatId;
     try { await chatsModel.removeOpenInvite(chatId); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/chats/${encodeURIComponent(chatId)}`);
-  })
-  .post("/chats/join-code", koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
-    const code = String(ctx.request.body.code || '').trim();
-    try {
-      const chatKey = await chatsModel.joinByInvite(code);
-      ctx.redirect(safeReturnTo(ctx, `/chats/${encodeURIComponent(chatKey)}`, ['/chats']));
-    } catch (e) {
-      inviteCodeFail(ctx, e);
-    }
   })
   .post("/chats/join/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'chatsMod')) { ctx.redirect('/modules'); return; }
@@ -13322,16 +13500,6 @@ router
     try { await padsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/pads/${encodeURIComponent(ctx.params.id)}`);
   })
-  .post("/pads/join-code", koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
-    const code = String((ctx.request.body || {}).code || "").trim();
-    try {
-      const padId = await padsModel.joinByInvite(code);
-      ctx.redirect(`/pads/${encodeURIComponent(padId)}`);
-    } catch (e) {
-      inviteCodeFail(ctx, e);
-    }
-  })
   .post("/pads/join/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'padsMod')) { ctx.redirect('/modules'); return; }
     const uid = getViewerId();
@@ -13428,12 +13596,6 @@ router
     if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
     try { await roomsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     ctx.redirect(`/rooms/${encodeURIComponent(ctx.params.id)}`);
-  })
-  .post("/rooms/join-code", koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
-    const code = String((ctx.request.body || {}).code || "").trim();
-    try { ctx.redirect(`/rooms/${encodeURIComponent(await roomsModel.joinByInvite(code))}`); }
-    catch (e) { inviteCodeFail(ctx, e); }
   })
   .post("/rooms/join/:id", koaBody(), async (ctx) => {
     if (config.public || !checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
@@ -13629,16 +13791,6 @@ router
     try { await calendarsModel.removeOpenInvite(ctx.params.id); } catch (_) { actionFail(ctx); return; }
     await applyClearnetChoice(ctx, 'calendars', ctx.params.id, { recheck: true, allowed: CLEARNET_REACH_OK.calendars(await calendarsModel.getCalendarById(ctx.params.id).catch(() => null)) });
     ctx.redirect(`/calendars/${encodeURIComponent(ctx.params.id)}`);
-  })
-  .post("/calendars/join-code", koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
-    const code = String((ctx.request.body || {}).code || "").trim();
-    try {
-      const calId = await calendarsModel.joinByInvite(code);
-      ctx.redirect(`/calendars/${encodeURIComponent(calId)}`);
-    } catch (e) {
-      inviteCodeFail(ctx, e);
-    }
   })
   .post("/calendars/leave/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
@@ -13984,50 +14136,33 @@ router
     cfg.language = lang;
     saveConfig(cfg);
     ctx.cookies.set("language", lang, { maxAge: 365 * 24 * 60 * 60 * 1000, httpOnly: true, sameSite: 'strict', secure: ctx.secure });
-    try { onboardingModel.markStep('language'); } catch (_) {}
     safeRefererRedirect(ctx, '/settings');
   })
   .post("/peers/pause", koaBody(), async ctx => { await setNetworkPaused(true); ctx.redirect("/peers"); })
   .post("/peers/resume", koaBody(), async ctx => { await setNetworkPaused(false); ctx.redirect("/peers"); })
-  .post("/settings/invite/accept", koaBody(), async ctx => {
-    const invite = String(ctx.request.body.invite || '');
-    const pubKey = (invite.match(/@[A-Za-z0-9+/=_-]{43,}\.ed25519/) || [])[0] || null;
-    if (pubKey) {
-      try {
-        const fsx = require('fs'), px = require('path');
-        const gossip = JSON.parse(fsx.readFileSync(px.join(ssbConfig.path, 'gossip.json'), 'utf8') || '[]');
-        let unfollowed = [];
-        try { unfollowed = JSON.parse(fsx.readFileSync(stateFilePath('gossip_unfollowed.json'), 'utf8') || '[]'); } catch (_) {}
-        const activePub = Array.isArray(gossip) && gossip.some(p => p && p.key === pubKey) && !unfollowed.some(u => u && u.key === pubKey);
-        if (activePub) { sendErrorPage(ctx, require('../views/main_views').i18n.invitesAlreadyFederated, { status: 400, to: '/invites' }); return; }
-      } catch (_) {}
-    }
-    if (/\.onion\b/i.test(invite) && !(await torUsable())) return failWith(ctx, 'peersTorMissing', '/invites');
-    let joined = false;
-    try { await meta.acceptInvite(invite); joined = true; } catch (_) {}
-    if (!joined) return failWith(ctx, 'inviteCodeInvalid');
-    rememberJoinedPub(invite);
-    bootstrapFromPub(invite);
-    safeRefererRedirect(ctx, "/invites");
-  })
-  .post("/invites/inhabitant/follow", koaBody(), async (ctx) => {
-    const feedId = String(ctx.request.body?.feedId || '').trim();
-    if (!/^@[A-Za-z0-9+/_\-]{43}=\.ed25519$/.test(feedId)) {
-      ctx.redirect(`/search?query=${encodeURIComponent(feedId)}`);
+  .post("/settings/invite/accept", koaBody(), async ctx => acceptPubInvite(ctx, String(ctx.request.body.invite || '')))
+  .post("/invites/join", koaBody(), async (ctx) => {
+    const code = String((ctx.request.body || {}).code || '').trim();
+    if (!code) { inviteCodeFail(ctx); return; }
+    if (FEED_ID_RE.test(code)) { await followInhabitant(ctx, code); return; }
+    if (PUB_INVITE_RE.test(code)) {
+      if (!isLoopbackRequest(ctx)) { failWith(ctx, 'invitesJoinLocalOnly', '/invites?filter=others'); return; }
+      await acceptPubInvite(ctx, code);
       return;
     }
-    try {
-      const name = await about.name(feedId);
-      if (!name || name === feedId.slice(1, 9)) {
-        ctx.redirect(`/search?query=${encodeURIComponent(feedId)}`);
+    for (const [kind, entry] of Object.entries(INVITE_JOINERS)) {
+      if (!checkMod(ctx, entry.mod)) continue;
+      let href;
+      try { href = await entry.join(code, ctx); } catch (e) {
+        if (INVITE_NO_MATCH.test(String(e && e.message))) continue;
+        inviteCodeFail(ctx, e);
         return;
       }
-      const ssb = await cooler.open();
-      await new Promise((res, rej) => ssb.publish({ type: 'contact', contact: feedId, following: true }, (e) => e ? rej(e) : res()));
-      ctx.redirect(`/author/${encodeURIComponent(feedId)}`);
-    } catch (_) {
-      ctx.redirect(`/search?query=${encodeURIComponent(feedId)}`);
+      await recordInviteUse(kind, href);
+      ctx.redirect(href);
+      return;
     }
+    inviteCodeFail(ctx);
   })
   .post("/settings/invite/unfollow", koaBody(), async (ctx) => {
     const { key } = ctx.request.body || {};
@@ -14767,9 +14902,17 @@ const middleware = [
   async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path, query: ctx.querystring, method: ctx.method }, next); },
   async (ctx, next) => {
     if (ctx.method !== 'POST') return next();
-    const forget = () => { censusCache.clear(); lifetime.forget(); };
+    const forget = () => {
+      censusCache.clear();
+      lifetime.forget();
+      try { activityModel.invalidateCache(); } catch (_) {}
+      clearnetDecisionCache = { at: 0, data: null };
+      clearnetIndexCache = { ts: 0, data: null, building: null };
+      clearnetBlobCache = { ts: 0, set: null, forcedAt: clearnetBlobCache.forcedAt };
+      clearnetTribesCache = { at: 0, data: null };
+    };
     forget();
-    try { await next(); } finally { forget(); }
+    try { await next(); } finally { forget(); await settleLogWrites(); }
   },
   publicModeGuard({
     isPublic: !!config.public,
@@ -14779,6 +14922,7 @@ const middleware = [
     if (isLoopbackOnlyPath(ctx.path) && !isLoopbackRequest(ctx)) { sendErrorPage(ctx, 'Forbidden', { status: 403 }); return; }
     await next();
   },
+  syncTribeModuleExposure,
   async (ctx, next) => { applyFirstRunLanguage(ctx); setLanguage(isClearnetPath(ctx.request) ? clearnetLanguage(ctx) : (ctx.cookies.get("language") || getConfig().language || "en")); await next(); },
   async (ctx, next) => {
     try { require('../views/comments_view').setCommentsOpen(ctx.method === 'GET' && String(ctx.query.comments || '') === 'open'); } catch (_) {}
@@ -14975,6 +15119,12 @@ async function runWalletWork(kind) {
     await notifyBot('BANKING_UBI_AVAILABLE', [getViewerId()], `${i18nB.bankingBotUbiAvailableText}: [${i18nB.bankClaimUBI}](/banking?filter=exchange) · ${avail.epochId}`);
     fs.writeFileSync(ubiNoticePath, JSON.stringify({ epochId: avail.epochId, at: new Date().toISOString() }));
   } catch (_) {}
+}
+const PUB_INVITES_REFRESH_MS = 24 * 60 * 60 * 1000;
+if (ssbConfig.pub === true) {
+  const announcePubInvites = async () => { try { await pubInvites.announce(await cooler.open()); } catch (_) {} };
+  setTimeout(announcePubInvites, 60000);
+  setInterval(announcePubInvites, PUB_INVITES_REFRESH_MS);
 }
 if (bankingModel.isPubNode()) {
   console.log(`[UBI] PUB engine on: paying UBI through ecoind at ${getConfig().wallet.url}`);

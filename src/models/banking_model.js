@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const pull = require("../server/node_modules/pull-stream");
 const { readTyped, CONTENT_TYPES, requestScope } = require("./typed_log");
-const { getConfig } = require("../configs/config-manager.js");
+const { getConfig, defaultInvite } = require("../configs/config-manager.js");
 const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state.js");
 
@@ -411,11 +411,8 @@ function isPubNode() {
 }
 
 function getDefaultPubId() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "configs", "snh-invite-code.json"), "utf8"));
-    const m = String(raw.code || "").match(/(@[A-Za-z0-9+/]+={0,2}\.ed25519)/);
-    return m ? m[1] : "";
-  } catch (_) { return ""; }
+  const m = String((defaultInvite() || {}).code || "").match(/(@[A-Za-z0-9+/]+={0,2}\.ed25519)/);
+  return m ? m[1] : "";
 }
 const PUB_DISCOVERY_TTL_MS = 60 * 1000;
 const PUB_ANNOUNCE_MAX_AGE_MS = 3 * 24 * 60 * 60 * 1000;

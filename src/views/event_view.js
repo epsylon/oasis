@@ -91,7 +91,7 @@ const renderEventAttendAction = (e, isAttending, returnTo) => {
   if (st !== "OPEN") return null;
   if (e.organizer === userId) return null;
   if (normalizePrivacy(e.isPublic) === "private" && !isAttending) {
-    return a({ class: "tribe-action-btn", href: "/invites#invites-events" }, i18n.tribeEnterInvite);
+    return a({ class: "tribe-action-btn", href: "/invites?filter=others" }, i18n.tribeEnterInvite);
   }
   return form(
     { method: "POST", action: `/events/attend/${encodeURIComponent(e.id)}` },

@@ -544,6 +544,13 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       }))
     },
 
+    async rehomeHub(id) {
+      const ssbClient = await openSsb()
+      const picked = await pickHub()
+      if (!picked || picked.hub === ssbClient.id) return null
+      return republish(id, (c) => ({ ...c, ...picked }))
+    },
+
     async closeRoomById(id) {
       return republish(id, (c) => ({ ...c, status: "CLOSED" }))
     },

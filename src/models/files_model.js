@@ -216,7 +216,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const oldDec = await decryptIfTribe(oldMsg.content);
       if (!oldDec || oldDec.type !== "file") throw new Error("File not found");
       assertReadable(oldDec, "File");
-      if ((oldDec.author || oldMsg.content.author) !== userId) throw new Error("Not the author");
+      if (oldMsg.author !== userId) throw new Error("Not the author");
       const aggFile = await this.getFileById(id, userId);
       if (aggFile && Object.keys(aggFile.opinions || {}).some(k => (aggFile.opinions[k] || 0) > 0)) throw new Error("Cannot edit file after it has received opinions.");
 
@@ -236,7 +236,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         opinions: oldDec.opinions || {},
         opinions_inhabitants: oldDec.opinions_inhabitants || [],
         author: oldDec.author || userId,
-        ...(oldMsg.content.tribeId ? { tribeId: oldMsg.content.tribeId } : {}),
+        ...((oldDec.tribeId || oldMsg.content.tribeId) ? { tribeId: oldDec.tribeId || oldMsg.content.tribeId } : {}),
         createdAt: oldDec.createdAt,
         updatedAt: now
       };
@@ -260,7 +260,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       if (!msg) throw new Error("File not found");
       const dec = await decryptIfTribe(msg.content);
       if (!dec || dec.type !== "file") throw new Error("File not found");
-      if ((dec.author || msg.content.author) !== userId) throw new Error("Not the author");
+      if (msg.author !== userId) throw new Error("Not the author");
 
       const tombstone = await tombFor(tipId, dec.tribeId || msg.content.tribeId, userId);
 

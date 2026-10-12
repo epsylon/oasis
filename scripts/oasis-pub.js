@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const ssbConfig = require(path.join(__dirname, '..', 'src', 'server', 'ssb_config'));
 const ssbClient = require(path.join(__dirname, '..', 'src', 'server', 'node_modules', 'ssb-client'));
+const pubInvites = require(path.join(__dirname, '..', 'src', 'models', 'pub_invites'));
+const configManager = require(path.join(__dirname, '..', 'src', 'configs', 'config-manager'));
 
 const socketPath = path.join(ssbConfig.path, 'socket');
 const publicInteger = (ssbConfig.keys.public || '').replace('.ed25519', '');
@@ -17,16 +19,36 @@ const usage = () => {
   console.error('PUB admin commands (sbot must be running: sh oasis.sh server):');
   console.error('  whoami                          Print this PUB id');
   console.error('  invite [N]                      Create an invite code (default uses=1)');
+  console.error('  invites                         Show how many invites this PUB created and how many are used');
   console.error('  name <text>                     Set PUB display name');
   console.error('  announce <host> [port]          Publish a pub address (default port=8008)');
   console.error('  follow <feedId>                 Follow another PUB');
   console.error('  join <invite>                   Join another PUB with its invite code');
   console.error('  status                          Show peer / replication status');
   console.error('  gossip                          List known gossip peers');
+  console.error('');
+  console.error('Works with the sbot stopped too:');
+  console.error('  hops [N]                        Show or set how many hops this node replicates (0-6)');
   process.exit(1);
 };
 
 if (!cmd) usage();
+
+if (cmd === 'hops') {
+  const current = (configManager.readServerConfig().friends || {}).hops;
+  if (args[0] === undefined) {
+    console.log(`Hops: ${Number.isFinite(current) ? current : 2}`);
+    process.exit(0);
+  }
+  const hops = Number(args[0]);
+  if (!Number.isInteger(hops) || hops < 0 || hops > 6) {
+    console.error('Hops must be a whole number from 0 to 6');
+    process.exit(1);
+  }
+  configManager.saveServerConfig({ friends: { hops } });
+  console.log(`Hops: ${hops} (was ${Number.isFinite(current) ? current : 2}). Restart Oasis to apply it.`);
+  process.exit(0);
+}
 
 const call = (fn, ...a) => new Promise((res, rej) => fn(...a, (e, r) => e ? rej(e) : res(r)));
 
@@ -64,6 +86,17 @@ ssbClient(ssbConfig.keys, { remote, caps: ssbConfig.caps }).then(async (ssb) => 
         const uses = Math.max(1, parseInt(args[0] || '1', 10));
         const code = await call(ssb.invite.create.bind(ssb.invite), uses);
         console.log(code);
+        await pubInvites.announce(ssb).catch(() => null);
+        break;
+      }
+      case 'invites': {
+        if (!ssb.invite || typeof ssb.invite.list !== 'function') { console.error('This node is not a PUB'); process.exit(1); }
+        const rows = await call(ssb.invite.list.bind(ssb.invite));
+        const sum = pubInvites.summarize(rows);
+        const single = pubInvites.summarize(rows.filter((r) => Number(r.total) === 1));
+        for (const r of sum.codes) console.log(`${r.id}  used ${r.used} of ${r.total}`);
+        if (single.total) console.log(`Single-use codes: used ${single.used} of ${single.total}`);
+        console.log(`Total: used ${sum.used} of ${sum.total}, ${sum.total - sum.used} left`);
         break;
       }
       case 'name': {

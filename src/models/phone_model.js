@@ -1,5 +1,4 @@
 const fs = require('fs');
-const path = require('path');
 const pull = require('../server/node_modules/pull-stream');
 const sharedState = require('../configs/shared-state');
 const { notify: desktopNotify, i18nNow, displayName } = require('../backend/desktopNotify');
@@ -173,11 +172,8 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile, isAvailable,
     try { pull(s.messagesByType({ type }), pull.collect((err, msgs) => resolve(err ? [] : msgs))); } catch (_) { resolve([]); }
   });
   const defaultPubId = () => {
-    try {
-      const raw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'configs', 'snh-invite-code.json'), 'utf8'));
-      const m = String(raw.code || '').match(/(@[A-Za-z0-9+/]{43}=\.ed25519)/);
-      return m ? m[1] : '';
-    } catch (_) { return ''; }
+    const m = String((require('../configs/config-manager').defaultInvite() || {}).code || '').match(/(@[A-Za-z0-9+/]{43}=\.ed25519)/);
+    return m ? m[1] : '';
   };
   let announcedPubs = new Set();
   const refreshPubs = async (force = false) => {

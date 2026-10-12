@@ -308,3 +308,64 @@ describe('peers: connections others open to this node', (t) => {
     }
   });
 });
+
+describe('peers: invitations a pub has left', (t) => {
+  const { makeNetwork, makePeer } = require('../../helpers/setup');
+  const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
+  const pubInvites = require('../../../src/models/pub_invites');
+  const crypto = require('crypto');
+  const inviteFor = (pub) => {
+    const seed = crypto.randomBytes(32);
+    return { code: `pub.example:8008:${pub.keypair.id}~${seed.toString('base64')}`, id: ssbKeys.generate('ed25519', seed).id };
+  };
+  const announceAs = async (peer, rows) => {
+    const ssb = await peer.cooler.open();
+    ssb.invite = { list: (cb) => cb(null, rows) };
+    return pubInvites.announce(ssb);
+  };
+  const statusSeenBy = async (peer, code) => (await pubInvites.readStatus(await peer.cooler.open(), [{ name: 'X', code }]))[0];
+
+  t('a pub that says nothing is offered as before, without a count', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const B = makePeer(net);
+    const s = await statusSeenBy(B, inviteFor(P).code);
+    eq(s.invites, null);
+    notOk(s.exhausted);
+  });
+
+  t('every batch of invites a pub creates adds up', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const B = makePeer(net);
+    const inv = inviteFor(P);
+    await announceAs(P, [{ id: inv.id, total: 200, used: 10 }, { id: inviteFor(P).id, total: 500, used: 0 }, { id: inviteFor(P).id, total: 1, used: 1 }]);
+    const s = await statusSeenBy(B, inv.code);
+    eq(s.invites.used, 11);
+    eq(s.invites.total, 701);
+    notOk(s.exhausted);
+  });
+
+  t('a code with no uses left is no longer offered, even if the pub has other codes', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const B = makePeer(net);
+    const inv = inviteFor(P);
+    await announceAs(P, [{ id: inv.id, total: 200, used: 200 }, { id: inviteFor(P).id, total: 500, used: 0 }]);
+    ok((await statusSeenBy(B, inv.code)).exhausted);
+  });
+
+  t('only the pub itself can say how many invitations it has left', async () => {
+    const net = makeNetwork(); const P = makePeer(net); const S = makePeer(net); const B = makePeer(net);
+    const inv = inviteFor(P);
+    await announceAs(S, [{ id: inv.id, total: 10, used: 10 }]);
+    const s = await statusSeenBy(B, inv.code);
+    eq(s.invites, null);
+    notOk(s.exhausted);
+  });
+
+  t('the pub only publishes again when its numbers change', async () => {
+    const net = makeNetwork(); const P = makePeer(net);
+    const inv = inviteFor(P);
+    const count = () => net.log.filter(m => m.value.content.type === pubInvites.ANNOUNCE_TYPE).length;
+    await announceAs(P, [{ id: inv.id, total: 50, used: 1 }]);
+    await announceAs(P, [{ id: inv.id, total: 50, used: 1 }]);
+    eq(count(), 1);
+    await announceAs(P, [{ id: inv.id, total: 50, used: 2 }]);
+    eq(count(), 2);
+  });
+});

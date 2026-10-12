@@ -2,12 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const pull = require('../server/node_modules/pull-stream');
 
-const STEPS = ['language', 'ux', 'profile', 'wish', 'workflow', 'federation', 'larp', 'greeting'];
+const STEPS = ['profile', 'ux', 'workflow', 'theme', 'community', 'greeting'];
+const MARKED_STEPS = ['profile', 'ux', 'workflow', 'theme', 'community'];
 const FLAG = 'oasis-first-contact';
 const PENDING = 'welcome=pending';
 const DISMISSED = 'welcome=dismissed';
 const DONE = 'welcome=done';
-const OPENED = 'welcome=opened';
 
 const ssbPathOf = (given) => {
   if (given) return given;
@@ -106,16 +106,6 @@ module.exports = ({ cooler, ssbPath } = {}) => {
     return c && typeof c === 'object' && c.type === 'feed' && String(c.text || '').trim().length > 0;
   });
 
-  const hasJoinedLarp = (messages) => {
-    for (const m of messages) {
-      const c = m.value.content;
-      if (!c || typeof c !== 'object') continue;
-      if (c.type === 'larpJoinHouse' && c.house) return true;
-      if (c.type === 'larpLeaveLarp') return false;
-    }
-    return false;
-  };
-
   const hasFederated = (mine, messages) => {
     try {
       const gossip = JSON.parse(fs.readFileSync(path.join(dir(), 'gossip.json'), 'utf8'));
@@ -167,24 +157,13 @@ module.exports = ({ cooler, ssbPath } = {}) => {
     },
 
     markStep(step) {
-      if (!STEPS.includes(step)) return false;
-      if (step !== 'language' && step !== 'workflow' && step !== 'wish' && step !== 'ux') return true;
+      if (!MARKED_STEPS.includes(step)) return false;
       if (!isPending(dir())) return true;
       return appendMarker(dir(), `step=${step}`);
     },
 
     dismiss() {
       return appendMarker(dir(), DISMISSED, true);
-    },
-
-    shouldOpen() {
-      const target = dir();
-      if (!isPending(target)) return false;
-      return !readFlag(target).markers.has(OPENED);
-    },
-
-    markOpened() {
-      return appendMarker(dir(), OPENED, true);
     },
 
     isVisible() {
@@ -199,13 +178,11 @@ module.exports = ({ cooler, ssbPath } = {}) => {
       let messages = [];
       try { ({ mine, messages } = await ownMessages()); } catch (_) { mine = ''; messages = []; }
       const steps = {
-        language: flag.markers.has('step=language'),
-        profile: hasProfile(mine, messages),
-        federation: hasFederated(mine, messages),
-        larp: hasJoinedLarp(messages),
+        profile: hasProfile(mine, messages) || flag.markers.has('step=profile'),
         ux: flag.markers.has('step=ux'),
-        wish: flag.markers.has('step=wish'),
         workflow: flag.markers.has('step=workflow'),
+        theme: flag.markers.has('step=theme'),
+        community: hasFederated(mine, messages) || flag.markers.has('step=community'),
         greeting: hasGreeted(messages)
       };
       const profile = { id: mine, name: '', description: '', image: '' };

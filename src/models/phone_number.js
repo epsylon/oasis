@@ -12,7 +12,7 @@ const phoneNumberOf = (id) => (FEED_ID.test(String(id || '')) ? digitsOf(id) : n
 const roomNumberOf = (id) => (MSG_ID.test(String(id || '')) ? digitsOf(id) : null);
 
 const normalizeNumber = (value) => {
-  const digits = String(value || '').replace(/[\s.\-]/g, '');
+  const digits = String(value || '').replace(/[^0-9A-Za-z]/g, '');
   return /^\d{6}$/.test(digits) ? `${digits.slice(0, 3)}-${digits.slice(3)}` : null;
 };
 

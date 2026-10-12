@@ -264,7 +264,7 @@ describe('banking: UBI rules (no RPC)', (t) => {
 
   t('with nobody announcing, the default PUB from the invite file is used, marked unavailable', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const raw = require('../../../src/configs/snh-invite-code.json');
+    const raw = require('../../../src/configs/invite-codes.json')[0];
     const snh = (String(raw.code).match(/(@[A-Za-z0-9+/]+={0,2}\.ed25519)/) || [])[1];
     const found = await A.use('banking').discoverUbiPub();
     eq(found.pubId, snh);
@@ -774,7 +774,7 @@ describe('banking: a PUB pays each UBI claim once, and only its own', (t) => {
     await claim(stale.A, Other.keypair.id, 4 * 86400000);
     const realRead = fs.readFileSync;
     fs.readFileSync = function (p, ...rest) {
-      if (String(p).endsWith('snh-invite-code.json')) return JSON.stringify({ code: `pub.example:8008:${P.keypair.id}~invite` });
+      if (String(p).endsWith('invite-codes.json')) return JSON.stringify([{ code: `pub.example:8008:${P.keypair.id}~invite` }]);
       return realRead.call(this, p, ...rest);
     };
     const wallet = await fakeWallet();
@@ -792,7 +792,7 @@ describe('banking: a PUB pays each UBI claim once, and only its own', (t) => {
     await publish(Other, { type: 'ubiClaimResult', allocationId: 'o', epochId: epochNow(), txid: 'd'.repeat(64), userId: stale.A.keypair.id, amount: 5, processedAt: new Date().toISOString() });
     const realRead = fs.readFileSync;
     fs.readFileSync = function (p, ...rest) {
-      if (String(p).endsWith('snh-invite-code.json')) return JSON.stringify({ code: `pub.example:8008:${P.keypair.id}~invite` });
+      if (String(p).endsWith('invite-codes.json')) return JSON.stringify([{ code: `pub.example:8008:${P.keypair.id}~invite` }]);
       return realRead.call(this, p, ...rest);
     };
     const wallet = await fakeWallet();

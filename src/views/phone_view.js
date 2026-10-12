@@ -115,7 +115,7 @@ const renderCompose = (compose) => {
         ...keep(),
         key('add', `+ ${i18n.phoneDialAdd}`, 'phone-dial-add', full ? { disabled: true } : {}),
         div({ class: 'phone-screen' },
-          input({ type: 'text', name: 'dial', value: dial, placeholder: i18n.phoneDialPlaceholder, maxlength: '64', autocomplete: 'off', autofocus: true })
+          input({ type: 'text', name: 'dial', value: dial, placeholder: i18n.phoneDialPlaceholder, maxlength: '64', autocomplete: 'off', ...(dial ? {} : { autofocus: true }) })
         ),
         div({ class: 'phone-dialpad' },
           ...DIAL_KEYS.map(d => key(d, d)),

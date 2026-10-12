@@ -1,4 +1,4 @@
-const { form, button, div, h2, h3, p, section, ul, li, a, br, hr, input, label, span, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, a, br, input, label, table, tr, td, textarea } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 const path = require("path");
 const fs = require('fs');
@@ -15,12 +15,21 @@ const encodePubLink = (key) => {
   return `/author/${encodeURIComponent('@' + core)}.ed25519`;
 };
 
-const snhInvitePath = path.join(__dirname, '..', 'configs', 'snh-invite-code.json');
-
-let snhInvite = null;
-try {
-  snhInvite = JSON.parse(fs.readFileSync(snhInvitePath, 'utf8'));
-} catch {}
+const INVITE_KIND_LABEL = {
+  tribes: 'invitesTribesTitle',
+  houses: 'invitesHousesTitle',
+  chats: 'invitesChatsTitle',
+  pads: 'invitesPadsTitle',
+  rooms: 'invitesRoomsTitle',
+  calendars: 'invitesCalendarsTitle',
+  events: 'invitesEventsTitle',
+  forum: 'invitesForumsTitle',
+  school: 'invitesSchoolTitle',
+  maps: 'invitesMapsTitle',
+  shops: 'invitesShopsTitle',
+  inhabitants: 'invitesInhabitantsTitle',
+  pubs: 'invitesPubsTitle'
+};
 
 const deduplicateByHost = (list) => {
   const seen = new Set();
@@ -32,8 +41,24 @@ const deduplicateByHost = (list) => {
   });
 };
 
+const renderSuggestedPub = (entry, canJoin) => div({ class: 'snh-invite-box' },
+  h3({ class: 'snh-invite-name' }, entry.name),
+  p({ class: 'snh-invite-name' }, entry.description),
+  p({ class: 'snh-invite-name' }, renderStyledText(entry.url)),
+  entry.createdAt ? p({ class: 'snh-invite-date' }, `${i18n.statsCreatedAt || 'Created'}: ${moment(entry.createdAt).format("YYYY/MM/DD")}`) : null,
+  p({ class: 'snh-invite-name snh-invite-code' }, entry.code),
+  entry.invites ? p({ class: 'snh-invite-date' }, `${i18n.invitesPubUses}: ${entry.invites.used}/${entry.invites.total}`) : null,
+  entry.exhausted
+    ? p({ class: 'snh-invite-name' }, i18n.invitesPubExhausted)
+    : canJoin
+      ? form({ action: '/settings/invite/accept', method: 'post' },
+          input({ type: 'hidden', name: 'invite', value: entry.code }),
+          button({ type: 'submit' }, i18n.invitesAcceptInvite)
+        )
+      : null
+);
+
 const invitesView = (opts = {}) => {
-  const { invitesEnabled } = opts;
   const canJoin = opts.canJoin !== false;
   let pubs = [];
   let pubsValue = "false";
@@ -66,14 +91,6 @@ const invitesView = (opts = {}) => {
   const deadKeys = opts.deadKeys instanceof Set ? opts.deadKeys : new Set();
   const hasError = (pubItem) => !!(pubItem && deadKeys.has(peerHealth.canonicalKey(pubItem.key)));
 
-  const sanitizeError = (err) => {
-    if (!err) return i18n.genericError || 'Unknown error';
-    const firstLine = String(err).split('\n')[0].replace(/^Error:\s*/, '').trim();
-    return firstLine || (i18n.genericError || 'Unknown error');
-  };
-
-  const unreachableLabel = i18n.currentlyUnreachable || i18n.currentlyUnrecheable || 'ERROR!';
-
   const pubTableHeader = () => tr(
     td({ class: 'card-label' }, 'PUB'),
     td({ class: 'card-label' }, i18n.invitesPort || 'Port'),
@@ -82,7 +99,9 @@ const invitesView = (opts = {}) => {
   );
 
   const activePubs = filteredPubs.filter(pubItem => !hasError(pubItem));
-  const unreachablePubs = pubs.filter(hasError);
+  const filter = opts.filter === 'others' ? 'others' : 'pubs';
+  const suggested = Array.isArray(opts.inviteCodes) ? opts.inviteCodes : [];
+  const used = (Array.isArray(opts.invitesUsed) ? opts.invitesUsed : []).filter((e) => e && typeof e.href === 'string' && e.href.startsWith('/'));
 
   const renderPubTable = (items, actionFn) => table({ class: 'block-info-table invites-pubs-table' },
     pubTableHeader(),
@@ -103,9 +122,19 @@ const invitesView = (opts = {}) => {
       div({ class: 'tags-header module-header-line' },
         h2(title),
         p(description)
+      ),
+      div({ class: 'mode-buttons-row' },
+        a({ class: filter === 'pubs' ? 'filter-btn active' : 'filter-btn', href: '/invites?filter=pubs' }, String(i18n.invitesPubsTitle).toUpperCase()),
+        a({ class: filter === 'others' ? 'filter-btn active' : 'filter-btn', href: '/invites?filter=others' }, String(i18n.invitesFilterOthers).toUpperCase())
       )
     ),
-    section(
+    filter === 'pubs' && suggested.length ? section(
+      div({ class: 'pubs-section' },
+        h2(`${i18n.invitesSuggestedPubs} (${suggested.length})`),
+        ...suggested.map((entry) => renderSuggestedPub(entry, canJoin))
+      )
+    ) : null,
+    filter === 'pubs' ? section(
       div({ class: 'pubs-section' },
         h2(i18n.invitesPubsTitle),
         p(i18n.invitesPubsHint),
@@ -116,23 +145,10 @@ const invitesView = (opts = {}) => {
               br(),
               button({ type: 'submit' }, i18n.invitesAcceptInvite)
             )
-          : p({ class: 'invites-join-note' }, opts.publicMode === true ? i18n.invitesJoinPubMode : i18n.invitesJoinLocalOnly),
-        br(),
-        snhInvite ? div({ class: 'snh-invite-box' },
-          h3({ class: 'snh-invite-name' }, snhInvite.name),
-          p({ class: 'snh-invite-name' }, snhInvite.description),
-          p({ class: 'snh-invite-name' }, renderStyledText(snhInvite.url)),
-          snhInvite.createdAt ? p({ class: 'snh-invite-date' }, `${i18n.statsCreatedAt || 'Created'}: ${moment(snhInvite.createdAt).format("YYYY/MM/DD")}`) : null,
-          canJoin
-            ? form({ action: '/settings/invite/accept', method: 'post' },
-                input({ type: 'hidden', name: 'invite', value: snhInvite.code }),
-                button({ type: 'submit', class: 'filter-btn' }, snhInvite.code)
-              )
-            : p({ class: 'snh-invite-name' }, snhInvite.code)
-        ) : null
+          : p({ class: 'invites-join-note' }, opts.publicMode === true ? i18n.invitesJoinPubMode : i18n.invitesJoinLocalOnly)
       )
-    ),
-    section(
+    ) : null,
+    filter === 'pubs' ? section(
       div({ class: 'federations-section' },
         h2(i18n.invitesFederationsTitle || 'Federations'),
         p(i18n.invitesFederationsHint),
@@ -140,16 +156,6 @@ const invitesView = (opts = {}) => {
           form({ action: '/invites/refresh-pubs', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsRefresh || 'Refresh')),
           form({ action: '/invites/clear-unreachable', method: 'post' }, button({ type: 'submit' }, i18n.invitesPubsClearUnreachable || 'Clean')),
           form({ action: '/invites/export-pubs', method: 'get' }, button({ type: 'submit' }, i18n.invitesPubsExport || 'Export'))
-        ),
-        form(
-          { action: '/invites/import-pubs', method: 'post', enctype: 'multipart/form-data', class: 'peers-import-form' },
-          label({ class: 'peers-import-label' }, i18n.invitesPubsImportTitle || 'Import pubs'),
-          br(),
-          textarea({ name: 'peerList', rows: '4', placeholder: i18n.invitesPubsImportPlaceholder || 'Paste one multiserver address or invite code per line…' }),
-          br(),
-          input({ type: 'file', name: 'peerFile', accept: '.txt,text/plain' }),
-          br(),
-          button({ type: 'submit', class: 'filter-btn' }, i18n.invitesPubsImport || 'Import')
         ),
         h2(`${i18n.invitesAcceptedInvites} (${activePubs.length})`),
         activePubs.length
@@ -160,7 +166,6 @@ const invitesView = (opts = {}) => {
               )
             )
           : p(i18n.invitesNoFederatedPubs),
-        hr(),
         h2(`${i18n.invitesUnfollowedInvites} (${unfollowed.length})`),
         unfollowed.length
           ? renderPubTable(unfollowed, pubItem =>
@@ -172,165 +177,47 @@ const invitesView = (opts = {}) => {
               )
             )
           : p(i18n.invitesNoUnfollowed),
-        hr(),
-        h2(`${i18n.invitesUnreachablePubs} (${unreachablePubs.length})`),
-        unreachablePubs.length
-          ? renderPubTable(unreachablePubs, pubItem =>
-              div({ class: 'error-box' },
-                p({ class: 'error-title' }, i18n.errorDetails),
-                p({ class: 'error-pre' }, sanitizeError(pubItem.error))
-              )
+        form(
+          { action: '/invites/import-pubs', method: 'post', enctype: 'multipart/form-data', class: 'peers-import-form' },
+          label({ class: 'peers-import-label' }, i18n.invitesPubsImportTitle || 'Import pubs'),
+          br(),
+          textarea({ name: 'peerList', rows: '4', placeholder: i18n.invitesPubsImportPlaceholder || 'Paste one multiserver address or invite code per line…' }),
+          br(),
+          input({ type: 'file', name: 'peerFile', accept: '.txt,text/plain' }),
+          br(),
+          button({ type: 'submit' }, i18n.invitesPubsImport || 'Import')
+        )
+      )
+    ) : null,
+    filter === 'others' ? section(
+      div(
+        h2(i18n.invitesJoinTitle),
+        p(i18n.invitesJoinHint),
+        form(
+          { action: '/invites/join', method: 'post' },
+          input({ name: 'code', type: 'text', placeholder: i18n.invitesJoinPlaceholder, required: true }),
+          br(),
+          button({ type: 'submit' }, i18n.invitesJoinButton)
+        ),
+        h2(`${i18n.invitesUsedTitle} (${used.length})`),
+        used.length
+          ? table({ class: 'block-info-table invites-used-table' },
+              tr(
+                td({ class: 'card-label' }, i18n.invitesUsedType),
+                td({ class: 'card-label' }, i18n.invitesUsedName),
+                td({ class: 'card-label' }, i18n.invitesUsedDate)
+              ),
+              used.map((entry) => tr(
+                td(INVITE_KIND_LABEL[entry.kind] ? i18n[INVITE_KIND_LABEL[entry.kind]] : entry.kind),
+                td(a({ href: entry.href }, entry.title || entry.href)),
+                td(moment(entry.at).format('YYYY/MM/DD HH:mm'))
+              ))
             )
-          : p(i18n.invitesNoUnreachablePubs)
+          : p(i18n.invitesUsedEmpty)
       )
-    ),
-    section(
-      div({ class: 'invites-houses', id: 'invites-houses' },
-        h2(i18n.invitesHousesTitle || 'Houses'),
-        p(i18n.invitesHousesHint),
-        form(
-          { action: '/larp/invite/redeem', method: 'post' },
-          input({ type: 'hidden', name: 'returnTo', value: '/invites' }),
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesHouseInviteCodePlaceholder || 'House invitation code', required: true, maxlength: 32 }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesHouseJoinButton || 'Join House')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-tribes', id: 'invites-tribes' },
-        h2(i18n.invitesTribesTitle),
-        p(i18n.invitesTribesHint),
-        form(
-          { action: '/tribes/join-code', method: 'post' },
-          input({ name: 'inviteCode', type: 'text', placeholder: i18n.invitesTribeInviteCodePlaceholder, required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesTribeJoinButton)
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-chats', id: 'invites-chats' },
-        h2(i18n.invitesChatsTitle || 'Chats'),
-        p(i18n.invitesChatsHint),
-        form(
-          { action: '/chats/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesChatInviteCodePlaceholder || 'Enter chat invite code', required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesChatJoinButton || 'Join Chat')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-pads', id: 'invites-pads' },
-        h2(i18n.invitesPadsTitle || 'Pads'),
-        p(i18n.invitesPadsHint),
-        form(
-          { action: '/pads/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesPadInviteCodePlaceholder || 'Enter pad invite code', required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesPadJoinButton || 'Join Pad')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-rooms', id: 'invites-rooms' },
-        h2(i18n.invitesRoomsTitle),
-        p(i18n.invitesRoomsHint),
-        form(
-          { action: '/rooms/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesRoomInviteCodePlaceholder, required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesRoomJoinButton)
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-calendars', id: 'invites-calendars' },
-        h2(i18n.invitesCalendarsTitle || 'Calendars'),
-        p(i18n.invitesCalendarsHint),
-        form(
-          { action: '/calendars/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesCalendarInviteCodePlaceholder || 'Enter calendar invite code', required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesCalendarJoinButton || 'Join Calendar')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-events', id: 'invites-events' },
-        h2(i18n.invitesEventsTitle || 'Events'),
-        p(i18n.invitesEventsHint),
-        form(
-          { action: '/events/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesEventInviteCodePlaceholder || 'Enter event invite code', required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesEventJoinButton || 'Join Event')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-forums', id: 'invites-forums' },
-        h2(i18n.invitesForumsTitle || 'Forums'),
-        p(i18n.invitesForumsHint),
-        form(
-          { action: '/forum/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesForumInviteCodePlaceholder || 'Enter forum invite code', required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesForumJoinButton || 'Join Forum')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-school', id: 'invites-school' },
-        h2(i18n.invitesSchoolTitle || 'School'),
-        p(i18n.invitesSchoolHint),
-        form(
-          { action: '/school/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesSchoolCodePlaceholder || 'Enter course invite code', required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesSchoolJoinButton || 'Join Course')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-maps', id: 'invites-maps' },
-        h2(i18n.invitesMapsTitle || 'Maps'),
-        p(i18n.invitesMapsHint),
-        form(
-          { action: '/maps/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesMapInviteCodePlaceholder || 'Enter map invite code', required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesMapJoinButton || 'Join Map')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-shops', id: 'invites-shops' },
-        h2(i18n.invitesShopsTitle || 'Shops'),
-        p(i18n.invitesShopsHint),
-        form(
-          { action: '/shops/join-code', method: 'post' },
-          input({ name: 'code', type: 'text', placeholder: i18n.invitesShopInviteCodePlaceholder || 'Enter shop invite code', required: true }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesShopJoinButton || 'Join Shop')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-inhabitants', id: 'invites-inhabitants' },
-        h2(i18n.invitesInhabitantsTitle || 'Inhabitants'),
-        p(i18n.invitesInhabitantsHint),
-        form(
-          { action: '/invites/inhabitant/follow', method: 'post' },
-          input({ name: 'feedId', id: 'inh_oasis_id', type: 'text', placeholder: '@...=.ed25519', pattern: '@[A-Za-z0-9+/_\\-]{43}=\\.ed25519', required: true, maxlength: 56 }),
-          br(),
-          button({ type: 'submit' }, i18n.invitesInhabitantsFollow || 'Give Support')
-        )
-      )
-    ),
-    section(
-      div({ class: 'invites-peers', id: 'invites-peers' },
+    ) : null,
+    filter === 'others' ? section(
+      div(
         h2(i18n.peers || 'Peers'),
         p(i18n.directConnectDescription),
         form({ action: '/peers/connect', method: 'post' },
@@ -347,9 +234,10 @@ const invitesView = (opts = {}) => {
           button({ type: 'submit' }, i18n.connectAndFollow)
         )
       )
-    )
+    ) : null
   );
 };
 
 exports.invitesView = invitesView;
+exports.renderSuggestedPub = renderSuggestedPub;
 

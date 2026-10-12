@@ -5,7 +5,7 @@ const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const tribeLogLimit = Math.max(logLimit, 100000);
 const { readTyped } = require('./typed_log');
-const TRIBE_LOG_TYPES = ['tribe', 'tribe-msg', 'tribe-keys-distrib', 'tribe-invite-msg', 'tribe-invite-tombstone', 'tribe-open-invite-tombstone', 'tombstone', 'contact'];
+const TRIBE_LOG_TYPES = ['tribe', 'tribe-msg', 'tribe-keys-distrib', 'tribe-invite-msg', 'tribe-invite-tombstone', 'tribe-open-invite', 'tribe-open-invite-tombstone', 'tombstone', 'contact'];
 
 const INVITE_CODE_BYTES = 16;
 const VALID_INVITE_MODES = ['strict', 'open'];
@@ -51,7 +51,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const x = a[f];
       const y = b[f];
       if (Array.isArray(x) || Array.isArray(y)) { if (!arraysEqual(x, y)) return false; continue; }
-      if (x !== y && !(x == null && y == null)) return false;
+      if (x !== y && !((x == null || x === '') && (y == null || y === ''))) return false;
     }
     return true;
   };
@@ -87,6 +87,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const inviteAuthorByCh = new Map();
     const inviteAuthorByKey = new Map();
     const inviteTombstonesByAuthor = new Map();
+    const sealedInvites = [];
 
     for (const m of msgs) {
       const c = m.value && m.value.content;
@@ -104,6 +105,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (tribeCrypto.isTribeMsg(c)) {
         const r = tribeCrypto.unwrapMsg(c, fpIdx);
         if (!r || !r.body || !r.body.k) continue;
+        if (r.body.k === 'open-invite' || r.body.k === 'open-invite-tombstone') {
+          sealedInvites.push({ key: m.key, author, body: r.body, keyRoot: r.rootId, ts });
+          continue;
+        }
         body = r.body;
       } else if (c.type === 'tribe' && typeof c === 'object') {
         body = {
@@ -257,7 +262,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     };
     for (const k of tribes.keys()) if (isDead(k)) effectivelyTombstoned.add(k);
 
-    tribeIndex = { tribes, tombstoned, effectivelyTombstoned, parent, child, tipByRoot, rootByTip };
+    tribeIndex = { tribes, tombstoned, effectivelyTombstoned, parent, child, tipByRoot, rootByTip, sealedInvites };
     tribeIndexTs = Date.now();
     return tribeIndex;
   };
@@ -321,36 +326,93 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
   const scanOpenInviteMarkers = async () => {
     const msgs = await streamLog();
-    const tombstoned = new Set();
-    for (const m of msgs) {
-      const c = m.value && m.value.content;
-      if (!c) continue;
-      if (c.type === 'tribe-open-invite-tombstone' && typeof c.target === 'string') tombstoned.add(c.target);
-      if (c.type === 'tribe-invite-tombstone' && typeof c.target === 'string') tombstoned.add('inv:' + c.target);
-    }
     const idx = await buildTribeIndex();
-    const allowedMarker = (root, author) => {
-      const rootEntry = idx.tribes.get(root);
-      if (!rootEntry || !author) return false;
-      if (author === rootEntry.author) return true;
-      const tip = idx.tribes.get(idx.tipByRoot.get(root) || root) || rootEntry;
-      const members = Array.isArray(tip.content.members) ? tip.content.members : [];
-      return members.includes(author);
+    const tombBy = new Map();
+    const markTomb = (target, author) => {
+      if (!tombBy.has(target)) tombBy.set(target, new Set());
+      tombBy.get(target).add(author);
     };
-    const byRoot = new Map();
+    const markers = [];
     for (const m of msgs) {
       const v = m.value;
       const c = v && v.content;
-      if (!c || c.type !== 'tribe-open-invite' || c.v !== 1) continue;
+      if (!c) continue;
+      if (c.type === 'tribe-open-invite-tombstone' && typeof c.target === 'string') markTomb(c.target, v.author);
+      else if (c.type === 'tribe-invite-tombstone' && typeof c.target === 'string') markTomb('inv:' + c.target, v.author);
+      else if (c.type === 'tribe-open-invite' && c.v === 1) markers.push({ key: m.key, author: v.author, body: c, sealed: false, ts: v.timestamp || 0 });
+    }
+    for (const e of idx.sealedInvites || []) {
+      if (e.body.k === 'open-invite-tombstone' && typeof e.body.target === 'string') markTomb(e.body.target, e.author);
+      else if (e.body.k === 'open-invite' && e.body.rootId === e.keyRoot) markers.push({ key: e.key, author: e.author, body: e.body, sealed: true, ts: e.ts || 0 });
+    }
+    const killed = (target, allowed) => {
+      const by = tombBy.get(target);
+      return !!by && allowed.some((a) => a && by.has(a));
+    };
+    const byRoot = new Map();
+    for (const mk of markers) {
+      const c = mk.body;
       if (typeof c.rootId !== 'string' || typeof c.code !== 'string') continue;
-      if (tombstoned.has(m.key)) continue;
-      if (c.inviteKey && tombstoned.has('inv:' + c.inviteKey)) continue;
-      if (!allowedMarker(c.rootId, v.author)) continue;
-      const ts = (v && v.timestamp) || 0;
+      const rootEntry = idx.tribes.get(c.rootId);
+      if (!rootEntry || !mk.author) continue;
+      const tip = idx.tribes.get(idx.tipByRoot.get(c.rootId) || c.rootId) || rootEntry;
+      if (tip.content.isAnonymous !== false && !mk.sealed) continue;
+      const members = Array.isArray(tip.content.members) ? tip.content.members : [];
+      if (mk.author !== rootEntry.author && !members.includes(mk.author)) continue;
+      const allowed = [mk.author, rootEntry.author];
+      if (killed(mk.key, allowed)) continue;
+      if (c.inviteKey && killed('inv:' + c.inviteKey, allowed)) continue;
       const prev = byRoot.get(c.rootId);
-      if (!prev || ts > prev.ts) byRoot.set(c.rootId, { code: c.code, by: c.by || v.author, markerKey: m.key, inviteKey: c.inviteKey || null, ts });
+      if (!prev || mk.ts > prev.ts) byRoot.set(c.rootId, { code: c.code, by: c.by || mk.author, markerKey: mk.key, inviteKey: c.inviteKey || null, sealed: mk.sealed, ts: mk.ts });
     }
     return byRoot;
+  };
+
+  const findInvite = async (code) => {
+    const msgs = await streamLog();
+    const inviteTombstonedBy = new Map();
+    const clearOpenInvites = new Set();
+    for (const m of msgs) {
+      const v = m.value;
+      const c = v && v.content;
+      if (!c) continue;
+      if (c.type === 'tribe-open-invite' && typeof c.inviteKey === 'string') { clearOpenInvites.add(c.inviteKey); continue; }
+      if (c.type !== 'tribe-invite-tombstone' || typeof c.target !== 'string') continue;
+      if (!inviteTombstonedBy.has(c.target)) inviteTombstonedBy.set(c.target, new Set());
+      inviteTombstonedBy.get(c.target).add(v.author);
+    }
+    let matched = null;
+    for (const m of msgs) {
+      const v = m.value;
+      const c = v && v.content;
+      if (!c || c.type !== 'tribe-invite-msg' || c.v !== 1) continue;
+      if (typeof c.ch !== 'string' || typeof c.s !== 'string' || typeof c.ek !== 'string') continue;
+      const multi = c.multi === 1 || c.multi === true;
+      if (!multi && inviteTombstonedBy.has(m.key)) continue;
+      if (tribeCrypto.hashInviteCode(code, c.s) !== c.ch) continue;
+      const chain = tribeCrypto.decryptChainFromInvite(c.ek, code, c.s, 3);
+      if (Array.isArray(chain) && chain.length) {
+        matched = { msgKey: m.key, codeHash: c.ch, chain, multi, inviteAuthor: v.author };
+        break;
+      }
+    }
+    if (!matched) return null;
+    const fresh = matched.chain.filter(entry => entry && Array.isArray(entry.keys) && entry.keys.length && !tribeCrypto.getKeys(entry.rootId).length);
+    for (const entry of fresh) tribeCrypto.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
+    tribeIndex = null;
+    const undo = () => { for (const entry of fresh) tribeCrypto.dropKey(entry.rootId); tribeIndex = null; };
+    const rootId = matched.chain[0].rootId;
+    const idx = await buildTribeIndex().catch(() => null);
+    const entry = idx && idx.tribes.get(idx.tipByRoot.get(rootId) || rootId);
+    const tribe = entry && !idx.effectivelyTombstoned.has(rootId) ? normalizeTribe(entry, idx.tribes.get(rootId)) : null;
+    if (!tribe) { undo(); return null; }
+    if (matched.multi) {
+      const by = inviteTombstonedBy.get(matched.msgKey);
+      const revoked = !!by && (by.has(matched.inviteAuthor) || by.has(tribe.author));
+      const exposed = tribe.isAnonymous && clearOpenInvites.has(matched.msgKey);
+      if (revoked || exposed) { undo(); return null; }
+    }
+    return { matched, rootId, tribe, fresh, undo };
   };
 
   return {
@@ -677,7 +739,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const root = await this.getRootId(tribeId).catch(() => tribeId);
       const map = await scanOpenInviteMarkers();
       const rec = map.get(root);
-      return rec ? { code: rec.code, by: rec.by, markerKey: rec.markerKey, inviteKey: rec.inviteKey } : null;
+      return rec ? { code: rec.code, by: rec.by, markerKey: rec.markerKey, inviteKey: rec.inviteKey, sealed: rec.sealed } : null;
     },
 
     async enrichOpenInvites(tribes) {
@@ -715,9 +777,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const invitePub = await new Promise((resolve, reject) =>
         client.publish({ type: 'tribe-invite-msg', v: 1, multi: 1, ch: codeHash, s: salt, ek: ekChain }, (err, r) => err ? reject(err) : resolve(r))
       );
-      await new Promise((resolve, reject) =>
-        client.publish({ type: 'tribe-open-invite', v: 1, rootId: targetRoot, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() }, (err, r) => err ? reject(err) : resolve(r))
-      );
+      const marker = { v: 1, rootId: targetRoot, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() };
+      if (tribe.isAnonymous) {
+        await wrapAndPublish(targetRoot, { k: 'open-invite', ...marker });
+      } else {
+        await new Promise((resolve, reject) =>
+          client.publish({ type: 'tribe-open-invite', ...marker }, (err, r) => err ? reject(err) : resolve(r))
+        );
+      }
       tribeIndex = null;
       return code;
     },
@@ -731,11 +798,23 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (rec.by !== userId && !(tribe && tribe.author === userId)) {
         throw new Error('Not allowed to remove this invitation');
       }
-      await new Promise((resolve, reject) =>
-        client.publish({ type: 'tribe-open-invite-tombstone', v: 1, target: rec.markerKey, ts: new Date().toISOString() }, (err, r) => err ? reject(err) : resolve(r))
-      );
+      const ts = new Date().toISOString();
+      if (rec.sealed) {
+        await wrapAndPublish(await this.getRootId(tribeId), { k: 'open-invite-tombstone', target: rec.markerKey, ts });
+      } else {
+        await new Promise((resolve, reject) =>
+          client.publish({ type: 'tribe-open-invite-tombstone', v: 1, target: rec.markerKey, ts }, (err, r) => err ? reject(err) : resolve(r))
+        );
+      }
       if (rec.inviteKey) await this.publishInviteTombstone(rec.inviteKey).catch(() => {});
       tribeIndex = null;
+    },
+
+    async previewInvite(rawCode) {
+      const found = await findInvite(String(rawCode || '').trim());
+      if (!found) return null;
+      found.undo();
+      return { rootId: found.rootId, title: found.tribe.title, tags: found.tribe.tags };
     },
 
     async joinByInvite(rawCode) {
@@ -743,34 +822,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!code) throw new Error('Invalid or expired invite code');
       const client = await openSsb();
       const userId = client.id;
-      const msgs = await streamLog();
-      const inviteTombstoned = new Set();
-      for (const m of msgs) {
-        const v = m.value;
-        const c = v && v.content;
-        if (!c || c.type !== 'tribe-invite-tombstone' || typeof c.target !== 'string') continue;
-        inviteTombstoned.add(c.target);
-      }
-      let matched = null;
-      for (const m of msgs) {
-        const v = m.value;
-        const c = v && v.content;
-        if (!c || c.type !== 'tribe-invite-msg' || c.v !== 1) continue;
-        if (typeof c.ch !== 'string' || typeof c.s !== 'string' || typeof c.ek !== 'string') continue;
-        if (inviteTombstoned.has(m.key)) continue;
-        if (tribeCrypto.hashInviteCode(code, c.s) !== c.ch) continue;
-        const chain = tribeCrypto.decryptChainFromInvite(c.ek, code, c.s, 3);
-        if (Array.isArray(chain) && chain.length) {
-          matched = { msgKey: m.key, codeHash: c.ch, chain, multi: c.multi === 1 || c.multi === true };
-          break;
-        }
-      }
-      if (!matched) throw new Error('Invalid or expired invite code');
-      const rootId = matched.chain[0].rootId;
-      const fresh = matched.chain.filter(entry => entry && Array.isArray(entry.keys) && entry.keys.length && !tribeCrypto.getKeys(entry.rootId).length);
-      for (const entry of fresh) tribeCrypto.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
-      tribeIndex = null;
-      const undo = () => { for (const entry of fresh) tribeCrypto.dropKey(entry.rootId); tribeIndex = null; };
+      const found = await findInvite(code);
+      if (!found) throw new Error('Invalid or expired invite code');
+      const { matched, rootId, fresh, undo } = found;
       let tribe;
       try { tribe = await this.getTribeById(rootId); } catch (_) { tribe = null; }
       if (!tribe) { undo(); throw new Error('Tribe not found'); }

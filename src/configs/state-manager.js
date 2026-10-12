@@ -18,6 +18,7 @@ const FOLDERS = {
   'content_favorites.json': 'content',
   'blob-access.json': 'content',
   'follow_state.json': 'content',
+  'invites-used.json': 'content',
   'agenda-config.json': 'content',
   'AI-history.json': 'ai',
   'AI-vectors.json': 'ai',

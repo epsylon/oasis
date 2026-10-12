@@ -543,7 +543,7 @@ async function checkLocalBlob(blobId) {
   try {
     const buf = await fs.readFile(filePath);
     if (buf && buf.length) return buf;
-  } catch (_) { /* not found */ }
+  } catch (_) {}
   return null;
 }
 
@@ -577,7 +577,7 @@ models.blob = {
             const filePath = blobIdToHexPath(blobId);
             await fs.mkdir(path.dirname(filePath), { recursive: true });
             await fs.writeFile(filePath, buffer);
-          } catch (e) { /* ignore */ }
+          } catch (e) {}
           resolve(buffer);
         })
       );
@@ -606,7 +606,7 @@ models.blob = {
             const filePath = blobIdToHexPath(blobId);
             await fs.mkdir(path.dirname(filePath), { recursive: true });
             await fs.writeFile(filePath, buffer);
-          } catch (e) { /* ignore */ }
+          } catch (e) {}
           resolve(buffer);
         })
       );

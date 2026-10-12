@@ -64,11 +64,9 @@ describe('courts: open + list cases', (t) => {
     const caseId = (await A.use('courts').listCases('all'))[0].id;
     const rootCaseId = (await A.use('courts').getCaseById(caseId)).rootCaseId;
     await A.use('courts').assignJudge({ caseId, judgeId: J.keypair.id });
-    // B (a party, NOT the judge) forges a raw courtsVerdict
     B.setActor();
     const ssbB = await B.cooler.open();
     await new Promise((res, rej) => ssbB.publish({ type: 'courtsVerdict', caseId: rootCaseId, judgeId: B.keypair.id, result: 'GUILTY', orders: 'forged', createdAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
-    // status must stay non-DECIDED (verdict author != derived judge)
     A.setActor();
     const d = await A.use('courts').getCaseDetails({ caseId });
     ok(String(d.status).toUpperCase() !== 'DECIDED', 'forged verdict by a non-judge must not decide the case');

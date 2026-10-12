@@ -1,8 +1,6 @@
-const fs = require("fs")
-const path = require("path")
 const pull = require("../server/node_modules/pull-stream")
 const moment = require("../server/node_modules/moment")
-const { getConfig } = require("../configs/config-manager.js")
+const { getConfig, defaultInvite } = require("../configs/config-manager.js")
 const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
@@ -25,11 +23,8 @@ const normalizeTags = (raw) => {
 }
 
 const defaultPubId = () => {
-  try {
-    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "configs", "snh-invite-code.json"), "utf8"))
-    const m = String(raw.code || "").match(/(@[A-Za-z0-9+/]+={0,2}\.ed25519)/)
-    return m ? m[1] : ""
-  } catch (_) { return "" }
+  const m = String((defaultInvite() || {}).code || "").match(/(@[A-Za-z0-9+/]+={0,2}\.ed25519)/)
+  return m ? m[1] : ""
 }
 
 const CATEGORIES = ["ECONOMIC", "TIME", "TRUST"]

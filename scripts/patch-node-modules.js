@@ -364,3 +364,37 @@ Object.keys(OASIS_EXTRA_ATTRIBUTES).forEach(function (name) {
 } else {
   log('html-element attributes patch skipped: file not found');
 }
+
+// === Patch ssb-invite (local read of how many uses each invite has and how many are spent) ===
+const ssbInvitePath = path.resolve(__dirname, '../src/server/node_modules/ssb-invite/index.js');
+const ssbInviteManifestPath = path.resolve(__dirname, '../src/server/node_modules/ssb-invite/manifest.json');
+if (fs.existsSync(ssbInvitePath) && fs.existsSync(ssbInviteManifestPath)) {
+  const data = fs.readFileSync(ssbInvitePath, 'utf8');
+  const anchor = "      }, 'string')\n    }\n  }\n}";
+  if (data.includes('codesDB.createReadStream')) {
+    log('ssb-invite already patched');
+  } else if (data.includes(anchor)) {
+    const list = `      }, 'string'),
+      list: function (cb) {
+        const out = []
+        let done = false
+        const finish = (err) => { if (done) return; done = true; err ? cb(err) : cb(null, out) }
+        codesDB.createReadStream()
+          .on('data', (d) => { const v = d.value || {}; out.push({ id: d.key, total: +v.total || 0, used: +v.used || 0 }) })
+          .on('error', finish)
+          .on('end', () => finish())
+      }
+    }
+  }
+}`;
+    fs.writeFileSync(ssbInvitePath, data.replace(anchor, list));
+    const manifest = JSON.parse(fs.readFileSync(ssbInviteManifestPath, 'utf8'));
+    manifest.list = 'async';
+    fs.writeFileSync(ssbInviteManifestPath, JSON.stringify(manifest, null, 2) + '\n');
+    log('Patched ssb-invite with a local list of invite uses');
+  } else {
+    log('ssb-invite patch skipped: unexpected index.js layout');
+  }
+} else {
+  log('ssb-invite patch skipped: file not found');
+}

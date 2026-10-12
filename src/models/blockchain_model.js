@@ -13,6 +13,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     if (!ssb) ssb = await cooler.open();
     return ssb;
   };
+  const nameByFeedId = new Map();
 
   const HIDDEN_ENVELOPE_TYPES = new Set([
     'tribe-keys-distrib',
@@ -141,8 +142,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const idToBlock = new Map();
     const versions = [];
 
-    const nameByFeedId = new Map();
-
     const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
     const accessibleTribeIds = await buildAccessibleTribeIds();
     for (const msg of results) {
@@ -233,7 +232,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const needsNameSearch = !!authorQ && !authorQ.toLowerCase().includes('.ed25519');
 
       if (needsNameSearch) {
-        aboutIndex = await buildNameIndexFromAbout(ssbClient, 10000);
+        aboutIndex = await buildNameIndexFromAbout(await openSsb(), 10000);
         for (const [fid, nm] of aboutIndex.entries()) {
           if (!nameByFeedId.has(fid)) nameByFeedId.set(fid, nm);
         }

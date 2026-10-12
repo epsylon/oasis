@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
 const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow, paged } = require("./main_views");
-const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect } = require("./clearnet_view");
+const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect, renderTribeOriginChip } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
 const moment = require("../server/node_modules/moment");
@@ -87,16 +87,20 @@ const renderTags = (tags) => (Array.isArray(tags) && tags.length)
   : null;
 
 const renderPageCard = (page, params = {}) => {
-  const href = pageHref(page.tribeId ? page.id : page.slug, page.tribeId);
+  const origin = page.tribeOrigin || null;
+  const href = origin ? origin.href : pageHref(page.tribeId ? page.id : page.slug, page.tribeId);
   return div({ class: "tribe-card wiki-card" },
     div({ class: "card-header activity-card-header" },
       span(),
-      renderContentActions(page.id, href, { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: (params.spreadMap && params.spreadMap.get(page.id)) || null, deleteAction: !page.tribeId && String(page.author) === String(userId) ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined })
+      renderContentActions(page.id, href, origin
+        ? { author: page.author, reportTitle: page.title }
+        : { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: (params.spreadMap && params.spreadMap.get(page.id)) || null, deleteAction: !page.tribeId && String(page.author) === String(userId) ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined })
     ),
     div({ class: "tribe-card-body" },
       page.image ? a({ href }, img({ loading: 'lazy', class: "wiki-card-cover", src: `/blob/${encodeURIComponent(page.image)}`, alt: page.title || "" })) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href }, page.title || "—"))),
-      div({ class: "card-chips-row" }, ...pageChips(page), page.clearnet === true ? reachChip(page) : null, renderLicenseChip(page.license))
+      div({ class: "card-chips-row" }, ...(origin ? [renderTribeOriginChip(origin)] : pageChips(page)), !origin && page.clearnet === true ? reachChip(page) : null, renderLicenseChip(page.license)),
+      origin && params.withBody && page.body ? renderWikiBody(page.body) : null
     )
   );
 };
@@ -361,7 +365,7 @@ exports.wikiPageView = async (page, params = {}) => {
   );
 };
 
-exports.renderTribeWikiSection = (tribe, pages, toolbar = null) => {
+exports.renderTribeWikiSection = (tribe, pages, toolbar = null, wrap = (pg, card) => card) => {
   const items = Array.isArray(pages) ? pages : [];
   const createBtn = form({ method: "GET", action: "/wiki" },
     input({ type: "hidden", name: "filter", value: "create" }),
@@ -371,7 +375,7 @@ exports.renderTribeWikiSection = (tribe, pages, toolbar = null) => {
   if (!items.length) return div({ class: "tribe-content-list" }, header, div({ class: "no-content-box" }, p(i18n.tribeWikiEmpty)));
   return div({ class: "tribe-content-list" },
     header,
-    div({ class: "tribe-grid" }, ...paged(items).map(pg => renderPageCard(pg, { tribeId: tribe.id })))
+    div({ class: "tribe-grid" }, ...paged(items).map(pg => wrap(pg, renderPageCard(pg, { tribeId: tribe.id, withBody: true }))))
   );
 };
 

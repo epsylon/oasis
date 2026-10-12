@@ -56,7 +56,7 @@ cp -r "${SRC_DIR}/src/models/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/models/"
 cp -r "${SRC_DIR}/src/client" "${DEB_ROOT}${INSTALL_DIR}/src/"
 find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name "*.py" -delete 2>/dev/null
 find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name ".ruff_cache" -type d -exec rm -rf {} + 2>/dev/null || true
-for f in server-config.json snh-invite-code.json config-manager.js shared-state.js state-manager.js; do
+for f in server-config.json invite-codes.json config-manager.js shared-state.js state-manager.js; do
     cp "${SRC_DIR}/src/configs/${f}" "${DEB_ROOT}${INSTALL_DIR}/src/configs/"
 done
 cp -r "${SRC_DIR}/src/games/." "${DEB_ROOT}${INSTALL_DIR}/src/games/" 2>/dev/null || true

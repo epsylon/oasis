@@ -139,3 +139,17 @@ describe('files: versions republished by other inhabitants', (t) => {
     eq(list[0].title, 'Original');
   });
 });
+
+describe('files: inside a tribe', (t) => {
+  t('an edit stays in the tribe and travels encrypted', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const tribe = await A.use('tribes').createTribe('Huerto', 'd', null, '', [], false, 'open', null, 'OPEN', '');
+    const blob = '[nota](&' + 'a'.repeat(43) + '=.sha256)';
+    const item = await A.use('files').createFile(blob, '', 'Acta', 'primera', 10, tribe.key);
+    await A.use('files').updateFileById(item.key, blob, '', 'Acta revisada', 'segunda');
+    const got = await A.use('files').getFileById(item.key, A.keypair.id);
+    eq(got.title, 'Acta revisada');
+    eq(got.tribeId, tribe.key, 'the edit stays in the tribe');
+    ok(!net.log.some(m => JSON.stringify(m.value.content).includes('Acta revisada')), 'and travels encrypted');
+  });
+});

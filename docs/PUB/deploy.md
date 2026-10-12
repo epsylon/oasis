@@ -118,7 +118,7 @@ The reference `server-config.json`:
 
 Everything else is the standard PUB shape: `pub: true`, no LAN discovery, the friends graph limits (`friends.dunbar` and `friends.hops`, see below), replication scheduler running on autostart, port `8008` open for SHS on every scope (device/local/public), and a `noauth` unix socket for the CLI. The `onion` outgoing entry lets the PUB reach other PUBs that only have an onion address when a local Tor is running; without Tor it changes nothing, and nobody is forced to use Tor (see [`TOR.md`](./TOR.md)).
 
-**How far a PUB replicates.** A PUB is a community, not an archive of the whole network. With the example's `friends.hops` it stores the inhabitants that redeemed one of its invites (the PUB follows each of them) and the inhabitants they follow, which is what a young network needs. A lower value keeps only the members themselves and is the conservative choice once the network is large; a higher one makes it carry most of the network and is only worth it on a large disk. Each extra hop multiplies the log, the blobs and the index rebuild time.
+**How far a PUB replicates.** A PUB is a community, not an archive of the whole network. With the example's `friends.hops` it stores the inhabitants that redeemed one of its invites (the PUB follows each of them) and the inhabitants they follow, which is what a young network needs. A lower value keeps only the members themselves and is the conservative choice once the network is large; a higher one makes it carry most of the network and is only worth it on a large disk. Each extra hop multiplies the log, the blobs and the index rebuild time. Change it with `./oasis.sh hops <N>` and restart the PUB.
 
 ## 5) Launch the PUB (server mode)
 
@@ -143,13 +143,17 @@ All admin actions go through the launcher itself, which talks to the running Oas
 ```
 ./oasis.sh whoami                  # print this PUB id
 ./oasis.sh invite [N]              # create invite code (N = uses, default 1)
+./oasis.sh invites                 # invites created by this PUB and how many are used
 ./oasis.sh name "<text>"           # set PUB display name
 ./oasis.sh announce <host> [port]  # publish pub address (default port 8008)
 ./oasis.sh follow <feedId>         # follow another PUB / feed
 ./oasis.sh join <invite>           # join another PUB with its invite code
 ./oasis.sh status                  # peer / replication overview
 ./oasis.sh gossip                  # known peers
+./oasis.sh hops [N]                # show or set how far this PUB replicates
 ```
+
+`hops` also works with the PUB stopped; the new value applies when Oasis restarts.
 
 ## 7) Get your PUB ID
 
@@ -177,6 +181,8 @@ Example response:
 ```
 
 The output is a single-use (or N-use) invite code you can hand out. Clients redeem it in their `/invites` page.
+
+A PUB can create as many codes as it wants; `./oasis.sh invites` adds them all up and shows how many are used and how many are left. The PUB also publishes that summary from time to time and right after `./oasis.sh invite`, so the PUBs offered in `/invites` show how many invitations they have spent; a PUB whose code has no uses left is listed without the button to join it. A PUB that does not publish it is shown as before, without that line.
 
 ## 10) Announce the PUB
 

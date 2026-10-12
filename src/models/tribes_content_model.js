@@ -14,7 +14,7 @@ const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const EXPOSURE_TYPE = 'tribeExposure';
 const REACH_LEVELS = ['tribe', 'oasis', 'clearnet'];
 const REACH_RANK = { tribe: 0, oasis: 1, clearnet: 2 };
-const SNAPSHOT_FIELDS = ['contentType', 'title', 'description', 'status', 'date', 'location', 'price', 'salary', 'priority', 'options', 'category', 'tags', 'image', 'mediaType', 'license', 'url', 'deadline', 'goal', 'createdAt', 'updatedAt'];
+const SNAPSHOT_FIELDS = ['contentType', 'title', 'description', 'status', 'date', 'location', 'price', 'salary', 'priority', 'options', 'category', 'tags', 'image', 'mediaType', 'license', 'url', 'deadline', 'goal', 'dates', 'lat', 'lng', 'markers', 'createdAt', 'updatedAt'];
 const snapshotOf = (item, replies = []) => {
   const out = {};
   for (const f of SNAPSHOT_FIELDS) {

@@ -266,6 +266,18 @@ describe('data: privacy and versions', (t) => {
     ok(forC.includes('secret task'), 'but the assignee of the private task does see it');
   });
 
+  t('content with encrypted fields is never suggested, not even to its members', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor(); await publishAs(A, cv(['solder']));
+    B.setActor();
+    const now = new Date().toISOString();
+    await publishAs(B, { type: 'pad', title: '3a832956485df161a2421453e00e9811b8d08703f2c91c9c', status: 'INVITE-ONLY', encrypted: true, tags: ['solder'], members: [B.keypair.id, A.keypair.id], createdAt: now });
+    await publishAs(B, { type: 'pad', title: 'open pad', status: 'OPEN', tags: ['solder'], members: [B.keypair.id], createdAt: now });
+    A.setActor();
+    const matches = (await A.use('data').listMatches('ALL')).matches;
+    ok(!matches.some(m => m.kind === 'pads' && m.title !== 'open pad'), 'the encrypted pad stays out');
+  });
+
   t('an updated item is suggested once, under its root id and latest title', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     A.setActor(); await publishAs(A, cv(['solder']));

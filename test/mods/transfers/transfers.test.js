@@ -248,7 +248,7 @@ describe('transfers: only signed parties decide a transfer', (t) => {
     await publish(D, raw(D.keypair.id, U.keypair.id, { concept: 'UBI - 2026-06', deadline: null, tags: ['UBI', 'epoch:2026-06'], txid: 'e'.repeat(64) }));
     const realRead = fs.readFileSync;
     fs.readFileSync = function (p, ...rest) {
-      if (String(p).endsWith('snh-invite-code.json')) return JSON.stringify({ code: `pub.example:8008:${D.keypair.id}~invite` });
+      if (String(p).endsWith('invite-codes.json')) return JSON.stringify([{ code: `pub.example:8008:${D.keypair.id}~invite` }]);
       return realRead.call(this, p, ...rest);
     };
     try {

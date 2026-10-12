@@ -1,0 +1,23 @@
+[
+  {
+    "name": "SNH \"La Plaza\"",
+    "description": "A shared place to begin an experimental utopia ...",
+    "url": "https://solarnethub.com",
+    "code": "pub.solarnethub.com:8008:@0qSCyK3xyL71X4qKkmf84Cb2riP6OeUqxCvbP2Z6HWs=.ed25519~7mC1c1gBJe8pmnWI9eIUYpFtEPUOiuHAxbzfxP/f0Ak=",
+    "createdAt": "2026-05-24T00:00:00.000Z"
+  },
+  {
+    "name": "t0k10 h4x0rs",
+    "description": "n0 l0gin. n0 m41l. n0 cl0ud...",
+    "url": "https://pub.elhack.net",
+    "code": "pub.elhack.net:8008:@R8WWz72Pz66Jw0SObjxe9Boio5WzskGpTK7wsPzeUEc=.ed25519~HaBhhmtYnYYfBA2j+JoYnckWXhPSzFGn0TCY1I9rP98=",
+    "createdAt": "2026-08-11T00:00:00.000Z"
+  },
+  {
+    "name": "Acampada 26s",
+    "description": "Red de la acampada en Madrid del #26s",
+    "url": "https://acampada26s.net",
+    "code": "madrid.acampada26s.net:8008:@Wt9tL9XtJCb7sZjX0+FtDlzziFLumWo1DAbou4Q5m3o=.ed25519~tkAoj1gE6dX8AcAOLQXs22VWFWKfOeJdT+7pBPfgbDA=",
+    "createdAt": "2026-09-26T00:00:00.000Z"
+  }
+]

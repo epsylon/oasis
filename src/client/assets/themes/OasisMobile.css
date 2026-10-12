@@ -1871,6 +1871,12 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   overflow-wrap: anywhere !important;
   word-break: break-word !important;
 }
+.invites-used-table td:nth-child(1),
+.invites-used-table td:nth-child(3) {
+  white-space: nowrap !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+}
 .bank-info-table td.card-value,
 .tribe-info-table td.card-value,
 .block-info-table td.card-value {

@@ -14,11 +14,6 @@ const publishRaw = async (peer, content) => {
 };
 const FUTURE = '2030-12-31T00:00:00.000Z';
 
-// These tests reproduce the "content overwrite via replaces" report: a peer B
-// publishes a signed message with `replaces` pointing at A's content and forged
-// body fields. A correct resolver must (a) ignore B's overwrite of A's core
-// content, and (b) still aggregate B's LEGITIMATE collaborative contribution.
-
 describe('security: replaces-overwrite hijack (CWE content spoofing)', (t) => {
 
   t('votes: B cannot overwrite A vote question via replaces', async () => {
@@ -52,7 +47,6 @@ describe('security: replaces-overwrite hijack (CWE content spoofing)', (t) => {
     const r = await A.use('votes').createVote('Q?', FUTURE, ['YES', 'NO']);
     const aId = r.key; const aAuthor = await idOf(A);
     B.setActor();
-    // B tries to stuff the ballot by overwriting with fake voters
     await publishRaw(B, { type: 'votes', replaces: aId, question: 'Q?', options: ['YES', 'NO'], createdBy: aAuthor, deadline: FUTURE, status: 'OPEN', votes: { YES: 999 }, voters: ['@fake1.ed25519', '@fake2.ed25519'], totalVotes: 999, opinions: {}, opinions_inhabitants: [], createdAt: new Date().toISOString() });
     const v = await A.use('votes').getVoteById(aId);
     notOk((v.voters || []).includes('@fake1.ed25519'), 'forged voter must be ignored');

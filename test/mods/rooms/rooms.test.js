@@ -617,3 +617,21 @@ describe('rooms: versions republished by other inhabitants', (t) => {
     eq(list[0].title, original.title);
   });
 });
+
+describe('rooms: meeting point', (t) => {
+  t('a room hosted on its author\'s node moves to a PUB once one is available', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    A.setActor();
+    const r = await A.use('rooms').createRoom({ title: 'Patio', description: 'x', status: 'OPEN' });
+    eq((await A.use('rooms').getRoomById(r.key)).hub, A.keypair.id, 'without a PUB the author hosts it');
+    eq(await A.use('rooms').rehomeHub(r.key), null, 'and it stays there while no PUB is available');
+    const pub = '@' + 'p'.repeat(43) + '=.ed25519';
+    const ssb = await A.cooler.open();
+    ssb.phone = { roomHubFor: (cb) => cb(null, { key: pub, address: 'net:pub.example:8008~shs:' + 'p'.repeat(43) + '=' }) };
+    ok(await A.use('rooms').rehomeHub(r.key), 'a PUB takes over');
+    const moved = await A.use('rooms').getRoomById(r.key);
+    eq(moved.hub, pub);
+    eq(moved.rootId, r.key, 'it is the same room');
+    eq((await A.use('rooms').listAll({ filter: 'all' })).filter(x => x.rootId === r.key).length, 1, 'listed once');
+  });
+});
