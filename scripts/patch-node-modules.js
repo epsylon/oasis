@@ -398,3 +398,54 @@ if (fs.existsSync(ssbInvitePath) && fs.existsSync(ssbInviteManifestPath)) {
 } else {
   log('ssb-invite patch skipped: file not found');
 }
+
+// === Patch on-wakeup (a busy event loop is not a wake-up: only time the machine spent suspended counts) ===
+const onWakeupPath = path.resolve(__dirname, '../src/server/node_modules/on-wakeup/index.js');
+if (fs.existsSync(onWakeupPath)) {
+  const data = fs.readFileSync(onWakeupPath, 'utf8');
+  const tickFrom = `      var t = Date.now()
+      if (lastSleepCheck && (t - lastSleepCheck) > SLEEP_CHECK_INTERVAL*NUM_MISSABLE_INTERVALS)
+        emitter.emit('wakeup') // missed NUM_MISSABLE_INTERVALS checks, let's run the callbacks 
+      lastSleepCheck = t`;
+  const tickTo = `      var t = Date.now()
+      var hr = process.hrtime()
+      var awake = hr[0] * 1e3 + hr[1] / 1e6
+      var gap = t - lastSleepCheck
+      var suspended = process.platform === 'win32' ? gap : gap - (awake - lastAwake)
+      if (lastSleepCheck && gap > SLEEP_CHECK_INTERVAL*NUM_MISSABLE_INTERVALS && suspended > SLEEP_CHECK_INTERVAL*(NUM_MISSABLE_INTERVALS-1))
+        emitter.emit('wakeup')
+      lastSleepCheck = t
+      lastAwake = awake`;
+  const varsFrom = 'var lastSleepCheck = false\n';
+  const varsTo = 'var lastSleepCheck = false\nvar lastAwake = 0\n';
+  if (data.includes('var lastAwake = 0')) {
+    log('on-wakeup already patched');
+  } else if (data.includes(tickFrom) && data.includes(varsFrom)) {
+    fs.writeFileSync(onWakeupPath, data.replace(varsFrom, varsTo).replace(tickFrom, tickTo));
+    log('Patched on-wakeup so a long busy stretch is not taken for a wake-up');
+  } else {
+    log('on-wakeup patch skipped: unexpected index.js layout');
+  }
+} else {
+  log('on-wakeup patch skipped: file not found');
+}
+
+// === Patch ssb-db2 (createHistoryStream returns a feed in arrival order, which is its sequence order, not by timestamp) ===
+const historyStreamPath = path.resolve(__dirname, '../src/server/node_modules/ssb-db2/compat/history-stream.js');
+if (fs.existsSync(historyStreamPath)) {
+  const data = fs.readFileSync(historyStreamPath, 'utf8');
+  const importFrom = "const { author, and, gte, where, batch, toPullStream } = require('../operators')";
+  const importTo = "const { author, and, gte, where, batch, sortByArrival, toPullStream } = require('../operators')";
+  const queryFrom = '          where(query),\n';
+  const queryTo = '          where(query),\n          sortByArrival(),\n';
+  if (data.includes(importTo)) {
+    log('ssb-db2 history stream already patched');
+  } else if (data.includes(importFrom) && data.split(queryFrom).length === 3) {
+    fs.writeFileSync(historyStreamPath, data.replace(importFrom, importTo).split(queryFrom).join(queryTo));
+    log('Patched ssb-db2 so createHistoryStream keeps sequence order');
+  } else {
+    log('ssb-db2 history stream patch skipped: unexpected history-stream.js layout');
+  }
+} else {
+  log('ssb-db2 history stream patch skipped: file not found');
+}

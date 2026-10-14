@@ -69,7 +69,10 @@ const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       cal.deadline
-        ? p({ class: "job-meta-line" }, `${i18n.calendarDeadlineLabel || "Deadline"}: ${moment(cal.deadline).format("YYYY/MM/DD HH:mm")}`)
+        ? div({ class: "card-field card-field-mb" },
+            span({ class: "card-label" }, `${String(i18n.calendarDeadlineLabel).toUpperCase()}: `),
+            span({ class: "card-value" }, moment(cal.deadline).format("YYYY/MM/DD HH:mm"))
+          )
         : null,
       origin && Array.isArray(cal.dates) && cal.dates.length
         ? div(...cal.dates.map(d => p({ class: "job-meta-line" }, `📅 ${moment(d.date).format("YYYY/MM/DD HH:mm")}${d.label ? ` · ${d.label}` : ""}`)))

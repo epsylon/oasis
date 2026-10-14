@@ -1090,8 +1090,8 @@ const parliamentView = async (state) => {
   return template(
     i18n.parliamentTitle,
     section(div({ class: 'tags-header module-header-line' }, h2(i18n.parliamentTitle), p(i18n.parliamentDescription)), Tabs(filter, {
-      candidatures: (candidatures || []).length > 0,
-      proposals: (proposals || []).length > 0,
+      candidatures: true,
+      proposals: true,
       laws: (laws || []).length > 0 || (futureLaws || []).length > 0,
       revocations: (revocations || []).length > 0 || (futureRevocations || []).length > 0,
       historical: (historical || []).length > 0,

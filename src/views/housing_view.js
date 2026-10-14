@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
-const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderMediaThumb, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -115,7 +115,7 @@ const renderInfoTable = (item) => {
     const mapNode = renderMapLocationVisitLabel(item.mapUrl)
     if (mapNode) pushRow(i18n.mapLocationTitle || "Map", mapNode)
   }
-  return table({ class: "tribe-info-table housing-info-table" }, ...rows)
+  return table({ class: "tribe-info-table housing-info-table" }, ...rows, ...renderCreatedRows(item.createdAt, item.author))
 }
 
 const today = () => moment().format("YYYY-MM-DD")
@@ -206,8 +206,8 @@ const renderHousingList = (items, filter, params = {}) => {
             renderStarRating(item.opinions, safeArr(item.opinions_inhabitants).length),
             div({ class: "price-chip" }, priceLabel(item)),
             safeText(item.place)
-              ? div({ class: "card-field" },
-                  span({ class: "card-label" }, `${i18n.housingPlace}: `),
+              ? div({ class: "card-field card-field-mb" },
+                  span({ class: "card-label" }, `${String(i18n.housingPlace).toUpperCase()}: `),
                   span({ class: "card-value" }, safeText(item.place))
                 )
               : null,
@@ -502,10 +502,6 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     renderSection(i18n.housingDescription, item.description),
     renderSection(i18n.housingRules, item.rules),
     item.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, item.mapUrl)) : null,
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(item.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(item.author)
-    ),
     renderEngagement(item.id,
       !isAuthor && item.everRequestedByViewer
         ? renderOpinionsVoting("/housing/opinions", item.id, item.opinions, returnTo, voters)

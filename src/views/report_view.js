@@ -1,10 +1,9 @@
 const { hr, div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
-const moment = require("../server/node_modules/moment");
 const { renderStyledText } = require("../backend/renderStyledText");
 
 const renderMediaBlob = (value, attrs = {}) => {
@@ -568,7 +567,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
       h2({ class: "tribe-card-title" }, report.title)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(report.createdAt, report.author)),
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
@@ -592,10 +591,6 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   const reportMain = div({ class: "tribe-main" },
     details ? div({ class: "job-section" }, details) : null,
     renderPhotoGallery(report, 'report'),
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(report.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(report.author)
-    ),
     renderEngagement(report.id, opinionsBar, renderReportCommentsSection(report.id, comments))
   );
 

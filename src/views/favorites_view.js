@@ -150,31 +150,24 @@ const renderFavoriteCard = (item, filter, spreadMap = null) => {
     ),
     div(
       { class: "card-section favorites-card-body" },
-      div(
-        { class: "bookmark-topbar" },
-        div(
-          { class: "bookmark-topbar-left" },
-          form(
-            {
-              method: "POST",
-              action: `/favorites/remove/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.favId)}`,
-              class: "bookmark-favorite-form"
-            },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: "filter-btn" }, i18n.favoritesRemoveButton)
-          )
-        )
-      ),
-      title ? h2(title) : null,
+      title ? div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, item.viewHref ? a({ href: item.viewHref }, title) : title)) : null,
       renderImagePreview(item),
       renderBookmarkUrl(item),
       safeText(item.description) ? p(...renderStyledText(item.description)) : null,
       renderDetailFields(item),
       renderTags(item.tags),
       p(
-        { class: "card-footer" },
+        { class: "card-footer favorites-meta" },
         absDate ? span({ class: "date-link" }, `${absDate}`) : "",
         item.author ? userLink(item.author) : ""
+      ),
+      p(
+        { class: "card-footer" },
+        form(
+          { method: "POST", action: `/favorites/remove/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.favId)}`, class: "phone-action-form" },
+          input({ type: "hidden", name: "returnTo", value: returnTo }),
+          button({ type: "submit", class: "tribe-action-btn" }, String(i18n.agendaDiscardButton).toUpperCase())
+        )
       )
     )
   );
@@ -197,10 +190,12 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "", param
             { type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" },
             `${i18n.favoritesFilterAll} (${total})`
           ),
-          button(
-            { type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterRecent} (${c.recent || 0})`
-          ),
+          (c.recent || 0) > 0 || filter === "recent"
+            ? button(
+                { type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" },
+                `${i18n.favoritesFilterRecent} (${c.recent || 0})`
+              )
+            : null,
           ...FILTER_KINDS.filter((k) => (c[k.value] || 0) > 0).map((k) =>
             button(
               { type: "submit", name: "filter", value: k.value, class: filter === k.value ? "filter-btn active" : "filter-btn" },

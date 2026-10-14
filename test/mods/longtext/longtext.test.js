@@ -57,6 +57,16 @@ describe('long text: blogs', (t) => {
     eq((await B.use('blogs').listAll('ALL')).length, 1, 'chunks are not listed as blogs');
   });
 
+  t('a long blog fetched by its key alone is read whole', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const text = longBody(20000);
+    const created = await A.use('blogs').createBlog({ text, subject: 'long' });
+    const ssb = await A.cooler.open();
+    const msg = await new Promise((res, rej) => ssb.get(created.key, (e, m) => e ? rej(e) : res(m)));
+    ok(msg.content.text.length < text.length, 'the message itself only carries the start');
+    eq((await longText.joinChunks(ssb, msg.content, msg.author)).text, text, 'the continuation is joined back');
+  });
+
   t('a chunk forged by a different author is ignored', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
     B.setActor();

@@ -320,7 +320,6 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
   const shownTribes = filter === 'create' || filter === 'edit' ? [] : paged(sorted);
 
   const tribeCards = shownTribes.map(t => {
-    const isMember = t.members.includes(userId);
     const parentTribe = t.parentTribeId ? allT.find(p => p.id === t.parentTribeId) : null;
 
     const isOwn = String(t.author) === String(userId);
@@ -358,14 +357,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
           ) : null,
           div({ class: 'tribe-card-members' },
             span({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${t.memberCount != null ? t.memberCount : t.members.length}`)
-          ),
-          (t.openInviteCode && !isMember && String(t.author) !== String(userId)) ? div({ class: 'tribe-card-join' },
-            renderInviteQrCard({ qrDataUrl: t.openInviteQr, name: t.title }),
-            form({ method: 'POST', action: '/tribes/open-invite/join' },
-              input({ type: 'hidden', name: 'tribeId', value: t.id }),
-              button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeJoinOpen)
-            )
-          ) : null
+          )
         )
       )
     );
@@ -1727,7 +1719,16 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
         ) : null
       ),
       h2({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${tribe.memberCount != null ? tribe.memberCount : tribe.members.length}`),
-      (canGenerateInvite || (isOutsider && !showInviteTop)) ? div({ class: 'tribe-side-actions' },
+      (isOutsider && hasOpenInvite)
+        ? div({ class: 'tribe-side-actions tribe-side-center' },
+            renderInviteQrCard({ qrDataUrl: tribe.openInviteQr, name: tribe.title }),
+            form({ method: 'POST', action: '/tribes/open-invite/join' },
+              input({ type: 'hidden', name: 'tribeId', value: tribe.id }),
+              button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeJoinOpen)
+            )
+          )
+        : null,
+      (canGenerateInvite || (isOutsider && !showInviteTop)) ? div({ class: canGenerateInvite ? 'tribe-side-actions' : 'tribe-side-actions tribe-side-center tribe-enter-invite' },
         canGenerateInvite
           ? (isLarpHouse
               ? form({ method: 'POST', action: '/larp/invite/create' },
@@ -1781,16 +1782,16 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
       ) : null,
       tribe.description ? p({ class: 'tribe-side-description' }, ...renderStyledText(tribe.description)) : null,
       renderMapEmbed(tribe.mapData, tribe.mapUrl),
-      (!tribe.parentTribeId && (canCreateSub || subTribes.length > 0 || showInviteTop)) ? div({ class: 'tribe-side-subtribes' },
+      showInviteTop
+        ? div({ class: 'tribe-side-actions tribe-side-center tribe-enter-invite' }, a({ class: 'tribe-action-btn', href: inviteHref }, i18n.tribeEnterInvite))
+        : null,
+      (!tribe.parentTribeId && (canCreateSub || subTribes.length > 0)) ? div({ class: 'tribe-side-subtribes' },
         canCreateSub
           ? form({ method: 'GET', action: `/tribe/${encodeURIComponent(tribe.id)}` },
               input({ type: 'hidden', name: 'section', value: 'subtribes' }),
               input({ type: 'hidden', name: 'action', value: 'create' }),
               button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeSubTribesCreate)
             )
-          : null,
-        showInviteTop
-          ? a({ class: 'tribe-action-btn', href: inviteHref }, i18n.tribeEnterInvite)
           : null,
         subTribes.length > 0
           ? div({ class: 'tribe-subtribes-list' },
@@ -1923,7 +1924,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1 })
     </div>
   </div>
   ${list.length
-    ? `<h2 class="cn-section">${escapeHtml(i18n.cnPublicContent || 'Public Content')} (${list.length})</h2><div class="cn-tribe-list">${paged.items.map(renderItem).join('')}</div>${pager}`
+    ? `<h2 class="cn-section">${escapeHtml(i18n.cnPublicContent || 'Content')} (${list.length})</h2><div class="cn-tribe-list">${paged.items.map(renderItem).join('')}</div>${pager}`
     : `<div class="cn-empty-content">${escapeHtml(i18n.cnCategoryEmpty || '')}</div>`}
 `;
   return renderClearnetPage({

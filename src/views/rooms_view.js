@@ -89,10 +89,7 @@ const renderRoomItem = (room, params = {}) => {
   return li({ class: "mailing-archive-item room-item" },
     div({ class: "emergency-update-head mailing-archive-head" },
       div({ class: "mailing-archive-meta" },
-        canJoin && !roomIsFull(occ)
-          ? form({ method: "POST", action: `/rooms/join/${encodeURIComponent(room.rootId)}`, class: "room-join-form" },
-              button({ type: "submit", class: "user-link room-title-join", title: i18n.roomJoin }, room.title || "—"))
-          : a({ href: roomHref(room), class: "user-link" }, room.title || "—"),
+        a({ href: roomHref(room), class: "user-link" }, room.title || "—"),
         span({ class: "card-label activity-update-counts mailing-counts" }, `👥: ${safeArr(room.members).length}`),
         ...roomChips(room, occ, inside),
         room.clearnet === true && clearnetEligible(room) ? renderReachChip(true, i18n, roomClearnetHref(room)) : null,

@@ -1199,7 +1199,6 @@ a.hashtag {
 .refeed-column { display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; gap: 4px !important; }
 .refeed-column h1 { margin: 0 !important; }
 .feed-card .card-footer { justify-content: center !important; align-items: center !important; text-align: center !important; }
-.tribe-card-join { display: flex !important; flex-direction: column !important; align-items: center !important; gap: 8px !important; width: 100% !important; }
 .invite-qr-card { border: none !important; background: transparent !important; box-shadow: none !important; padding: 0 !important; margin: 8px auto !important; display: flex !important; justify-content: center !important; width: fit-content !important; }
 .invite-qr-img { display: block !important; margin: 0 auto !important; }
 .stats-kpi { display: flex !important; flex-direction: row !important; justify-content: space-between !important; align-items: center !important; gap: 8px !important; width: 100% !important; }
@@ -2109,7 +2108,6 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 }
 
 .mailing-archive-meta > .user-link,
-.mailing-archive-meta > .room-join-form:first-child,
 .mailing-archive-meta > .forum-category {
   flex: 0 0 100% !important;
 }
@@ -2691,17 +2689,6 @@ body > .header {
   background: transparent !important;
   padding: 0 !important;
 }
-.main-column .mailing-archive-meta > .room-join-form:first-child button.room-title-join {
-  background: transparent !important;
-  color: #FFD700 !important;
-  border: 0 !important;
-  padding: 0 !important;
-  min-height: 0 !important;
-  font-size: 1.15rem !important;
-  font-weight: 700 !important;
-  text-align: left !important;
-  text-decoration: underline !important;
-}
 .main-column .mailing-archive-meta .tribe-action-btn {
   background: #ffa300 !important;
   color: #111 !important;
@@ -3020,14 +3007,6 @@ body > .header {
   display: inline-flex !important;
   margin: 6px 0 0 0 !important;
 }
-.main-column .event-card-body .job-meta-line {
-  display: block !important;
-  margin: 10px 0 0 0 !important;
-  color: #FFD700 !important;
-  font-size: 13px !important;
-  letter-spacing: 0.5px !important;
-  text-transform: none !important;
-}
 .main-column .pledge-box button.btn {
   display: block !important;
   width: 100% !important;
@@ -3093,8 +3072,8 @@ body > .header {
 }
 .main-column .graphos-zoom-row {
   display: flex !important;
-  justify-content: center !important;
-  margin: 8px 0 0 0 !important;
+  justify-content: flex-end !important;
+  margin: 0 0 8px 0 !important;
 }
 .main-column .graphos-zoom-row .graphos-zoom-btn {
   min-height: 36px !important;

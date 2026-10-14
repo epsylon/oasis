@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -421,7 +421,7 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     renderPhotoGallery(task, 'task'),
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(task.createdAt, task.author)),
     assignNode ? div({ class: "tribe-side-actions housing-status-row task-assign-row" }, ...assignNode) : null,
     isAuthor ? renderTaskStatusRow(task, returnToSelf) : null,
     tagsNode,
@@ -444,10 +444,6 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
           p({ class: "tribe-side-description" }, ...renderStyledText(task.description))
         )
       : null,
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(task.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(task.author)
-    ),
     renderEngagement(task.id, opinionsBar, renderTaskCommentsSection(task.id, comments, currentFilter))
   );
 

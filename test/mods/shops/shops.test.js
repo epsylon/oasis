@@ -583,3 +583,22 @@ describe('shops: orders are decided only by their signed parties', (t) => {
     eq((await A.use('shops').getShopById(posing.key)).author, X.keypair.id);
   });
 });
+
+describe('shops: a product whose media is a video is shown as a video', (t) => {
+  t('the blob is sniffed once and the card gets a video instead of a broken image', async () => {
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const shop = await A.use('shops').createShop('S', '', '', null, '', '', [], 'OPEN', '');
+    const prod = await A.use('shops').createProduct(shop.key, 'Clip', 'desc', '&clip.sha256', 10, 5, false);
+    const still = await A.use('shops').createProduct(shop.key, 'Photo', 'desc', '&photo.sha256', 10, 5, false);
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypmp42'), Buffer.alloc(16)]);
+    const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]);
+    let reads = 0;
+    (await A.cooler.open()).blobs = { get: (id) => { reads++; return pull.values([id === '&clip.sha256' ? mp4 : png]); } };
+    const list = await A.use('shops').listProducts(shop.key);
+    eq(list.find(p => p.key === prod.key).image, '[video:](&clip.sha256)', 'the video blob is wrapped as a video');
+    eq(list.find(p => p.key === still.key).image, '&photo.sha256', 'an image stays a plain blob');
+    eq((await A.use('shops').getProductById(prod.key)).image, '[video:](&clip.sha256)');
+    eq(reads, 2, 'each blob is sniffed only once');
+  });
+});

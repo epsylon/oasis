@@ -117,6 +117,35 @@ describe('peers: a pub that answers on another address', (t) => {
   });
 });
 
+describe('peers: a busy node is not a node that slept', (t) => {
+  t('a long busy stretch keeps every connection; a real sleep still refreshes them', () => {
+    const file = require.resolve('../../../src/server/node_modules/on-wakeup');
+    delete require.cache[file];
+    const saved = { setInterval: global.setInterval, now: Date.now, hrtime: process.hrtime };
+    let tick = null;
+    let wall = 1700000000000;
+    let awake = 5000;
+    global.setInterval = (fn) => { tick = fn; return { unref() {} }; };
+    Date.now = () => wall;
+    process.hrtime = () => [Math.floor(awake / 1000), (awake % 1000) * 1e6];
+    let wakeups = 0;
+    try {
+      require(file)(() => { wakeups++; });
+      tick();
+      wall += 10000; awake += 10000; tick();
+      wall += 89000; awake += 89000; tick();
+      eq(wakeups, 0, 'ninety seconds of work are not a wake-up');
+      wall += 600000; awake += 10000; tick();
+      eq(wakeups, 1, 'ten minutes asleep are');
+    } finally {
+      global.setInterval = saved.setInterval;
+      Date.now = saved.now;
+      process.hrtime = saved.hrtime;
+      delete require.cache[file];
+    }
+  });
+});
+
 describe('peers: which pubs come first', (t) => {
   t('up-to-date pubs that replicate what you follow are preferred, outdated ones go last', async () => {
     const pull = require('../../../src/server/node_modules/pull-stream');

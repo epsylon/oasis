@@ -640,7 +640,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
                   : p({ class: "tribe-side-description" }, i18n.marketNoBids || "No bids yet"),
                 item.status !== "SOLD" && item.status !== "DISCARDED" && String(item.seller) !== String(userId)
                   ? form(
-                      { method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}` },
+                      { method: "POST", action: `/market/bid/${encodeURIComponent(item.id)}`, class: "market-bid-form" },
                       input({ type: "hidden", name: "returnTo", value: returnTo }),
                       input({ type: "number", name: "bidAmount", step: "0.000001", min: "0.000001", placeholder: i18n.marketYourBid, required: true }),
                       br(),
@@ -653,7 +653,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
             ? div(
                 { class: "market-item actions" },
                 form(
-                  { method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}` },
+                  { method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}`, class: "market-buy-form" },
                   input({ type: "hidden", name: "returnTo", value: "/inbox?filter=sent" }),
                   button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
                 )

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderTribeOriginChip } = require("./clearnet_view");
@@ -201,7 +201,7 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
       h2({ class: "tribe-card-title" }, v.question)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(v.createdAt, v.createdBy)),
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
@@ -230,10 +230,6 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
           tr(...voteOptions.map((opt) => td(baseCounts[opt])))
         )
       )
-    ),
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(v.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(v.createdBy)
     ),
     renderEngagement(v.id, renderOpinionsBar(v, returnTo),
       mode === "detail" ? renderCommentsSection(v.id, params.comments || [], activeFilter) : null)

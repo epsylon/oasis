@@ -986,13 +986,13 @@ let clearnetTribesCache = { at: 0, data: null };
 const getClearnetTribes = async () => {
   if (clearnetTribesCache.data && Date.now() - clearnetTribesCache.at < CLEARNET_INDEX_TTL_MS) return clearnetTribesCache.data;
   const state = await tribesContentModel.exposureState().catch(() => new Map());
-  const counts = new Map();
-  for (const e of state.values()) if (e.level === 'clearnet' && e.item) counts.set(e.tribeId, (counts.get(e.tribeId) || 0) + 1);
+  const exposed = new Set();
+  for (const e of state.values()) if (e.level === 'clearnet' && e.item) exposed.add(e.tribeId);
   const out = [];
-  for (const [tribeId, count] of counts) {
+  for (const tribeId of exposed) {
     const t = await tribesModel.getTribeById(tribeId).catch(() => null);
     if (!t || !(await tribeReachAllowed(t.id))) continue;
-    out.push({ id: tribeId, title: t.title || '', description: t.description || '', image: t.image || null, count });
+    out.push({ id: tribeId, title: t.title || '', description: t.description || '', image: t.image || null, members: Array.isArray(t.members) ? t.members.length : 0 });
   }
   clearnetTribesCache = { at: Date.now(), data: out };
   return out;
@@ -5723,7 +5723,7 @@ router
     ctx.body = await privateView({ messages, listTitles: await inboxListTitles(messages) }, returnFilter || 'all', decrypted);
   })
   .get('/tags', async ctx => {
-    const filter = qf(ctx), search = String(ctx.query.search || '').trim();
+    const filter = qf(ctx, 'top'), search = String(ctx.query.search || '').trim();
     const tags = await tagsModel.listTags(filter, search);
     ctx.body = await tagsView(tags, filter, search);
   })
@@ -6298,10 +6298,6 @@ router
     } catch (_) {}
     let filteredTribes = search ? tribes.filter(t => t.title.toLowerCase().includes(search.toLowerCase())) : tribes;
     try { filteredTribes = await lifetime.enrichAndFilter(filteredTribes, { getKey: (x) => x.id || x.key }); } catch (_) {}
-    try { await tribesModel.enrichOpenInvites(filteredTribes); } catch (_) {}
-    for (const t of filteredTribes) {
-      if (t.openInviteCode) t.openInviteQr = `/qr-invite/tribe/${encodeURIComponent(t.id)}`;
-    }
     try {
       const viewer = getViewerId();
       const { mine } = await subscriptionsModel.subscriberCounts(filteredTribes.map(t => t.id));
@@ -9024,8 +9020,9 @@ router
     ctx.params.msgKey = await clearnetIdFor('posts', ctx.params.msgKey);
     const msgKey = String(ctx.params.msgKey || '');
     let msg;
+    let ssbX;
     try {
-      const ssbX = await cooler.open();
+      ssbX = await cooler.open();
       msg = await new Promise((res, rej) => ssbX.get(msgKey, (err, m) => err || !m ? rej(err || new Error('not found')) : res(m)));
     } catch (_) {}
     const content = msg && msg.content;
@@ -9042,10 +9039,11 @@ router
       return;
     }
     const authorName = authorId ? await about.name(authorId).catch(() => '') : '';
+    const full = await longText.joinChunks(ssbX, content, authorId).catch(() => content);
     ctx.type = 'text/html';
     ctx.body = await clearnetBlogView({
       msgKey,
-      text: content.text || '',
+      text: full.text || '',
       author: authorId,
       authorName,
       contentWarning: content.contentWarning || '',
@@ -9066,7 +9064,7 @@ router
       authors.push({ feedId: entry.feedId, name: entry.name || '', count });
     }
     ctx.type = 'text/html';
-    ctx.body = await clearnetHubView({ authors, items, tribes: await getClearnetTribes().catch(() => []), filterType: String(ctx.query.type || '').toLowerCase(), query: String(ctx.query.q || '').trim(), page: ctx.query.page });
+    ctx.body = await clearnetHubView({ authors, items, tribes: await getClearnetTribes().catch(() => []), filterType: String(ctx.query.type || '').toLowerCase(), query: String(ctx.query.q || '').trim(), page: ctx.query.page, tribesPage: ctx.query.tpage });
   })
   .get("/c/tribe/:id", async (ctx) => {
     const { clearnetSlugFor, clearnetShortId } = require('../views/main_views');

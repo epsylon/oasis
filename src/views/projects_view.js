@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -81,7 +81,7 @@ const renderCardFieldRich = (labelText, children) =>
 
 const renderProgressBlock = (labelText, valueText, value, maxValue) =>
   div(
-    { class: "confirmations-block progress-block" },
+    { class: "confirmations-block progress-block project-progress-block" },
     div(
       { class: "card-field" },
       span({ class: "card-label" }, labelText),
@@ -662,6 +662,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     div({ class: "job-price-line card-salary" }, `${i18n.projectFollowers}: ${followersCount(pr)}`),
     renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
     goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null,
+    table({ class: "tribe-info-table" }, ...renderCreatedRows(pr.createdAt, pr.author)),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     pr.subscription
       ? renderSubscriptionBox({
@@ -688,12 +689,8 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     renderBudget(pr),
     renderBackers(pr, f),
     renderMilestonesAndBounties(pr, f, isAuthor),
-    renderFollowers(pr),
     renderPledgeBox(pr, f, isAuthor),
-    div({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(pr.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(pr.author)
-    ),
+    renderFollowers(pr),
     renderEngagement(pr.id || pr.key,
       renderOpinionsVoting('/projects/opinions', pr.id || pr.key, pr.opinions, null, pr.opinions_inhabitants),
       renderSharedCommentsSection({

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -156,10 +156,13 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo, opts =
         )
       ),
       chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      dateText ? p({ class: "time-chip" }, dateText) : null,
       e.location && String(e.location).trim()
-        ? p({ class: "job-meta-line" }, String(e.location))
+        ? div({ class: "card-field card-field-mb" },
+            span({ class: "card-label" }, `${String(i18n.eventLocation).toUpperCase()}: `),
+            span({ class: "card-value" }, String(e.location))
+          )
         : null,
+      dateText ? p({ class: "time-chip" }, dateText) : null,
       price > 0
         ? div({ class: "price-chip" }, `${price.toFixed(6)} ECO`)
         : null,
@@ -519,7 +522,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     renderPhotoGallery(event, 'event'),
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(event.createdAt, event.organizer)),
     event.recurring && Array.isArray(event.occurrences) && event.occurrences.length > 1
       ? details({ class: "event-occurrences" },
           summary({ class: "chat-thread-summary" }, `${i18n.eventUpcomingDates} (${event.occurrences.length})`),
@@ -559,10 +562,6 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
         )
       : null,
     event.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, event.mapUrl)) : null,
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(event.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(event.organizer)
-    ),
     renderEngagement(event.id, opinionsBar, renderEventCommentsSection(event.id, comments, currentFilter))
   );
 

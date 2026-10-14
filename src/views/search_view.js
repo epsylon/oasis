@@ -128,10 +128,18 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           content.text ? div({ class: 'card-field' }, span({ class: 'card-value', [RAW_HTML]: sanitizeHtml(renderStyledHtml(content.text)) })) : null
         );
       case 'about':
-        return div({ class: 'search-about' },
-          content.name ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.name + ':'), span({ class: 'card-value' }, content.name)) : null,
-          content.description ? div({ class: 'card-field card-field-stacked' }, span({ class: 'card-value' }, content.description)) : null,
-          content.image ? img({ loading: 'lazy', src: `/image/64/${encodeURIComponent(content.image)}` }) : null
+        return div({ class: 'card-section about' },
+          div({ class: 'about-card-cols' },
+            div({ class: 'about-card-col-img' },
+              content.image
+                ? renderZoomableImage(`/blob/${encodeURIComponent(content.image)}`, { imgClass: 'activity-avatar', alt: content.name || '', linkClass: 'zoom-inline' })
+                : img({ src: '/assets/images/default-avatar.png', alt: content.name || '', class: 'activity-avatar' })
+            ),
+            div({ class: 'about-card-col-desc' },
+              h2({ class: 'about-card-header' }, userLink(content.about, content.name)),
+              content.description ? p({ class: 'tribe-side-description' }, ...renderStyledText(String(content.description))) : null
+            )
+          )
         );
       case 'feed': {
         const rawText = typeof content.text === 'string' ? content.text.trim() : '';

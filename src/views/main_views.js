@@ -50,6 +50,18 @@ const userLink = (feedId, knownName) => {
 
 exports.userLink = userLink;
 
+const renderCreatedRows = (createdAt, author, updatedAt) => {
+  const createdTs = createdAt ? new Date(createdAt).getTime() : NaN;
+  const updatedTs = updatedAt ? new Date(updatedAt).getTime() : NaN;
+  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+  return [
+    createdAt ? tr(td({ class: 'tribe-info-label' }, i18n.createdAtLabel), td({ class: 'tribe-info-value', colspan: '3' }, moment(createdAt).format('YYYY/MM/DD HH:mm'))) : null,
+    showUpdated ? tr(td({ class: 'tribe-info-label' }, i18n.jobsUpdatedAt), td({ class: 'tribe-info-value', colspan: '3' }, moment(updatedAt).format('YYYY/MM/DD HH:mm'))) : null,
+    author ? tr(td({ class: 'tribe-info-value', colspan: '4' }, userLink(author))) : null
+  ];
+};
+exports.renderCreatedRows = renderCreatedRows;
+
 const inboxBadges = () => {
   const inboxCount = Number(sharedState.getInboxCount()) || 0;
   return [inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : ''];
@@ -3134,6 +3146,11 @@ video.cn-hub-player{max-height:160px;object-fit:cover}
 img.cn-hub-player{max-height:200px;object-fit:cover}
 audio.cn-hub-player{background:transparent;height:36px}
 .cn-hub-thumb{width:100%;height:140px;object-fit:cover;background:#000;border-bottom:1px solid var(--border)}
+.cn-pop-row{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px;margin-top:16px}
+.cn-pop-thumb{width:100%;height:90px;object-fit:cover;background:#000;border-bottom:1px solid var(--border)}
+.cn-pop-card .cn-hub-body{padding:8px 10px;gap:4px}
+.cn-pop-card .cn-hub-title{font-size:13px}
+@media (max-width:700px){.cn-pop-row{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:42%;overflow-x:auto}}
 .cn-hub-body{padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-width:0}
 .cn-hub-title{color:var(--fg);font-weight:600;font-size:15px;word-break:break-word}
 .cn-hub-snippet{color:var(--fg-soft);font-size:13px;line-height:1.4;word-break:break-word;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
@@ -3209,24 +3226,28 @@ const buildClearnetHub = ({ items = {}, filterBase, filterType = '', query = '',
   const paged = paginateClearnet(visibleItems, page);
   const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter, q: query }, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
   const sections = visibleItems.length
-    ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${visibleItems.length})</h2><div class="cn-hub-grid">${paged.items.map(it => renderHubItem(it.modulePath, it)).join('')}</div>${pager}`
+    ? `${filterButtons}<h2 class="cn-section">${esc(i18n.cnNetworkContent)} (${visibleItems.length})</h2><div class="cn-hub-grid">${paged.items.map(it => renderHubItem(it.modulePath, it)).join('')}</div>${pager}`
     : (allItems.length ? `${filterButtons}<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
   return { sections, total: allItems.length, visible: visibleItems.length, page: paged.page, pages: paged.pages };
 };
 
-exports.clearnetHubView = async ({ authors = [], items = {}, tribes = [], filterType = '', query = '', page = 1 }) => {
-  const { escapeHtml: esc, renderClearnetPage, blobUrl: cnBlob, renderRichText, CLEARNET_PAGER_CSS } = require('./clearnet_view');
+exports.clearnetHubView = async ({ authors = [], items = {}, tribes = [], filterType = '', query = '', page = 1, tribesPage = 1 }) => {
+  const { escapeHtml: esc, renderClearnetPage, blobUrl: cnBlob, CLEARNET_PAGER_CSS, renderClearnetPager } = require('./clearnet_view');
   const hub = buildClearnetHub({ items, filterBase: '/c', filterType, query, page });
   const extraCss = CLEARNET_HUB_CSS + CLEARNET_PAGER_CSS + `
 `;
   const q = String(query || '').trim().toLowerCase();
   const shownTribes = (filterType || hub.page > 1) ? [] : (tribes || []).filter(t => !q || [t.title, t.description].some(v => String(v || '').toLowerCase().includes(q)));
-  const tribesBlock = shownTribes.length
-    ? `<h2 class="cn-section">${esc(i18n.tribesTitle)} (${shownTribes.length})</h2><div class="cn-hub-grid">${shownTribes.map(t => {
-        const img = cnBlob(t.image);
-        const href = `/c/tribe/${encodeURIComponent(clearnetSlugFor(t.title, t.id))}`;
-        return `<div class="cn-hub-card"><a class="cn-hub-cover" href="${href}" aria-label="${esc(t.title)}"></a>${img ? `<img class="cn-hub-thumb" src="${img}" alt="" loading="lazy"/>` : ''}<div class="cn-hub-body"><div class="cn-hub-kind">${esc(i18n.tribesTitle)}</div><a class="cn-hub-title" href="${href}">${esc(t.title || i18n.cnUntitled)}</a>${t.description ? `<div class="cn-hub-snippet">${renderRichText(String(t.description).slice(0, 300))}</div>` : ''}<div class="cn-hub-meta">${esc(i18n.cnPublicContent)}: ${Number(t.count) || 0}</div></div></div>`;
-      }).join('')}</div>`
+  const ranked = shownTribes.slice().sort((x, y) => (Number(y.members) || 0) - (Number(x.members) || 0));
+  const tribePage = slicePage(ranked, tribesPage, 10);
+  const tribeCard = (t) => {
+    const img = cnBlob(t.image) || '/c/assets/images/default-tribe.png';
+    const href = `/c/tribe/${encodeURIComponent(clearnetSlugFor(t.title, t.id))}`;
+    return `<div class="cn-hub-card cn-pop-card"><a class="cn-hub-cover" href="${href}" aria-label="${esc(t.title)}"></a><img class="cn-pop-thumb" src="${img}" alt="" loading="lazy"/><div class="cn-hub-body"><a class="cn-hub-title" href="${href}">${esc(t.title || i18n.cnUntitled)}</a><div class="cn-hub-meta">${esc(i18n.tribeMembersCount)}: ${Number(t.members) || 0}</div></div></div>`;
+  };
+  const tribesMore = renderClearnetPager({ base: '/c', params: { q: query }, page: tribePage.page, pages: tribePage.pages, total: tribePage.total, pageParam: 'tpage' });
+  const tribesBlock = ranked.length
+    ? `<h2 class="cn-section">${esc(i18n.cnTribesContent)} (${ranked.length})</h2><div class="cn-pop-row">${tribePage.items.map(tribeCard).join('')}</div>${tribesMore}`
     : '';
   const body = `
   ${tribesBlock}

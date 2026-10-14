@@ -281,6 +281,20 @@ describe('ssb-db2: the legacy surface the models rely on', (t) => {
     } finally { await closeSbot(sbot); }
   });
 
+  t('a feed read from its history comes in sequence order even when its clock repeated or went back', async () => {
+    const sbot = makeSbot();
+    try {
+      const keys = ssbKeys.generate();
+      const base = Date.now();
+      const stamps = [base, base - 60000, base - 60000, base - 120000, base, base, base - 1, base];
+      for (const timestamp of stamps) await new Promise((res, rej) => sbot.db.create({ keys, content: { type: 'post', text: 'x' }, timestamp }, (e, m) => e ? rej(e) : res(m)));
+      const all = await collect(sbot.createHistoryStream({ id: keys.id }));
+      eq(all.map(m => m.value.sequence).join(','), '1,2,3,4,5,6,7,8');
+      const from = await collect(sbot.createHistoryStream({ id: keys.id, seq: 3, limit: 3 }));
+      eq(from.map(m => m.value.sequence).join(','), '3,4,5', 'a start and a limit keep the order too');
+    } finally { await closeSbot(sbot); }
+  });
+
   t('a live stream the consumer abandons releases its log listener', async () => {
     const sbot = makeSbot();
     try {

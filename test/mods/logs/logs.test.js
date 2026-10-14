@@ -145,13 +145,16 @@ describe('logs: every screen belongs to the module', (t) => {
     ['detail', { view: 'detail', aiModOn: false, entry }]
   ];
 
-  t('title, description and filters are on all of them', () => {
+  t('title and description are on all of them; only the list carries the period filters and Export', () => {
     for (const [name, opts] of screens) {
       const html = String(logsView([entry], 'today', 'manual', opts));
       ok(html.includes(String(i18n.logsTitle)), `${name}: the module title is there`);
       ok(html.includes(String(i18n.logsDescription)), `${name}: and its description`);
-      ok(html.includes(String(i18n.logsFilterAlways)), `${name}: and the period filters`);
-      ok(html.includes(String(i18n.logsExport)), `${name}: and Export Logs`);
+      ok(html.includes(String(i18n.logsFilterToday)), `${name}: and the way back to the current period`);
+      const isList = name === 'list';
+      eq(html.includes(String(i18n.logsFilterAlways)), isList, `${name}: the other periods only on the list`);
+      eq(html.includes(String(i18n.logsExport)), isList, `${name}: Export Logs only on the list`);
+      eq(html.includes(String(i18n.logsCreate)), isList, `${name}: Create Log only on the list`);
     }
   });
 });

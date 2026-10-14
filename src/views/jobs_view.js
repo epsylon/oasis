@@ -1,8 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views")
-const moment = require("../server/node_modules/moment")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
@@ -105,15 +104,6 @@ const renderApplicantsProgress = (subsCount, vacants) => {
   )
 }
 
-const renderUpdatedLabel = (createdAt, updatedAt) => {
-  const createdTs = createdAt ? new Date(createdAt).getTime() : NaN
-  const updatedTs = updatedAt ? new Date(updatedAt).getTime() : NaN
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs)
-  return showUpdated
-    ? span({ class: "votations-comment-date" }, ` | ${i18n.jobsUpdatedAt}: ${moment(updatedAt).format("YYYY/MM/DD HH:mm")}`)
-    : null
-}
-
 const renderJobOwnerActions = (job, returnTo) => {
   const isAuthor = String(job.author) === String(userId)
   if (!isAuthor) return []
@@ -204,7 +194,7 @@ const renderJobExtraDetails = (job) => {
     pushRow(i18n.jobsHoursRequested || "Hours requested", `${Number(job.hoursRequested) || 0} h`)
     if (skill) pushRow(i18n.jobsExchangeSkill || "Skill", skill)
   }
-  return table({ class: "tribe-info-table jobs-info-table" }, ...rows)
+  return table({ class: "tribe-info-table jobs-info-table" }, ...rows, ...(opts.includeCreated ? renderCreatedRows(job.createdAt, job.author, job.updatedAt) : []))
 }
 
 const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
@@ -675,7 +665,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     job.image
       ? renderMediaBlob(job.image, { class: "tribe-detail-image" })
       : null,
-    renderJobInfoTable(job, { includeVacants: true, includeSubscribers: false }),
+    renderJobInfoTable(job, { includeVacants: true, includeSubscribers: false, includeCreated: true }),
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.jobSubscribers}: ${subs.length}`)
     ),
@@ -701,11 +691,6 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     extraDetailsTable ? div({ class: "job-section" }, extraDetailsTable) : null,
     renderJobSection(i18n.jobTasks, job.tasks),
     job.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, job.mapUrl)) : null,
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(job.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(job.author),
-      renderUpdatedLabel(job.createdAt, job.updatedAt)
-    ),
     candidatesBlock ? candidatesBlock : null,
     renderJobCommentsSection(job.id, returnTo, comments)
   )

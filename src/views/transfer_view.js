@@ -1,6 +1,6 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { getConfig } = require('../configs/config-manager.js');
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -121,16 +121,6 @@ const renderOwnerActions = (transfer, returnTo) => {
     )
   ]
 }
-
-const renderUpdatedLabel = (createdAt, updatedAt) => {
-  const createdTs = createdAt ? new Date(createdAt).getTime() : NaN
-  const updatedTs = updatedAt ? new Date(updatedAt).getTime() : NaN
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs)
-  return showUpdated
-    ? span({ class: "votations-comment-date" }, ` | ${i18n.transfersUpdatedAt}: ${moment(updatedAt).format("YYYY/MM/DD HH:mm")}`)
-    : null
-}
-
 
 const renderTransferStatusChip = (status) => {
   const up = String(status || "").toUpperCase()
@@ -521,6 +511,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
       h2({ class: "tribe-card-title" }, transferTitle(transfer))
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    table({ class: "tribe-info-table" }, ...renderCreatedRows(transfer.createdAt, transfer.from, transfer.updatedAt)),
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.transfersConfirmations}: ${confirmedCount}/${required}`)
@@ -548,11 +539,6 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
       confirmedList.length
         ? div({ class: "card-assigned-list" }, ...confirmedList.map(id => userLink(id)))
         : null
-    ),
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(transfer.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(transfer.from),
-      renderUpdatedLabel(transfer.createdAt, transfer.updatedAt)
     ),
     renderEngagement(transfer.id,
       renderOpinionsVoting('/transfers/opinions', transfer.id, transfer.opinions, returnTo, transfer.opinions_inhabitants),

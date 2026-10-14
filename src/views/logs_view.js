@@ -223,7 +223,11 @@ exports.logsView = (items, filter, mode, opts = {}) => {
     listTitle,
     section(
       div({ class: "tags-header module-header-line" }, h2(listTitle), p(description)),
-      renderFilterBar(filter),
+      div({ class: "activity-sub-filter" },
+        form({ method: "GET", action: "/logs", class: "sub-filter-form" },
+          button({ type: "submit", name: "filter", value: filter || "today", class: "filter-btn active" }, String(filterLabel(filter || "today")).toUpperCase())
+        )
+      ),
       ...blocks
     )
   );

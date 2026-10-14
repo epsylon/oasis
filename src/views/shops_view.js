@@ -1,4 +1,4 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged } = require("./main_views")
 const moment = require("../server/node_modules/moment")
@@ -32,6 +32,8 @@ const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
   if (s.startsWith('&')) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(s)}`, ...attrs })
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}`, preload: 'metadata' })
+  const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
+  if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}`, preload: 'metadata' })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mImg) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(mImg[1])}`, ...attrs })
   return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
@@ -641,8 +643,9 @@ exports.clearnetShopView = async (shop, products = []) => {
   };
   const productCards = (products || []).filter(p => Number(p.stock) > 0 || p.featured).map(prod => {
     const pImg = cnBlobUrl(prod.image);
+    const pKind = /^\[video:/.test(String(prod.image || '')) ? 'video' : /^\[audio:/.test(String(prod.image || '')) ? 'audio' : 'img';
     return `<article class="cn-product">
-      ${pImg ? `<img class="cn-product-img" src="${pImg}" alt="" loading="lazy"/>` : ''}
+      ${pImg ? (pKind === 'img' ? `<img class="cn-product-img" src="${pImg}" alt="" loading="lazy"/>` : `<${pKind} class="cn-product-img" src="${pImg}" controls preload="metadata"></${pKind}>`) : ''}
       <h3 class="cn-product-title">${cnEscapeHtml(prod.title || '')}</h3>
       ${prod.description ? `<p class="cn-product-desc">${cnRichText(prod.description)}</p>` : ''}
       <p class="cn-product-price">${fmtPrice(prod.price)} ECO</p>

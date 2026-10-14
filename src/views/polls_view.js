@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
@@ -278,7 +278,7 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
     ),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question)),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(poll.createdAt, poll.author)),
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.pollVoters}: ${poll.totalVoters}`)
@@ -308,10 +308,6 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
       : (poll.voters.length
           ? div({ class: "card-assigned-list" }, ...poll.voters.map(v => userLink(v)))
           : null),
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(poll.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(poll.author)
-    ),
     renderEngagement(poll.id,
       renderOpinionsVoting('/polls/opinions', poll.id, poll.opinions, href, poll.opinions_inhabitants),
       renderComments(poll, comments, basePath)

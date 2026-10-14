@@ -3955,7 +3955,7 @@ a.pm-btn:hover { text-decoration: none }
 .shop-product-body{padding:10px;display:flex;flex-direction:column;gap:6px}
 .price-chip{display:inline-flex;align-items:center;width:auto;max-width:max-content;box-sizing:border-box;border-radius:10px;font-size:14px;font-weight:700;border:1px solid #a39134;background:#3a2300;color:#ffd700;padding:4px 12px;margin:6px 0 0 0;box-shadow:none;white-space:nowrap}
 .time-chip{display:inline-flex;align-items:center;width:auto;max-width:100%;box-sizing:border-box;border-radius:10px;font-size:14px;font-weight:700;line-height:1.4;border:1px solid #5a5a5a;background:#3a3a3a;color:#ffd740;padding:4px 12px;margin:6px 0 0 0;box-shadow:none;white-space:normal;overflow-wrap:anywhere}
-.shop-product-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.shop-product-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;padding:0;border:0;background:transparent;box-shadow:none}
 .shop-add-product{border:1px dashed #555;border-radius:8px;padding:16px;margin:12px 0}
 .shop-featured-products{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
 .shop-featured-item{display:flex;flex-direction:column;align-items:center;width:72px;text-decoration:none;border:1px solid #333;border-radius:6px;overflow:hidden;background:#111}
@@ -4297,6 +4297,8 @@ a.pm-btn:hover { text-decoration: none }
   gap: 6px;
 }
 .tribe-side-actions form > * { margin: 0 }
+.tribe-side-center { flex-direction: column; justify-content: center; }
+.tribe-enter-invite { border: none !important; background: transparent !important; box-shadow: none !important; padding: 0; }
 .tribe-side-actions select,
 .tribe-side-actions input[type="number"],
 .tribe-side-actions input[type="text"] { height: 36px; box-sizing: border-box }
@@ -8219,13 +8221,13 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .ai-train-approved{color:#5ad25a;font-weight:600}
 .ai-train-rejected{color:#ff6b6b;font-weight:600}
 
-.modules-counts{display:flex;flex-wrap:wrap;gap:18px;align-items:baseline;padding:10px 14px !important;margin-bottom:10px;border:0 !important}
+.modules-counts{display:flex;flex-wrap:wrap;gap:18px;align-items:baseline;padding:10px 0 !important;margin-bottom:10px;border:0 !important}
 .modules-count-value{color:#ffa300}
 .modules-count-list{list-style-type:none;padding:0;margin:0}
 .modules-count-item{margin:0}
 .modules-preset-form{display:inline;margin:0}
 .module-status-cell{text-align:center}
-.save-button-container{margin-top:20px;text-align:center}
+.save-button-container{margin-top:20px;text-align:left}
 
 .votes-count-negative{margin-left:12px}
 .forum-thread-header{display:flex;align-items:flex-start}
@@ -8687,7 +8689,6 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .room-join-btn,.room-join-form .room-join-btn{display:inline-flex;align-items:center;gap:4px;border-radius:10px;font-size:12px;font-weight:700;line-height:1.4;padding:2px 10px;margin:0;width:auto;height:auto;min-height:0;border:1px solid #ffa500;background:transparent;color:#ffa500;box-shadow:none;cursor:pointer;text-decoration:none}
 .room-join-btn:hover,.room-join-form .room-join-btn:hover{background:#ffa500;color:#1a1a1a}
 .room-join-form .room-join-btn:disabled{opacity:.5;cursor:default}
-.room-join-form .room-title-join{margin:0;width:auto;min-height:0;height:auto;box-shadow:none;text-transform:none;font-family:inherit;line-height:normal;cursor:pointer;max-width:100%;overflow-wrap:anywhere}
 .room-item .mailing-archive-head{flex-wrap:nowrap;align-items:flex-start}
 .room-item .mailing-archive-meta{flex:1 1 0;min-width:0}
 .room-peer{flex-wrap:nowrap;min-width:0}
@@ -8801,7 +8802,8 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .tribe-main .room-item .mailing-archive-head{flex-wrap:wrap}
 .tribe-main .room-item .mailing-archive-meta{flex:1 1 200px}
 
-.agenda-card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.agenda-card-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding:0;border:0;background:transparent;box-shadow:none}
+.card-section>.card-footer.favorites-meta{border-top:0;padding-top:0;margin-top:6px}
 .agenda-list.jobs-grid{margin-top:12px}
 .oasis-pager{display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap;gap:8px;margin:24px 0 8px 0}
 .oasis-pager-info{color:#9a8a2e;font-size:12px;margin-right:4px}
@@ -8810,8 +8812,14 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .oasis-pager-btn:hover,.oasis-pager-btn.active{border-color:#FFD700;color:#FFD700;text-decoration:none}
 .card-title-link{color:inherit;text-decoration:none}
 .card-title-link:hover{text-decoration:underline}
-.graphos-zoom-row{display:flex;justify-content:center;margin:8px 0 0;padding:0;border:0;background:none;box-shadow:none}
+.graphos-zoom-row{display:flex;justify-content:flex-end;margin:0 0 8px;padding:0;border:0;background:none;box-shadow:none}
 .graphos-lightbox .graphos-canvas-zoom{width:96vw;height:92vh;overflow:auto;background:#111;border:1px solid #2a2a2a;border-radius:8px;box-sizing:border-box;padding:0;margin:0}
 .graphos-lightbox .graphos-zoom-stage,.graphos-lightbox .graphos-zoom-svg{padding:0;margin:0;border:0;border-radius:0;background:none;box-shadow:none}
 .graphos-lightbox .graphos-svg{width:100%;height:auto;max-height:calc(92vh - 4px);min-height:0;display:block}
 .graphos-lightbox .lightbox-close{position:fixed;top:14px;right:22px;z-index:10002;font-size:28px;text-decoration:none}
+.shop-buy-form,.market-item.actions,.market-bid-form,.market-buy-form{border:0;background:transparent;box-shadow:none;padding:0}
+.project-progress-block .confirmations-progress{width:100%}
+.tags-list .tag-table th:last-child,.tags-list .tag-table td:last-child{width:1%;white-space:nowrap;text-align:right}
+.stats-block .tag-table,.stats-card .tag-table{width:100%;border-collapse:collapse;table-layout:fixed}
+.stats-block .tag-table th:first-child,.stats-block .tag-table td:first-child,.stats-card .tag-table th:first-child,.stats-card .tag-table td:first-child{width:70%}
+.stats-block .tag-table th:last-child,.stats-block .tag-table td:last-child,.stats-card .tag-table th:last-child,.stats-card .tag-table td:last-child{width:30%;text-align:right}

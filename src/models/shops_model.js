@@ -4,6 +4,7 @@ const categories = require("../backend/opinion_categories")
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeByPreferring, norm } = require('../backend/dedupe')
 const { readTyped, memoIndex } = require('./typed_log')
+const FileType = require('../server/node_modules/file-type')
 const logLimit = getConfig().ssbLogStream?.limit || 1000
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -22,6 +23,27 @@ module.exports = ({ cooler, tribeCrypto }) => {
   const SHOP_TYPES = ["shop", "shopProduct", "shopOpinion", "shopPurchase", "shop-invite", "shop-invite-tombstone", "shop-open-invite", "shop-open-invite-tombstone", "tombstone"]
 
   const readAll = async (ssbClient) => readTyped(ssbClient, SHOP_TYPES, { limit: logLimit, withWindow: true, withPrivate: true })
+  const mediaKinds = new Map()
+  const blobMediaKind = async (ssbClient, blobId) => {
+    if (mediaKinds.has(blobId)) return mediaKinds.get(blobId)
+    let kind
+    try {
+      const head = await new Promise((resolve, reject) => pull(ssbClient.blobs.get(blobId), pull.take(1), pull.collect((err, chunks) => err ? reject(err) : resolve(Buffer.concat(chunks)))))
+      const ft = await FileType.fromBuffer(head)
+      kind = ft && ft.mime ? ft.mime.split('/')[0] : 'other'
+    } catch (_) { return null }
+    mediaKinds.set(blobId, kind)
+    return kind
+  }
+  const withMediaKind = async (ssbClient, items) => {
+    for (const p of items) {
+      if (!p || !p.image || !String(p.image).startsWith('&')) continue
+      const kind = await blobMediaKind(ssbClient, p.image)
+      if (kind === 'video') p.image = `[video:](${p.image})`
+      else if (kind === 'audio') p.image = `[audio:](${p.image})`
+    }
+    return items
+  }
   const openSealed = (ssbClient, m) => {
     if (typeof m.value?.content === "string") return ssbClient.private.unbox({ key: m.key, value: m.value, timestamp: m.value?.timestamp || m.timestamp || 0 })
     return m.value?.private === true ? m : null
@@ -569,7 +591,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
       const root = idx.rootOf(tip)
 
-      return buildProduct(node, root, idx)
+      return (await withMediaKind(ssbClient, [buildProduct(node, root, idx)]))[0]
     },
 
     async listProducts(shopRootId) {
@@ -587,7 +609,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (prod && !prod.undecryptable) items.push(prod)
       }
 
-      return items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      return withMediaKind(ssbClient, items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)))
     },
 
     async listFeaturedProducts(shopRootId) {
@@ -606,7 +628,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (prod && !prod.undecryptable) items.push(prod)
       }
 
-      return items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 4)
+      return withMediaKind(ssbClient, items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 4))
     },
 
     async listAllProducts({ filter = "all", sort = "recent" } = {}) {
@@ -623,8 +645,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (prod && !prod.undecryptable) items.push(prod)
       }
 
-      if (filter === "top") return items.slice().sort((a, b) => voteSum(b.opinions) - voteSum(a.opinions) || new Date(b.createdAt) - new Date(a.createdAt))
-      return items.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      const sorted = filter === "top"
+        ? items.slice().sort((a, b) => voteSum(b.opinions) - voteSum(a.opinions) || new Date(b.createdAt) - new Date(a.createdAt))
+        : items.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      return withMediaKind(ssbClient, sorted)
     },
 
     async buyProduct(productId) {

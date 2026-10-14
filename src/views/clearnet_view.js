@@ -417,7 +417,7 @@ const CLEARNET_PAGER_CSS = `
 .cn-pager-btn:hover,.cn-pager-btn.active{border-color:var(--fg);color:var(--fg);text-decoration:none}
 `;
 const paginateClearnet = (list, page) => mv().slicePage(list, page, mv().listPerPage(cnScope().query));
-const renderClearnetPager = ({ base, params = {}, page, pages, per, total }) => {
+const renderClearnetPager = ({ base, params = {}, page, pages, per, total, pageParam = 'page' }) => {
   const query = String(cnScope().query || '');
   const sizes = !!per && mv().showPageSizes(total, query);
   if (!(pages > 1) && !sizes) return '';
@@ -426,7 +426,7 @@ const renderClearnetPager = ({ base, params = {}, page, pages, per, total }) => 
     const q = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) if (v) q.set(k, String(v));
     if (size || chosen) q.set('perPage', size || per);
-    if (n > 1) q.set('page', String(n));
+    if (n > 1) q.set(pageParam, String(n));
     const s = q.toString();
     return escapeHtml(s ? `${base}?${s}` : base);
   };

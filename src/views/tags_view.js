@@ -45,7 +45,7 @@ exports.tagsView = async (tags, filter, search = '') => {
 
   const title = i18n.tagsTitle;
 
-  const emptyTags = filteredTags.length === 0 && String(filter || 'all') === 'all' && !query;
+  const emptyTags = filteredTags.length === 0 && ['top', 'all'].includes(String(filter || 'top')) && !query;
   return template(
     title,
     section(
@@ -56,17 +56,17 @@ exports.tagsView = async (tags, filter, search = '') => {
       emptyTags ? null : div({ class: 'filters' },
         form({ method: 'GET', action: '/tags', class: 'ui-toolbar ui-toolbar--filters' },
           input({ type: 'hidden', name: 'search', value: query }),
+          button({ type: 'submit', name: 'filter', value: 'top', class: filter === 'top' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterTop).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'all', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterAll).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'recent', class: filter === 'recent' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterRecent).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'mine', class: filter === 'mine' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterMine).toUpperCase()),
-          button({ type: 'submit', name: 'filter', value: 'top', class: filter === 'top' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterTop).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'cloud', class: filter === 'cloud' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterCloud).toUpperCase())
         )
       ),
       emptyTags ? null : div({ class: 'tags-search activity-filter-chips activity-toolbar-row' },
         renderModuleStats(filteredTags.length),
         form({ method: 'GET', action: '/tags', class: 'filter-box' },
-          input({ type: 'hidden', name: 'filter', value: filter || 'all' }),
+          input({ type: 'hidden', name: 'filter', value: filter || 'top' }),
           input({ type: 'text', name: 'search', value: query, placeholder: i18n.tagsSearchPlaceholder, class: 'filter-box__input' }),
           div({ class: 'filter-box__controls' }, button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton))
         )
@@ -76,7 +76,7 @@ exports.tagsView = async (tags, filter, search = '') => {
           ? p(query ? i18n.noResultsFound : i18n.tagsNoItems)
           : filter !== 'cloud'
             ? renderTagsTable(paged(filteredTags))
-            : renderTagsCloud(paged(filteredTags))
+            : renderTagsCloud(filteredTags)
       )
     )
   );
