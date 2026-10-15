@@ -237,3 +237,36 @@ describe('mentions: versions republished by other inhabitants', (t) => {
     eq(list[0].title, 'Fair');
   });
 });
+
+describe('mentions: by name, not only by id', (t) => {
+  t('writing @name reaches the mentions of the inhabitant with that name; an email address does not', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    B.setActor();
+    await publishAs(B, { type: 'about', about: B.keypair.id, name: 'jdrm' });
+    A.setActor();
+    await publishAs(A, { type: 'post', text: 'gracias @jdrm, era cosa nuestra.' });
+    await publishAs(A, { type: 'post', text: 'escribe a mail@jdrm.com' });
+    await publishAs(A, { type: 'post', text: 'hola @JDRM' });
+    B.setActor();
+    const list = await B.use('mentions').listMentions('ALL');
+    eq(list.length, 2, 'the two mentions by name, in any case, and not the email');
+    ok(list.every(m => /@jdrm/i.test(m.content.text)));
+  });
+
+  t('rendered text links a known @name, leaves unknown names and emails alone, and stays plain on the clearnet', () => {
+    const rst = require('../../../src/backend/renderStyledText');
+    const id = '@' + 'J'.repeat(43) + '=.ed25519';
+    rst.setMentionResolver(null);
+    const plain = String(rst.renderStyledHtml('hola @jdrm'));
+    ok(plain.includes('@jdrm') && !plain.includes('href'), 'without a resolver the name is plain text');
+    rst.setMentionResolver((name) => name === 'jdrm' ? id : null);
+    try {
+      const linked = String(rst.renderStyledHtml('hola @jdrm, mira mail@jdrm.com y @nadie'));
+      ok(linked.includes(`href="/author/${encodeURIComponent(id)}"`) && linked.includes('class="mention"'), 'a known name becomes a mention link');
+      ok(linked.includes('mail@jdrm.com') && !linked.includes('mailto:@'), 'the email keeps its shape');
+      ok(linked.includes('@nadie') && (linked.match(/class="mention"/g) || []).length === 1, 'an unknown name is left alone');
+      const clearnet = String(rst.renderStyledHtml('hola @jdrm', { internalLinks: false }));
+      ok(clearnet.includes('@jdrm') && !clearnet.includes('/author/'), 'on the clearnet names are not linked');
+    } finally { rst.setMentionResolver(null); }
+  });
+});

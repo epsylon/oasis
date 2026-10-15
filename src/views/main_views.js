@@ -105,6 +105,27 @@ const renderInviteQrCard = ({ qrDataUrl }) =>
   qrDataUrl ? div({ class: 'invite-qr-card' }, img({ src: qrDataUrl, alt: 'QR', class: 'invite-qr-img' })) : null;
 exports.renderInviteQrCard = renderInviteQrCard;
 
+const renderLiveFeed = (src, imgClass) => {
+  const id = `live-${String(src).replace(/[^a-zA-Z0-9]/g, '').slice(-24)}`;
+  return [
+    a({ href: `#${id}`, id: `${id}-src`, class: 'zoom-link zoom-inline' }, img({ src, alt: '', class: imgClass })),
+    div({ id, class: 'lightbox live-lightbox' },
+      a({ href: `#${id}-src`, class: 'lightbox-close' }, '\u00d7'),
+      a({ href: `#${id}-src`, class: 'lightbox-image-link' }, img({ src, alt: '', class: 'lightbox-image', loading: 'lazy' }))
+    )
+  ];
+};
+exports.renderLiveFeed = renderLiveFeed;
+
+const renderVideoGrid = (peers, me) => {
+  const tiles = [
+    me ? div({ class: 'video-tile video-tile-me' }, ...renderLiveFeed('/phone/video/me', 'video-feed'), span({ class: 'video-tile-name' }, i18n.roomYou)) : null,
+    ...(Array.isArray(peers) ? peers : []).filter(p => p && p.id && p.on).map(p => div({ class: 'video-tile' }, ...renderLiveFeed(`/phone/video/${encodeURIComponent(p.id)}`, 'video-feed'), userLink(p.id)))
+  ].filter(Boolean);
+  return tiles.length ? div({ class: 'video-grid' }, ...tiles) : null;
+};
+exports.renderVideoGrid = renderVideoGrid;
+
 const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, returnTo, canWrite, inline, compact }) => {
   if (!target) return null;
   if (isOwner && (Number(count) || 0) <= 1) return null;
@@ -3231,6 +3252,8 @@ const buildClearnetHub = ({ items = {}, filterBase, filterType = '', query = '',
   return { sections, total: allItems.length, visible: visibleItems.length, page: paged.page, pages: paged.pages };
 };
 
+exports.CLEARNET_HUB_CSS = CLEARNET_HUB_CSS;
+
 exports.clearnetHubView = async ({ authors = [], items = {}, tribes = [], filterType = '', query = '', page = 1, tribesPage = 1 }) => {
   const { escapeHtml: esc, renderClearnetPage, blobUrl: cnBlob, CLEARNET_PAGER_CSS, renderClearnetPager } = require('./clearnet_view');
   const hub = buildClearnetHub({ items, filterBase: '/c', filterType, query, page });
@@ -3238,12 +3261,12 @@ exports.clearnetHubView = async ({ authors = [], items = {}, tribes = [], filter
 `;
   const q = String(query || '').trim().toLowerCase();
   const shownTribes = (filterType || hub.page > 1) ? [] : (tribes || []).filter(t => !q || [t.title, t.description].some(v => String(v || '').toLowerCase().includes(q)));
-  const ranked = shownTribes.slice().sort((x, y) => (Number(y.members) || 0) - (Number(x.members) || 0));
+  const ranked = shownTribes.slice().sort((x, y) => (Number(y.content) || 0) - (Number(x.content) || 0));
   const tribePage = slicePage(ranked, tribesPage, 10);
   const tribeCard = (t) => {
     const img = cnBlob(t.image) || '/c/assets/images/default-tribe.png';
     const href = `/c/tribe/${encodeURIComponent(clearnetSlugFor(t.title, t.id))}`;
-    return `<div class="cn-hub-card cn-pop-card"><a class="cn-hub-cover" href="${href}" aria-label="${esc(t.title)}"></a><img class="cn-pop-thumb" src="${img}" alt="" loading="lazy"/><div class="cn-hub-body"><a class="cn-hub-title" href="${href}">${esc(t.title || i18n.cnUntitled)}</a><div class="cn-hub-meta">${esc(i18n.tribeMembersCount)}: ${Number(t.members) || 0}</div></div></div>`;
+    return `<div class="cn-hub-card cn-pop-card"><a class="cn-hub-cover" href="${href}" aria-label="${esc(t.title)}"></a><img class="cn-pop-thumb" src="${img}" alt="" loading="lazy"/><div class="cn-hub-body"><a class="cn-hub-title" href="${href}">${esc(t.title || i18n.cnUntitled)}</a><div class="cn-hub-meta">${esc(i18n.cnPublicContent)}: ${Number(t.content) || 0}</div></div></div>`;
   };
   const tribesMore = renderClearnetPager({ base: '/c', params: { q: query }, page: tribePage.page, pages: tribePage.pages, total: tribePage.total, pageParam: 'tpage' });
   const tribesBlock = ranked.length

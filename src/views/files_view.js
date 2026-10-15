@@ -2,10 +2,10 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderFileDownloads, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderStyledText } = require("../backend/renderStyledText");
+const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
 
 const userId = config.keys.id;
 
@@ -91,7 +91,6 @@ const renderFileTable = exports.renderFileTable = (files, filter, params = {}) =
       th(i18n.fileSizeLabel || "SIZE"),
       th(i18n.seedsLabel),
       th(i18n.seedAction),
-      th(""),
       th("")
     ),
     files.map((t) =>
@@ -111,16 +110,42 @@ const renderFileTable = exports.renderFileTable = (files, filter, params = {}) =
             params.sort ? input({ type: "hidden", name: "sort", value: params.sort }) : null,
             button({ type: "submit", class: "filter-btn" }, i18n.fileDetailsButton)
           )
-        ),
-        td(
-          t.url && t.url.startsWith("&")
-            ? renderFileDownloads(t.key, t.torrentUrl, t.fileName || t.title)
-            : ""
         )
       )
     )
   );
 };
+
+const isExternalUrl = (u) => /^https?:\/\//i.test(String(u || ""));
+
+const renderNextcloudForm = (returnTo) => div(
+  { class: "div-center audio-form" },
+  h2("Nextcloud"),
+  form(
+    { action: "/files/nextcloud", method: "POST", enctype: "multipart/form-data" },
+    input({ type: "hidden", name: "returnTo", value: returnTo }),
+    span(i18n.nextcloudFileLabel),
+    br(),
+    input({ type: "file", name: "file", required: true }),
+    br(),
+    br(),
+    span(i18n.fileTitleLabel),
+    br(),
+    input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.fileTitlePlaceholder, required: true }),
+    br(),
+    span(i18n.fileDescriptionLabel),
+    br(),
+    textarea({ maxlength: "5000", name: "description", placeholder: i18n.fileDescriptionPlaceholder, rows: "4" }),
+    br(),
+    span(i18n.fileTagsLabel),
+    br(),
+    input({ type: "text", name: "tags", placeholder: i18n.fileTagsPlaceholder }),
+    br(),
+    br(),
+    renderClearnetSelector(false, i18n), br(),
+    button({ type: "submit" }, i18n.nextcloudUploadButton)
+  )
+);
 
 const renderFileForm = (filter, fileId, fileToEdit, params = {}) => {
   const returnTo = safeText(params.returnTo) || buildReturnTo("all", params);
@@ -219,7 +244,7 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
     ),
     section(
       filter === "create" || filter === "edit"
-        ? renderFileForm(filter, fileId, fileToEdit, { ...params, filter })
+        ? [renderFileForm(filter, fileId, fileToEdit, { ...params, filter }), filter !== "edit" && params.nextcloud && !params.tribeId ? renderNextcloudForm(safeText(params.returnTo) || buildReturnTo("all", params)) : null]
         : section(
             emptyMod ? null : div(
               { class: "audios-search activity-filter-chips activity-toolbar-row" },
@@ -281,7 +306,7 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
       author: fileObj.author,
       deleteAction: String(fileObj.author) === String(userId) ? contentDeleteAction("file", fileObj.key) : null,
       favKind: 'files',
-      torrentFrom: { blobId: fileObj.url, name: fileObj.fileName || fileObj.title },
+      ...(fileObj.url && fileObj.url.startsWith("&") ? { torrentFrom: { blobId: fileObj.url, name: fileObj.fileName || fileObj.title } } : {}),
       isFavorite: fileObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
@@ -331,7 +356,20 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
               )
             : null
         )
-      : p(i18n.fileNoFile),
+      : isExternalUrl(fileObj.url)
+        ? div({ class: "torrent-download" },
+            div({ class: "torrent-oasis torrent-detail-section" },
+              h3({ class: "torrent-section-title" }, i18n.fileExternalLink),
+              table({ class: "tribe-info-table torrent-file-info" },
+                tr(td({ class: "tribe-info-label" }, i18n.fileShareFileLabel), td({ class: "tribe-info-value" }, fileObj.fileName || fileObj.title || "download")),
+                tr(td({ class: "tribe-info-label" }, i18n.fileSizeLabel), td({ class: "tribe-info-value" }, formatSize(fileObj.size))),
+                fileObj.mime ? tr(td({ class: "tribe-info-label" }, i18n.fileTypeLabel), td({ class: "tribe-info-value" }, fileObj.mime)) : null,
+                tr(td({ class: "tribe-info-label" }, "URL"), td({ class: "tribe-info-value" }, a({ href: safeExternalHref(fileObj.url), target: "_blank", rel: "noopener noreferrer" }, fileObj.url)))
+              ),
+              a({ href: safeExternalHref(fileObj.url), target: "_blank", rel: "noopener noreferrer", class: "filter-btn" }, `\u2B07 ${i18n.fileExternalLink}`)
+            )
+          )
+        : p(i18n.fileNoFile),
     (() => {
       const createdTs = fileObj.createdAt ? new Date(fileObj.createdAt).getTime() : NaN;
       const updatedTs = fileObj.updatedAt ? new Date(fileObj.updatedAt).getTime() : NaN;

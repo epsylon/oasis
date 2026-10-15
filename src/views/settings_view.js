@@ -29,7 +29,8 @@ const getThemeConfig = () => {
   }
 };
 
-const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, fediverseAccount, telegramAccount = null, telegramLogin = null, peertubeAccount = null, verification = null, rebuild = null }) => {
+const settingsView = (params) => {
+  const { version, aiPrompt, aiExportCount = 0, blobCache = null, fediverseAccount, telegramAccount = null, telegramLogin = null, peertubeAccount = null, nextcloudAccount = null, verification = null, rebuild = null } = params;
   const currentThemeConfig = getThemeConfig();
   const theme = currentThemeConfig.themes?.current || "Dark-SNH";
   const currentConfig = getConfig();
@@ -106,14 +107,8 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
     );
   }
 
-  return template(
-    i18n.settings,
-    section(
-      div({ class: "tags-header module-header-line" },
-        h2(i18n.settings),
-        p(i18n.settingsDescription)
-      )
-    ),
+  const filter = params.filter === 'multiverse' && modOn('fediverse') ? 'multiverse' : 'oasis';
+  const oasisParts = [
     updatePanel,
     section({ id: "language" },
       div({ class: "tags-header" },
@@ -363,6 +358,11 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
             option({ value: "mutuals", ...(!currentPhone.dnd && currentPhone.visibility === "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals),
             option({ value: "dnd", ...(currentPhone.dnd ? { selected: true } : {})}, i18n.phoneDnd)
           ), br(), br(),
+          label(i18n.settingsPhoneVideo), br(),
+          select({ name: "video" },
+            option({ value: "on", ...(currentPhone.video !== false ? { selected: true } : {}) }, i18n.settingsPhoneVideoOn),
+            option({ value: "off", ...(currentPhone.video === false ? { selected: true } : {}) }, i18n.settingsPhoneVideoOff)
+          ), br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
         )
       )
@@ -414,97 +414,6 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
         )
       )
     ) : null,
-    modOn('fediverse') ? section(
-      { id: "multiverse" },
-      div({ class: "tags-header" },
-        h2(i18n.fediverseSettingsTitle),
-        div({ class: "fediverse-network" },
-          h3("Mastodon"),
-          fediverseAccount
-            ? (() => {
-                const host = String(fediverseAccount.instance || "").replace(/^https?:\/\//, "");
-                const profileUrl = `${fediverseAccount.instance}/@${fediverseAccount.acct}`;
-                const link = (txt) => a({ href: profileUrl, target: "_blank", rel: "noopener noreferrer" }, txt);
-                return form(
-                  { action: "/settings/fediverse/disconnect", method: "POST" },
-                  p(
-                    `${i18n.fediverseConnectedAs}: `,
-                    link(`${fediverseAccount.acct}@${host}`)
-                  ),
-                  button({ type: "submit" }, i18n.fediverseDisconnect)
-                );
-              })()
-            : form(
-                { action: "/settings/fediverse", method: "POST" },
-                label({ for: "fediverse_instance" }, i18n.fediverseInstanceLabel), br(),
-                input({ type: "text", id: "fediverse_instance", name: "instance", placeholder: "mastodon.social", required: true }), br(),
-                label({ for: "fediverse_token" }, i18n.fediverseTokenLabel), br(),
-                input({ type: "password", id: "fediverse_token", name: "token", autocomplete: "off", required: true }), br(),
-                button({ type: "submit" }, i18n.fediverseConnect)
-              )
-        ),
-        div({ class: "fediverse-network" },
-          h3("Telegram"),
-          telegramAccount
-            ? form(
-                { action: "/settings/telegram/disconnect", method: "POST" },
-                p(`${i18n.fediverseConnectedAs}: `, strong(telegramAccount.displayName || ""), telegramAccount.username ? span(` (@${telegramAccount.username})`) : ""),
-                br(),
-                button({ type: "submit" }, i18n.fediverseDisconnect)
-              )
-            : telegramLogin && telegramLogin.step === "code"
-              ? form(
-                  { action: "/settings/telegram/code", method: "POST" },
-                  br(),
-                  p(i18n.telegramCodeHelp),
-                  input({ type: "text", id: "telegram_code", name: "code", autocomplete: "off", inputmode: "numeric", placeholder: "12345", required: true }), br(), br(),
-                  button({ type: "submit" }, i18n.telegramVerify),
-                  " ",
-                  button({ type: "submit", formaction: "/settings/telegram/cancel", class: "delete-btn" }, i18n.telegramCancel)
-                )
-              : telegramLogin && telegramLogin.step === "password"
-                ? form(
-                    { action: "/settings/telegram/password", method: "POST" },
-                    br(),
-                    p(i18n.telegramPasswordHelp),
-                    input({ type: "password", id: "telegram_password", name: "password", autocomplete: "off", required: true }), br(), br(),
-                    button({ type: "submit" }, i18n.telegramVerify),
-                    " ",
-                    button({ type: "submit", formaction: "/settings/telegram/cancel", class: "delete-btn" }, i18n.telegramCancel)
-                  )
-                : form(
-                    { action: "/settings/telegram/start", method: "POST" },
-                    label({ for: "telegram_api_id" }, i18n.telegramApiIdLabel), br(),
-                    input({ type: "text", id: "telegram_api_id", name: "apiId", inputmode: "numeric", placeholder: "12345678", required: true }), br(),
-                    label({ for: "telegram_api_hash" }, i18n.fediverseTokenLabel), br(),
-                    input({ type: "password", id: "telegram_api_hash", name: "apiHash", autocomplete: "off", placeholder: "0123456789abcdef0123456789abcdef", required: true }), br(),
-                    label({ for: "telegram_phone" }, i18n.telegramPhoneLabel), br(),
-                    input({ type: "tel", id: "telegram_phone", name: "phone", placeholder: "+34 60000000", required: true }), br(), br(),
-                    button({ type: "submit" }, i18n.fediverseConnect)
-                  )
-        )
-        ,
-        div({ class: "fediverse-network" },
-          h3("PeerTube"),
-          peertubeAccount
-            ? form(
-                { action: "/settings/peertube/disconnect", method: "POST" },
-                p(`${i18n.fediverseConnectedAs}: `, a({ href: peertubeAccount.channelUrl || peertubeAccount.profileUrl, target: "_blank", rel: "noopener noreferrer" }, peertubeAccount.handle)),
-                button({ type: "submit" }, i18n.fediverseDisconnect)
-              )
-            : form(
-                { action: "/settings/peertube", method: "POST" },
-                label({ for: "peertube_instance" }, i18n.fediverseInstanceLabel), br(),
-                input({ type: "text", id: "peertube_instance", name: "instance", placeholder: "peertube.example.org", required: true }), br(),
-                label({ for: "peertube_username" }, i18n.peertubeUsernameLabel), br(),
-                input({ type: "text", id: "peertube_username", name: "username", autocomplete: "off", required: true }), br(),
-                label({ for: "peertube_password" }, i18n.peertubePasswordLabel), br(),
-                input({ type: "password", id: "peertube_password", name: "password", autocomplete: "off", required: true }), br(),
-                button({ type: "submit" }, i18n.fediverseConnect)
-              )
-        )
-      )
-    ) : null,
     section({ id: "verification" },
       div({ class: "tags-header" },
         h2(i18n.verificationTitle),
@@ -541,6 +450,136 @@ const settingsView = ({ version, aiPrompt, aiExportCount = 0, blobCache = null, 
         )
       )
     )
+  ];
+  const multiverseParts = modOn('fediverse') ? [
+    section({ id: "mastodon" },
+      div({ class: "tags-header" },
+        h2("Mastodon"),
+        fediverseAccount
+          ? (() => {
+              const host = String(fediverseAccount.instance || "").replace(/^https?:\/\//, "");
+              const profileUrl = `${fediverseAccount.instance}/@${fediverseAccount.acct}`;
+              const link = (txt) => a({ href: profileUrl, target: "_blank", rel: "noopener noreferrer" }, txt);
+              return form(
+                { action: "/settings/fediverse/disconnect", method: "POST" },
+                p(
+                  `${i18n.fediverseConnectedAs}: `,
+                  link(`${fediverseAccount.acct}@${host}`)
+                ),
+                button({ type: "submit" }, i18n.fediverseDisconnect)
+              );
+            })()
+          : form(
+              { action: "/settings/fediverse", method: "POST" },
+              label({ for: "fediverse_instance" }, i18n.fediverseInstanceLabel), br(),
+              input({ type: "text", id: "fediverse_instance", name: "instance", placeholder: "mastodon.social", required: true }), br(),
+              label({ for: "fediverse_token" }, i18n.fediverseTokenLabel), br(),
+              input({ type: "password", id: "fediverse_token", name: "token", autocomplete: "off", required: true }), br(),
+              button({ type: "submit" }, i18n.fediverseConnect)
+            )
+      )
+    ),
+    section({ id: "telegram" },
+      div({ class: "tags-header" },
+        h2("Telegram"),
+        telegramAccount
+          ? form(
+              { action: "/settings/telegram/disconnect", method: "POST" },
+              p(`${i18n.fediverseConnectedAs}: `, strong(telegramAccount.displayName || ""), telegramAccount.username ? span(` (@${telegramAccount.username})`) : ""),
+              br(),
+              button({ type: "submit" }, i18n.fediverseDisconnect)
+            )
+          : telegramLogin && telegramLogin.step === "code"
+            ? form(
+                { action: "/settings/telegram/code", method: "POST" },
+                br(),
+                p(i18n.telegramCodeHelp),
+                input({ type: "text", id: "telegram_code", name: "code", autocomplete: "off", inputmode: "numeric", placeholder: "12345", required: true }), br(), br(),
+                button({ type: "submit" }, i18n.telegramVerify),
+                " ",
+                button({ type: "submit", formaction: "/settings/telegram/cancel", class: "delete-btn" }, i18n.telegramCancel)
+              )
+            : telegramLogin && telegramLogin.step === "password"
+              ? form(
+                  { action: "/settings/telegram/password", method: "POST" },
+                  br(),
+                  p(i18n.telegramPasswordHelp),
+                  input({ type: "password", id: "telegram_password", name: "password", autocomplete: "off", required: true }), br(), br(),
+                  button({ type: "submit" }, i18n.telegramVerify),
+                  " ",
+                  button({ type: "submit", formaction: "/settings/telegram/cancel", class: "delete-btn" }, i18n.telegramCancel)
+                )
+              : form(
+                  { action: "/settings/telegram/start", method: "POST" },
+                  label({ for: "telegram_api_id" }, i18n.telegramApiIdLabel), br(),
+                  input({ type: "text", id: "telegram_api_id", name: "apiId", inputmode: "numeric", placeholder: "12345678", required: true }), br(),
+                  label({ for: "telegram_api_hash" }, i18n.fediverseTokenLabel), br(),
+                  input({ type: "password", id: "telegram_api_hash", name: "apiHash", autocomplete: "off", placeholder: "0123456789abcdef0123456789abcdef", required: true }), br(),
+                  label({ for: "telegram_phone" }, i18n.telegramPhoneLabel), br(),
+                  input({ type: "tel", id: "telegram_phone", name: "phone", placeholder: "+34 60000000", required: true }), br(), br(),
+                  button({ type: "submit" }, i18n.fediverseConnect)
+                )
+      )
+    ),
+    section({ id: "peertube" },
+      div({ class: "tags-header" },
+        h2("PeerTube"),
+        peertubeAccount
+          ? form(
+              { action: "/settings/peertube/disconnect", method: "POST" },
+              p(`${i18n.fediverseConnectedAs}: `, a({ href: peertubeAccount.channelUrl || peertubeAccount.profileUrl, target: "_blank", rel: "noopener noreferrer" }, peertubeAccount.handle)),
+              button({ type: "submit" }, i18n.fediverseDisconnect)
+            )
+          : form(
+              { action: "/settings/peertube", method: "POST" },
+              label({ for: "peertube_instance" }, i18n.fediverseInstanceLabel), br(),
+              input({ type: "text", id: "peertube_instance", name: "instance", placeholder: "peertube.example.org", required: true }), br(),
+              label({ for: "peertube_username" }, i18n.peertubeUsernameLabel), br(),
+              input({ type: "text", id: "peertube_username", name: "username", autocomplete: "off", required: true }), br(),
+              label({ for: "peertube_password" }, i18n.peertubePasswordLabel), br(),
+              input({ type: "password", id: "peertube_password", name: "password", autocomplete: "off", required: true }), br(),
+              button({ type: "submit" }, i18n.fediverseConnect)
+            )
+      )
+    )
+    ,
+    section({ id: "nextcloud" },
+      div({ class: "tags-header" },
+        h2("Nextcloud"),
+        nextcloudAccount
+          ? form(
+              { action: "/settings/nextcloud/disconnect", method: "POST" },
+              p(`${i18n.fediverseConnectedAs}: `, a({ href: nextcloudAccount.server, target: "_blank", rel: "noopener noreferrer" }, `${nextcloudAccount.user}@${String(nextcloudAccount.server).replace(/^https?:\/\//, "")}`), ` (${nextcloudAccount.folder})`),
+              button({ type: "submit" }, i18n.fediverseDisconnect)
+            )
+          : form(
+              { action: "/settings/nextcloud", method: "POST" },
+              label({ for: "nextcloud_server" }, i18n.nextcloudServerLabel), br(),
+              input({ type: "text", id: "nextcloud_server", name: "server", placeholder: "cloud.example.org", required: true }), br(),
+              label({ for: "nextcloud_user" }, i18n.nextcloudUserLabel), br(),
+              input({ type: "text", id: "nextcloud_user", name: "user", autocomplete: "off", required: true }), br(),
+              label({ for: "nextcloud_password" }, i18n.peertubePasswordLabel), br(),
+              input({ type: "password", id: "nextcloud_password", name: "password", autocomplete: "off", required: true }), br(),
+              label({ for: "nextcloud_folder" }, i18n.nextcloudFolderLabel), br(),
+              input({ type: "text", id: "nextcloud_folder", name: "folder", placeholder: "Oasis" }), br(),
+              button({ type: "submit" }, i18n.fediverseConnect)
+            )
+      )
+    )
+  ] : [];
+  return template(
+    i18n.settings,
+    section(
+      div({ class: "tags-header module-header-line" },
+        h2(i18n.settings),
+        p(i18n.settingsDescription)
+      ),
+      div({ class: "mode-buttons-row" },
+        a({ class: filter === 'oasis' ? 'filter-btn active' : 'filter-btn', href: '/settings?filter=oasis' }, String(i18n.linkBoxOasis).toUpperCase()),
+        modOn('fediverse') ? a({ class: filter === 'multiverse' ? 'filter-btn active' : 'filter-btn', href: '/settings?filter=multiverse' }, String(i18n.multiverse).toUpperCase()) : null
+      )
+    ),
+    ...(filter === 'multiverse' ? multiverseParts : oasisParts)
   );
 };
 

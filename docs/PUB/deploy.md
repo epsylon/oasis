@@ -281,8 +281,16 @@ Inhabitants call each other from **Phone**. When two of them cannot reach each o
 
 **Rooms** meet on the PUB their creator was connected to when the room was opened. The PUB forwards what each participant sends to the others in the room without being able to read it: the room key stays among the participants. The PUB hosts rooms opened by inhabitants it follows.
 
+**Video** travels the same way, as a stream of its own next to the voice: the PUB forwards the encrypted pictures of every camera that is on to everyone else in the room, and caps how much video one participant can push per second so a single camera cannot flood the others. Cameras cost upload bandwidth on the PUB in proportion to how many are on and how many are inside.
+
 Nothing has to be installed or opened: the relay runs inside Oasis over the connections the PUB already has, and it is on unless `oasis-config.json` says otherwise. To stop relaying calls and hosting rooms, set it off there:
 
 ```json
 "phone": { "visibility": "whole", "dnd": false, "relay": false }
+```
+
+To keep relaying voice but not video (rooms on this PUB stay audio-only and calls through it carry no pictures):
+
+```json
+"phone": { "visibility": "whole", "dnd": false, "relay": true, "video": false }
 ```

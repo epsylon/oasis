@@ -49,3 +49,34 @@ describe('clearnet: two items with the same title never share a public link', (t
     ok(clearnetSlugFor('Assembly', '%e1mnopqr.sha256') !== clearnetSlugFor('Assembly', '%e2stuvwx.sha256'));
   });
 });
+
+describe('clearnet: a tribe page can be narrowed by kind and by author', (t) => {
+  t('the kind and author filters combine and keep each other in their links', async () => {
+    const { clearnetTribeView } = require('../../../src/views/tribes_view');
+    const A = '@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=.ed25519';
+    const B = '@bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb=.ed25519';
+    const items = [
+      { id: '%f1.sha256', contentType: 'forum', title: 'Thread by Alice', author: A },
+      { id: '%f2.sha256', contentType: 'forum', title: 'Thread by Bob', author: B },
+      { id: '%e1.sha256', contentType: 'event', title: 'Picnic by Bob', author: B },
+      { id: '%b1.sha256', contentType: 'blog', title: 'Blog by Alice', description: 'first lines', author: A, href: '/c/blog/blog-by-alice-b1' }
+    ];
+    const names = { [A]: 'Alice', [B]: 'Bob' };
+    const render = (opts) => clearnetTribeView({ tribe: { title: 'Seeds' }, items, names, slug: 'seeds-abc', ...opts });
+    const all = String(await render({}));
+    ok(all.includes('Thread by Alice') && all.includes('Picnic by Bob'), 'everything is listed by default');
+    ok(all.includes('href="/c/tribe/seeds-abc?type=forum"') && all.includes('href="/c/tribe/seeds-abc?type=blog"'), 'kinds are offered as links, blogs of the members among them');
+    ok(all.includes('<a href="/c/blog/blog-by-alice-b1">Blog by Alice</a>'), 'a blog links to its own public page');
+    const blogs = String(await render({ filterType: 'blog' }));
+    ok(blogs.includes('Blog by Alice') && !blogs.includes('Thread by Alice'), 'the blog filter keeps only blogs');
+    ok(all.includes(`?author=${encodeURIComponent(B)}`), 'authors are offered as links');
+    const forum = String(await render({ filterType: 'forum' }));
+    ok(forum.includes('Thread by Alice') && forum.includes('Thread by Bob') && !forum.includes('Picnic by Bob'), 'the kind filter keeps only that kind');
+    ok(forum.includes('?type=forum&amp;author='), 'author links keep the chosen kind');
+    const bob = String(await render({ filterAuthor: B }));
+    ok(!bob.includes('Thread by Alice') && !bob.includes('Blog by Alice') && bob.includes('Thread by Bob') && bob.includes('Picnic by Bob'), 'the author filter keeps only that author');
+    const bobForum = String(await render({ filterType: 'forum', filterAuthor: B }));
+    ok(!bobForum.includes('Thread by Alice') && bobForum.includes('Thread by Bob') && !bobForum.includes('Picnic by Bob'), 'both filters combine');
+    eq((all.match(/<form[^>]*method="POST"/g) || []).length, 0, 'the page stays read-only');
+  });
+});

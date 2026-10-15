@@ -449,3 +449,33 @@ if (fs.existsSync(historyStreamPath)) {
 } else {
   log('ssb-db2 history stream patch skipped: file not found');
 }
+
+// === Patch ssb-invite-client (a pub that already follows us is not a failed invite: keep the pub and finish joining) ===
+const inviteClientPath = path.resolve(__dirname, '../src/server/node_modules/ssb-invite-client/lib/index.js');
+if (fs.existsSync(inviteClientPath)) {
+  const data = fs.readFileSync(inviteClientPath, 'utf8');
+  const useFrom = `            const [e2] = await run(rpc.invite.use)({ feed: this.ssb.id });
+            if (e2)
+                return cb(clarify(e2, 'Invite not accepted by the pub'));
+            if (shouldPublish) {`;
+  const useTo = `            const [e2] = await run(rpc.invite.use)({ feed: this.ssb.id });
+            const knownToPub = !!e2 && /already following/i.test(String((e2 && e2.message) || e2));
+            if (e2 && !knownToPub)
+                return cb(clarify(e2, 'Invite not accepted by the pub'));
+            let followsPub = false;
+            if (knownToPub && this.ssb.friends && typeof this.ssb.friends.isFollowing === 'function') {
+                const [, yes] = await run(this.ssb.friends.isFollowing)({ source: this.ssb.id, dest: parsed.key });
+                followsPub = !!yes;
+            }
+            if (shouldPublish && !followsPub) {`;
+  if (data.includes('knownToPub')) {
+    log('ssb-invite-client already patched');
+  } else if (data.includes(useFrom)) {
+    fs.writeFileSync(inviteClientPath, data.replace(useFrom, useTo));
+    log('Patched ssb-invite-client so a pub that already follows us still gets joined');
+  } else {
+    log('ssb-invite-client patch skipped: unexpected lib/index.js layout');
+  }
+} else {
+  log('ssb-invite-client patch skipped: file not found');
+}

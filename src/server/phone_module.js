@@ -55,6 +55,16 @@ const K_CTRL = 0;
 const K_AUDIO = 1;
 const K_DATA = 2;
 const K_KEY = 3;
+const K_VIDEO = 4;
+const VIDEO_CHUNK = 8 * 1024;
+const VIDEO_PAD = 1024;
+const VIDEO_HDR = 6;
+const VIDEO_FRAME_MAX = 256 * 1024;
+const VIDEO_FPS = 8;
+const VIDEO_SIZE = { w: 320, h: 240 };
+const VIDEO_HOLD_MS = 3000;
+const ROOM_VIDEO_FRAME_MAX = 10 * 1024;
+const ROOM_VIDEO_BYTES_PER_S = 200 * 1024;
 const VAD_MIN = 200;
 const VAD_FLOOR_MAX = 1500;
 const VAD_HANG = 15;
@@ -166,6 +176,80 @@ const systemAudio = () => {
 };
 let audioFactory = systemAudio;
 
+const JPEG_SOI = Buffer.from([0xff, 0xd8, 0xff]);
+const JPEG_EOI = Buffer.from([0xff, 0xd9]);
+const jpegSplitter = (onJpeg) => {
+  let pending = Buffer.alloc(0);
+  return (chunk) => {
+    pending = pending.length ? Buffer.concat([pending, chunk]) : Buffer.from(chunk);
+    for (;;) {
+      const start = pending.indexOf(JPEG_SOI);
+      if (start < 0) { pending = Buffer.alloc(0); return; }
+      const end = pending.indexOf(JPEG_EOI, start + 3);
+      if (end < 0) { pending = pending.length - start > VIDEO_FRAME_MAX ? Buffer.alloc(0) : pending.subarray(start); return; }
+      onJpeg(Buffer.from(pending.subarray(start, end + 2)));
+      pending = pending.subarray(end + 2);
+    }
+  };
+};
+const VIDEO_BACKENDS = [
+  { bin: 'v4l2-ctl', args: (dev) => ['--device', dev, `--set-fmt-video=width=${VIDEO_SIZE.w},height=${VIDEO_SIZE.h},pixelformat=MJPG`, `--set-parm=${VIDEO_FPS}`, '--stream-mmap', '--stream-to=-'] },
+  { bin: 'gst-launch-1.0', args: (dev) => ['-q', 'v4l2src', `device=${dev}`, '!', `video/x-raw,width=${VIDEO_SIZE.w},height=${VIDEO_SIZE.h}`, '!', 'videorate', '!', `video/x-raw,framerate=${VIDEO_FPS}/1`, '!', 'videoconvert', '!', 'jpegenc', 'quality=60', '!', 'fdsink', 'fd=1'] },
+  { bin: 'ffmpeg', args: (dev) => ['-loglevel', 'quiet', '-f', 'v4l2', '-video_size', `${VIDEO_SIZE.w}x${VIDEO_SIZE.h}`, '-i', dev, '-vf', `fps=${VIDEO_FPS}`, '-c:v', 'mjpeg', '-q:v', '8', '-f', 'image2pipe', '-'] }
+];
+const videoDevices = () => {
+  try { return fs.readdirSync('/dev').filter(n => /^video\d+$/.test(n)).sort((a, b) => Number(a.slice(5)) - Number(b.slice(5))).map(n => `/dev/${n}`); } catch (_) { return []; }
+};
+const systemVideo = (server, device) => {
+  const backend = VIDEO_BACKENDS.find(b => onPath(b.bin));
+  const dev = device || videoDevices()[0];
+  if (!backend || !dev) return null;
+  return {
+    capture(onJpeg) {
+      const p = spawn(backend.bin, backend.args(dev), { stdio: ['ignore', 'pipe', 'ignore'] });
+      p.on('error', () => {});
+      p.stdout.on('data', jpegSplitter(onJpeg));
+      return { stop() { try { p.kill('SIGTERM'); } catch (_) {} } };
+    }
+  };
+};
+let videoFactory = systemVideo;
+
+const videoChunks = (seq, jpeg) => {
+  const n = Math.ceil(jpeg.length / VIDEO_CHUNK);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const data = jpeg.subarray(i * VIDEO_CHUNK, (i + 1) * VIDEO_CHUNK);
+    const plain = Buffer.alloc(Math.ceil((VIDEO_HDR + data.length) / VIDEO_PAD) * VIDEO_PAD);
+    plain.writeUInt16BE(seq & 0xffff, 0);
+    plain[2] = i;
+    plain[3] = n;
+    plain.writeUInt16BE(data.length, 4);
+    data.copy(plain, VIDEO_HDR);
+    nodeCrypto.randomFillSync(plain, VIDEO_HDR + data.length);
+    out.push(plain);
+  }
+  return out;
+};
+const videoOff = () => { const plain = Buffer.alloc(VIDEO_PAD); nodeCrypto.randomFillSync(plain, VIDEO_HDR); return plain; };
+const videoAssembler = () => {
+  let cur = null;
+  return (plain) => {
+    if (!Buffer.isBuffer(plain) || plain.length < VIDEO_HDR) return null;
+    const seq = plain.readUInt16BE(0), idx = plain[2], n = plain[3], len = plain.readUInt16BE(4);
+    if (!n) { cur = null; return 'off'; }
+    if (idx >= n || VIDEO_HDR + len > plain.length || n * VIDEO_CHUNK > VIDEO_FRAME_MAX) return null;
+    if (!cur || cur.seq !== seq) cur = { seq, n, parts: new Array(n), got: 0 };
+    if (cur.parts[idx]) return null;
+    cur.parts[idx] = Buffer.from(plain.subarray(VIDEO_HDR, VIDEO_HDR + len));
+    cur.got++;
+    if (cur.got < n) return null;
+    const jpeg = Buffer.concat(cur.parts);
+    cur = null;
+    return jpeg;
+  };
+};
+
 const BEEP_MS = 700;
 const playBeep = (audio, count = 1) => {
   const on = (count > 1 ? 150 : BEEP_MS) * RATE / 1000;
@@ -238,6 +322,8 @@ const clampPcm = (acc) => {
 
 let OpusScript = null;
 try { OpusScript = require('opusscript'); } catch (_) {}
+let sharpLib = null;
+try { sharpLib = require('./node_modules/sharp'); } catch (_) {}
 const OPUS_TAG = 0xf0;
 const OPUS_BITRATE = 16000;
 const makeEncoder = (codec) => {
@@ -298,7 +384,7 @@ const ephKey = (v) => {
 const deriveKeys = (mySecret, theirPublic, callId, callerPk, calleePk) => {
   const shared = sodium.crypto_scalarmult(mySecret, theirPublic);
   const label = (l) => sodium.crypto_hash_sha256(Buffer.concat([Buffer.from(shared), Buffer.from(l), Buffer.from(callId, 'hex'), callerPk, calleePk]));
-  return { a2b: label('oasis-voices-a2b'), b2a: label('oasis-voices-b2a') };
+  return { a2b: label('oasis-voices-a2b'), b2a: label('oasis-voices-b2a'), va2b: label('oasis-video-a2b'), vb2a: label('oasis-video-b2a') };
 };
 const sealer = (key) => {
   const prefix = nodeCrypto.randomBytes(16);
@@ -331,15 +417,15 @@ module.exports = {
   name: 'phone',
   version: '1.0.0',
   manifest: {
-    ring: 'async', answer: 'async', hangup: 'async', audio: 'duplex', relay: 'async', relayAudio: 'duplex',
-    call: 'async', accept: 'async', reject: 'async', end: 'async', mute: 'async', silence: 'async', dismiss: 'async',
+    ring: 'async', answer: 'async', hangup: 'async', audio: 'duplex', relay: 'async', relayAudio: 'duplex', video: 'duplex', relayVideo: 'duplex',
+    call: 'async', accept: 'async', reject: 'async', end: 'async', mute: 'async', silence: 'async', dismiss: 'async', camera: 'async', videoFrames: 'source',
     recordStop: 'async', recordCancel: 'async',
     roomHub: 'duplex', roomInfo: 'async', roomAdmits: 'async', roomJoin: 'async', roomLeave: 'async', roomMute: 'async', roomHand: 'async', roomCount: 'async',
     roomRecStart: 'async', roomRecStop: 'async', roomNotify: 'async', roomClearEvents: 'async',
     roomState: 'sync', roomToken: 'sync', roomHubFor: 'async',
     state: 'sync', available: 'sync', pubs: 'sync', events: 'source'
   },
-  permissions: { anonymous: { allow: ['ring', 'answer', 'hangup', 'audio', 'relay', 'relayAudio', 'roomHub', 'roomInfo', 'roomAdmits'] } },
+  permissions: { anonymous: { allow: ['ring', 'answer', 'hangup', 'audio', 'relay', 'relayAudio', 'video', 'relayVideo', 'roomHub', 'roomInfo', 'roomAdmits'] } },
   init(server, config) {
     const keys = config.keys;
     const audio = audioFactory(server);
@@ -366,8 +452,34 @@ module.exports = {
     const pamWarnMs = Number(policy().pamWarnMs) > 0 ? Number(policy().pamWarnMs) : PAM_WARN_MS;
     const roomMax = Number(policy().roomMax) > 0 ? Math.min(ROOM_MAX, Number(policy().roomMax)) : ROOM_MAX;
     const roomQuietAt = Number(policy().roomQuietAt) > 0 ? Number(policy().roomQuietAt) : ROOM_QUIET_AT;
-    const codecsOffered = () => (OpusScript && policy().opus !== false ? ['opus'] : []);
+    const video = videoFactory(server, policy().videoDevice);
+    const videoAllowed = () => policy().video !== false;
+    const videoOn = () => !!video && videoAllowed();
+    const codecsOffered = () => [...(OpusScript && policy().opus !== false ? ['opus'] : []), ...(videoOn() ? ['mjpeg'] : [])];
     const pickCodec = (offer) => (codecsOffered().includes('opus') && Array.isArray(offer) && offer.includes('opus') ? 'opus' : 'ulaw');
+    const pickVideo = (offer, mine = false) => (videoAllowed() && ((Array.isArray(offer) && offer.includes('mjpeg')) || mine) ? 'mjpeg' : null);
+    const frameWatchers = new Map();
+    const publishFrame = (target, jpeg) => { const set = frameWatchers.get(target); if (set) for (const p of set) p.push(jpeg); };
+    const endFrames = (target) => {
+      const set = frameWatchers.get(target);
+      if (!set) return;
+      frameWatchers.delete(target);
+      for (const p of set) { try { p.end(); } catch (_) {} }
+    };
+    let cam = null;
+    let camSeq = 0;
+    const startCam = (onJpeg) => {
+      if (cam || !videoOn()) return false;
+      const cap = video.capture((jpeg) => {
+        if (!cam || jpeg.length > VIDEO_FRAME_MAX) return;
+        camSeq = (camSeq + 1) & 0xffff;
+        publishFrame('me', jpeg);
+        onJpeg(jpeg, camSeq);
+      });
+      cam = { stop() { cap.stop(); } };
+      return true;
+    };
+    const stopCam = () => { if (!cam) return; const c = cam; cam = null; c.stop(); endFrames('me'); };
     const relation = (method, source, dest, done) => {
       const friends = server.friends;
       if (!friends || typeof friends[method] !== 'function') return done(false);
@@ -461,6 +573,7 @@ module.exports = {
       startedAt: call.startedAt, answeredAt: call.answeredAt || 0, ringUntil: call.ringUntil || 0,
       muted: !!call.muted, silenced: silenced.has(call.peer), recordingStartedAt: call.recordingStartedAt || 0,
       reached: call.group ? call.legs.some(l => l.reached) : !!call.reached, why: call.why || '', codec: call.codec || '',
+      video: !!call.video, cam: !!call.cam, peerCam: !!call.peerCam, videoAvailable: videoOn(),
       ...(call.group ? { group: true, peers: call.legs.map(l => ({ id: l.peer, phase: l.phase, reached: !!l.reached, silenced: silenced.has(l.peer) })) } : {})
     } : null;
     const changed = () => emit({ type: 'state', state: snapshot() });
@@ -500,6 +613,7 @@ module.exports = {
       stopTone(c);
       stopRecorder(c);
       if (c.media) c.media.stop();
+      stopCallVideo(c);
       if (c.group) {
         for (const leg of c.legs) { clearTimeout(leg.timer); if (leg.out) { try { leg.out.end(); } catch (_) {} } }
         if (c.mixer) c.mixer.stop();
@@ -761,6 +875,7 @@ module.exports = {
         }
       });
       const incoming = [];
+      c.audioLag = () => incoming.length * FRAME_MS;
       const pace = setInterval(() => {
         if (call !== c) return;
         if (incoming.length > MIX_QUEUE) incoming.splice(0, incoming.length - MIX_QUEUE);
@@ -778,6 +893,42 @@ module.exports = {
       pull(duplex.source, sink);
       return null;
     };
+
+    const peerFrameSeen = (c) => {
+      clearTimeout(c.peerTimer);
+      c.peerTimer = setTimeout(() => { if (call === c && c.peerCam) { c.peerCam = false; endFrames(c.peer); changed(); } }, VIDEO_HOLD_MS);
+      if (c.peerTimer.unref) c.peerTimer.unref();
+      if (!c.peerCam) { c.peerCam = true; changed(); }
+    };
+    const startVideo = (c, duplex, role) => {
+      const seal = sealer(role === 'out' ? c.keys.va2b : c.keys.vb2a);
+      const open = opener(role === 'out' ? c.keys.vb2a : c.keys.va2b);
+      const out = Pushable(() => {});
+      const assemble = videoAssembler();
+      const sink = pull.drain((frame) => {
+        const plain = open(Buffer.isBuffer(frame) ? frame : Buffer.from(frame || []));
+        if (!plain || call !== c) return;
+        const got = assemble(plain);
+        if (got === 'off') { clearTimeout(c.peerTimer); if (c.peerCam) { c.peerCam = false; endFrames(c.peer); changed(); } return; }
+        if (!got) return;
+        peerFrameSeen(c);
+        const hold = setTimeout(() => { if (call === c && c.peerCam) publishFrame(c.peer, got); }, typeof c.audioLag === 'function' ? c.audioLag() : 0);
+        if (hold.unref) hold.unref();
+      }, () => { if (call === c) stopCallVideo(c); });
+      c.vmedia = { out, seal, stop() { try { out.end(); } catch (_) {} } };
+      if (!duplex) return { source: out, sink };
+      pull(out, duplex.sink);
+      pull(duplex.source, sink);
+      return null;
+    };
+    const stopCallVideo = (c) => {
+      clearTimeout(c.peerTimer);
+      if (c.cam) { c.cam = false; stopCam(); }
+      if (c.vmedia) { c.vmedia.stop(); c.vmedia = null; }
+      endFrames(c.peer);
+      c.peerCam = false;
+    };
+    const sendCallVideo = (c, plain) => { if (c.vmedia) c.vmedia.out.push(c.vmedia.seal(plain)); };
 
     const deliver = (m, frame, droppable) => {
       if (droppable && m.sent - m.acked > HUB_LAG_MAX) return;
@@ -813,8 +964,18 @@ module.exports = {
       };
       m.kick = () => { m.leave(); try { out.end(); } catch (_) {} };
       m.handle = (frame) => {
-        if (r.members.get(slot) !== m || frame.length < 2 || frame.length > ROOM_FRAME_MAX) return;
+        if (r.members.get(slot) !== m || frame.length < 2) return;
         const kind = frame[0];
+        if (kind === K_VIDEO) {
+          if (frame.length > ROOM_VIDEO_FRAME_MAX || policy().video === false) return;
+          const at = Date.now();
+          if (at - (m.vwindowAt || 0) >= 1000) { m.vwindowAt = at; m.vbytes = 0; }
+          m.vbytes = (m.vbytes || 0) + frame.length;
+          if (m.vbytes > ROOM_VIDEO_BYTES_PER_S) return;
+          hubBroadcast(r, slot, Buffer.concat([Buffer.from([K_VIDEO, slot]), frame.subarray(1)]), true);
+          return;
+        }
+        if (frame.length > ROOM_FRAME_MAX) return;
         if (kind === K_CTRL) {
           let msg = null;
           try { msg = JSON.parse(frame.subarray(1).toString('utf8')); } catch (_) {}
@@ -834,7 +995,7 @@ module.exports = {
         }
       };
       r.members.set(slot, m);
-      deliver(m, ctrlFrame({ t: 'hello', slot, peers, max: roomMax }), false);
+      deliver(m, ctrlFrame({ t: 'hello', slot, peers, max: roomMax, video: policy().video !== false }), false);
       hubBroadcast(r, slot, ctrlFrame({ t: 'join', slot, id }), false);
       return m;
     };
@@ -870,9 +1031,10 @@ module.exports = {
       return {
         rid: r.rid, ref: r.ref, title: r.title, phase: r.phase, joinedAt: r.joinedAt, muted: !!r.muted, hand: !!r.hand, handSince: r.hand ? r.handAt : 0,
         secure: !!r.kid, count: r.peers.size + 1, max: r.max, speaking: now - r.sentAt < 1000,
+        cam: !!r.cam, videoAvailable: videoOn() && r.hubVideo === true, grid: !!sharpLib, gridOrder: gridIds(r),
         notify: !!r.notify, recording: !!r.rec, recordingSince: r.rec ? r.rec.at : 0, recordingBy: [...r.recPeers],
         events: r.notify ? r.events.slice(-ROOM_EVENTS_MAX) : [],
-        peers: [...r.peers.values()].map(p => ({ id: p.id, speaking: now - p.heardAt < 1000, muted: now - p.mutedAt < MUTE_TTL_MS, hand: now - (p.handBeat || 0) < MUTE_TTL_MS, handSince: p.handSince || 0, silenced: silenced.has(p.id), recording: r.recPeers.has(p.id) }))
+        peers: [...r.peers.values()].map(p => ({ id: p.id, speaking: now - p.heardAt < 1000, muted: now - p.mutedAt < MUTE_TTL_MS, hand: now - (p.handBeat || 0) < MUTE_TTL_MS, handSince: p.handSince || 0, silenced: silenced.has(p.id), recording: r.recPeers.has(p.id), cam: now - (p.frameAt || 0) < VIDEO_HOLD_MS }))
       };
     };
     const roomChanged = () => emit({ type: 'room', room: roomSnapshot() });
@@ -935,12 +1097,13 @@ module.exports = {
       if (sealed) r.out.push(Buffer.concat([Buffer.from([K_KEY, slot]), Buffer.from(sealed)]));
     };
     const peerEntry = (id) => ({ id, queue: [], openers: new Map(), heardAt: 0, mutedAt: 0, dec: null, opus: false, greeted: false });
-    const dropPeer = (r, slot) => { const p = r.peers.get(slot); if (p && p.dec) p.dec.free(); r.peers.delete(slot); };
+    const dropPeer = (r, slot) => { const p = r.peers.get(slot); if (p) { if (p.dec) p.dec.free(); clearTimeout(p.vtimer); endFrames(p.id); gridNote(p.id, null); } r.peers.delete(slot); };
     const sendCodecs = (r) => { if (r.out && r.sealer && codecsOffered().length) sendRoomData(r, { t: 'codecs', codecs: codecsOffered() }); };
     const onRoomCtrl = (r, msg) => {
       if (msg.t === 'hello' && r.slot === null) {
         r.slot = Number(msg.slot);
         r.max = Number(msg.max) > 0 ? Number(msg.max) : ROOM_MAX;
+        r.hubVideo = msg.video === true;
         for (const p of Array.isArray(msg.peers) ? msg.peers : []) {
           if (!p || !isFeedId(p.id)) continue;
           r.peers.set(Number(p.slot), peerEntry(p.id));
@@ -1069,6 +1232,64 @@ module.exports = {
       p.mutedAt = msg.on ? Date.now() : 0;
       noteMute(r, p, !!msg.on, msg.beacon === true);
     };
+    const gridIds = (r) => {
+      const now = Date.now();
+      const ids = r.cam ? [server.id] : [];
+      for (const slot of r.order) { const p = r.peers.get(slot); if (p && now - (p.frameAt || 0) < VIDEO_HOLD_MS) ids.push(p.id); }
+      return ids;
+    };
+    const gridFrames = new Map();
+    let gridBusy = false;
+    let gridDirty = false;
+    let gridTimer = null;
+    const composeGrid = async (r) => {
+      const ids = gridIds(r).filter(id => gridFrames.has(id));
+      if (!ids.length) return;
+      const cols = Math.ceil(Math.sqrt(ids.length));
+      const rows = Math.ceil(ids.length / cols);
+      const tiles = [];
+      for (let i = 0; i < ids.length; i++) {
+        try {
+          let tile = sharpLib(gridFrames.get(ids[i])).resize(VIDEO_SIZE.w, VIDEO_SIZE.h, { fit: 'cover' });
+          if (ids[i] === server.id) tile = tile.flop();
+          tiles.push({ input: await tile.toBuffer(), left: (i % cols) * VIDEO_SIZE.w, top: Math.floor(i / cols) * VIDEO_SIZE.h });
+        } catch (_) {}
+      }
+      if (!tiles.length) return;
+      const jpeg = await sharpLib({ create: { width: cols * VIDEO_SIZE.w, height: rows * VIDEO_SIZE.h, channels: 3, background: '#000000' } }).composite(tiles).jpeg({ quality: 70 }).toBuffer();
+      if (room === r) publishFrame('grid', jpeg);
+    };
+    const gridTick = () => {
+      const r = room;
+      if (!r || !sharpLib || gridBusy || !gridDirty || !frameWatchers.has('grid')) return;
+      gridDirty = false;
+      gridBusy = true;
+      composeGrid(r).catch(() => {}).then(() => { gridBusy = false; });
+    };
+    const gridNote = (id, jpeg) => { if (jpeg) gridFrames.set(id, jpeg); else gridFrames.delete(id); gridDirty = true; };
+    const stopGrid = () => { clearInterval(gridTimer); gridTimer = null; gridFrames.clear(); gridDirty = false; endFrames('grid'); };
+    const onRoomVideo = (r, slot, payload) => {
+      const p = r.peers.get(slot);
+      if (!videoAllowed()) return;
+      const plain = openRoomFrame(r, p, payload);
+      if (!plain) return;
+      if (!p.vasm) p.vasm = videoAssembler();
+      const got = p.vasm(plain);
+      if (got === 'off') { clearTimeout(p.vtimer); if (p.frameAt) { p.frameAt = 0; endFrames(p.id); gridNote(p.id, null); roomChanged(); } return; }
+      if (!got) return;
+      const fresh = !(Date.now() - (p.frameAt || 0) < VIDEO_HOLD_MS);
+      p.frameAt = Date.now();
+      clearTimeout(p.vtimer);
+      p.vtimer = setTimeout(() => { if (room === r) { endFrames(p.id); gridNote(p.id, null); roomChanged(); } }, VIDEO_HOLD_MS);
+      if (p.vtimer.unref) p.vtimer.unref();
+      const hold = setTimeout(() => { if (room !== r || !(Date.now() - (p.frameAt || 0) < VIDEO_HOLD_MS)) return; publishFrame(p.id, got); gridNote(p.id, got); }, p.queue.length * FRAME_MS);
+      if (hold.unref) hold.unref();
+      if (fresh) roomChanged();
+    };
+    const sendRoomVideo = (r, plain) => {
+      if (!r.sealer || !r.hubVideo) return;
+      r.out.push(Buffer.concat([Buffer.from([K_VIDEO]), Buffer.from(r.kid, 'hex'), r.sealer(plain)]));
+    };
     const onRoomFrame = (r, frame) => {
       if (room !== r) return;
       const buf = Buffer.isBuffer(frame) ? frame : Buffer.from(frame || []);
@@ -1083,6 +1304,7 @@ module.exports = {
       }
       if (buf.length < 3) return;
       if (buf[0] === K_AUDIO) onRoomAudio(r, buf[1], buf.subarray(2));
+      else if (buf[0] === K_VIDEO) onRoomVideo(r, buf[1], buf.subarray(2));
       else if (buf[0] === K_DATA) onRoomData(r, buf[1], buf.subarray(2));
       else if (buf[0] === K_KEY) onRoomKey(r, buf[1], buf.subarray(2));
     };
@@ -1113,7 +1335,7 @@ module.exports = {
           if (r.hand && r.sealer && Date.now() - (r.handBeaconAt || 0) >= MUTE_BEACON_MS) { sendRoomData(r, { t: 'hand', on: true, at: r.handAt, beacon: true }); r.handBeaconAt = Date.now(); }
           if (r.muted || !r.sealer || !voiced) continue;
           r.sentAt = Date.now();
-          const opus = r.peers.size > 0 && [...r.peers.values()].every(p => p.opus);
+          const opus = codecsOffered().includes('opus') && r.peers.size > 0 && [...r.peers.values()].every(p => p.opus);
           if (opus && !r.enc) r.enc = makeEncoder('opus');
           r.out.push(Buffer.concat([Buffer.from([K_AUDIO]), Buffer.from(r.kid, 'hex'), r.sealer(opus ? r.enc.encode(mic) : ulawEncode(mic))]));
         }
@@ -1131,6 +1353,9 @@ module.exports = {
       stopRoomRec(r);
       room = null;
       clearTimeout(r.timer);
+      if (r.cam) { r.cam = false; stopCam(); }
+      for (const p of r.peers.values()) { clearTimeout(p.vtimer); endFrames(p.id); }
+      stopGrid();
       if (r.media) r.media.stop();
       if (r.enc) { r.enc.free(); r.enc = null; }
       for (const p of r.peers.values()) if (p.dec) p.dec.free();
@@ -1145,7 +1370,7 @@ module.exports = {
     };
 
     if (server.close && typeof server.close.hook === 'function') {
-      server.close.hook(function (fn, args) { finish('ended'); leaveRoom(room, 'ended'); return fn.apply(this, args); });
+      server.close.hook(function (fn, args) { finish('ended'); leaveRoom(room, 'ended'); stopCam(); return fn.apply(this, args); });
     }
 
     return {
@@ -1180,7 +1405,7 @@ module.exports = {
             return;
           }
           const startedAt = Date.now();
-          call = { id: callId, peer: from, dir: 'in', phase: 'incoming', startedAt, ringUntil: startedAt + ringMs, remotePk, via: directRings.has(callId) ? null : via, codec: pickCodec(req.codecs) };
+          call = { id: callId, peer: from, dir: 'in', phase: 'incoming', startedAt, ringUntil: startedAt + ringMs, remotePk, via: directRings.has(callId) ? null : via, codec: pickCodec(req.codecs), video: pickVideo(req.codecs, videoOn()) };
           call.tone = startTone(audio, 'ring');
           call.timer = setTimeout(() => { if (call && call.id === callId && call.phase === 'incoming') finish('missed'); }, ringMs);
           changed();
@@ -1201,6 +1426,7 @@ module.exports = {
         if (!path) return cb(new Error('no-connection'));
         c.keys = deriveKeys(c.eph.secretKey, calleePk, c.id, Buffer.from(c.eph.publicKey), calleePk);
         c.codec = pickCodec([req.codec]);
+        c.video = pickVideo([req.video]);
         clearTimeout(c.timer);
         stopTone(c);
         c.via = via;
@@ -1210,6 +1436,7 @@ module.exports = {
         changed();
         const quiet = () => {};
         startMedia(c, via ? path.phone.relayAudio({ to: c.peer, callId: c.id }, quiet) : path.phone.audio({ callId: c.id }, quiet), 'out');
+        if (c.video) startVideo(c, via ? path.phone.relayVideo({ to: c.peer, callId: c.id }, quiet) : path.phone.video({ callId: c.id }, quiet), 'out');
       },
       hangup(raw, cb) {
         const reply = typeof cb === 'function' ? cb : () => {};
@@ -1287,6 +1514,80 @@ module.exports = {
           : next.phone.relayAudio({ to: opts.to, callId: opts.callId, from: caller }, () => {});
         return { source: remote.source, sink: remote.sink };
       },
+      video(opts) {
+        const direct = this && this.id;
+        const from = opts && isFeedId(opts.from) ? opts.from : direct;
+        const c = call;
+        const viaOk = direct === c?.peer || (c?.via && direct === c.via);
+        if (!c || c.dir !== 'in' || !c.keys || !c.video || c.vmedia || from !== c.peer || !viaOk || !opts || opts.callId !== c.id || (c.phase !== 'connecting' && c.phase !== 'connected')) {
+          return { source: pull.error(new Error('no-call')), sink: pull.drain(null, () => {}) };
+        }
+        return startVideo(c, null, 'in');
+      },
+      relayVideo(opts) {
+        const from = this && this.id;
+        const refuse = { source: pull.error(new Error('no-route')), sink: pull.drain(null, () => {}) };
+        if (!from || !opts || !isFeedId(opts.to) || opts.to === from || policy().relay === false || policy().video === false) return refuse;
+        const forwarded = knownPubs().includes(from) && isFeedId(opts.from);
+        const caller = forwarded ? opts.from : from;
+        const r = routes.get(String(opts.callId || ''));
+        const side = r && r.sides.find(x => x.id === opts.to);
+        const direct = liveRpc(opts.to);
+        const next = direct || (side && side.via && side.via !== from ? liveRpc(side.via) : null);
+        if (!next) return refuse;
+        const remote = direct
+          ? next.phone.video({ callId: opts.callId, from: caller }, () => {})
+          : next.phone.relayVideo({ to: opts.to, callId: opts.callId, from: caller }, () => {});
+        return { source: remote.source, sink: remote.sink };
+      },
+      camera(flag, cb) {
+        const on = !!flag;
+        const c = call;
+        if (c && c.vmedia && !c.group) {
+          if (on === !!c.cam) return cb(null, snapshot());
+          if (on) {
+            if (!startCam((jpeg, seq) => { if (call === c) for (const plain of videoChunks(seq, jpeg)) sendCallVideo(c, plain); })) return cb(new Error('unavailable'));
+            c.cam = true;
+          } else {
+            c.cam = false;
+            stopCam();
+            sendCallVideo(c, videoOff());
+          }
+          changed();
+          return cb(null, snapshot());
+        }
+        const r = room;
+        if (r && r.phase === 'live') {
+          if (on === !!r.cam) return cb(null, roomSnapshot());
+          if (on) {
+            if (!r.hubVideo || !startCam((jpeg, seq) => { if (room !== r) return; gridNote(server.id, jpeg); for (const plain of videoChunks(seq, jpeg)) sendRoomVideo(r, plain); })) return cb(new Error('unavailable'));
+            r.cam = true;
+          } else {
+            r.cam = false;
+            stopCam();
+            gridNote(server.id, null);
+            sendRoomVideo(r, videoOff());
+          }
+          roomChanged();
+          return cb(null, roomSnapshot());
+        }
+        cb(new Error('no-call'));
+      },
+      videoFrames(opts) {
+        const target = String((opts && opts.peer) || '');
+        const p = Pushable(() => { const set = frameWatchers.get(target); if (set) { set.delete(p); if (!set.size) frameWatchers.delete(target); } });
+        const now = Date.now();
+        const live = target === 'me'
+          ? !!cam
+          : target === 'grid' ? !!(room && sharpLib && gridIds(room).length)
+          : call ? (call.peer === target && !!call.peerCam)
+          : room ? [...room.peers.values()].some(x => x.id === target && now - (x.frameAt || 0) < VIDEO_HOLD_MS)
+          : false;
+        if (!live) { p.end(); return p; }
+        if (!frameWatchers.has(target)) frameWatchers.set(target, new Set());
+        frameWatchers.get(target).add(p);
+        return p;
+      },
 
       call(target, opts, cb) {
         if (typeof opts === 'function') { cb = opts; opts = {}; }
@@ -1320,7 +1621,7 @@ module.exports = {
         changed();
         const ts = Date.now();
         const ephPk = b64(eph.publicKey);
-        sendVia(c.via || null, c.peer, 'answer', { callId: c.id, from: server.id, ephPk, ts, sig: signParts(keys, ['answer', c.id, ephPk, c.peer, ts]), codec: c.codec }, (err) => {
+        sendVia(c.via || null, c.peer, 'answer', { callId: c.id, from: server.id, ephPk, ts, sig: signParts(keys, ['answer', c.id, ephPk, c.peer, ts]), codec: c.codec, video: c.video }, (err) => {
           if (call !== c) return;
           if (err) return finish('failed');
           if (c.phase === 'connecting') { c.phase = 'connected'; changed(); }
@@ -1387,7 +1688,7 @@ module.exports = {
       roomHub(opts) { return hubDuplex(this && this.id, opts); },
       roomInfo(opts, cb) {
         const r = hubRooms.get(String((opts && opts.rid) || ''));
-        cb(null, { count: r ? r.members.size : 0, max: roomMax });
+        cb(null, { count: r ? r.members.size : 0, max: roomMax, video: policy().video !== false });
       },
       roomAdmits(opts, cb) {
         const from = this && this.id;
@@ -1419,6 +1720,7 @@ module.exports = {
           clearTimeout(r.timer);
           if (err) { leaveRoom(r, null); return cb(err); }
           startRoomMedia(r);
+          if (sharpLib) { gridTimer = setInterval(gridTick, Math.round(1000 / VIDEO_FPS)); if (gridTimer.unref) gridTimer.unref(); }
           roomChanged();
           cb(null, roomSnapshot());
         };
@@ -1531,6 +1833,11 @@ module.exports = {
 };
 
 module.exports.setAudioFactory = (factory) => { audioFactory = typeof factory === 'function' ? factory : systemAudio; };
+module.exports.setVideoFactory = (factory) => { videoFactory = typeof factory === 'function' ? factory : systemVideo; };
+module.exports.jpegSplitter = jpegSplitter;
+module.exports.VIDEO_CHUNK = VIDEO_CHUNK;
+module.exports.VIDEO_HOLD_MS = VIDEO_HOLD_MS;
+module.exports.ROOM_VIDEO_BYTES_PER_S = ROOM_VIDEO_BYTES_PER_S;
 module.exports.ulawEncode = ulawEncode;
 module.exports.ulawDecode = ulawDecode;
 module.exports.RING_MS = RING_MS;

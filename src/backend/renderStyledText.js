@@ -34,6 +34,10 @@ const BLOB_TORRENT_RE = /\[torrent:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha
 const BLOB_FILE_RE = /(?<!!)\[(?!(?:video|audio|pdf|torrent):)([^\]\n]{1,160})\]\(\s*(&[^)\s]+\.sha256)\s*\)/g;
 const MD_MENTION_RE = /\[@([^\]\[\n]{1,120})\]\(@?([A-Za-z0-9+/=.\-]{1,120}\.ed25519)\)/g;
 const RAW_MENTION_RE = /@([A-Za-z0-9+/=.\-]+\.ed25519)/g;
+const BARE_MENTION_RE = /(^|[^\p{L}\p{N}_\[\]/@])@([\p{L}\p{N}_.\-]{1,64})(?=$|[^\p{L}\p{N}_/+=])/gu;
+let mentionResolver = null;
+const setMentionResolver = (fn) => { mentionResolver = typeof fn === 'function' ? fn : null; };
+const bareMentionName = (token) => (/\.ed25519$/i.test(token) ? '' : token.replace(/[.\-]+$/, ''));
 const MSG_REF_RE = /%[A-Za-z0-9+/=]{44}\.sha256/g;
 const MD_LINK_RE = /!?\[([^\]\n]{1,160})\]\((https?:\/\/[^)\s]+|\/(?![\/\\])[^)\s]*)\)/g;
 const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
@@ -112,6 +116,10 @@ function renderStyledText(value, opts = {}) {
   for (const m of text.matchAll(BLOB_FILE_RE)) push(m, { type: 'blob-file', name: m[1], blob: m[2] });
   for (const m of text.matchAll(MD_MENTION_RE)) push(m, { type: 'md-mention', name: m[1], feedId: m[2] });
   for (const m of text.matchAll(RAW_MENTION_RE)) push(m, { type: 'raw-mention', feedId: m[1] });
+  for (const m of text.matchAll(BARE_MENTION_RE)) {
+    const name = bareMentionName(m[2]);
+    if (name) allMatches.push({ index: m.index + m[1].length, length: name.length + 1, type: 'bare-mention', name });
+  }
   for (const m of text.matchAll(MSG_REF_RE)) push(m, { type: 'msg-ref', id: m[0] });
   for (const m of text.matchAll(MD_LINK_RE)) push(m, { type: 'md-link', label: m[1], href: m[2] });
   for (const m of text.matchAll(BOLD_RE)) push(m, { type: 'bold', body: m[1] });
@@ -201,6 +209,9 @@ function renderStyledText(value, opts = {}) {
       result.push(internalOn ? a({ href: `/author/${encodeURIComponent('@' + m.feedId)}`, class: 'mention' }, '@' + m.name) : '@' + m.name);
     } else if (m.type === 'raw-mention') {
       result.push(internalOn ? a({ href: `/author/${encodeURIComponent('@' + m.feedId)}`, class: 'mention' }, '@' + m.feedId.slice(0, 8) + '...') : '@' + m.feedId.slice(0, 8) + '...');
+    } else if (m.type === 'bare-mention') {
+      const feedId = internalOn && mentionResolver ? mentionResolver(m.name) : null;
+      result.push(feedId ? a({ href: `/author/${encodeURIComponent(feedId)}`, class: 'mention' }, '@' + m.name) : '@' + m.name);
     } else if (m.type === 'md-link') {
       const external = /^https?:\/\//.test(m.href) && !SELF_HOST_RE.test(m.href);
       result.push(external
@@ -225,7 +236,7 @@ function renderStyledText(value, opts = {}) {
       result.push(linksOn ? a({ href: `mailto:${m.text}` }, m.text) : plain(m.text));
     } else if (m.type === 'hashtag') {
       const tagHref = typeof opts.hashtagHref === 'function' ? opts.hashtagHref(m.tag) : (internalOn ? `/search?query=%23${encodeURIComponent(m.tag)}` : null);
-      result.push(tagHref ? a({ href: tagHref, class: 'tag-link' }, `#${m.tag}`) : `#${m.tag}`);
+      result.push(tagHref ? a({ href: tagHref, class: 'tag-link tag-inline' }, `#${m.tag}`) : `#${m.tag}`);
     }
     cursor = m.index + m.length;
   }
@@ -311,4 +322,4 @@ function richTextarea(attrs, ...children) {
   return [renderFormatBar(), textarea(attrs, ...children)];
 }
 
-module.exports = { renderStyledText, renderStyledHtml, renderTextPreview, plainText, escapeHtml, safeExternalHref, renderFormatBar, richTextarea, INTERNAL_PATHS };
+module.exports = { renderStyledText, renderStyledHtml, renderTextPreview, plainText, escapeHtml, safeExternalHref, renderFormatBar, richTextarea, setMentionResolver, INTERNAL_PATHS };

@@ -986,13 +986,16 @@ let clearnetTribesCache = { at: 0, data: null };
 const getClearnetTribes = async () => {
   if (clearnetTribesCache.data && Date.now() - clearnetTribesCache.at < CLEARNET_INDEX_TTL_MS) return clearnetTribesCache.data;
   const state = await tribesContentModel.exposureState().catch(() => new Map());
-  const exposed = new Set();
-  for (const e of state.values()) if (e.level === 'clearnet' && e.item) exposed.add(e.tribeId);
+  const exposed = new Map();
+  for (const e of state.values()) if (e.level === 'clearnet' && e.item) exposed.set(e.tribeId, (exposed.get(e.tribeId) || 0) + 1);
+  const index = exposed.size ? await getClearnetIndex().catch(() => []) : [];
   const out = [];
-  for (const tribeId of exposed) {
+  for (const [tribeId, count] of exposed) {
     const t = await tribesModel.getTribeById(tribeId).catch(() => null);
     if (!t || !(await tribeReachAllowed(t.id))) continue;
-    out.push({ id: tribeId, title: t.title || '', description: t.description || '', image: t.image || null, members: Array.isArray(t.members) ? t.members.length : 0 });
+    const members = new Set(Array.isArray(t.members) ? t.members : []);
+    const blogs = index.reduce((n, entry) => members.has(entry.feedId) ? n + ((entry.items && entry.items.posts) || []).length : n, 0);
+    out.push({ id: tribeId, title: t.title || '', description: t.description || '', image: t.image || null, content: count + blogs });
   }
   clearnetTribesCache = { at: Date.now(), data: out };
   return out;
@@ -1806,6 +1809,20 @@ async function fetchProfileItems(feedId, prefs) {
   return items;
 }
 
+const BARE_MENTION_RE = /(^|[^\p{L}\p{N}_\[\]/@])@([\p{L}\p{N}_.\-]{1,64})(?=$|[^\p{L}\p{N}_/+=])/gu;
+const feedForName = (name) => {
+  const feeds = [...new Set((about.named(name) || []).filter(m => m && String(m.name || '').toLowerCase() === String(name).toLowerCase()).map(m => String(m.feed || '')).filter(Boolean))];
+  return feeds.length === 1 ? feeds[0] : null;
+};
+require('./renderStyledText').setMentionResolver(feedForName);
+const linkMentions = (text) => String(text || '').replace(BARE_MENTION_RE, (all, before, token) => {
+  if (/\.ed25519$/i.test(token)) return all;
+  const name = token.replace(/[.\-]+$/, '');
+  const trail = token.slice(name.length);
+  if (!name) return all;
+  const feed = feedForName(name);
+  return feed ? `${before}[@${name}](${feed})${trail}` : all;
+});
 const extractMentions = async (text) => {
   const mentions = ssbMentions(text) || [];
   const resolvedMentions = await Promise.all(mentions.map(async (mention) => {
@@ -2355,6 +2372,8 @@ const favoritesModel = require("../models/favorites_model")({ services: { cooler
 const logsModel = require("../models/logs_model")({ cooler });
 const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
 const fediverseModel = require('../models/fediverse_model')({ isPublic: config.public });
+const nextcloudModel = require('../models/nextcloud_model')({ isPublic: config.public });
+const NEXTCLOUD_MAX_BYTES = 8 * 1024 * 1024 * 1024;
 const { isPrivateHost } = require('../models/fediverse_model');
 const viewerFilters = require('../models/viewer_filters');
 
@@ -5301,7 +5320,7 @@ router
     if (bySeeds) enriched = sortBySeeds(enriched, spreadMap);
     await warmAuthorNames(pageOf(ctx, enriched));
     const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await censusOf(`files:${sort}`, () => filesModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).filter(x2 => !x2.tribeId).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
-    ctx.body = await filesView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, ...(tribeId ? { tribeId } : {}), spreadMap, isPublic: !!config.public });
+    ctx.body = await filesView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, ...(tribeId ? { tribeId } : {}), spreadMap, isPublic: !!config.public, nextcloud: !config.public && getConfig().modules.fediverseMod === 'on' && !!nextcloudModel.getAccount() });
   })
   .get("/files/:fileId/get", async (ctx) => {
     if (!checkMod(ctx, 'filesMod')) { ctx.redirect('/modules'); return; }
@@ -5615,6 +5634,29 @@ router
   .post('/phone/reject', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.reject().catch(() => null); safeRefererRedirect(ctx, '/phone'); })
   .post('/phone/hangup', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.hangup().catch(() => null); safeRefererRedirect(ctx, '/phone'); })
   .post('/phone/mute', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.mute(String(ctx.request.body.mute) === '1').catch(() => null); safeRefererRedirect(ctx, '/phone'); })
+  .post('/phone/camera', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; } await phoneModel.camera(String(ctx.request.body.cam) === '1').catch(() => null); safeRefererRedirect(ctx, '/phone'); })
+  .get('/phone/video/:peer', async (ctx) => {
+    if (config.public || !checkMod(ctx, 'phoneMod') || !isLoopbackRequest(ctx)) { ctx.status = 404; return; }
+    const peer = String(ctx.params.peer || '');
+    if (peer !== 'me' && peer !== 'grid' && !FEED_ID_RE.test(peer)) { ctx.status = 404; return; }
+    const source = await phoneModel.videoFrames(peer).catch(() => null);
+    if (!source) { ctx.status = 404; return; }
+    const { PassThrough } = require('stream');
+    const body = new PassThrough();
+    ctx.status = 200;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.set('X-Content-Type-Options', 'nosniff');
+    ctx.set('Content-Type', 'multipart/x-mixed-replace; boundary=oasisframe');
+    ctx.body = body;
+    const sink = pull.drain((jpeg) => {
+      if (body.destroyed) { sink.abort(); return; }
+      body.write(`--oasisframe\r\nContent-Type: image/jpeg\r\nContent-Length: ${jpeg.length}\r\n\r\n`);
+      body.write(Buffer.from(jpeg));
+      body.write('\r\n');
+    }, () => { try { body.write('--oasisframe--\r\n'); body.end(); } catch (_) {} });
+    ctx.req.on('close', () => { try { sink.abort(); } catch (_) {} });
+    pull(source, sink);
+  })
   .post('/phone/silence', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.silence(String(ctx.request.body.id || ''), String(ctx.request.body.on) === '1').catch(() => null); safeRefererRedirect(ctx, '/phone'); })
   .post('/phone/dismiss', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.dismiss().catch(() => null); ctx.redirect('/phone'); })
   .post('/phone/pam/cancel', koaBody(), async (ctx) => { if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; } await phoneModel.recordCancel().catch(() => null); safeRefererRedirect(ctx, '/phone'); })
@@ -7179,7 +7221,7 @@ router
     let blobCacheUsage = null;
     try { blobCacheUsage = await blobCacheModel.usage(); } catch (_) { blobCacheUsage = null; }
     const blobCache = { maxMB: Number(cfg.blobCache && cfg.blobCache.maxMB) || 0, usage: blobCacheUsage, cleaned: ctx.query.cleaned === undefined ? null : Number(ctx.query.cleaned) || 0, freed: Number(ctx.query.freed) || 0 };
-    ctx.body = await settingsView({ theme, version: version.toString(), aiPrompt: cfg.ai?.prompt || "", aiExportCount, blobCache, fediverseAccount: fediverseModel.getAccount(), telegramAccount: fediverseModel.telegram.getAccount(), telegramLogin: fediverseModel.telegram.loginState(), peertubeAccount: fediverseModel.peertube.getAccount(), verification, rebuild });
+    ctx.body = await settingsView({ filter: String(ctx.query.filter || 'oasis'), nextcloudAccount: nextcloudModel.getAccount(), theme, version: version.toString(), aiPrompt: cfg.ai?.prompt || "", aiExportCount, blobCache, fediverseAccount: fediverseModel.getAccount(), telegramAccount: fediverseModel.telegram.getAccount(), telegramLogin: fediverseModel.telegram.loginState(), peertubeAccount: fediverseModel.peertube.getAccount(), verification, rebuild });
   })
   .get("/peers", async (ctx) => {
     const { discoveredPeers, unknownPeers } = await meta.discovered();
@@ -7839,62 +7881,76 @@ router
       } catch (_) {}
       ctx.redirect('/fediverse');
     } catch (err) {
-      fediverseFail(ctx, err.message || 'fediverseError', '/settings#multiverse');
+      fediverseFail(ctx, err.message || 'fediverseError', '/settings?filter=multiverse');
     }
+  })
+  .post("/settings/nextcloud", koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    try {
+      await nextcloudModel.connect({ server: ctx.request.body?.server, user: ctx.request.body?.user, password: ctx.request.body?.password, folder: ctx.request.body?.folder });
+      ctx.redirect('/settings?filter=multiverse');
+    } catch (err) {
+      fediverseFail(ctx, err && err.message ? err.message : 'nextcloudErrConnect', '/settings?filter=multiverse');
+    }
+  })
+  .post("/settings/nextcloud/disconnect", koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    nextcloudModel.disconnect();
+    ctx.redirect('/settings?filter=multiverse');
   })
   .post("/settings/fediverse/disconnect", koaBody(), async (ctx) => {
     try { fediverseModel.disconnect(); } catch (_) {}
     try { await post.publishFediverseHandle(''); } catch (_) {}
-    ctx.redirect("/settings#multiverse");
+    ctx.redirect("/settings?filter=multiverse");
   })
   .post("/settings/peertube", koaBody(), async (ctx) => {
     try {
       await fediverseModel.peertube.connect({ instance: ctx.request.body?.instance, username: ctx.request.body?.username, password: ctx.request.body?.password });
       ctx.redirect('/fediverse');
     } catch (err) {
-      fediverseFail(ctx, err && err.message ? err.message : 'peertubeErrConnect', '/settings#multiverse');
+      fediverseFail(ctx, err && err.message ? err.message : 'peertubeErrConnect', '/settings?filter=multiverse');
     }
   })
   .post("/settings/peertube/disconnect", koaBody(), async (ctx) => {
     try { await fediverseModel.peertube.disconnect(); } catch (_) {}
-    ctx.redirect('/settings#multiverse');
+    ctx.redirect('/settings?filter=multiverse');
   })
   .post("/settings/telegram/start", koaBody(), async (ctx) => {
     try {
       const state = await fediverseModel.telegram.beginLogin({ apiId: ctx.request.body?.apiId, apiHash: ctx.request.body?.apiHash, phone: ctx.request.body?.phone });
-      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings#multiverse'); return; }
-      ctx.redirect('/settings#multiverse');
+      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings?filter=multiverse'); return; }
+      ctx.redirect('/settings?filter=multiverse');
     } catch (err) {
-      fediverseFail(ctx, tgErrorCode(err), '/settings#multiverse');
+      fediverseFail(ctx, tgErrorCode(err), '/settings?filter=multiverse');
     }
   })
   .post("/settings/telegram/code", koaBody(), async (ctx) => {
     try {
       const state = await fediverseModel.telegram.submitCode(ctx.request.body?.code);
       if (state && state.step === 'done') { ctx.redirect('/fediverse'); return; }
-      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings#multiverse'); return; }
-      ctx.redirect('/settings#multiverse');
+      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings?filter=multiverse'); return; }
+      ctx.redirect('/settings?filter=multiverse');
     } catch (err) {
-      fediverseFail(ctx, tgErrorCode(err), '/settings#multiverse');
+      fediverseFail(ctx, tgErrorCode(err), '/settings?filter=multiverse');
     }
   })
   .post("/settings/telegram/password", koaBody(), async (ctx) => {
     try {
       const state = await fediverseModel.telegram.submitPassword(ctx.request.body?.password);
       if (state && state.step === 'done') { ctx.redirect('/fediverse'); return; }
-      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings#multiverse'); return; }
-      ctx.redirect('/settings#multiverse');
+      if (state && state.step === 'error') { fediverseFail(ctx, state.error || 'telegramErrConnect', '/settings?filter=multiverse'); return; }
+      ctx.redirect('/settings?filter=multiverse');
     } catch (err) {
-      fediverseFail(ctx, tgErrorCode(err), '/settings#multiverse');
+      fediverseFail(ctx, tgErrorCode(err), '/settings?filter=multiverse');
     }
   })
   .post("/settings/telegram/cancel", koaBody(), async (ctx) => {
     try { await fediverseModel.telegram.cancelLogin(); } catch (_) {}
-    ctx.redirect('/settings#multiverse');
+    ctx.redirect('/settings?filter=multiverse');
   })
   .post("/settings/telegram/disconnect", koaBody(), async (ctx) => {
     try { await fediverseModel.telegram.disconnect(); } catch (_) {}
-    ctx.redirect('/settings#multiverse');
+    ctx.redirect('/settings?filter=multiverse');
   })
   .get('/data', async ctx => {
     const filter = String(ctx.query.filter || 'ALL').toUpperCase();
@@ -8053,7 +8109,7 @@ router
   .post('/blogs/create', koaBody({ multipart: true, urlencoded: true, formidable: { multiples: true, maxFileSize: maxSize } }), async ctx => {
     if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
-    let text = stripDangerousTags((b.text || '').toString().trim());
+    let text = linkMentions(stripDangerousTags((b.text || '').toString().trim()));
     const subject = stripDangerousTags((b.subject || '').toString().trim());
     const blobMarkdown = await handleBlobUploads(ctx, 'blob', 9);
     if (blobMarkdown.length) text += blobMarkdown.join('');
@@ -8170,7 +8226,7 @@ router
     ctx.redirect('/welcome');
   })
   .post('/welcome/greeting', koaBody(), async (ctx) => {
-    const text = stripDangerousTags(String((ctx.request.body || {}).text || ''));
+    const text = linkMentions(stripDangerousTags(String((ctx.request.body || {}).text || '')));
     try {
       const mentions = await extractMentions(text);
       await feedModel.createFeed(text, mentions);
@@ -9082,6 +9138,12 @@ router
     }
     tribe.rootId = hit.id;
     const items = await tribesContentModel.listExposed(hit.id, null, 'clearnet').catch(() => []);
+    const members = new Set(Array.isArray(tribe.members) ? tribe.members : []);
+    for (const entry of await getClearnetIndex().catch(() => [])) {
+      if (!members.has(entry.feedId)) continue;
+      for (const b of (entry.items.posts || [])) items.push({ id: b.id, contentType: 'blog', title: b.title, description: b.snippet, author: entry.feedId, createdAt: b.ts, href: `/c/blog/${encodeURIComponent(clearnetSlugFor(b.title, b.id))}` });
+    }
+    items.sort((a, b) => (new Date(b.createdAt).getTime() || 0) - (new Date(a.createdAt).getTime() || 0));
     const names = {};
     for (const it of items) {
       for (const id of [it.author, ...((it.replies || []).map(r => r.author))]) {
@@ -9089,7 +9151,7 @@ router
       }
     }
     ctx.type = 'text/html';
-    ctx.body = await require('../views/tribes_view').clearnetTribeView({ tribe, items, names, slug: clearnetSlugFor(tribe.title, hit.id), page: ctx.query.page });
+    ctx.body = await require('../views/tribes_view').clearnetTribeView({ tribe, items, names, slug: clearnetSlugFor(tribe.title, hit.id), page: ctx.query.page, filterType: String(ctx.query.type || ''), filterAuthor: String(ctx.query.author || '') });
   })
   .get("/c/sitemap.xml", async (ctx) => {
     const { escapeHtml: esc } = require('../views/clearnet_view');
@@ -10860,12 +10922,12 @@ router
   )
   .post("/subtopic/:message", koaBody(), async (ctx) => {
     const { message } = ctx.params;
-    const text = stripDangerousTags(String(ctx.request.body.text));
+    const text = linkMentions(stripDangerousTags(String(ctx.request.body.text)));
     const rawContentWarning = stripDangerousTags(String(ctx.request.body.contentWarning).trim());
     const contentWarning =
       rawContentWarning.length > 0 ? rawContentWarning : undefined;
     const publishSubtopic = async ({ message, text }) => {
-      const mentions = extractMentions(text);
+      const mentions = await extractMentions(text);
       const parent = await post.get(message);
       return post.subtopic({
         parent,
@@ -10893,11 +10955,11 @@ router
     } catch {
       decodedMessage = ctx.params.message;
     }
-    const text = stripDangerousTags(String(ctx.request.body.text));
+    const text = linkMentions(stripDangerousTags(String(ctx.request.body.text)));
     const rawContentWarning = stripDangerousTags(String(ctx.request.body.contentWarning));
     const contentWarning =
       rawContentWarning.length > 0 ? rawContentWarning : undefined;
-    let mentions = extractMentions(text);
+    let mentions = await extractMentions(text);
     if (!Array.isArray(mentions)) mentions = [];
     const parent = await meta.get(decodedMessage);
     ctx.body = await post.comment({
@@ -11034,7 +11096,7 @@ router
   .post('/forum/create', koaBody({ multipart: true }), async ctx => {
     const { category, title, text, isPublic } = ctx.request.body;
     const isPrivate = String(isPublic || 'public').toLowerCase() === 'private';
-    let cleanText = stripDangerousTags(text);
+    let cleanText = linkMentions(stripDangerousTags(text));
     const blobMarkdown = await handleBlobUpload(ctx, 'blob');
     if (blobMarkdown) cleanText += blobMarkdown;
     const keepForum = async (err) => {
@@ -11049,7 +11111,7 @@ router
   })
   .post('/forum/:id/message', koaBody({ multipart: true }), async ctx => {
     const { message, parentId } = ctx.request.body;
-    let cleanedMsg = stripDangerousTags(message);
+    let cleanedMsg = linkMentions(stripDangerousTags(message));
     const blobMarkdown = await handleBlobUpload(ctx, 'blob');
     if (blobMarkdown) cleanedMsg += blobMarkdown;
     const keepReply = async (err) => {
@@ -11059,9 +11121,11 @@ router
     };
     if (longText.tooLong(cleanedMsg)) { await keepReply(new Error('Text too long')); return; }
     const mentions = await extractMentions(cleanedMsg);
-    try { await forumModel.addMessageToForum(ctx.params.id, { text: cleanedMsg, author: getViewerId(), timestamp: new Date().toISOString(), mentions: mentions.length > 0 ? mentions : undefined }, parentId); }
+    let posted = null;
+    try { posted = await forumModel.addMessageToForum(ctx.params.id, { text: cleanedMsg, author: getViewerId(), timestamp: new Date().toISOString(), mentions: mentions.length > 0 ? mentions : undefined }, parentId); }
     catch (err) { await keepReply(err); return; }
-    ctx.redirect(`/forum/${encodeURIComponent(ctx.params.id)}`);
+    const anchor = posted && posted.key ? `#msg-${String(posted.key).replace(/[^a-zA-Z0-9]/g, '')}` : '';
+    ctx.redirect(`/forum/${encodeURIComponent(ctx.params.id)}${anchor}`);
   })
   .post('/forum/:forumId/vote', koaBody(), async ctx => {
     await forumModel.voteContent(ctx.request.body.target, parseInt(ctx.request.body.value, 10));
@@ -11175,7 +11239,7 @@ router
     ctx.body = feedCreateView({ text, media: fresh ? String(fresh).trim() : kept, clearnet: String(ctx.request.body?.clearnet || '') === '1', mastodon: fediverseModel.hasAccount(), mastodonOn: String(ctx.request.body?.mastodon || '') === '1' });
   })
   .post("/feed/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
-    const text = ctx.request.body?.text != null ? stripDangerousTags(String(ctx.request.body.text)) : "";
+    const text = ctx.request.body?.text != null ? linkMentions(stripDangerousTags(String(ctx.request.body.text))) : "";
     const mentions = await extractMentions(text);
     const kept = typeof ctx.request.body?.media === "string" && FEED_MEDIA_MD_RE.test(ctx.request.body.media) ? ctx.request.body.media.trim() : "";
     const media = (await handleBlobUpload(ctx, 'blob')) || kept || null;
@@ -11472,6 +11536,24 @@ router
   .post("/torrents/favorites/add/:id", koaBody(), async ctx => favAction(ctx, 'torrents', 'add'))
   .post("/torrents/favorites/remove/:id", koaBody(), async ctx => favAction(ctx, 'torrents', 'remove'))
   .post("/torrents/:torrentId/comments", koaBodyMiddleware, async ctx => commentAction(ctx, 'torrents', 'torrentId'))
+  .post("/files/nextcloud", koaBody({ multipart: true, formidable: { maxFileSize: NEXTCLOUD_MAX_BYTES, maxTotalFileSize: NEXTCLOUD_MAX_BYTES } }), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'filesMod') || !checkMod(ctx, 'fediverseMod')) { ctx.redirect('/modules'); return; }
+    if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
+    const { tags, title, description } = ctx.request.body || {};
+    const rawFile = ctx.request.files?.file;
+    const uploaded = Array.isArray(rawFile) ? rawFile[0] : rawFile;
+    if (!uploaded || !(Number(uploaded.size) > 0)) { sendErrorPage(ctx, require('../views/main_views').i18n.fileEmptyError, { status: 400 }); return; }
+    let mime = String(uploaded.mimetype || '');
+    try { const ft = await FileType.fromFile(uploaded.filepath); if (ft && ft.mime) mime = ft.mime; } catch (_) {}
+    const fileName = String(uploaded.originalFilename || '').replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim().slice(0, 120);
+    let stored;
+    try { stored = await nextcloudModel.upload({ filePath: uploaded.filepath, size: Number(uploaded.size), name: fileName }); }
+    catch (err) { fediverseFail(ctx, err && err.message ? err.message : 'nextcloudErrUpload', '/files?filter=create'); return; }
+    finally { try { fs.unlinkSync(uploaded.filepath); } catch (_) {} }
+    const created = await filesModel.createLink(stored.url, stripDangerousTags(tags), stripDangerousTags(title || fileName), stripDangerousTags(description), stored.size, { mime, fileName: stored.name });
+    await applyClearnetChoice(ctx, 'files', created);
+    ctx.redirect(safeReturnTo(ctx, '/files?filter=all', ['/files']));
+  })
   .post("/files/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'filesMod')) { ctx.redirect('/modules'); return; }
     const { tags, title, description, tribeId } = ctx.request.body;
@@ -13617,6 +13699,13 @@ router
     if ((ctx.request.body || {}).returnTo) ctx.redirect(safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']));
     else safeRefererRedirect(ctx, '/rooms');
   })
+  .post("/rooms/camera", koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
+    await roomsModel.camera(String((ctx.request.body || {}).cam) === '1').catch(() => null);
+    if ((ctx.request.body || {}).returnTo) ctx.redirect(safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']));
+    else safeRefererRedirect(ctx, '/rooms');
+  })
   .post("/rooms/hand", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
     await roomsModel.hand(String((ctx.request.body || {}).hand) === '1').catch(() => null);
@@ -14572,9 +14661,10 @@ router
     const cfg = getConfig();
     const choice = String(ctx.request.body.visibility || '');
     const prev = cfg.phone || {};
+    const video = String(ctx.request.body.video || '') !== 'off';
     cfg.phone = choice === 'dnd'
-      ? { ...prev, visibility: prev.visibility === 'whole' ? 'whole' : 'mutuals', dnd: true }
-      : { ...prev, visibility: choice === 'whole' ? 'whole' : 'mutuals', dnd: false };
+      ? { ...prev, visibility: prev.visibility === 'whole' ? 'whole' : 'mutuals', dnd: true, video }
+      : { ...prev, visibility: choice === 'whole' ? 'whole' : 'mutuals', dnd: false, video };
     saveConfig(cfg);
     try { await syncPhoneVisibility(); } catch (_) {}
     ctx.redirect("/settings#phone");

@@ -206,6 +206,29 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       });
     },
 
+    async createLink(url, tagsRaw, title, description, size, extra = null) {
+      const ssbClient = await openSsb();
+      const link = String(url || '').trim();
+      if (!/^https?:\/\//i.test(link)) throw new Error('Invalid link');
+      const content = {
+        type: "file",
+        url: link,
+        createdAt: new Date().toISOString(),
+        updatedAt: null,
+        author: ssbClient.id,
+        tags: normalizeTags(tagsRaw) || [],
+        title: title || "",
+        description: description || "",
+        size: Number(size) || 0,
+        opinions: {},
+        opinions_inhabitants: [],
+        ...fileExtra(extra)
+      };
+      return new Promise((resolve, reject) => {
+        ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)));
+      });
+    },
+
     async updateFileById(id, blobMarkdown, tagsRaw, title, description, extra = null) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;

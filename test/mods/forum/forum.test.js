@@ -152,3 +152,33 @@ describe('forum: invitations come from the forum author', (t) => {
     ok(threw, 'the planted code is rejected');
   });
 });
+
+describe('forum: the highlighted reply', (t) => {
+  t('downvotes count: a clean 2-0 reply beats a contested 2-2 one', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net); const D = makePeer(net); const E = makePeer(net);
+    A.setActor();
+    const thread = await A.use('forum').createForum('general', 'Ranking', 'root');
+    const contested = await A.use('forum').addMessageToForum(thread.key, { text: 'contested reply' });
+    const clean = await A.use('forum').addMessageToForum(thread.key, { text: 'clean reply' });
+    const vote = async (peer, target, value) => { const s = await peer.cooler.open(); await new Promise((res, rej) => s.publish({ type: 'vote', vote: { link: target, value, expression: value > 0 ? 'Like' : 'Dislike' } }, (e) => e ? rej(e) : res())); };
+    for (const p of [B, C]) { await vote(p, contested.key, 1); await vote(p, clean.key, 1); }
+    for (const p of [D, E]) await vote(p, contested.key, -1);
+    const data = await A.use('forum').getMessagesByForumId(thread.key);
+    const byText = Object.fromEntries(data.messages.map(m => [m.text, m]));
+    eq(`${byText['contested reply'].positiveVotes}/${byText['contested reply'].negativeVotes}`, '2/2');
+    eq(`${byText['clean reply'].positiveVotes}/${byText['clean reply'].negativeVotes}`, '2/0');
+    const forum = await A.use('forum').getForumById(thread.key);
+    const html = String(await require('../../../src/views/forum_view').singleForumView(forum, data, 'all'));
+    const highlighted = html.indexOf('highlighted-reply');
+    ok(highlighted > -1, 'one reply is highlighted');
+    ok(html.indexOf('clean reply') > highlighted && html.indexOf('clean reply') < html.indexOf('contested reply'), 'the clean reply is the highlighted one and comes first');
+    const nested = await A.use('forum').addMessageToForum(thread.key, { text: 'nested answer' }, contested.key);
+    for (const p of [B, C, D]) await vote(p, nested.key, 1);
+    const again = await A.use('forum').getMessagesByForumId(thread.key);
+    const html2 = String(await require('../../../src/views/forum_view').singleForumView(forum, again, 'all'));
+    const box = html2.slice(html2.indexOf('highlighted-reply'));
+    const nextBox = box.indexOf('class="forum-comment', 20);
+    ok(box.indexOf('nested answer') > -1 && (nextBox === -1 || box.indexOf('nested answer') < nextBox), 'the best reply is highlighted even when it answers another message');
+    eq((html2.match(/highlighted-reply/g) || []).length, 1, 'only one reply is highlighted');
+  });
+});

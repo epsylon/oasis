@@ -229,6 +229,11 @@ module.exports = ({ cooler, pmModel, nameOf, isPublic, encryptFile, isAvailable,
     reject: () => act('reject'),
     hangup: () => act('end'),
     mute: (flag) => act('mute', !!flag),
+    camera: (flag) => act('camera', !!flag),
+    async videoFrames(peer) {
+      const ph = await phone();
+      return ph && typeof ph.videoFrames === 'function' ? ph.videoFrames({ peer: String(peer || '') }) : null;
+    },
     silence: (id, flag) => act('silence', { id, on: !!flag }),
     dismiss: () => act('dismiss'),
     recordCancel: () => act('recordCancel'),

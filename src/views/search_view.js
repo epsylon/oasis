@@ -84,7 +84,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'job': return `/jobs/${encodeURIComponent(contentId)}`;
       case 'industry': return `/industry/${encodeURIComponent(contentId)}`;
       case 'industryBlueprint': return `/industry/blueprint/${encodeURIComponent(contentId)}`;
-      case 'forum': return `/forum/${encodeURIComponent(contentId)}`;
+      case 'forum': return content && content.root ? `/forum/${encodeURIComponent(typeof content.root === 'string' ? content.root : (content.root.key || content.root.id || ''))}#msg-${String(contentId || '').replace(/[^a-zA-Z0-9]/g, '')}` : `/forum/${encodeURIComponent(contentId)}`;
       case 'vote': return content && content.vote && content.vote.link ? `/thread/${encodeURIComponent(content.vote.link)}#${encodeURIComponent(content.vote.link)}` : null;
       case 'contact': return content && content.contact ? `/author/${encodeURIComponent(content.contact)}` : null;
       case 'pub': return null;

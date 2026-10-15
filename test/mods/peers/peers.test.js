@@ -398,3 +398,46 @@ describe('peers: invitations a pub has left', (t) => {
     eq(count(), 2);
   });
 });
+
+describe('peers: joining a pub that already follows you', (t) => {
+  const plugin = require('../../../src/server/node_modules/ssb-invite-client');
+  const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
+  const me = ssbKeys.generate().id;
+  const pubKey = ssbKeys.generate().id;
+  const code = `pub.example.org:8008:${pubKey}~${require('crypto').randomBytes(32).toString('base64')}`;
+  const fakeSsb = ({ useError, following }) => {
+    const calls = { published: [], remembered: [] };
+    const rpc = { invite: { use: (opts, cb) => cb(useError ? new Error(useError) : null, true) } };
+    const ssb = {
+      id: me,
+      conn: { connect: (addr, data, cb) => cb(null, rpc), remember: (addr, data, cb) => { calls.remembered.push(addr); cb(null); } },
+      publish: (msg, cb) => { calls.published.push(msg); cb(null, msg); },
+      friends: { isFollowing: (opts, cb) => cb(null, following) }
+    };
+    return { ssb, calls };
+  };
+  const accept = (ssb) => new Promise((resolve) => plugin.init(ssb, {}).accept(code, (err, ok) => resolve({ err, ok })));
+
+  t('an identity the pub already follows (a restored backup) is let in and keeps the pub', async () => {
+    const { ssb, calls } = fakeSsb({ useError: 'already following', following: true });
+    const r = await accept(ssb);
+    notOk(r.err, 'no error is raised');
+    eq(calls.remembered.length, 1, 'the pub is kept among the connections');
+    eq(calls.published.length, 0, 'nothing is republished when we already follow the pub');
+  });
+
+  t('if we had not followed the pub yet, the follow is published', async () => {
+    const { ssb, calls } = fakeSsb({ useError: 'already following', following: false });
+    const r = await accept(ssb);
+    notOk(r.err);
+    ok(calls.published.some(m => m.type === 'contact' && m.contact === pubKey && m.following === true), 'we follow the pub');
+    eq(calls.remembered.length, 1);
+  });
+
+  t('any other refusal of the pub still fails the join', async () => {
+    const { ssb, calls } = fakeSsb({ useError: 'invite has expired', following: false });
+    const r = await accept(ssb);
+    ok(r.err, 'the error reaches the caller');
+    eq(calls.remembered.length, 0, 'and the pub is not kept');
+  });
+});

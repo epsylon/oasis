@@ -35,8 +35,16 @@ const heard = (id, value) => devices.get(id).played.some(b => b.length >= 320 &&
 const listen = async (id, rounds = 8) => { for (let i = 0; i < rounds; i++) { speak(id, 0); await sleep(25); } };
 const hears = (id, value) => waitFor(async () => { await listen(id, 2); return heard(id, value); });
 
+const cams = new Map();
+const fakeVideo = (server) => ({
+  capture(onJpeg) { cams.set(server.id, onJpeg); return { stop() { if (cams.get(server.id) === onJpeg) cams.delete(server.id); } }; }
+});
+const show = (id, jpeg) => { const f = cams.get(id); if (f) f(jpeg); return !!f; };
+const frameOf = (n, fill = 7) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(n - 5, fill), Buffer.from([0xff, 0xd9])]);
+const watch = (node, peer) => { const got = []; pull(node.phone.videoFrames({ peer }), pull.drain(b => got.push(Buffer.from(b)), () => { got.ended = true; })); return got; };
 const makeNode = (prefs = {}) => {
   phone.setAudioFactory(fakeAudio);
+  phone.setVideoFactory(fakeVideo);
   fs.mkdirSync(tmpRoot, { recursive: true });
   const dir = fs.mkdtempSync(path.join(tmpRoot, 'node-'));
   const port = freePort();
@@ -633,5 +641,100 @@ describe('rooms: meeting point', (t) => {
     eq(moved.hub, pub);
     eq(moved.rootId, r.key, 'it is the same room');
     eq((await A.use('rooms').listAll({ filter: 'all' })).filter(x => x.rootId === r.key).length, 1, 'listed once');
+  });
+});
+
+describe('rooms: cameras in a room', (t) => {
+  t('a camera is seen by everyone through the pub, which only forwards and never decodes', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, pub); await link(b, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b)));
+      ok(a.phone.roomState().videoAvailable && b.phone.roomState().videoAvailable, 'the pub forwards video');
+      ok(!b.phone.roomState().peers[0].cam, 'cameras start off');
+      await asP(a.phone.camera, true);
+      ok(a.phone.roomState().cam);
+      show(a.id, frameOf(20 * 1024, 2));
+      ok(await waitFor(() => b.phone.roomState().peers[0].cam), 'B sees the camera of A on');
+      const seen = watch(b, a.id);
+      const frame = frameOf(25 * 1024, 9);
+      show(a.id, frame);
+      ok(await waitFor(() => seen.length === 1), 'the next frame arrives');
+      ok(seen[0].equals(frame), 'whole');
+      await asP(a.phone.camera, false);
+      ok(await waitFor(() => !b.phone.roomState().peers[0].cam), 'turning it off is seen at once');
+      ok(await waitFor(() => seen.ended));
+      ok(!a.phone.roomState().cam);
+    } finally { await closeAll(a, b, pub); }
+  });
+
+  t('the pub caps how much video one member can push per second, audio untouched', async () => {
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, pub); await link(b, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b)));
+      await asP(a.phone.camera, true);
+      show(a.id, frameOf(2000, 1));
+      ok(await waitFor(() => b.phone.roomState().peers[0].cam));
+      const seen = watch(b, a.id);
+      for (let i = 0; i < 12; i++) show(a.id, frameOf(30 * 1024, 10 + i));
+      await sleep(600);
+      ok(seen.length >= 1 && seen.length < 10, `a burst of 360 KB in a second gets through only in part (${seen.length} frames)`);
+      speak(a.id, 8000);
+      ok(await hears(b.id, 8000), 'the voice is not affected');
+    } finally { await closeAll(a, b, pub); }
+  });
+
+  t('a pub that does not forward video leaves the room audio-only', async () => {
+    const pub = makeNode({ relayOpen: true, video: false });
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, pub); await link(b, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b)));
+      ok(!a.phone.roomState().videoAvailable, 'no camera is offered');
+      let refused = '';
+      try { await asP(a.phone.camera, true); } catch (e) { refused = e.message; }
+      eq(refused, 'unavailable');
+      speak(a.id, 8000);
+      ok(await hears(b.id, 8000), 'voices still meet');
+    } finally { await closeAll(a, b, pub); }
+  });
+});
+
+describe('rooms: all the cameras in one picture', (t) => {
+  t('the cameras that are on are tiled into a single stream, in the order the page lists them', async () => {
+    const sharp = require('../../../src/server/node_modules/sharp');
+    const solid = (r, g, b) => sharp({ create: { width: 320, height: 240, channels: 3, background: { r, g, b } } }).jpeg().toBuffer();
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode(); const c = makeNode();
+    try {
+      await link(a, pub); await link(b, pub); await link(c, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room); await asP(c.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b) && secure(c)));
+      ok(c.phone.roomState().grid, 'the mosaic is available');
+      const none = watch(c, 'grid');
+      ok(await waitFor(() => none.ended), 'nothing to show while every camera is off');
+      await asP(a.phone.camera, true); await asP(b.phone.camera, true);
+      const red = await solid(255, 0, 0), green = await solid(0, 255, 0);
+      show(a.id, red); show(b.id, green);
+      ok(await waitFor(() => c.phone.roomState().peers.filter(p => p.cam).length === 2), 'C sees both cameras on');
+      const seen = watch(c, 'grid');
+      for (let i = 0; i < 4 && !seen.length; i++) { show(a.id, red); show(b.id, green); await sleep(400); }
+      ok(seen.length >= 1, 'a mosaic arrives');
+      const meta = await sharp(seen[seen.length - 1]).metadata();
+      eq([meta.width, meta.height].join('x'), '640x240', 'two cameras side by side');
+      eq(c.phone.roomState().gridOrder.length, 2, 'and the page knows whose tile is whose');
+      await asP(a.phone.camera, false); await asP(b.phone.camera, false);
+      ok(await waitFor(() => c.phone.roomState().gridOrder.length === 0));
+    } finally { await closeAll(a, b, c, pub); }
   });
 });

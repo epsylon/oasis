@@ -87,7 +87,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Forums: Module to discover and manage forums.
  + Games: Module to play and share your scores in various mini-games.	
  + Governance: Module to discover and manage votes.	
- + Graphos: Module to explore the network as an interactive map of peers, with a Federation view of the PUBs: which ones are connected, unreachable and why, outdated or reachable only over Tor, and how they follow each other.
+ + Graphos: Module to explore the network as an interactive map of peers and PUBs.
  + Housing: Module to discover and manage places.
  + Images: Module to discover and manage images.
  + Industry: Module to manage the means of production collectively.
@@ -95,9 +95,9 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Jobs: Module to discover and manage jobs.	
  + L.A.R.P.: Module for the live-action role-playing layer.
  + Logistics: Discover and manage logistic plans.
- + Logs: Module to keep a private diary of your experiences, written by hand or by the AI.
+ + Logs: Module to keep a private diary of your experiences.
  + Mailing Lists: Discover and manage mailing lists.
- + Maps: Module to manage and share offline maps, drawn locally over a shaded-relief raster base with vector borders, coasts and places, all vendored in the repository so nothing is ever downloaded (made with Natural Earth, free vector and raster map data @ naturalearthdata.com).
+ + Maps: Module to manage and share offline maps.
  + Market: Module to exchange goods or services.
  + Matches: Module to explore and visualize the matches in the blockchain.
  + Melody: Module to generate and share the "sound" of your blockchain.
@@ -105,13 +105,13 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Opinions: Module to discover and vote on opinions.	
  + Pads: Module to manage collaborative text editors.
  + Parliament: Module to elect governments and vote on laws.	
- + Phone: Module to call other inhabitants with end-to-end encrypted voice calls (VoIP).
+ + Phone: Module to call other inhabitants with end-to-end encrypted videocalls.
  + Pixelia: Module to draw on a collaborative grid.	
  + Podcasts: Module to publish podcast channels.
  + Polls: Module to ask the network and count the answers.
  + Projects: Module to explore, crowd-funding and manage projects.
- + Reports: Module to manage and track reports related to issues, bugs, abuses, and content warnings.	
- + Rooms: Module to discover and join encrypted rooms.
+ + Reports: Module to manage and track reports (issues, bugs, abuses).	
+ + Rooms: Module to discover and join encrypted videoconference rooms.
  + School: Module to exchange knowledge.
  + Shops: Module to manage and discover shops.	
  + Tags: Module to discover and explore taxonomy patterns (tags).	
@@ -119,7 +119,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Torrents: Module to explore and manage torrents.
  + Transfers: Module to discover and manage smart-contracts (transfers).	
  + Trending: Module to explore the most popular content.	
- + Tribes: Module to explore or create tribes (groups), whose members choose how far each piece of content reaches: TRIBE, OASIS or CLEARNET.	
+ + Tribes: Module to explore or create tribes (groups).
  + Videos: Module to discover and manage videos.	
  + Wallet: Module to manage your digital assets (ECOin).	
  + Wikis: Module to build shared knowledge pages, versioned and linked.
@@ -216,7 +216,7 @@ Check "The Houses" to review which one fit better with your ambitions:
 
 ## Multiverse
 
-Oasis bridges to the **Fediverse** and beyond. You can connect your other accounts (**Mastodon**, **Telegram**, **PeerTube**) and use them from inside Oasis: read your Mastodon home timeline, publish (text, images and video), reply, boost and favourite; read your Telegram chats, groups and channels and send messages or files; watch, like and comment the videos of your PeerTube subscriptions and upload your own to your channel — without storing any third-party content in your SSB log (everything is fetched live and shown ephemerally; only your credentials are kept locally).
+Oasis bridges to the **Multiverse**: the accounts you already have on other networks and services, used from inside Oasis. Everything is fetched live and shown ephemerally; only your credentials are kept locally.
 
   ![SNH](https://solarnethub.com/git/oasis-fediverse.png "SolarNET.HuB")
 
@@ -225,16 +225,18 @@ Connect your accounts from **Settings → Multiverse**, then open them from **Mu
  + Mastodon connect guide: [docs/MULTIVERSE/MASTODON/connect.md](docs/MULTIVERSE/MASTODON/connect.md)
  + Telegram connect guide: [docs/MULTIVERSE/TELEGRAM/connect.md](docs/MULTIVERSE/TELEGRAM/connect.md)
  + PeerTube connect guide: [docs/MULTIVERSE/PEERTUBE/connect.md](docs/MULTIVERSE/PEERTUBE/connect.md)
+ + Nextcloud connect guide: [docs/MULTIVERSE/NEXTCLOUD/connect.md](docs/MULTIVERSE/NEXTCLOUD/connect.md)
 
 ----------
 
 ## Phone
 
-Oasis contains its own telephone: voice calls between inhabitants, end-to-end encrypted, with no operator, server or account in between.
+Oasis contains its own telephone: voice and video calls between inhabitants, end-to-end encrypted, with no operator, server or account in between.
 
  + Every inhabitant has a phone number, derived from their Oasis ID and shown on their profile. Dial it (or an Oasis ID) from **Phone**, or call from a profile.
  + If the other side is busy or cannot be reached, you are told and can leave a message.
  + Call several inhabitants at once to make a joint call.
+ + When one side has a camera, the call carries video: turn yours on or off at any moment; it is encrypted like the voice.
  + When nobody answers, leave a Private Audio Message (PaM).
  + Choose who can call you (everyone, or only mutual supporters) in **Settings → Phone**.
  + **Do not disturb** can be switched from your profile or from Settings.
@@ -243,13 +245,13 @@ Oasis contains its own telephone: voice calls between inhabitants, end-to-end en
 
 ## Rooms
 
-Rooms are encrypted meeting places, under **Community → Rooms**, that inhabitants join and leave whenever they want.
+Rooms are encrypted videoconference rooms, under **Community → Rooms**, that inhabitants join and leave whenever they want.
 
  + A room is OPEN or INVITE-ONLY (entered with an invite code); tribes and sub-tribes have rooms of their own.
- + Entering a room joins its call.
+ + Entering a room joins its call. Anyone inside can turn their camera on; everyone sees the cameras that are on tiled into one picture, with the names underneath.
  + Each room has a phone number, and its creator chooses **Do not disturb** or **Switchboard**: with Switchboard, dialling the number from Phone enters the room.
- + Everything is encrypted end to end: the PUB of the room's creator relays it without being able to read it.
- + Mute yourself whenever you want.
+ + Everything is encrypted end to end: the PUB of the room's creator relays voice and video without being able to read them.
+ + Mute yourself or switch your camera off whenever you want.
  + An OPEN room can be published as CLEARNET: its public page shows only its name and number.
 
 See [docs/phone/README.md](docs/phone/README.md) for both.
@@ -262,14 +264,14 @@ See [docs/phone/README.md](docs/phone/README.md) for both.
 
 ## PDF export
 
-Many content pages offer **Generate PDF** and **Share via PM** (the PDF travels encrypted, attached to a new private message): reports, votes, events, tasks, calendars, CVs, emergencies, campaigns, logistics routes, mailing lists, the Pixelia canvas and transfers (as smart contracts). Pads, wiki pages and school certificates can be downloaded as PDF too.
+Many content pages offer **Generate PDF** and **Share via PM** (the PDF travels encrypted, attached to a new private message); some can be downloaded as PDF too. The option appears on the page when it applies.
 
 ## Clearnet
 
 Everything you publish is created as **OASIS** (visible to the inhabitants of Oasis only) or **CLEARNET** (also served on the public web pages of every PUB that replicates you, under `/c`). You choose when you create the item and can switch it later from the item's page. Private, hidden, closed, invite-only, paid or tribe content can never be CLEARNET; if an item is later hidden or closed it leaves the CLEARNET and does not come back on its own.
 
- + Modules with the choice: audios, videos, images, documents, files, torrents, bookmarks, blogs, feed, wiki, podcasts, market, shops, school, jobs, events, projects, rooms, maps, calendars, emergencies, campaigns and housing.
- + Public pages show what the author published, never what other inhabitants added (confirmations, signatures, requests, comments).
+ + Most modules offer the choice; the module page shows it when it applies.
+ + Public pages show what the author published, never what other inhabitants added to it.
  + Your public page lists what you put on the CLEARNET; the hub `/c` and its sitemap list everything public, including the public tribes.
 
  + Clearnet guide: [docs/PUB/clearnet.md](docs/PUB/clearnet.md)
@@ -416,6 +418,7 @@ Check ['Call 4 Hackers'](https://wiki.solarnethub.com/community/hackers) for con
  + Ecosystem: https://wiki.solarnethub.com/socialnet/ecosystem
  + Project Network: https://wiki.solarnethub.com/socialnet/snh#the_project_network
  + Oasis: https://wiki.solarnethub.com/socialnet/overview
+ + Maps data: Natural Earth, free vector and raster map data: https://naturalearthdata.com
  + ECOin: https://wiki.solarnethub.com/ecoin/overview
  + Role-playing (L.A.R.P): https://wiki.solarnethub.com/socialnet/roleplaying
  + Warehouse: https://wiki.solarnethub.com/stock/submit_request

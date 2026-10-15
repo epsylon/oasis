@@ -65,6 +65,15 @@ describe('clearnet: choosing a language without cookies', (t) => {
 describe('licenses', (t) => {
   const { normalizeLicense, licenseInfo } = require('../../../src/views/clearnet_view');
 
+  t('tribes in the hub are counted by what they publish and the busiest goes first', async () => {
+    const mv = require('../../../src/views/main_views');
+    const i18n = require('../../../src/client/assets/translations/i18n');
+    const tribes = [{ id: '%aaa.sha256', title: 'Seeds', content: 3 }, { id: '%bbb.sha256', title: 'Roots', content: 7 }];
+    const hub = String(await mv.clearnetHubView({ authors: [], items: {}, tribes }));
+    ok(hub.includes(`${i18n.en.cnPublicContent}: 7`) && hub.includes(`${i18n.en.cnPublicContent}: 3`) && !hub.includes(i18n.en.tribeMembersCount), 'each card shows its published content, not its members');
+    ok(hub.indexOf('Roots') < hub.indexOf('Seeds'), 'tribes are ordered by published content');
+  });
+
   t('form values outside the list fall back to Public Domain', () => {
     eq(normalizeLicense('CC-BY-4.0'), 'CC-BY-4.0');
     eq(normalizeLicense(''), 'CC0-1.0');

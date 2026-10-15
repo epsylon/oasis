@@ -776,6 +776,12 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       return asP(ph.silence, { id, on: !!flag })
     },
 
+    async camera(flag) {
+      const ph = await phone()
+      if (!ph || typeof ph.camera !== "function") return null
+      return asP(ph.camera, !!flag)
+    },
+
     async recStart() {
       const ph = await phone()
       if (!ph || typeof ph.roomRecStart !== "function") return null

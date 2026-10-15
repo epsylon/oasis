@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed } = require("./main_views")
 const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
@@ -211,6 +211,13 @@ const renderLiveControls = (room, live) => div({ class: "room-live-controls" },
     input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
     button({ type: "submit", class: "tribe-action-btn" }, String(live.muted ? i18n.phoneUnmute : i18n.phoneMute).toUpperCase())
   ),
+  live.videoAvailable
+    ? form({ method: "POST", action: "/rooms/camera", class: "phone-action-form" },
+        input({ type: "hidden", name: "cam", value: live.cam ? "0" : "1" }),
+        input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
+        button({ type: "submit", class: live.cam ? "tribe-action-btn room-cam-btn-on" : "tribe-action-btn" }, String(live.cam ? i18n.phoneCameraOff : i18n.phoneCameraOn).toUpperCase())
+      )
+    : null,
   live.recording
     ? form({ method: "POST", action: "/rooms/rec/stop", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.roomRecStop).toUpperCase()))
     : form({ method: "POST", action: "/rooms/rec/start", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.roomRec).toUpperCase())),
@@ -253,19 +260,28 @@ const renderLivePanel = (room, live, occ, canJoin = false) => {
       input({ type: "hidden", name: "on", value: on ? "0" : "1" }),
       button({ type: "submit", class: on ? "tribe-action-btn danger-btn" : "tribe-action-btn" }, String(on ? i18n.phoneUnsilence : i18n.phoneSilence).toUpperCase())
     )
-    const who = (id, muted, you, silenced = false, recording = false, turn = 0) => div({ class: "phone-contact room-peer" + (turn ? " room-peer-raised" : "") },
+    const who = (id, muted, you, silenced = false, recording = false, turn = 0, cam = false) => div({ class: "phone-contact room-peer" + (turn ? " room-peer-raised" : "") },
       turn ? span({ class: "room-peer-hand" }, `✋ ${turn}`) : null,
       userLink(id),
       you ? span({ class: "room-peer-you" }, i18n.roomYou) : null,
       muted ? span({ class: "room-peer-muted" }, String(i18n.roomMuted).toUpperCase()) : null,
+      cam ? span({ class: "room-peer-cam" }, "CAM") : null,
       recording ? renderRecChip() : null,
       you ? null : silenceForm(id, silenced)
     )
     return div({ class: "phone-call-panel room-live-panel" },
       head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null), renderLiveControls(room, live)),
+      live.grid
+        ? (safeArr(live.gridOrder).length
+            ? div({ class: "video-grid video-grid-one" },
+                ...renderLiveFeed("/phone/video/grid", "video-feed video-feed-grid"),
+                div({ class: "video-grid-names" }, ...safeArr(live.gridOrder).map(id => id === userId ? span({ class: "video-tile-name" }, i18n.roomYou) : userLink(id)))
+              )
+            : null)
+        : renderVideoGrid(safeArr(live.peers).map(p => ({ id: p.id, on: !!p.cam })), !!live.cam),
       div({ class: "phone-contacts" }, ...handOrder(live).map(e => e.you
-        ? who(userId, live.muted, true, false, !!live.recording, e.turn)
-        : who(e.peer.id, e.peer.muted, false, !!e.peer.silenced, !!e.peer.recording, e.turn))),
+        ? who(userId, live.muted, true, false, !!live.recording, e.turn, !!live.cam)
+        : who(e.peer.id, e.peer.muted, false, !!e.peer.silenced, !!e.peer.recording, e.turn, !!e.peer.cam))),
       renderRoomEvents(live)
     )
   }

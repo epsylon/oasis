@@ -56,11 +56,24 @@ module.exports = ({ cooler }) => {
     return values.some(v => v && (v.link === feedId || v === feedId));
   };
 
-  const mentionsText = (content, feedId) => {
+  const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const nameRes = (names) => names.map(n => new RegExp(`(^|[^\\p{L}\\p{N}_\\[\\]/@])@${escapeRe(n)}(?=$|[^\\p{L}\\p{N}_/+=])`, 'iu'));
+  const myNamesOf = (messages, feedId) => {
+    let latest = null;
+    for (const m of messages) {
+      const v = m && m.value;
+      const c = v && v.content;
+      if (!c || c.type !== 'about' || String(v.author) !== String(feedId) || c.about !== feedId || typeof c.name !== 'string' || !c.name.trim()) continue;
+      const ts = Number(v.timestamp || m.timestamp || 0);
+      if (!latest || ts >= latest.ts) latest = { ts, name: c.name.trim() };
+    }
+    return latest ? [latest.name] : [];
+  };
+  const mentionsText = (content, feedId, byName = []) => {
     const bare = feedId.startsWith('@') ? feedId.slice(1) : feedId;
     for (const field of TEXT_FIELDS) {
       const v = content[field];
-      if (typeof v === 'string' && (v.includes(feedId) || v.includes(bare))) return true;
+      if (typeof v === 'string' && (v.includes(feedId) || v.includes(bare) || byName.some(re => re.test(v)))) return true;
     }
     if (Array.isArray(content.tags)) {
       if (content.tags.some(t => typeof t === 'string' && (t.includes(feedId) || t.includes(bare)))) return true;
@@ -101,6 +114,7 @@ module.exports = ({ cooler }) => {
 
       const out = [];
       const seen = new Set();
+      const byName = nameRes(myNamesOf(messages, myFeedId));
       for (const m of messages) {
         const v = m && m.value;
         const c = v && v.content;
@@ -112,7 +126,7 @@ module.exports = ({ cooler }) => {
         if (c.tribeId && c.type !== 'tribe') continue;
         if (String(v.author) === String(myFeedId)) continue;
         if (vg.tipOf(m.key) !== m.key || !vg.roots.has(vg.rootOf(m.key))) continue;
-        if (!mentionsList(c, myFeedId) && !mentionsText(c, myFeedId)) continue;
+        if (!mentionsList(c, myFeedId) && !mentionsText(c, myFeedId, byName)) continue;
         if (seen.has(m.key)) continue;
         seen.add(m.key);
         out.push({

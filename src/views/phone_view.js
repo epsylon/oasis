@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, span, audio, table, tr, td, th, br, a } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderCallButton, liveClock, renderStateChip } = require("./main_views");
+const { template, i18n, userLink, userLinkLabel, renderCallButton, liveClock, renderStateChip, renderVideoGrid } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
 const { phoneNumberOf } = require("../models/phone_number");
 const moment = require("../server/node_modules/moment");
@@ -55,8 +55,10 @@ const renderCallPanel = (st, now) => {
       line(...inCall, ' ', span({ class: 'phone-call-clock' }, liveClock(st.answeredAt || st.startedAt))),
       ringing.length ? div({ class: 'phone-call-ringing' }, i18n.phoneCalling, ' ', ...linkList(ringing)) : null,
       st.group ? div({ class: 'phone-contacts phone-call-peers' }, ...st.peers.filter(x => x.phase === 'connected').map(peerRow)) : null,
+      st.video ? renderVideoGrid([{ id: st.peer, on: st.peerCam }], st.cam) : null,
       actions(
         st.muted ? postButton('/phone/mute', i18n.phoneUnmute, false, { mute: 0 }) : postButton('/phone/mute', i18n.phoneMute, false, { mute: 1 }),
+        st.video ? (st.cam ? postButton('/phone/camera', i18n.phoneCameraOff, false, { cam: 0 }) : postButton('/phone/camera', i18n.phoneCameraOn, false, { cam: 1 })) : null,
         st.group ? null : silenceButton(st.peer, st.silenced),
         postButton('/phone/hangup', i18n.phoneHangup, true)
       )

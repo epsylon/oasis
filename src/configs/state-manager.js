@@ -24,6 +24,7 @@ const FOLDERS = {
   'AI-vectors.json': 'ai',
   'AI-search-vectors.json': 'ai',
   'fediverse-accounts.json': 'multiverse',
+  'nextcloud-account.json': 'multiverse',
   'oasis-backup.json': 'backup',
   'oasis-first-contact': 'flags',
   'oasis-mentions-seen': 'flags',

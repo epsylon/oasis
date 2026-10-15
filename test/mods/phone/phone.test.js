@@ -23,6 +23,17 @@ const fakeAudio = (server) => {
     player() { return { write(buf) { dev.played.push(Buffer.from(buf)); return true; }, stop() {} }; }
   };
 };
+const cams = new Map();
+const fakeVideo = (server) => ({
+  capture(onJpeg) { cams.set(server.id, onJpeg); return { stop() { if (cams.get(server.id) === onJpeg) cams.delete(server.id); } }; }
+});
+const show = (id, jpeg) => { const f = cams.get(id); if (f) f(jpeg); return !!f; };
+const frameOf = (n, fill = 7) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(n - 5, fill), Buffer.from([0xff, 0xd9])]);
+const watch = (node, peer) => {
+  const got = [];
+  require('../../../src/server/node_modules/pull-stream')(node.phone.videoFrames({ peer }), require('../../../src/server/node_modules/pull-stream').drain(b => got.push(Buffer.from(b)), () => { got.ended = true; }));
+  return got;
+};
 const speak = (id, value, frames = 5) => {
   const pcm = Buffer.alloc(320 * frames);
   for (let i = 0; i < pcm.length; i += 2) pcm.writeInt16LE(value, i);
@@ -33,14 +44,16 @@ const heard = (id, value) => devices.get(id).played.some(b => b.length >= 320 &&
 const BEEP_BYTES = 8000 * 0.7 * 2;
 const DOUBLE_BEEP_BYTES = 8000 * 0.45 * 2;
 const makeNode = (prefs = {}) => {
+  const { noVideo, ...phonePrefs } = prefs;
   phone.setAudioFactory(fakeAudio);
+  phone.setVideoFactory(noVideo ? () => null : fakeVideo);
   fs.mkdirSync(tmpRoot, { recursive: true });
   const dir = fs.mkdtempSync(path.join(tmpRoot, 'node-'));
   const port = freePort();
   const keys = ssbKeys.generate();
   const node = SecretStack({ caps })
     .use(phone)
-    .call(null, { path: dir, keys, port, host: '127.0.0.1', phone: { ringMs: 1500, voicemailMaxMs: 3000, opus: false, ...prefs }, connections: { incoming: { net: [{ scope: 'device', transform: 'shs', port, host: '127.0.0.1' }] }, outgoing: { net: [{ transform: 'shs' }] } } });
+    .call(null, { path: dir, keys, port, host: '127.0.0.1', phone: { ringMs: 1500, voicemailMaxMs: 3000, opus: false, ...phonePrefs }, connections: { incoming: { net: [{ scope: 'device', transform: 'shs', port, host: '127.0.0.1' }] }, outgoing: { net: [{ transform: 'shs' }] } } });
   node.__dir = dir;
   node.__port = port;
   node.__keys = keys;
@@ -772,5 +785,93 @@ describe('phone: voice messages left for you', (t) => {
     await A.use('pm').sendPam(B.keypair.id, share, 3);
     eq((await A.use('phone').pams()).length, 0);
     eq(await A.use('phone').refreshCount(), 0);
+  });
+});
+
+describe('phone: video in a call', (t) => {
+  t('a camera turned on reaches the other side whole, encrypted, and goes dark when turned off', async () => {
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, b);
+      await asP(a.phone.call, b.id);
+      await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming');
+      await asP(b.phone.accept);
+      ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'connected' && b.phone.state().phase === 'connected'));
+      ok(a.phone.state().video && b.phone.state().video, 'both sides agreed on video');
+      ok(!a.phone.state().cam && !b.phone.state().peerCam, 'cameras start off');
+      const early = watch(b, a.id);
+      ok(await waitFor(() => early.ended), 'nothing to watch while the camera is off');
+      await asP(a.phone.camera, true);
+      ok(a.phone.state().cam, 'the caller sees their own camera on');
+      const mine = watch(a, 'me');
+      const first = frameOf(20 * 1024, 3);
+      ok(show(a.id, first), 'the camera is being captured');
+      ok(await waitFor(() => b.phone.state().peerCam), 'the callee sees the camera on');
+      const seen = watch(b, a.id);
+      const second = frameOf(30 * 1024, 5);
+      show(a.id, second);
+      ok(await waitFor(() => seen.length === 1), 'a later frame reaches the watcher');
+      ok(seen[0].equals(second), 'whole, after being split in chunks');
+      ok(mine.length >= 1 && mine[mine.length - 1].equals(second), 'the mirror shows the same frame');
+      await asP(a.phone.camera, false);
+      ok(await waitFor(() => !b.phone.state().peerCam), 'turning it off is told to the other side at once');
+      ok(await waitFor(() => seen.ended && mine.ended), 'and both watchers end');
+      await asP(a.phone.end);
+    } finally { await closeNode(a); await closeNode(b); }
+  });
+
+  t('a node without a camera still watches the other side, and two without cameras stay audio-only', async () => {
+    const a = makeNode(); const b = makeNode({ noVideo: true });
+    try {
+      await link(a, b);
+      await asP(a.phone.call, b.id);
+      await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming');
+      await asP(b.phone.accept);
+      ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'connected' && b.phone.state().phase === 'connected'));
+      ok(a.phone.state().video && b.phone.state().video, 'video is on because one side can show a camera');
+      ok(!b.phone.state().videoAvailable, 'the callee has no camera of their own');
+      let refused = '';
+      try { await asP(b.phone.camera, true); } catch (e) { refused = e.message; }
+      eq(refused, 'unavailable', 'and cannot turn one on');
+      await asP(a.phone.camera, true);
+      show(a.id, frameOf(4000, 2));
+      ok(await waitFor(() => b.phone.state().peerCam), 'but sees the caller');
+      speak(a.id, 9000);
+      ok(await waitFor(() => heard(b.id, 9000)), 'while audio flows');
+      await asP(a.phone.end);
+    } finally { await closeNode(a); await closeNode(b); }
+    const c = makeNode({ noVideo: true }); const d = makeNode({ noVideo: true });
+    try {
+      await link(c, d);
+      await asP(c.phone.call, d.id);
+      await waitFor(() => d.phone.state() && d.phone.state().phase === 'incoming');
+      await asP(d.phone.accept);
+      ok(await waitFor(() => c.phone.state() && c.phone.state().phase === 'connected' && d.phone.state().phase === 'connected'));
+      ok(!c.phone.state().video && !d.phone.state().video, 'with no camera anywhere there is no video stream');
+      await asP(c.phone.end);
+    } finally { await closeNode(c); await closeNode(d); }
+  });
+
+  t('a side that chose audio only neither shows nor receives video', async () => {
+    const a = makeNode(); const b = makeNode({ video: false });
+    try {
+      await link(a, b);
+      await asP(a.phone.call, b.id);
+      await waitFor(() => b.phone.state() && b.phone.state().phase === 'incoming');
+      await asP(b.phone.accept);
+      ok(await waitFor(() => a.phone.state() && a.phone.state().phase === 'connected' && b.phone.state().phase === 'connected'));
+      ok(!a.phone.state().video && !b.phone.state().video, 'the call is audio-only');
+      await asP(a.phone.end);
+    } finally { await closeNode(a); await closeNode(b); }
+  });
+
+  t('a stream of JPEG bytes is cut into whole frames', () => {
+    const f1 = frameOf(40, 1), f2 = frameOf(700, 2), f3 = frameOf(12, 3);
+    const got = [];
+    const feed = phone.jpegSplitter(j => got.push(j));
+    const all = Buffer.concat([Buffer.from([0, 0]), f1, f2, f3]);
+    for (let i = 0; i < all.length; i += 17) feed(all.subarray(i, i + 17));
+    eq(got.length, 3);
+    ok(got[0].equals(f1) && got[1].equals(f2) && got[2].equals(f3), 'each frame comes out exactly as it went in');
   });
 });

@@ -986,16 +986,18 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         const parentForum = byIdAll.get(rootId) || actions.find(a => a.type === 'forum' && !a.content?.root && (a.id === rootId || a.content?.key === rootId));
         const parentContent = parentForum ? (parentForum.value?.content || parentForum.content || {}) : {};
         const parentTitle = (parentContent?.title && String(parentContent.title).trim()) ? parentContent.title : ((rootTitle && String(rootTitle).trim()) ? rootTitle : '');
-        const parentAuthor = parentForum?.author || '';
-        const parentName = parentForum?.authorName || '';
+        const branchId = typeof content.branch === 'string' && content.branch !== rootId && content.branch !== rootKey ? content.branch : '';
+        const branchMsg = branchId ? (byIdAll.get(branchId) || actions.find(a => a.type === 'forum' && (a.id === branchId || a.content?.key === branchId))) : null;
+        const repliedAuthor = branchMsg ? (branchMsg.author || '') : '';
+        const repliedName = branchMsg ? (branchMsg.authorName || '') : '';
         const hrefKey = rootKey || rootId;
         cardBody.push(
           div({ class: 'card-section forum' },
             div(
               { class: 'reply-context' },
               span({ class: 'reply-context-meta' },
-                a({ href: `/forum/${encodeURIComponent(hrefKey)}`, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
-                parentAuthor ? span(' ', userLink(parentAuthor, parentName)) : ''
+                a({ href: `/forum/${encodeURIComponent(hrefKey)}#msg-${String(action.tipId || action.id || '').replace(/[^a-zA-Z0-9]/g, '')}`, class: 'tag-link' }, repliedAuthor ? i18n.inReplyTo : i18n.forumInThread),
+                repliedAuthor ? span(' ', userLink(repliedAuthor, repliedName)) : ''
               ),
               parentTitle ? p({ class: 'post-text reply-context-text' }, parentTitle) : ''
             ),
@@ -2010,7 +2012,12 @@ function getViewDetailsAction(type, action) {
     case 'video':      return `/videos/${id}`;
     case 'torrent':    return `/torrents/${id}`;
     case 'file':       return `/files/${id}`;
-    case 'forum':      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
+    case 'forum': {
+      const root = action.content?.root;
+      const rootId = typeof root === 'string' ? root : (root && (root.key || root.id)) || '';
+      if (rootId) return `/forum/${encodeURIComponent(action.content?.rootKey || rootId)}#msg-${String(action.tipId || action.id || '').replace(/[^a-zA-Z0-9]/g, '')}`;
+      return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
+    }
     case 'document':   return `/documents/${id}`;
     case 'bookmark':   return `/bookmarks/${id}`;
     case 'event':      return `/events/${id}`;

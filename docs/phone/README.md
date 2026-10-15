@@ -6,6 +6,8 @@
 
 Calls use the microphone and speakers of the device where Oasis runs (the browser runs no JavaScript), through PulseAudio, PipeWire or ALSA. Without one of them, **Phone** says that calls are not available on this device.
 
+Video is optional on top of that. To turn your camera on, the device needs one of `v4l2-ctl` (from v4l-utils), GStreamer (`gst-launch-1.0`) or `ffmpeg`, and a camera. Without them you still see the cameras of the others; you just cannot show yours. Nothing is installed by Oasis.
+
 ---
 
 ## Phone
@@ -27,6 +29,10 @@ Add several inhabitants to make a **joint call**: your Oasis connects with each 
 An incoming call shows a bar at the top of every page with **Answer** and **Reject**, and on a desktop also a system notification with the same two buttons, so you can pick up without going to the browser. Rejecting is silent: the caller only sees that nobody answered, exactly as if you were away.
 
 While a call is on, the same bar keeps who you are talking to, a running clock, **Mute** and **Hang up**, so you can keep browsing. You can be in one call or one room at a time.
+
+### Camera
+
+Every call starts as voice only. As soon as one of the two devices can show a camera, the call carries video: the call panel in **Phone** offers **Camera on** to whoever has one, your camera starts, the other side sees you in the panel, and **Camera off** stops it at once; the camera light on your device is the honest sign of whether it is running. The pictures go end to end encrypted with keys made for that call, like the voice, and are never kept anywhere. Joint calls are voice only.
 
 From **Phone** you can also stop hearing one particular inhabitant, in a call for two or in a joint call, with **Silence** next to their name. It only affects your ears: the others keep hearing them, and they keep hearing you. **Hear again** undoes it.
 
@@ -69,13 +75,15 @@ Tribes and sub-tribes have rooms of their own, in their **ROOMS** section, reada
 
 ### Joining
 
-Click a room's title in the list to enter it: you are in the room and hear whoever is talking. Entering another room leaves the one you were in. **Leave** to go, whenever you want; joining needs the same devices as a call. **Mute** yourself at any moment; the others see that you are muted. **Silence** next to someone's name stops their voice for you alone, without anyone else noticing; **Hear again** brings it back.
+Click a room's title in the list to open it; **Join** gets you in: you are in the room and hear whoever is talking. Entering another room leaves the one you were in. **Leave** to go, whenever you want; joining needs the same devices as a call. **Mute** yourself at any moment; the others see that you are muted. **Silence** next to someone's name stops their voice for you alone, without anyone else noticing; **Hear again** brings it back.
 
 While you are in a room, the bar at the top of every page shows its name, how many are inside, how long you have been there, **Mute**, **Raise hand** and **Leave**. If the room is already busy when you enter, you come in muted, so the newcomers do not interrupt; **Unmute** when you want to speak.
 
 A chime tells you when someone enters, and a different one when someone leaves, mutes or unmutes. On the room page, above the participants, the bell turns those chimes and the list of what happened (who entered, who left, who muted, who recorded) on or off for you, and **Clear** empties that list. It is never stored anywhere: it lives only while you are inside. On a desktop, each of those notices also appears as a system notification, so you can follow the room without reloading the page; what you do yourself is not notified.
 
 **Raise hand** asks for a turn to speak. The others hear a signal and get a notice, and your hand appears next to your name with your place in the queue: the first hand raised is the first turn. Raised hands are listed first among the participants, in that order, and the bar at the top shows your own place. **Lower hand** takes you out of the queue.
+
+Rooms are videoconference rooms: everyone hears everyone, and anyone can also show their camera. **Camera on**, on the room page, starts yours; everyone inside sees the cameras that are on tiled into one picture above the participants, with the names in the same order underneath, and a camera mark next to whoever is showing theirs. **Camera off** stops yours at once. The pictures are encrypted with the room key, like the voice, and are never kept anywhere; the PUB that hosts the room only forwards them. On a PUB that does not forward video, the room is voice only and the button does not appear. Several cameras at once cost bandwidth to everyone inside: in a large room, keep yours off unless you are speaking.
 
 Any participant can **Record** the room. Everyone inside hears a signal when a recording starts and another when it stops, and sees a **REC** mark next to whoever is recording. The recording stays on the device of the one who made it, under **Recordings** on the room page, to download or delete.
 

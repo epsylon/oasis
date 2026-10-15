@@ -1,6 +1,6 @@
 const {
   div, a, span, form, button, section, p, ul, li,
-  input, label, br, select, option, h2, textarea
+  input, label, br, select, option, h2, textarea, details, summary
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
@@ -108,7 +108,7 @@ const renderForumForm = (draft = null) =>
       textarea({ maxlength: String(TEXT_CAP),
         name: 'text',
         required: true,
-        rows: 4,
+        rows: 8,
         placeholder: i18n.forumMessagePlaceholder
       }, draft ? String(draft.text || '') : ''), br(), br(),
       label(i18n.uploadMedia), br(),
@@ -117,24 +117,35 @@ const renderForumForm = (draft = null) =>
     )
   );
 
-const renderThread = (nodes, level = 0, forumId) => {
+const bySupport = (a, b) =>
+  wilsonScore(b.positiveVotes, b.negativeVotes) - wilsonScore(a.positiveVotes, a.negativeVotes);
+
+const bestReplyKey = (nodes) => {
+  const flat = [];
+  const walk = (list) => { for (const m of Array.isArray(list) ? list : []) { if (m && m.text && String(m.text).trim()) flat.push(m); walk(m && m.children); } };
+  walk(nodes);
+  if (!flat.length) return null;
+  const sorted = flat.slice().sort(bySupport);
+  const top = sorted[0];
+  if (wilsonScore(top.positiveVotes, top.negativeVotes) > 0) return top.key;
+  const first = (Array.isArray(nodes) ? nodes : []).filter(m => m && m.text && String(m.text).trim()).sort(bySupport)[0];
+  return first ? first.key : null;
+};
+
+const renderThread = (nodes, level = 0, forumId, bestKey = null) => {
   if (!Array.isArray(nodes)) return [];
   return [...nodes]
     .filter(m => (m && m.text && String(m.text).trim()) || (m && Array.isArray(m.children) && m.children.length))
-    .sort((a, b) =>
-      wilsonScore(b.positiveVotes, b.negativeVotes)
-      - wilsonScore(a.positiveVotes, a.negativeVotes)
-    )
-    .flatMap((m, i) => {
-      const isTopLevelWinner = level === 0 && i === 0;
+    .sort(bySupport)
+    .flatMap((m) => {
       const classList = [
         'forum-comment',
         `level-${level}`,
-        isTopLevelWinner ? 'highlighted-reply' : ''
+        bestKey && m.key === bestKey ? 'highlighted-reply' : ''
       ].filter(Boolean).join(' ');
 
       const commentBox = div(
-        { class: classList },
+        { class: classList, id: `msg-${String(m.key || '').replace(/[^a-zA-Z0-9]/g, '')}` },
         div({ class: 'comment-header' },
           span({ class: 'date-link' },
             `${moment(m.timestamp).format('YYYY/MM/DD HH:mm')}`),
@@ -158,7 +169,8 @@ const renderThread = (nodes, level = 0, forumId) => {
             )
           )
         ),
-        div({ class: 'new-reply' },
+        details({ class: 'new-reply forum-inline-reply', ...(draftFor(m.key) ? { open: true } : {}) },
+          summary({ class: 'forum-inline-reply-toggle' }, i18n.tribeForumReply),
           form({
             method: 'POST',
             action: `/forum/${encodeURIComponent(forumId)}/message`,
@@ -168,7 +180,7 @@ const renderThread = (nodes, level = 0, forumId) => {
             input({ type: 'hidden', name: 'parentId', value: m.key }),
             textarea({ maxlength: String(TEXT_CAP),
               name: 'message',
-              rows: 2,
+              rows: 4,
               required: true,
               placeholder: i18n.forumMessagePlaceholder,
               class: 'comment-textarea'
@@ -179,7 +191,7 @@ const renderThread = (nodes, level = 0, forumId) => {
         )
       );
 
-      return [ commentBox, ...renderThread(m.children || [], level + 1, forumId) ];
+      return [ commentBox, ...renderThread(m.children || [], level + 1, forumId, bestKey) ];
     });
 };
 
@@ -407,7 +419,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
         },
           textarea({ maxlength: String(TEXT_CAP),
             name: 'message',
-            rows: 4,
+            rows: 8,
             required: true,
             placeholder: i18n.forumMessagePlaceholder,
             class: 'new-message-textarea'
@@ -417,7 +429,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
           button({ type: 'submit', class: 'forum-send-btn' }, i18n.forumSendButton)
         )
       ),
-      ...renderThread(messagesData.messages, 0, forum.key)
+      ...renderThread(messagesData.messages, 0, forum.key, bestReplyKey(messagesData.messages))
     )
   );
 };

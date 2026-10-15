@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged, CLEARNET_HUB_CSS } = require('./main_views');
 const { renderTribeWikiSection } = require('./wiki_view');
 const { renderEncryptedChip: renderTribeEncryptedChip, renderLicenseSelect, renderReachChip, renderClearnetPage, escapeHtml, renderRichText, blobUrl: cnBlobUrl, paginateClearnet, renderClearnetPager, CLEARNET_PAGER_CSS } = require('./clearnet_view');
 const { renderPollCard } = require('./polls_view');
@@ -449,7 +449,7 @@ const contentTypeVerb = (ct) => {
 };
 
 const contentTypeName = (ct) => {
-  const map = { event: i18n.tribeSectionEvents, task: i18n.tribeSectionTasks, votation: i18n.tribeSectionVotations, poll: i18n.pollsTitle, forum: i18n.tribeSectionForum, 'forum-reply': i18n.tribeSectionForum, media: i18n.tribeSectionMedia, feed: i18n.tribeSectionFeed, pad: i18n.tribeSectionPads || 'PADS', chat: i18n.tribeSectionChats || 'CHATS', calendar: i18n.tribeSectionCalendars || 'CALENDARS', map: i18n.tribeSectionMaps || 'MAPS', wiki: i18n.tribeSectionWiki || 'WIKI' };
+  const map = { event: i18n.tribeSectionEvents, task: i18n.tribeSectionTasks, votation: i18n.tribeSectionVotations, poll: i18n.pollsTitle, forum: i18n.tribeSectionForum, 'forum-reply': i18n.tribeSectionForum, blog: i18n.blogTitle, media: i18n.tribeSectionMedia, feed: i18n.tribeSectionFeed, pad: i18n.tribeSectionPads || 'PADS', chat: i18n.tribeSectionChats || 'CHATS', calendar: i18n.tribeSectionCalendars || 'CALENDARS', map: i18n.tribeSectionMaps || 'MAPS', wiki: i18n.tribeSectionWiki || 'WIKI' };
   return map[ct] || ct;
 };
 
@@ -1839,19 +1839,43 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
   return section === 'documents' ? `${page}<script type="module" src="/js/pdf-viewer.js?v=102"></script>` : page;
 };
 
-exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1 }) => {
+exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, filterType = '', filterAuthor = '' }) => {
   const t = tribe || {};
-  const list = (Array.isArray(items) ? items : []).filter(it => it && it.contentType !== 'forum-reply');
+  const all = (Array.isArray(items) ? items : []).filter(it => it && it.contentType !== 'forum-reply');
+  const kindKey = (it) => it.contentType === 'media' ? `media-${String(it.mediaType || '')}` : String(it.contentType || '');
+  const kindName = (it) => it.contentType === 'media' ? activityMediaTypeName(String(it.mediaType || '')) : contentTypeName(it.contentType);
+  const activeType = String(filterType || '').toLowerCase();
+  const activeAuthor = String(filterAuthor || '');
+  const byAuthor = activeAuthor ? all.filter(it => it.author === activeAuthor) : all;
+  const list = activeType ? byAuthor.filter(it => kindKey(it) === activeType) : byAuthor;
+  const base = `/c/tribe/${encodeURIComponent(slug || '')}`;
+  const hrefFor = (type, author) => {
+    const q = new URLSearchParams();
+    if (type) q.set('type', type);
+    if (author) q.set('author', author);
+    const qs = q.toString();
+    return escapeHtml(qs ? `${base}?${qs}` : base);
+  };
   const paged = paginateClearnet(list, page);
-  const pager = renderClearnetPager({ base: `/c/tribe/${encodeURIComponent(slug || '')}`, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
+  const pager = renderClearnetPager({ base, params: { type: activeType, author: activeAuthor }, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
   const name = t.title || i18n.cnUntitled || 'Untitled';
   const cover = cnBlobUrl(t.image);
   const desc = renderRichText(t.description || '');
   const day = (v) => { const d = new Date(v); return v && !isNaN(d) ? d.toISOString().slice(0, 10) : ''; };
   const who = (id) => (names && names[id]) || (id ? `${String(id).slice(0, 10)}…` : '');
+  const countBy = (arr, fn) => { const out = new Map(); for (const it of arr) { const k = fn(it); if (k) out.set(k, (out.get(k) || 0) + 1); } return out; };
+  const typeCounts = countBy(byAuthor, kindKey);
+  const authorCounts = countBy(activeType ? all.filter(it => kindKey(it) === activeType) : all, it => it.author);
+  const btn = (href, label, count, active) => `<a class="cn-filter-btn${active ? ' active' : ''}" href="${href}">${escapeHtml(label)} (${count})</a>`;
+  const typeRow = typeCounts.size > 1
+    ? `<div class="cn-filter-row">${btn(hrefFor('', activeAuthor), i18n.all, byAuthor.length, !activeType)}${[...typeCounts.entries()].map(([k, n]) => btn(hrefFor(k, activeAuthor), kindName(byAuthor.find(it => kindKey(it) === k)), n, activeType === k)).join('')}</div>`
+    : '';
+  const authorRow = authorCounts.size > 1
+    ? `<div class="cn-filter-row">${btn(hrefFor(activeType, ''), i18n.all, [...authorCounts.values()].reduce((a, b) => a + b, 0), !activeAuthor)}${[...authorCounts.entries()].map(([id, n]) => btn(hrefFor(activeType, id), who(id), n, activeAuthor === id)).join('')}</div>`
+    : '';
   const renderItem = (it) => {
     const mt = it.contentType === 'media' ? String(it.mediaType || '') : '';
-    const kind = mt ? activityMediaTypeName(mt) : contentTypeName(it.contentType);
+    const kind = kindName(it);
     const title = escapeHtml(it.title || '');
     const blob = cnBlobUrl(it.image);
     const media = !blob ? ''
@@ -1885,7 +1909,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1 })
     const when = day(it.createdAt);
     return `<div class="cn-tribe-item">
       <div class="cn-tribe-meta"><span class="cn-kind-tag">[${escapeHtml(String(kind).toUpperCase())}]</span>${when ? `<span>📅 ${escapeHtml(when)}</span>` : ''}${it.author ? `<span>${escapeHtml(who(it.author))}</span>` : ''}</div>
-      ${title ? `<h2 class="cn-tribe-title">${title}</h2>` : ''}
+      ${title ? `<h2 class="cn-tribe-title">${it.href ? `<a href="${escapeHtml(it.href)}">${title}</a>` : title}</h2>` : ''}
       ${media}
       ${text ? `<p class="cn-tribe-text">${text}</p>` : ''}
       ${bookmark}
@@ -1914,7 +1938,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1 })
 .cn-tribe-reply-meta{color:var(--fg-dim);font-size:12px;word-break:break-all}
 .cn-tribe-reply p{margin:4px 0 0 0;color:var(--fg-soft);line-height:1.5;word-break:break-word}
 .cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
-` + CLEARNET_PAGER_CSS;
+` + CLEARNET_HUB_CSS + CLEARNET_PAGER_CSS;
   const body = `
   <div class="cn-tribe-head">
     <a href="/c/tribe/${encodeURIComponent(slug || '')}"><img class="cn-tribe-cover" src="${cover || '/c/assets/images/default-tribe.png'}" alt="${escapeHtml(name)}"/></a>
@@ -1923,6 +1947,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1 })
       ${desc ? `<p class="cn-tribe-desc">${desc}</p>` : ''}
     </div>
   </div>
+  ${typeRow}${authorRow}
   ${list.length
     ? `<h2 class="cn-section">${escapeHtml(i18n.cnPublicContent || 'Content')} (${list.length})</h2><div class="cn-tribe-list">${paged.items.map(renderItem).join('')}</div>${pager}`
     : `<div class="cn-empty-content">${escapeHtml(i18n.cnCategoryEmpty || '')}</div>`}

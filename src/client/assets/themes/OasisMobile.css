@@ -3601,7 +3601,7 @@ body > .header {
   flex-direction: column !important;
 }
 .main-column .tribe-main:has(> .room-live-panel) > .pad-members-details {
-  order: -1 !important;
+  order: 1 !important;
   text-align: center !important;
 }
 .main-column .tribe-main:has(> .room-live-panel) > .pm-form-error-msg {
@@ -3809,4 +3809,120 @@ body > .header {
   background: #ff9900 !important;
   color: #000 !important;
   border: 1px solid #e68a00 !important;
+}
+.main-column .video-grid { gap: 6px !important; margin-top: 18px !important; }
+.main-column .video-tile { width: calc(50% - 3px) !important; }
+.main-column .forum-comment.highlighted-reply {
+  background-color: transparent !important;
+  border-left: 2px solid rgba(255, 164, 0, 0.55) !important;
+}
+.main-column .video-tile .video-tile-name,
+.main-column .video-tile .user-link,
+.main-column .video-grid-names {
+  display: none !important;
+}
+.main-column .tribe-side-actions.housing-status-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.main-column .tribe-side-actions.housing-status-row > .card-label {
+  width: auto !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  letter-spacing: 0 !important;
+}
+.main-column .tribe-side-actions.housing-status-row > .inline-form {
+  display: inline-flex !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+}
+.main-column .tribe-main > .pad-members-details .pad-members-chips {
+  justify-content: center !important;
+}
+.main-column .tribe-side-actions.housing-status-row > .inline-form .tribe-action-btn {
+  min-height: 32px !important;
+  padding: 4px 12px !important;
+  font-size: 13px !important;
+}
+.main-column .tribe-side-actions.owner-actions {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.main-column .tribe-main > .room-live-panel {
+  padding: 8px 10px !important;
+  margin: 0 !important;
+}
+.main-column .tribe-main > .pad-members-details {
+  margin: 0 !important;
+}
+.main-column .tribe-main > .pad-members-details > summary {
+  margin: 0 !important;
+}
+.main-column .room-live-panel .phone-empty {
+  margin: 0 0 8px !important;
+}
+.main-column .tribe-side:has(> .owner-actions) {
+  display: flex !important;
+  flex-direction: column !important;
+}
+.main-column .tribe-side:has(> .owner-actions) > :is(.tribe-side-description, .tribe-info-table, .card-tags, .tribe-side-tags, .tribe-card-members, .tribe-side-actions:not(.owner-actions):not(.housing-status-row)) {
+  order: 1 !important;
+}
+.main-column .tribe-side:has(> .owner-actions) > .housing-status-row {
+  order: -1 !important;
+}
+.main-column .tribe-side:has(> .owner-actions) > :is(.card-header, .shop-title-row, .card-chips-row) {
+  order: -2 !important;
+}
+.main-column .room-live-head .room-live-controls {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+.main-column .live-lightbox {
+  top: 60px !important;
+  bottom: 66px !important;
+  margin: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 0 !important;
+  z-index: 800 !important;
+  background: #0d0d0d !important;
+}
+.main-column .live-lightbox .lightbox-image {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: contain !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+}
+.main-column .live-lightbox .lightbox-close {
+  position: absolute !important;
+  top: 8px !important;
+  right: 14px !important;
+  z-index: 2 !important;
+  font-size: 32px !important;
+  line-height: 1 !important;
+  color: #FFD700 !important;
+}
+.main-column .live-lightbox .lightbox-image-link {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: none !important;
 }

@@ -1204,6 +1204,23 @@ a.create-button {
   align-items: center !important;
   gap: 8px 6px !important;
   padding: 8px 8px 4px !important;
+  min-height: 60px !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 900 !important;
+  box-sizing: border-box !important;
+}
+.oasis-nav-side-toggle ~ .header + * ,
+.oasis-nav-side-toggle ~ .header ~ .update-banner:first-of-type {
+  margin-top: 0 !important;
+}
+body:has(.oasis-nav-side-toggle) {
+  padding-top: 64px !important;
+}
+body:has(:is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select):focus) .oasis-nav-side-toggle ~ .header {
+  position: absolute !important;
 }
 .oasis-nav-side-toggle ~ .header .top-bar-left,
 .oasis-nav-side-toggle ~ .header .top-bar-right,
@@ -1375,6 +1392,7 @@ a.create-button {
 .oasis-nav-side-toggle ~ .header .top-bar-right nav {
   position: fixed !important;
   bottom: 0 !important;
+  height: 66px !important;
   width: 50% !important;
   flex: none !important;
   z-index: 900 !important;

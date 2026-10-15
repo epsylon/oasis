@@ -113,7 +113,7 @@ const mastodonBox = (account, stats, actions, showLabel) => {
 
 const disconnectedBlock = () => {
   const text = String(i18n.fediverseDisconnected || "");
-  const settingsLink = a({ href: "/settings#multiverse" }, i18n.fediverseEmptyLink || "settings");
+  const settingsLink = a({ href: "/settings?filter=multiverse" }, i18n.fediverseEmptyLink || "settings");
   const parts = text.split("%LINK%");
   const para = parts.length > 1
     ? p(parts[0], settingsLink, parts.slice(1).join("%LINK%"))
