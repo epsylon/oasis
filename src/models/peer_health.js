@@ -54,6 +54,8 @@ const isDead = ({ key, failures = 0, now = Date.now() } = {}) => {
   return Math.max(observed, Number(failures) * RETRY_CAP_MS) >= DEAD_AFTER_MS;
 };
 
+const failingSince = (key) => Number((load()[canonicalKey(key)] || {}).failingSince) || 0;
+
 const addressOf = (item) => {
   const m = Array.isArray(item) ? String(item[0] || '').match(/^(?:net|onion):([^:~]+):(\d+)/) : null;
   if (m) return `${m[1]}:${m[2]}`;
@@ -100,4 +102,4 @@ const NET_REASON_KEYS = {
   notfound: 'peerErrNotFound', unreachable: 'peerErrUnreachable', timeout: 'peerErrTimeout', dropped: 'peerErrDropped', other: 'peerErrOther', silent: 'peerErrSilent'
 };
 
-module.exports = { canonicalKey, observe, isDead, failuresByKey, classifyNetError, NET_REASON_KEYS, DEAD_AFTER_MS };
+module.exports = { canonicalKey, observe, isDead, failingSince, failuresByKey, classifyNetError, NET_REASON_KEYS, DEAD_AFTER_MS };

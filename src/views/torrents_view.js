@@ -80,10 +80,11 @@ const renderTorrentSeeds = (t, spreadMap) => {
   const info = spreadInfoOf(t, spreadMap);
   return String(info && typeof info.count === "number" ? info.count : (info && Array.isArray(info.voters) ? info.voters.length : 0));
 };
-const renderTorrentSpread = (t, spreadMap) => String(t.author) === String(userId) ? "" : renderSpreadButton(t.key, spreadInfoOf(t, spreadMap), i18n.seedAction, false);
+const renderTorrentSpread = (t, spreadMap) => String(t.author) === String(userId) ? "—" : renderSpreadButton(t.key, spreadInfoOf(t, spreadMap), i18n.seedAction, false);
 
 const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
+  const extraColumns = typeof params.rowFor === "function";
 
   if (!torrents.length) return p(params.q ? i18n.torrentNoMatch : i18n.noTorrents);
 
@@ -91,20 +92,17 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
     { border: "1", class: "torrent-table" },
     tr(
       th(i18n.createdAt || "DATE"),
-      th(i18n.authorLabel || "AUTHOR"),
       th(i18n.torrentTitleLabel || "TITLE"),
       th(i18n.torrentSizeLabel || "SIZE"),
-      th(i18n.seedsLabel),
-      th(i18n.seedAction),
+      th({ class: "torrent-spread-cell" }, i18n.seedsLabel),
+      th({ class: "torrent-spread-cell" }, i18n.seedAction),
       th(""),
-      th(""),
-      th("")
+      ...(extraColumns ? [th(""), th("")] : [])
     ),
     torrents.map((t) => {
       const row = typeof params.rowFor === "function" ? params.rowFor(t) : null;
       return tr(
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
-        td(userLink(t.author)),
         td(t.title || "", t.tribeOrigin ? renderTribeOriginChip(t.tribeOrigin) : t.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('torrents', t.title, t.key)) : null, ...(row && Array.isArray(row.titleChips) ? row.titleChips.filter(Boolean) : [])),
         td(formatSize(t.size)),
         td({ class: "torrent-spread-cell" }, t.tribeOrigin || row ? "" : renderTorrentSeeds(t, params.spreadMap)),
@@ -123,25 +121,7 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
                 button({ type: "submit", class: "filter-btn" }, i18n.torrentDetailsButton)
               )
         ),
-        td(
-          row
-            ? (row.download || "")
-            : t.url && t.url.startsWith("&")
-            ? div({ class: "torrent-card-actions" }, renderTorrentSourceDownload(t.key, t.source), renderTorrentDownload(torrentDownloadHref(t.url, t.title)))
-            : ""
-        ),
-        td(
-          row
-            ? (row.actions || "")
-            : t.tribeOrigin ? "" : renderContentActions(t.key, `/torrents/${encodeURIComponent(t.key)}`, {
-            author: t.author,
-            favKind: 'torrents',
-            isFavorite: t.isFavorite,
-            returnTo,
-            reportTitle: t.title,
-            deleteAction: String(t.author) === String(userId) ? contentDeleteAction('torrent', t.key) : undefined
-          })
-        )
+        ...(extraColumns ? [td(row ? (row.download || "") : ""), td(row ? (row.actions || "") : "")] : [])
       );
     })
   );
@@ -307,7 +287,6 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
         { class: "filters" },
         form(
           { method: "GET", action: "/torrents", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
@@ -448,7 +427,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
           : null
       );
     })(),
-    renderEngagement(torrentObj.key,
+    torrentObj.tribeId ? null : renderEngagement(torrentObj.key,
       renderOpinionsVoting('/torrents/opinions', torrentObj.key, torrentObj.opinions, returnTo, torrentObj.opinions_inhabitants),
       renderTorrentCommentsSection(torrentObj.key, comments, returnTo)
     )
@@ -465,7 +444,6 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
         { class: "filters" },
         form(
           { method: "GET", action: "/torrents", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),          ...(mediaChip("favorites") ? [button(
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase())] : []),

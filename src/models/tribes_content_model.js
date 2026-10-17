@@ -7,7 +7,7 @@ const longText = require('../backend/long_text');
 const { versionGroups } = require('../backend/dedupe');
 const TRIBE_LOG_TYPES = ['tribe', 'tribe-msg', 'tribe-keys-distrib', 'tribe-invite-msg', 'tribe-invite-tombstone', 'tribe-open-invite-tombstone', 'tombstone', 'contact'];
 
-const VALID_CONTENT_TYPES = ['event', 'task', 'report', 'votation', 'forum', 'forum-reply', 'market', 'job', 'project', 'media', 'feed', 'pixelia'];
+const VALID_CONTENT_TYPES = ['event', 'task', 'report', 'votation', 'forum', 'forum-reply', 'market', 'job', 'project', 'media', 'feed'];
 const categories = require('../backend/opinion_categories');
 const VALID_STATUSES = ['OPEN', 'CLOSED', 'IN-PROGRESS'];
 const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];

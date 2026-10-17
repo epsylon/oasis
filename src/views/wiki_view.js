@@ -117,7 +117,6 @@ const renderFilters = (filter, q, params = {}, census = []) => {
   const labelOf = (mode) => String(i18n[`wikiFilter${mode.charAt(0).toUpperCase() + mode.slice(1)}`] || mode).toUpperCase();
   return div({ class: "filters" },
     form({ method: "GET", action: "/wiki", class: "ui-toolbar ui-toolbar--filters" },
-      input({ type: "hidden", name: "q", value: q || "" }),
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       ...(params.emptyMod ? [] : [
         ...FILTERS.filter(chipVisible).map(mode => button({ type: "submit", name: "filter", value: mode, class: filter === mode ? "filter-btn active" : "filter-btn" }, labelOf(mode))),

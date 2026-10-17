@@ -81,7 +81,6 @@ const renderFilters = (filter, q, census, emptyMod) =>
   section(
     div({ class: "filters" },
       form({ method: "GET", action: "/mailing", class: "ui-toolbar ui-toolbar--filters" },
-        input({ type: "hidden", name: "q", value: q || "" }),
         ...(emptyMod ? [] : [
           ...chipButtons(BASE_FILTERS, filter, census, baseLabel),
           ...chipButtons(TYPE_FILTERS, filter, census, typeLabel),

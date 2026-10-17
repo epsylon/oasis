@@ -11,12 +11,15 @@ const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 const userId = config.keys.id;
 
+const capFirst = (s) => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+const typeLabel = (type) => i18n['type' + capFirst(type)] || type;
+
 const filterButton = (mode, currentFilter) =>
   form({ method: 'GET', action: '/trending' },
     input({ type: 'hidden', name: 'filter', value: mode }),
     button(
       { type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' },
-      String(i18n[mode + 'Button'] || mode).toUpperCase()
+      String(i18n[mode + 'Button'] || typeLabel(mode)).toUpperCase()
     )
   );
 
@@ -162,6 +165,16 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
           : null
       )
     );
+  } else if (c.type === 'post') {
+    contentHtml = div({ class: 'trending-blog' },
+      div({ class: 'card-section blog' },
+        c.contentWarning ? div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, a({ href: `/blogs/${encodeURIComponent(item.key)}` }, c.contentWarning))) : "",
+        div({ class: 'blog-card-text', [RAW_HTML]: sanitizeHtml(renderStyledHtml(String(c.text || '').trim().length > 420 ? String(c.text).trim().slice(0, 420).replace(/\s+$/, '') + '…' : String(c.text || '').trim())) }),
+        Array.isArray(c.tags) && c.tags.length
+          ? div({ class: 'card-tags' }, c.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+          : null
+      )
+    );
   } else if (c.type === 'feed') {
     const { text, refeeds } = c;
     contentHtml = div({ class: 'trending-feed' },
@@ -221,6 +234,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     file: 'files',
     document: 'documents',
     feed: 'feed',
+    post: 'blogs',
     votes: 'votes',
     transfer: 'transfers',
     industry: 'industry',
@@ -249,12 +263,12 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     div(
       { class: 'card-header activity-card-header' },
       span({ class: 'pm-exposition-chip pm-exposition-whole' },
-        span({ class: 'pm-exposition-text' }, String(i18n['type' + String(c.type || '').charAt(0).toUpperCase() + String(c.type || '').slice(1)] || c.type || '').toUpperCase())
+        span({ class: 'pm-exposition-text' }, String(typeLabel(c.type) || '').toUpperCase())
       ),
       renderContentActions(item.key, detailHref, {
         spread: spreadMap.get(item.key) || null,
         author: item.value.author,
-        reportTitle: c.title || c.question || c.concept || '',
+        reportTitle: c.title || c.question || c.concept || c.contentWarning || '',
         ...(CONTENT_TORRENTABLE.has(c.type) && typeof c.url === 'string' && c.url.startsWith('&')
           ? { torrentFrom: { blobId: c.url, name: c.title || c.fileName || '' } }
           : {}),
@@ -301,7 +315,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   const baseFilters = ['ALL', 'RECENT', 'MINE', 'TOP'];
   const contentFilters = [
     ['votes', 'event', 'task', 'report'],
-    ['feed', 'project', 'industry', 'shopProduct', 'transfer'],
+    ['feed', 'post', 'project', 'industry', 'shopProduct', 'transfer'],
     ['audio', 'bookmark', 'document', 'file', 'image', 'torrent', 'video'],
     ['podcast', 'podcastEpisode', 'campaign', 'logisticsRoute']
   ];

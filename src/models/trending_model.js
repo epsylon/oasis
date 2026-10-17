@@ -4,6 +4,12 @@ const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const opinionCategories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES, requestScope } = require('./typed_log');
+const longText = require('../backend/long_text');
+const isRootBlogPost = (c) =>
+  !!c && c.type === 'post' && typeof c.text === 'string' &&
+  !c.root && !c.fork && !c.branch && !c.about && !c.target &&
+  c.private !== true && !Array.isArray(c.recps);
+
 const { buildVoteTally } = require('../backend/vote_tally');
 const { versionGroups, versionEntry } = require('../backend/dedupe');
 
@@ -21,7 +27,7 @@ module.exports = ({ cooler }) => {
   };
 
   const types = [
-    'bookmark', 'votes', 'poll', 'feed',
+    'bookmark', 'votes', 'poll', 'feed', 'post',
     'image', 'audio', 'video', 'document', 'torrent', 'file', 'transfer',
     'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse',
     'podcast', 'podcastEpisode', 'campaign', 'logisticsRoute'
@@ -52,6 +58,15 @@ module.exports = ({ cooler }) => {
       if (c.opinions && !['task', 'event', 'report'].includes(c.type)) itemsById.set(k, m);
 
       if (c.type === 'feed' && !itemsById.has(k)) itemsById.set(k, m);
+      if (isRootBlogPost(c) && !itemsById.has(k)) itemsById.set(k, m);
+    }
+
+    const chunkLookup = longText.lookupIn(longText.indexChunks(messages));
+    for (const [k, m] of Array.from(itemsById.entries())) {
+      const c = m.value?.content;
+      if (c?.type === 'post' && longText.hasChunks(c)) {
+        itemsById.set(k, { ...m, value: { ...m.value, content: longText.resolveField(c, 'text', m.value.author, chunkLookup) } });
+      }
     }
 
     const vg = versionGroups(Array.from(itemsById.values()).map(versionEntry));

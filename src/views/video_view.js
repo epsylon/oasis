@@ -19,7 +19,7 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
@@ -55,7 +55,7 @@ const renderVideoPlayer = (videoObj) =>
         { class: "video-container video-container-row" },
         videoHyperaxe({
           controls: true,
-          src: `/blob/${encodeURIComponent(videoObj.url)}`,
+          src: blobUrlOf(videoObj.url),
           preload: "metadata"
         })
       )
@@ -232,7 +232,6 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
         { class: "filters" },
         form(
           { method: "GET", action: "/videos", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
@@ -370,7 +369,6 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
         { class: "filters" },
         form(
           { method: "GET", action: "/videos", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),          ...(mediaChip("favorites") ? [button(
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase())] : []),

@@ -2349,12 +2349,17 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
   font-size: 13px !important;
 }
 
-.content-actions .btn-singleview.btn-content {
+.btn-singleview.btn-content,
+.main-column .content-actions .btn-singleview.btn-content {
+  background: #ffa300 !important;
+  color: #1e1f23 !important;
   border: 1px solid #ffa300 !important;
 }
-.content-actions .btn-singleview.btn-content:hover {
-  background: rgba(255, 163, 0, .18) !important;
-  border-color: #ffa300 !important;
+.btn-singleview.btn-content:hover,
+.main-column .content-actions .btn-singleview.btn-content:hover {
+  background: #FFD700 !important;
+  color: #1e1f23 !important;
+  border-color: #FFD700 !important;
 }
 
 .tribe-details.pad-page { padding: 8px !important; gap: 10px !important; }
@@ -3070,12 +3075,10 @@ body > .header {
   color: #111 !important;
   font-weight: 700 !important;
 }
-.main-column .graphos-zoom-row {
-  display: flex !important;
-  justify-content: flex-end !important;
+.main-column .graphos-statsbar {
   margin: 0 0 8px 0 !important;
 }
-.main-column .graphos-zoom-row .graphos-zoom-btn {
+.main-column .graphos-canvas .graphos-zoom-btn {
   min-height: 36px !important;
   padding: 6px 14px !important;
   font-size: 13px !important;
@@ -3541,7 +3544,7 @@ body > .header {
   min-height: 0 !important;
   height: auto !important;
 }
-.main-column .graphos-zoom-row {
+.main-column .graphos-statsbar {
   margin: 4px 0 6px 0 !important;
 }
 .main-column .graphos-fed-table,
@@ -3925,4 +3928,26 @@ body > .header {
   margin: 0 !important;
   border: 0 !important;
   background: none !important;
+}
+
+.profile-sensors-box span.karma-line.karma-line-stacked {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 3px !important;
+}
+.profile-sensors-box span.karma-line .karma-line-main {
+  display: block !important;
+}
+.profile-sensors-box span.karma-line .karma-received-row {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  gap: 14px !important;
+  margin-top: 2px !important;
+}
+.profile-sensors-box span.karma-line .karma-received {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
 }

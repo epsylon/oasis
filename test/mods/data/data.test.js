@@ -352,11 +352,11 @@ describe('data: rendering', (t) => {
     ok(!html.includes('href="#data-jobs"'), 'with a reason active the type shortcuts are hidden');
   });
 
-  t('ALL lists one section per kind, each led by its best match, with shortcuts to jump to them', async () => {
+  t('ALL lists one section per kind, each led by its best match, with a filter per kind', async () => {
     const { dataView } = require('../../../src/views/data_view');
     const mk = (kind, title, score) => ({ id: `%${title}.sha256`, kind, author: '@a.ed25519', title, href: `/${kind}/x`, common: [], score, createdAt: new Date().toISOString(), ts: Date.now(), reasons: [] });
     const html = String(await dataView({ hasProfile: true, reasonsAvail: [], reason: '', matches: [mk('jobs', 'job low', 0.2), mk('projects', 'project top', 0.9), mk('jobs', 'job high', 0.6)] }));
-    ok(html.includes('href="#data-jobs"') && html.includes('href="#data-projects"'), 'a shortcut per kind present');
+    ok(html.includes('name="filter" value="JOBS"') && html.includes('name="filter" value="PROJECTS"'), 'a filter per kind present');
     ok(html.includes('id="data-jobs"') && html.includes('id="data-projects"'), 'and a section per kind');
     ok(html.indexOf('id="data-projects"') < html.indexOf('id="data-jobs"'), 'sections ordered by their best match');
     ok(html.indexOf('project top') < html.indexOf('id="data-projects"'), 'the best of the best is shown on top');

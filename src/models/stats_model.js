@@ -6,6 +6,10 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const { versionGroups, versionEntry } = require('../backend/dedupe');
+const opinionCategories = require('../backend/opinion_categories');
+const CONSTRUCTIVE_OPINIONS = new Set(opinionCategories.karma.constructive);
+const MODERATION_OPINIONS = new Set(opinionCategories.karma.moderation);
+const NEUTRAL_OPINIONS = new Set(opinionCategories.karma.neutral);
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 const DISK_USAGE_TTL_MS = 10 * 60 * 1000;
 
@@ -223,8 +227,10 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     let s = 0;
     for (const k in cats) {
       if (!Object.prototype.hasOwnProperty.call(cats, k)) continue;
+      if (NEUTRAL_OPINIONS.has(k)) continue;
       if (k === 'interesting' || k === 'inspiring') s += 5;
-      else if (k === 'boring' || k === 'spam' || k === 'propaganda') s -= 3;
+      else if (MODERATION_OPINIONS.has(k)) s -= 5;
+      else if (CONSTRUCTIVE_OPINIONS.has(k)) s -= 3;
       else s += 1;
     }
     return s;

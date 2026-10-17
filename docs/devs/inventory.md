@@ -77,13 +77,14 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `banking/banking-confirm-notice.json` | The same, for contracts waiting for your confirmation. |
 | `content/content_favorites.json` | What you marked as a favourite, by content type. |
 | `content/follow_state.json` | Follow requests pending and accepted, with the moment of the last one. |
+| `content/viewer_hidden.json` | Inhabitants you muted and content you hid. Applied only by this node; nothing about it is published. |
 | `content/invites-used.json` | The latest invitations you used, with what you joined and when. |
 | `content/agenda-config.json` | How you arranged your Agenda. |
-| `content/blob-access.json` | When each downloaded blob was last opened. The media cache (Settings → Media cache) uses it to decide what to drop first once the quota is exceeded. |
+| `content/blob-access.json` | When each downloaded blob was last opened. The media cache (Settings → Content → Media cache) uses it to decide what to drop first once the quota is exceeded. |
 | `content/snapshot.oasissn`, `content/snapshot-recent.oasissn` | Only on a PUB: the copies of its log (every feed whole, and the recently active feeds; private messages as ciphertext) that newcomers receive over the SSB connection when they join, so they can start right away. Rebuilt periodically. |
 | `ai/AI-history.json` | Your conversation with the AI. It stays here; it is never published. |
 | `ai/AI-vectors.json` | Embeddings of the approved AI exchanges of the network, so 42 can pick the ones related to a question without recomputing them. Rebuilt on demand. |
-| `ai/AI-search-vectors.json` | Embeddings of public content titles and descriptions, used by the semantic part of Search. Rebuilt on demand. |
+| `ai/AI-search-vectors.json` | Embeddings of public content titles and descriptions, used by the semantic part of Search when a query has no literal match. Rebuilt on demand. |
 | `multiverse/fediverse-accounts.json` | The Mastodon, Telegram and PeerTube accounts linked to Multiverse, including their session tokens. Treat it like a password file. |
 | `multiverse/nextcloud-account.json` | The Nextcloud connected to Multiverse: server, user, folder and the app password that lets Oasis upload files there. Treat it like a password file. |
 | `backup/oasis-backup.json` | The state of the last backup or restore, so the page can report progress after a reload. |
@@ -94,7 +95,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `flags/oasis-political-seen` | Which governance announcements have already been sent to you, so none is sent twice. |
 | `peers/gossip_unfollowed.json` | The pubs you stopped following, so they are not offered again. |
 | `peers/peer-health.json` | Since when each pub or peer has been failing to connect. A pub that keeps failing for long enough is shown as unreachable and hidden from the peer lists; as soon as it connects again it is removed from here. |
-| `peers/lan-peers.json` | The inhabitants this node has met on the local network. With the Wish set to Only LAN, you see content from them and from yourself. |
+| `peers/lan-peers.json` | The inhabitants this node has met on the local network and when each one was last seen. With the Wish set to Only LAN, you see content from them and from yourself. Offline entries can be removed from the LAN tab; a removed inhabitant is added again when seen on the network. |
 | `phone/phone-history.json` | Your call history: who, when, direction, result and duration. It stays on this device. |
 | `rooms/` | The recordings you made in rooms, as audio files. They stay on this device and are not part of a backup. |
 | `phone/phone-seen.json` | Which missed calls and audio records you have already seen or played, so the PHONE counter only counts the rest. |

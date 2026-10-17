@@ -215,7 +215,6 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
         { class: "filters" },
         form(
           { method: "GET", action: "/bookmarks", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterAll).toUpperCase()),
@@ -356,7 +355,6 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
         { class: "filters" },
         form(
           { method: "GET", action: "/bookmarks", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterRecent).toUpperCase())] : []),

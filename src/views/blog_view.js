@@ -21,9 +21,16 @@ const FILTERS = [
 
 const safeText = (v) => String(v == null ? "" : v).trim();
 
+const renderBlogTags = (tags) => {
+  const list = (Array.isArray(tags) ? tags : []).map(t => String(t || "").trim().replace(/^#+/, "")).filter(Boolean);
+  return list.length
+    ? div({ class: "card-tags" }, list.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
+    : null;
+};
+
 const excerpt = (text, max = 420) => {
   const s = safeText(text);
-  return s.length > max ? s.slice(0, max) + "…" : s;
+  return s.length > max ? s.slice(0, max).replace(/\s+$/, "") + "…" : s;
 };
 
 const renderFilterBar = (filter, q, showSearch = true, total = null, censusList = null) => {
@@ -77,6 +84,7 @@ const renderBlogCard = (blog, filter, spreadInfo) => {
         : null,
       blog.clearnet === true ? div({ class: "card-chips-row" }, renderReachChip(true, i18n, clearnetItemHref("blog", blog.subject || blog.text, blog.id))) : null,
       div({ class: "blog-card-text", [RAW_HTML]: sanitizeHtml(renderStyledHtml(excerpt(blog.text))) }),
+      renderBlogTags(blog.tags),
       p({ class: "card-footer" },
         span({ class: "date-link" }, `${moment(blog.createdAt).format("YYYY/MM/DD HH:mm")}`),
         userLink(blog.author)
@@ -89,13 +97,15 @@ const renderCreateForm = (draft = null) => {
   const subjectValue = draft ? safeText(draft.subject) : "";
   const textValue = draft ? String(draft.text || "") : "";
   const allowComments = draft ? draft.allowComments !== false : true;
+  const tagsValue = draft ? (Array.isArray(draft.tags) ? draft.tags.join(", ") : safeText(draft.tags)) : "";
   return section(
     draft
       ? section({ class: "post-preview blog-preview" },
           div({ class: "preview-content" },
             h2(i18n.messagePreview),
             subjectValue ? h2({ class: "tribe-card-title" }, subjectValue) : null,
-            div({ class: "blog-detail-text", [RAW_HTML]: sanitizeHtml(renderStyledHtml(textValue)) })
+            div({ class: "blog-detail-text", [RAW_HTML]: sanitizeHtml(renderStyledHtml(textValue)) }),
+            renderBlogTags(draft.tags)
           )
         )
       : null,
@@ -105,16 +115,18 @@ const renderCreateForm = (draft = null) => {
         br(),
         input({ type: "text", name: "subject", id: "subject", maxlength: "150", placeholder: i18n.contentWarningPlaceholder, value: subjectValue }),
         br(),
-        br(),
         label({ for: "text" }, i18n.blogMessage),
         br(),
         textarea({ required: true, name: "text", id: "text", rows: "8", class: "publish-textarea", maxlength: String(TEXT_CAP), placeholder: i18n.publishWarningPlaceholder }, textValue),
-        br(),
         br(),
         label({ for: "blob" }, i18n.blogMedia),
         br(),
         input({ type: "file", id: "blob", name: "blob", multiple: true, accept: "image/*,video/*,audio/*,application/pdf" }),
         br(),
+        br(),
+        label({ for: "tags" }, i18n.tagsLabel || "Tags"),
+        br(),
+        input({ type: "text", name: "tags", id: "tags", placeholder: i18n.tagsPlaceholder || "", value: tagsValue }),
         br(),
         div({ class: "blog-allow-comments" },
           input({ type: "hidden", name: "allowComments", value: "0" }),
@@ -206,7 +218,8 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
 
   const blogMain = div({ class: "tribe-main" },
     div({ class: "job-section" },
-      div({ class: "blog-detail-text", [RAW_HTML]: sanitizeHtml(renderStyledHtml(blog.text || "")) })
+      div({ class: "blog-detail-text", [RAW_HTML]: sanitizeHtml(renderStyledHtml(blog.text || "")) }),
+      renderBlogTags(blog.tags)
     ),
     renderEngagement(blog.id,
       renderOpinionsVoting('/blogs/opinions', blog.id, blog.opinions, href, blog.opinions_inhabitants),

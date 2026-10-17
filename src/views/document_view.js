@@ -4,7 +4,7 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -77,7 +77,7 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
             div({ class: "shop-title-row" }, title ? h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title) : null, doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null, renderLicenseChip(doc.license), ...(typeof params.titleChips === "function" ? params.titleChips(doc) : [])),
             doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
             doc?.url
-              ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
+              ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": blobUrlOf(doc.url) })
               : p(i18n.documentNoFile),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(doc) : []),
             engagement,
@@ -180,7 +180,6 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
         { class: "filters" },
         form(
           { method: "GET", action: "/documents", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
@@ -285,7 +284,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   const docMain = div({ class: "tribe-main" },
     detailActions,
     doc?.url
-      ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": `/blob/${encodeURIComponent(doc.url)}` })
+      ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": blobUrlOf(doc.url) })
       : p(i18n.documentNoFile),
     (() => {
       const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
@@ -321,7 +320,6 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
         { class: "filters" },
         form(
           { method: "GET", action: "/documents", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),

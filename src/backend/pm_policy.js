@@ -6,8 +6,9 @@ const isMutual = (relationship) => !!(relationship && relationship.following && 
 
 const isRecipientAllowed = ({ pmVisibility, viewerId, recipientId, relationship } = {}) => {
   if (recipientId && viewerId && recipientId === viewerId) return true;
-  if (pmVisibility !== 'mutuals') return true;
-  return isMutual(relationship);
+  if (pmVisibility === 'mutuals') return isMutual(relationship);
+  if (pmVisibility === 'following') return !!(relationship && relationship.following);
+  return true;
 };
 
 const announceSeenPath = () => {

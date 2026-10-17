@@ -75,7 +75,7 @@ const renderFileSeeds = (t, spreadMap) => {
   const info = spreadInfoOf(t, spreadMap);
   return String(info && typeof info.count === "number" ? info.count : (info && Array.isArray(info.voters) ? info.voters.length : 0));
 };
-const renderFileSpread = (t, spreadMap) => String(t.author) === String(userId) ? "" : renderSpreadButton(t.key, spreadInfoOf(t, spreadMap), i18n.seedAction, false);
+const renderFileSpread = (t, spreadMap) => String(t.author) === String(userId) ? "—" : renderSpreadButton(t.key, spreadInfoOf(t, spreadMap), i18n.seedAction, false);
 
 const renderFileTable = exports.renderFileTable = (files, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
@@ -86,17 +86,15 @@ const renderFileTable = exports.renderFileTable = (files, filter, params = {}) =
     { border: "1", class: "file-table" },
     tr(
       th(i18n.createdAt || "DATE"),
-      th(i18n.authorLabel || "AUTHOR"),
       th(i18n.fileTitleLabel || "TITLE"),
       th(i18n.fileSizeLabel || "SIZE"),
-      th(i18n.seedsLabel),
-      th(i18n.seedAction),
+      th({ class: "torrent-spread-cell" }, i18n.seedsLabel),
+      th({ class: "torrent-spread-cell" }, i18n.seedAction),
       th("")
     ),
     files.map((t) =>
       tr(
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
-        td(userLink(t.author)),
         td(t.title || "", t.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('files', t.title, t.key)) : null),
         td(formatSize(t.size)),
         td({ class: "torrent-spread-cell" }, renderFileSeeds(t, params.spreadMap)),
@@ -225,7 +223,6 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
         { class: "filters" },
         form(
           { method: "GET", action: "/files", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterAll).toUpperCase()),
@@ -387,7 +384,7 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
           : null
       );
     })(),
-    renderEngagement(fileObj.key,
+    fileObj.tribeId ? null : renderEngagement(fileObj.key,
       renderOpinionsVoting('/files/opinions', fileObj.key, fileObj.opinions, returnTo, fileObj.opinions_inhabitants),
       renderFileCommentsSection(fileObj.key, comments, returnTo)
     )
@@ -404,7 +401,6 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
         { class: "filters" },
         form(
           { method: "GET", action: "/files", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterRecent).toUpperCase())] : []),

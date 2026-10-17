@@ -96,7 +96,7 @@ describe('trending: opinion + list', (t) => {
     const bm = await A.use('bookmarks').createBookmark('https://trend.test/bad', [], 'b', '');
     await throwsAsync(() => A.use('trending').createVote(bm.key, 'notacategory'), /Invalid voting category/);
     const ssb = await A.cooler.open();
-    const raw = await new Promise((res, rej) => ssb.publish({ type: 'post', text: 'x' }, (e, r) => e ? rej(e) : res(r)));
+    const raw = await new Promise((res, rej) => ssb.publish({ type: 'about', about: A.keypair.id, name: 'x' }, (e, r) => e ? rej(e) : res(r)));
     await throwsAsync(() => A.use('trending').createVote(raw.key, 'interesting'), /Voting not allowed/);
   });
 });

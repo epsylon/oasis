@@ -4,7 +4,7 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions , renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
@@ -36,7 +36,7 @@ const renderTags = (tags) => {
 };
 
 const renderImageMedia = (imgObj, filter, params = {}) => {
-  const src = imgObj?.url ? `/blob/${encodeURIComponent(imgObj.url)}` : "";
+  const src = imgObj?.url ? blobUrlOf(imgObj.url) : "";
 
   return imgObj?.url
     ? div(
@@ -144,7 +144,7 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
       br(),
       br(),
       imageToEdit?.url
-        ? img({ loading: 'lazy', src: `/blob/${encodeURIComponent(imageToEdit.url)}`, class: "media-preview", alt: imageToEdit?.title || "" })
+        ? img({ loading: 'lazy', src: blobUrlOf(imageToEdit.url), class: "media-preview", alt: imageToEdit?.title || "" })
         : null,
       label(i18n.imageTitleLabel),
       br(),
@@ -188,7 +188,7 @@ const renderGallery = (images) => {
 
 const renderLightbox = (images) =>
   images.map((imgObj) => {
-    const src = imgObj.url ? `/blob/${encodeURIComponent(imgObj.url)}` : "";
+    const src = imgObj.url ? blobUrlOf(imgObj.url) : "";
     return div(
       { id: `img-${encodeURIComponent(imgObj.key)}`, class: "lightbox" },
       a({ href: `#img-${encodeURIComponent(imgObj.key)}-src`, class: "lightbox-close" }, "×"),
@@ -239,7 +239,6 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
         { class: "filters" },
         form(
           { method: "GET", action: "/images", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),
@@ -351,7 +350,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
       ? div(
           { class: "image-container" },
           img({
-            src: `/blob/${encodeURIComponent(imageObj.url)}`,
+            src: blobUrlOf(imageObj.url),
             alt: imageObj.title || "",
             class: "media-preview",
             loading: "lazy"
@@ -392,7 +391,6 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
         { class: "filters" },
         form(
           { method: "GET", action: "/images", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),          ...(mediaChip("favorites") ? [button(
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterRecent).toUpperCase())] : []),

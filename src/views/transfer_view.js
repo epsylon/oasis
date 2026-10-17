@@ -295,7 +295,6 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
         { class: "filters" },
         form(
           { method: "GET", action: "/transfers", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "minAmount", value: String(minAmountRaw ?? "") }),
           input({ type: "hidden", name: "maxAmount", value: String(maxAmountRaw ?? "") }),
           input({ type: "hidden", name: "sort", value: sort }),
@@ -558,7 +557,6 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
         { class: "filters" },
         form(
           { method: "GET", action: "/transfers", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "minAmount", value: String(params.minAmount ?? "") }),
           input({ type: "hidden", name: "maxAmount", value: String(params.maxAmount ?? "") }),
           input({ type: "hidden", name: "sort", value: sort }),

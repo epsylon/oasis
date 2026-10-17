@@ -3,6 +3,12 @@ const { getConfig } = require('../configs/config-manager.js');
 const categories = require('../backend/opinion_categories');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES, requestScope } = require('./typed_log');
+const longText = require('../backend/long_text');
+const isRootBlogPost = (c) =>
+  !!c && c.type === 'post' && typeof c.text === 'string' &&
+  !c.root && !c.fork && !c.branch && !c.about && !c.target &&
+  c.private !== true && !Array.isArray(c.recps);
+
 const { buildVoteTally } = require('../backend/vote_tally');
 const { versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -24,13 +30,14 @@ module.exports = ({ cooler }) => {
 
   const validTypes = [
     'bookmark', 'votes', 'transfer',
-    'feed', 'image', 'audio', 'video', 'document', 'torrent', 'file',
+    'feed', 'post', 'image', 'audio', 'video', 'document', 'torrent', 'file',
     'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse',
     'podcast', 'podcastEpisode', 'campaign', 'logisticsRoute'
   ];
 
   const getPreview = c => {
     if (c.type === 'bookmark' && c.bookmark) return `🔖 ${c.bookmark}`;
+    if (c.type === 'post') return c.contentWarning || c.text || '';
     return c.text || c.description || c.title || c.name || '';
   };
 
@@ -82,6 +89,18 @@ module.exports = ({ cooler }) => {
       }
       if (c.type === 'feed' && !byId.has(key)) {
         byId.set(key, { key, value: { ...msg.value, content: c, preview: getPreview(c) } });
+      }
+      if (isRootBlogPost(c) && !byId.has(key)) {
+        byId.set(key, { key, value: { ...msg.value, content: c, preview: getPreview(c) } });
+      }
+    }
+
+    const chunkLookup = longText.lookupIn(longText.indexChunks(messages));
+    for (const [key, m] of Array.from(byId.entries())) {
+      const c = m.value?.content;
+      if (c?.type === 'post' && longText.hasChunks(c)) {
+        const content = longText.resolveField(c, 'text', m.value.author, chunkLookup);
+        byId.set(key, { key, value: { ...m.value, content, preview: getPreview(content) } });
       }
     }
 

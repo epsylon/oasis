@@ -21,9 +21,74 @@ const loadState = () => {
 };
 const saveState = (s) => writeJson(statePath, s);
 
+const hiddenPath = require('../configs/state-manager').statePath('viewer_hidden.json');
+let hiddenState = null;
+const loadHidden = () => {
+  if (!hiddenState) {
+    const raw = readJson(hiddenPath, {});
+    const muted = Array.isArray(raw && raw.muted) ? raw.muted : [];
+    const hidden = Array.isArray(raw && raw.hidden) ? raw.hidden : [];
+    hiddenState = {
+      muted: muted.map(x => (typeof x === 'string' ? { id: x, at: 0 } : x)).filter(x => x && typeof x.id === 'string'),
+      hidden: hidden.filter(x => x && typeof x.id === 'string')
+    };
+  }
+  return hiddenState;
+};
+const saveHidden = () => writeJson(hiddenPath, loadHidden());
+
+const mutedList = () => loadHidden().muted.slice();
+const mutedIds = () => new Set(loadHidden().muted.map(x => x.id));
+const isMuted = (id) => !!id && loadHidden().muted.some(x => x.id === id);
+const mute = (id) => {
+  const s = loadHidden();
+  if (!id || s.muted.some(x => x.id === id)) return false;
+  s.muted.push({ id, at: Date.now() });
+  saveHidden();
+  return true;
+};
+const unmute = (id) => {
+  const s = loadHidden();
+  const before = s.muted.length;
+  s.muted = s.muted.filter(x => x.id !== id);
+  if (s.muted.length !== before) saveHidden();
+  return s.muted.length !== before;
+};
+
+const hiddenList = () => loadHidden().hidden.slice();
+const hiddenIds = () => new Set(loadHidden().hidden.map(x => x.id));
+const isHidden = (id) => !!id && loadHidden().hidden.some(x => x.id === id);
+const hideContent = ({ id, href = '', label = '' } = {}) => {
+  const s = loadHidden();
+  if (!id || s.hidden.some(x => x.id === id)) return false;
+  s.hidden.push({ id, href: String(href || '').slice(0, 300), label: String(label || '').slice(0, 120), at: Date.now() });
+  saveHidden();
+  return true;
+};
+const unhideContent = (id) => {
+  const s = loadHidden();
+  const before = s.hidden.length;
+  s.hidden = s.hidden.filter(x => x.id !== id);
+  if (s.hidden.length !== before) saveHidden();
+  return s.hidden.length !== before;
+};
+
+const idsOfItem = (item) => {
+  if (!item || typeof item !== 'object') return [];
+  return [item.id, item.key, item.rootId, item.favId].filter(v => typeof v === 'string');
+};
+const isItemHidden = (item, authorOf, { authors, ids } = {}) => {
+  if (!item) return false;
+  const a = typeof authorOf === 'function' ? authorOf(item) : null;
+  if (a && authors && authors.has(String(a))) return true;
+  if (ids && ids.size && idsOfItem(item).some(id => ids.has(id))) return true;
+  return false;
+};
+
 const lanPeersPath = require('../configs/state-manager').statePath('lan-peers.json');
 const FEED_ID = /^@[A-Za-z0-9+/]{43}=\.ed25519$/;
-let lanKnown = null;
+const LAN_SEEN_STEP_MS = 60 * 1000;
+let lanSeen = null;
 
 const canonicalFeedId = (key) => {
   let k = String(key || '').trim();
@@ -62,22 +127,41 @@ const lanKeysFromConn = (entries) => {
   return out;
 };
 
-const lanPeers = () => {
-  if (!lanKnown) {
+const lanPeersSeen = () => {
+  if (!lanSeen) {
     const list = readJson(lanPeersPath, []);
-    lanKnown = new Set((Array.isArray(list) ? list : []).map(canonicalFeedId).filter(Boolean));
+    lanSeen = new Map();
+    for (const item of (Array.isArray(list) ? list : [])) {
+      const id = canonicalFeedId(typeof item === 'string' ? item : item && item.key);
+      if (id) lanSeen.set(id, Number(item && item.seenAt) || 0);
+    }
   }
-  return lanKnown;
+  return lanSeen;
 };
 
-const rememberLanPeers = (keys) => {
-  const set = lanPeers();
+const lanPeers = () => new Set(lanPeersSeen().keys());
+
+const rememberLanPeers = (keys, now = Date.now()) => {
+  const seen = lanPeersSeen();
   let changed = false;
   for (const k of keys || []) {
     const id = canonicalFeedId(k);
-    if (id && !set.has(id)) { set.add(id); changed = true; }
+    if (!id) continue;
+    const prev = seen.get(id);
+    if (prev === undefined || now - prev >= LAN_SEEN_STEP_MS) { seen.set(id, now); changed = true; }
   }
-  if (changed) writeJson(lanPeersPath, [...set]);
+  if (changed) writeJson(lanPeersPath, [...seen].map(([key, seenAt]) => ({ key, seenAt })));
+  return changed;
+};
+
+const forgetLanPeers = (keys) => {
+  const seen = lanPeersSeen();
+  let changed = false;
+  for (const k of keys || []) {
+    const id = canonicalFeedId(k);
+    if (id && seen.delete(id)) changed = true;
+  }
+  if (changed) writeJson(lanPeersPath, [...seen].map(([key, seenAt]) => ({ key, seenAt })));
   return changed;
 };
 
@@ -104,7 +188,8 @@ const filterByWish = async (items, { wish, viewer, authorOf: author, isOwn, isMu
 
 const wishMutualsOnly = () => getConfig().wish === 'mutuals';
 const pmMutualsOnly = () => getConfig().pmVisibility === 'mutuals';
-const isFrictionActive = () => wishMutualsOnly() || pmMutualsOnly();
+const pmFollowingOnly = () => getConfig().pmVisibility === 'following';
+const isFrictionActive = () => wishMutualsOnly() || pmMutualsOnly() || pmFollowingOnly();
 
 const listPending = () => loadState().pending;
 const enqueuePending = (followerId, extra = {}) => {
@@ -183,8 +268,13 @@ const applyMutualSupportFilter = async (items, viewerId, friendModel) => {
 };
 
 const canSendPmTo = async (viewerId, recipientId, friendModel) => {
-  if (!pmMutualsOnly()) return { allowed: true };
   if (viewerId === recipientId) return { allowed: true };
+  if (pmFollowingOnly()) {
+    let rel = null;
+    try { rel = friendModel && typeof friendModel.getRelationship === 'function' ? await friendModel.getRelationship(recipientId) : null; } catch (_) { rel = null; }
+    return rel && rel.following ? { allowed: true } : { allowed: false, reason: 'not-following' };
+  }
+  if (!pmMutualsOnly()) return { allowed: true };
   const isMutual = makeMutualCache(friendModel);
   if (await isMutual(recipientId)) return { allowed: true };
   return { allowed: false, reason: 'non-mutual' };
@@ -194,6 +284,7 @@ module.exports = {
   COOLDOWN_MS,
   wishMutualsOnly,
   pmMutualsOnly,
+  pmFollowingOnly,
   isFrictionActive,
   listPending,
   enqueuePending,
@@ -211,6 +302,19 @@ module.exports = {
   isPrivateHost,
   lanKeysFromConn,
   lanPeers,
+  lanPeersSeen,
   rememberLanPeers,
+  forgetLanPeers,
   filterByWish,
+  mutedList,
+  mutedIds,
+  isMuted,
+  mute,
+  unmute,
+  hiddenList,
+  hiddenIds,
+  isHidden,
+  hideContent,
+  unhideContent,
+  isItemHidden,
 };

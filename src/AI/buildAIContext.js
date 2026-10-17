@@ -162,8 +162,12 @@ async function listExchanges() {
 
 const netVotes = (votes, key) => { const per = votes.get(key); if (!per) return 0; let n = 0; for (const v of per.values()) n += v; return n }
 
-async function rankExchanges(question, { embed, cosine, k = 5 } = {}) {
-  const { exchanges, votes } = await listExchanges()
+async function rankExchanges(question, { embed, cosine, k = 5, excludeAuthors = null } = {}) {
+  const listed = await listExchanges()
+  const votes = listed.votes
+  const exchanges = excludeAuthors instanceof Set && excludeAuthors.size
+    ? listed.exchanges.filter(ex => !excludeAuthors.has(String(ex.author)))
+    : listed.exchanges
   if (!exchanges.length) return []
   const scored = []
   if (typeof embed === 'function' && typeof cosine === 'function') {

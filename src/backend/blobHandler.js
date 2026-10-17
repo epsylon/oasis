@@ -71,7 +71,9 @@ const oggMime = (buffer) => {
   return 'video/ogg';
 };
 
-const storeUploadedFile = async function (blobUpload) {
+const sealedRef = (sealed, mime, name) => `/blob/sealed/${encodeURIComponent(sealed.manifestBlobId)}?k=${encodeURIComponent(sealed.key)}&t=${encodeURIComponent(mime)}&n=${encodeURIComponent(name)}`;
+
+const storeUploadedFile = async function (blobUpload, seal = null) {
   if (!blobUpload || !blobUpload.filepath) return null;
 
   let data = await promisesFs.readFile(blobUpload.filepath);
@@ -119,14 +121,19 @@ const storeUploadedFile = async function (blobUpload) {
     data = stripPdfMetadata(data);
   }
 
-  const ssbClient = await cooler.open();
-
-  blob.id = await new Promise((resolve, reject) => {
-    pull(
-      pull.values([data]),
-      ssbClient.blobs.add((err, ref) => (err ? reject(err) : resolve(ref)))
-    );
-  });
+  if (typeof seal === 'function') {
+    await promisesFs.writeFile(blobUpload.filepath, data);
+    const sealed = await seal({ filepath: blobUpload.filepath, size: data.length, name: blob.name, mime: blob.mime });
+    blob.id = sealedRef(sealed, blob.mime, blob.name);
+  } else {
+    const ssbClient = await cooler.open();
+    blob.id = await new Promise((resolve, reject) => {
+      pull(
+        pull.values([data]),
+        ssbClient.blobs.add((err, ref) => (err ? reject(err) : resolve(ref)))
+      );
+    });
+  }
 
   if (blob.mime.startsWith("image/")) return `\n![image:${blob.name}](${blob.id})`;
   if (blob.mime.startsWith("audio/")) return `\n[audio:${blob.name}](${blob.id})`;
@@ -137,20 +144,20 @@ const storeUploadedFile = async function (blobUpload) {
   return `\n[${blob.name}](${blob.id})`;
 };
 
-const handleBlobUpload = async function (ctx, fileFieldName) {
+const handleBlobUpload = async function (ctx, fileFieldName, seal = null) {
   if (!ctx.request.files || !ctx.request.files[fileFieldName]) return null;
   const entry = ctx.request.files[fileFieldName];
   const first = Array.isArray(entry) ? entry[0] : entry;
-  return storeUploadedFile(first);
+  return storeUploadedFile(first, seal);
 };
 
-const handleBlobUploads = async function (ctx, fileFieldName, max = 8) {
+const handleBlobUploads = async function (ctx, fileFieldName, max = 8, seal = null) {
   if (!ctx.request.files || !ctx.request.files[fileFieldName]) return [];
   const entry = ctx.request.files[fileFieldName];
   const files = (Array.isArray(entry) ? entry : [entry]).slice(0, Math.max(0, max));
   const out = [];
   for (const file of files) {
-    const stored = await storeUploadedFile(file);
+    const stored = await storeUploadedFile(file, seal);
     if (stored) out.push(stored);
   }
   return out;

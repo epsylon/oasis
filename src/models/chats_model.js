@@ -367,11 +367,15 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     if (c.type !== "chatMessage") return null
 
     let text = c.text || ""
+    let image = c.image || null
+    let mimeType = typeof c.mimeType === "string" ? c.mimeType : null
     if (tribeCrypto && c.encryptedText) {
       const candidateKeys = [...tribeKeys, ...lookupKeys(chatRootId)]
       for (const keyHex of candidateKeys) {
         try {
           text = tribeCrypto.decryptWithKey(c.encryptedText, keyHex)
+          if (c.encryptedImage) image = tribeCrypto.decryptWithKey(c.encryptedImage, keyHex)
+          if (c.encryptedMime) mimeType = tribeCrypto.decryptWithKey(c.encryptedMime, keyHex)
           break
         } catch (_) {}
       }
@@ -381,8 +385,8 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       key: node.key,
       chatId: c.chatId || "",
       text,
-      image: c.image || null,
-      mimeType: typeof c.mimeType === "string" ? c.mimeType : null,
+      image,
+      mimeType,
       replyTo: typeof c.replyTo === "string" ? c.replyTo : null,
       author: node.author,
       createdAt: c.createdAt || new Date(node.ts).toISOString()
@@ -962,6 +966,14 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         if (!encKey) encKey = lookupKey(chat.rootId)
         if (!encKey) throw new Error(`Missing chat key for ${chat.rootId} — cannot send message`)
         content.encryptedText = tribeCrypto.encryptWithKey(safeText(text), encKey)
+        if (content.image) {
+          content.encryptedImage = tribeCrypto.encryptWithKey(String(content.image), encKey)
+          delete content.image
+          if (content.mimeType) {
+            content.encryptedMime = tribeCrypto.encryptWithKey(String(content.mimeType), encKey)
+            delete content.mimeType
+          }
+        }
         if (chat.tribeId) content.tribeId = chat.tribeId
       } else {
         content.text = safeText(text)

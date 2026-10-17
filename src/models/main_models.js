@@ -624,6 +624,12 @@ models.blob = {
 };
 
 models.friend = {
+  blockedIds: async () => {
+    const ssb = await cooler.open();
+    const graph = await new Promise((resolve) => ssb.friends.graph((err, g) => resolve(err || !g ? {} : g)));
+    const mine = graph[ssb.id] || {};
+    return new Set(Object.keys(mine).filter(feed => Math.round(mine[feed]) === -1));
+  },
   setRelationship: async ({ feedId, following, blocking }) => {
     if (following && blocking) {
       throw new Error("Cannot follow and block at the same time");

@@ -531,7 +531,6 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         { class: "filters" },
         form(
           { method: "GET", action: "/market", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "q", value: q }),
           input({ type: "hidden", name: "minPrice", value: minPrice ?? "" }),
           input({ type: "hidden", name: "maxPrice", value: maxPrice ?? "" }),
           input({ type: "hidden", name: "sort", value: sort }),

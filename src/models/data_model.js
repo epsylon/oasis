@@ -40,8 +40,14 @@ const KINDS = {
   mailing: { type: 'mailingList', href: (id) => `/mailing/${encodeURIComponent(id)}` },
   logistics: { type: 'logisticsRoute', href: (id) => `/logistics/${encodeURIComponent(id)}` },
   podcasts: { type: 'podcast', href: (id) => `/podcasts/${encodeURIComponent(id)}` },
-  campaigns: { type: 'campaign', href: (id) => `/campaigns/${encodeURIComponent(id)}` }
+  campaigns: { type: 'campaign', href: (id) => `/campaigns/${encodeURIComponent(id)}` },
+  blogs: { type: 'post', href: (id) => `/blogs/${encodeURIComponent(id)}` }
 };
+
+const isRootBlogPost = (c) =>
+  !!c && c.type === 'post' && typeof c.text === 'string' &&
+  !c.root && !c.fork && !c.branch && !c.about && !c.target &&
+  c.private !== true && !Array.isArray(c.recps);
 
 const KIND_BY_TYPE = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [v.type, k]));
 
@@ -103,7 +109,7 @@ const opinionsTotalOf = (c) => {
 const excerpt = (s) => String(s || '').replace(/!?\[[^\]]*\]\([^)]*\)/g, ' ').replace(/[#*_>`~|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90);
 const titleOf = (kind, c, author) => {
   if (kind === 'inhabitants') return c.name || '';
-  return c.title || c.name || c.question || c.concept || c.subject || excerpt(typeof c.text === 'string' ? c.text : '') || excerpt(typeof c.description === 'string' ? c.description : '') || '';
+  return c.title || c.name || c.question || c.concept || c.subject || c.contentWarning || excerpt(typeof c.text === 'string' ? c.text : '') || excerpt(typeof c.description === 'string' ? c.description : '') || '';
 };
 
 const jaccard = (a, b) => {
@@ -147,6 +153,7 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
         continue;
       }
       if (c.tribeId && c.type !== 'tribe') continue;
+      if (c.type === 'post' && !isRootBlogPost(c)) continue;
       const kind = KIND_BY_TYPE[c.type];
       if (!kind) continue;
       versions.push(versionEntry(m));
@@ -360,11 +367,19 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
         out.push({ ...strip(n), score, common, connections: common.length, reasons });
       }
 
+      if (opts.hidden && (opts.hidden.authors || opts.hidden.ids)) {
+        const ha = opts.hidden.authors instanceof Set ? opts.hidden.authors : new Set();
+        const hi = opts.hidden.ids instanceof Set ? opts.hidden.ids : new Set();
+        out = out.filter(s => !ha.has(String(s.author)) && !hi.has(String(s.id)));
+      }
       const anyMatches = out.length > 0;
       const kindsAvail = {};
       for (const n of use) {
         if (String(n.author) !== String(viewerId)) kindsAvail[n.kind] = true;
       }
+
+      const kindsMatched = {};
+      for (const s of out) kindsMatched[s.kind] = true;
 
       if (f === 'RECENT') {
         const cutoff = Date.now() - 24 * 60 * 60 * 1000;
@@ -393,6 +408,7 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
         hasProfile: myTermSet.size > 0,
         myTerms: [...myTermSet],
         kindsAvail,
+        kindsMatched,
         anyMatches,
         reasonsAvail,
         reason: reasonsAvail.includes(reason) ? reason : ''

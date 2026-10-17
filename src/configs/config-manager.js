@@ -154,7 +154,8 @@ const readConfig = () => {
   const configData = fs.readFileSync(configFilePath);
   const cfg = JSON.parse(configData);
   if (!['whole', 'mutuals', 'only-lan', 'local'].includes(cfg.wish)) cfg.wish = 'whole';
-  if (cfg.pmVisibility !== 'whole' && cfg.pmVisibility !== 'mutuals') cfg.pmVisibility = 'whole';
+  if (!['whole', 'mutuals', 'following'].includes(cfg.pmVisibility)) cfg.pmVisibility = 'whole';
+  if (!['whole', 'mutuals', 'following'].includes(cfg.mentionsVisibility)) cfg.mentionsVisibility = 'whole';
   if (!cfg.phone || typeof cfg.phone !== 'object') cfg.phone = {};
   cfg.phone = { visibility: cfg.phone.visibility === 'whole' ? 'whole' : 'mutuals', dnd: cfg.phone.dnd === true, relay: cfg.phone.relay !== false, video: cfg.phone.video !== false, ...(typeof cfg.phone.videoDevice === 'string' && cfg.phone.videoDevice.trim() ? { videoDevice: cfg.phone.videoDevice.trim() } : {}) };
   if (typeof cfg.ux === 'string') cfg.ux = { current: cfg.ux };

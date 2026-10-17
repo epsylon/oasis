@@ -19,6 +19,7 @@ const detailHref = (type, key) => {
     case 'file': return `/files/${encodeURIComponent(key)}`;
     case 'document': return `/documents/${encodeURIComponent(key)}`;
     case 'feed': return `/feed/${encodeURIComponent(key)}`;
+    case 'post': return `/blogs/${encodeURIComponent(key)}`;
     case 'votes': return `/votes/${encodeURIComponent(key)}`;
     case 'transfer': return `/transfers/${encodeURIComponent(key)}`;
     case 'industry': return `/industry/${encodeURIComponent(key)}`;
@@ -264,6 +265,16 @@ const renderContentHtml = (content, key) => {
         )
       );
     }
+    case 'post':
+      return div({ class: 'opinion-blog' },
+        div({ class: 'card-section blog' },
+          content.contentWarning ? div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, a({ href: `/blogs/${encodeURIComponent(key)}` }, content.contentWarning))) : "",
+          div({ class: 'blog-card-text', [RAW_HTML]: sanitizeHtml(renderStyledHtml(String(content.text || '').trim().length > 420 ? String(content.text).trim().slice(0, 420).replace(/\s+$/, '') + '…' : String(content.text || '').trim())) }),
+          Array.isArray(content.tags) && content.tags.length
+            ? div({ class: 'card-tags' }, content.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+            : null
+        )
+      );
     case 'feed':
       return div({ class: 'opinion-feed' },
         div({ class: 'card-section feed' },
@@ -392,12 +403,12 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
         { class: 'trending-card opinions-card' + (isOwn ? ' own-content' : '') },
         div({ class: 'card-header activity-card-header' },
           span({ class: 'pm-exposition-chip pm-exposition-whole' },
-            span({ class: 'pm-exposition-text' }, String(c.type || '').toUpperCase())
+            span({ class: 'pm-exposition-text' }, String(c.type === 'post' ? (i18n.typePost || 'BLOG') : (c.type || '')).toUpperCase())
           ),
           renderContentActions(key, detailHref(c.type, key), {
             spread: spreadMap.get(key) || null,
             author: item.value.author,
-            reportTitle: c.title || c.question || c.concept || c.name || '',
+            reportTitle: c.title || c.question || c.concept || c.name || c.contentWarning || '',
             ...(CONTENT_TORRENTABLE.has(c.type) && typeof c.url === 'string' && c.url.startsWith('&')
               ? { torrentFrom: { blobId: c.url, name: c.title || c.fileName || '' } }
               : {}),

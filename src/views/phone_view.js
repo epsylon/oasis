@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, span, audio, table, tr, td, th, br, a } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderCallButton, liveClock, renderStateChip, renderVideoGrid } = require("./main_views");
+const { template, i18n, userLink, userLinkLabel, renderCallButton, liveClock, renderStateChip, renderVideoGrid, renderIcon } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
 const { phoneNumberOf } = require("../models/phone_number");
 const moment = require("../server/node_modules/moment");
@@ -182,7 +182,7 @@ const renderRecords = (pams) =>
 const deleteCalls = (ids) => ids.length
   ? form({ method: 'POST', action: '/phone/delete-shown', class: 'content-action-form phone-row-delete' },
       ...ids.map(id => input({ type: 'hidden', name: 'calls', value: id })),
-      button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.phoneDelete }, '✕')
+      button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.phoneDelete }, renderIcon('close'))
     )
   : null;
 

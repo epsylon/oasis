@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, span, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderModuleStats, paged } = require("./main_views");
+const { template, i18n, userLink, renderModuleStats, paged, renderIcon } = require("./main_views");
 
 const KIND_LABEL = {
   inhabitants: () => i18n.dataKindInhabitants,
@@ -32,7 +32,8 @@ const KIND_LABEL = {
   mailing: () => i18n.mailingTitle,
   logistics: () => i18n.logisticsTitle,
   podcasts: () => i18n.podcastsTitle,
-  campaigns: () => i18n.campaignsTitle
+  campaigns: () => i18n.campaignsTitle,
+  blogs: () => i18n.blogTitle
 };
 
 const REASON_LABEL = {
@@ -54,16 +55,23 @@ const FILTER_COLUMNS = [
   ["INHABITANTS", "TRIBES"],
   ["VOTES", "EVENTS", "CALENDARS", "TASKS", "REPORTS", "EMERGENCIES", "MAILING", "CAMPAIGNS"],
   ["MARKET", "HOUSING", "JOBS", "PROJECTS", "INDUSTRY", "LOGISTICS"],
-  ["FORUM", "CHATS", "ROOMS", "PADS", "WIKI", "MAPS", "SCHOOL"],
+  ["BLOGS", "FORUM", "CHATS", "ROOMS", "PADS", "WIKI", "MAPS", "SCHOOL"],
   ["AUDIOS", "BOOKMARKS", "DOCUMENTS", "FILES", "IMAGES", "TORRENTS", "VIDEOS", "PODCASTS"]
 ];
 
 const kindLabel = (kind) => (KIND_LABEL[kind] ? KIND_LABEL[kind]() : String(kind || '').toUpperCase());
 
-const reasonButton = (value, label, current, q) =>
+const reasonButton = (value, label, current, filter) =>
   form({ method: "GET", action: "/data" },
-    input({ type: "hidden", name: "q", value: q || "" }),
+    filter && filter !== "ALL" ? input({ type: "hidden", name: "filter", value: filter }) : null,
     value ? input({ type: "hidden", name: "reason", value }) : null,
+    button({ type: "submit", class: current === value ? "filter-btn active" : "filter-btn" }, String(label).toUpperCase())
+  );
+
+const filterButton = (value, label, current, reason) =>
+  form({ method: "GET", action: "/data" },
+    input({ type: "hidden", name: "filter", value }),
+    reason ? input({ type: "hidden", name: "reason", value: reason }) : null,
     button({ type: "submit", class: current === value ? "filter-btn active" : "filter-btn" }, String(label).toUpperCase())
   );
 
@@ -72,21 +80,25 @@ const sectionId = (kind) => `data-${String(kind || '').toLowerCase()}`;
 const renderFilters = (q, payload = {}, kindsPresent = []) => {
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
   const reason = String(payload.reason || "");
-  if (!matches.length && !String(q || "").trim() && !reason) return null;
+  const filter = String(payload.filter || "ALL").toUpperCase();
+  const isKindFilter = !FILTER_COLUMNS[0].includes(filter);
+  if (!matches.length && !String(q || "").trim() && !reason && !isKindFilter) return null;
   const avail = (Array.isArray(payload.reasonsAvail) ? payload.reasonsAvail : []).filter(r => REASON_LABEL[r]);
   const present = new Set(kindsPresent);
-  const columns = FILTER_COLUMNS.slice(1)
-    .map(col => col.filter(k => present.has(k.toLowerCase())))
-    .filter(col => col.length);
+  const columns = [FILTER_COLUMNS[0]].concat(
+    FILTER_COLUMNS.slice(1)
+      .map(col => col.filter(k => present.has(k.toLowerCase())))
+      .filter(col => col.length)
+  );
   return section(
     div({ class: "activity-sub-filter" },
-      reasonButton("", i18n.dataFilterAll, reason, q),
-      ...avail.map(r => reasonButton(r, REASON_LABEL[r](), reason, q))
+      reasonButton("", i18n.dataFilterAll, reason, filter),
+      ...avail.map(r => reasonButton(r, REASON_LABEL[r](), reason, filter))
     ),
-    reason || !columns.length ? null : div({ class: "activity-filter-grid" },
+    div({ class: "activity-filter-grid" },
       ...columns.map(col =>
         div({ class: "activity-filter-col" },
-          ...col.map(k => a({ href: `#${sectionId(k)}`, class: "filter-btn" }, String(kindLabel(k.toLowerCase())).toUpperCase()))
+          ...col.map(k => filterButton(k, FILTER_COLUMNS[0].includes(k) ? (i18n[k + "Button"] || k) : kindLabel(k.toLowerCase()), filter, reason))
         )
       )
     ),
@@ -94,6 +106,7 @@ const renderFilters = (q, payload = {}, kindsPresent = []) => {
       renderModuleStats(matches.length),
       form({ method: "GET", action: "/data", class: "filter-box" },
         reason ? input({ type: "hidden", name: "reason", value: reason }) : null,
+        filter !== "ALL" ? input({ type: "hidden", name: "filter", value: filter }) : null,
         input({ type: "text", name: "q", value: q || "", placeholder: i18n.dataSearchPlaceholder, class: "filter-box__input" }),
         div({ class: "filter-box__controls" },
           button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
@@ -165,7 +178,7 @@ const renderMatchRow = (m, isBest) => {
       span({ class: "data-kind-chip" }, String(kindLabel(m.kind)).toUpperCase()),
       span({ class: "card-label data-score-label" }, `${isBest ? i18n.dataBestMatch : (i18n.dataCcShort || "CC")}: `),
       span({ class: isBest ? "data-score-value data-best-score" : "data-score-value" }, `${scorePct(m.score)}%`),
-      a({ href: m.href, class: "btn-singleview btn-content data-side-visit", title: i18n.visitContent }, "↗")
+      a({ href: m.href, class: "btn-singleview btn-content data-side-visit", title: i18n.visitContent }, renderIcon("open"))
     ),
     a({ href: m.href, class: "data-card-title" }, shortTitle(m.title) || shortId(m.id)),
     span({ class: "data-card-author" }, userLink(m.author)),
@@ -210,12 +223,12 @@ exports.dataView = async (payload = {}) => {
   return template(
     i18n.dataTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.dataTitle), p(i18n.dataDescription))),
-    renderFilters(q, { ...payload, matches }, groups.map(g => g.kind)),
+    renderFilters(q, { ...payload, matches }, payload.kindsMatched && typeof payload.kindsMatched === "object" ? Object.keys(payload.kindsMatched) : groups.map(g => g.kind)),
     emptyData ? null : (payload.cohesion ? renderCohesion(payload.cohesion) : null),
     section(
       emptyData ? null : div({ class: "tags-header" },
-        h2(q ? `${i18n.dataTopicTitle} #${q}` : i18n.dataMatchesTitle),
-        p(q ? i18n.dataTopicHint : i18n.dataMatchesHint)
+        h2(i18n.dataMatchesTitle),
+        p(i18n.dataMatchesHint)
       ),
       best
         ? div({ class: "data-section data-top-best" },

@@ -72,7 +72,7 @@ describe('opinions: cast + list', (t) => {
   t('voting on an unsupported content type is rejected', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const ssb = await A.cooler.open();
-    const raw = await new Promise((res, rej) => ssb.publish({ type: 'post', text: 'hi' }, (e, r) => e ? rej(e) : res(r)));
+    const raw = await new Promise((res, rej) => ssb.publish({ type: 'about', about: A.keypair.id, name: 'hi' }, (e, r) => e ? rej(e) : res(r)));
     await throwsAsync(() => A.use('opinions').createVote(raw.key, 'interesting'), /Voting not allowed/);
   });
 

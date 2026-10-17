@@ -2,7 +2,7 @@
 
 const SAFE_SRC = /^\/(?:blob|image)\/[^\s"'<>]+$/i;
 const SAFE_HREF = /^(?:https?:\/\/|\/(?!\/)|#|mailto:)/i;
-const SAFE_CLASS = /^(?:rt-[a-z0-9-]+|styled-link|mention|tag-link|zoom-link|pm-quote|wiki-link(?:-missing)?|internal-link(?:-id|-kind)?|lightbox(?:-[a-z]+)?|post-(?:audio|image|pdf|video))$/;
+const SAFE_CLASS = /^(?:rt-[a-z0-9-]+|styled-link|mention|tag-link|tag-inline|zoom-link|pm-quote|wiki-link(?:-missing)?|internal-link(?:-id|-kind)?|lightbox(?:-[a-z]+)?|post-(?:audio|image|pdf|video))$/;
 let purifier = null;
 const getPurify = () => {
   if (purifier) return purifier;

@@ -148,7 +148,7 @@ const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, retu
               : button({ type: 'submit', class: subscribed ? 'tribe-action-btn danger-btn' : 'tribe-action-btn' }, `${subscribed ? '🔕' : '🔔'} ${String(subscribed ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe).toUpperCase()}`)
           ),
       showPm && total
-        ? a({ href: `/pm?list=${encodeURIComponent(target)}`, class: 'btn-singleview btn-pm', title: i18n.pmCreateButton || 'Write a PM' }, '✉')
+        ? a({ href: `/pm?list=${encodeURIComponent(target)}`, class: 'btn-singleview btn-pm', title: i18n.pmCreateButton || 'Write a PM' }, renderIcon('mail'))
         : null
     )
   ];
@@ -254,7 +254,7 @@ const renderLinkBox = (blockId, viewHref, title) => {
   const id = `linkbox-${linkBoxSeq}-${String(blockId).replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;
   const clearnetHref = clearnetHrefFor(viewHref, blockId, title);
   return [
-    a({ href: `#${id}`, id: `${id}-src`, class: 'btn-singleview btn-link', title: i18n.copyLinkTitle }, '⚯'),
+    a({ href: `#${id}`, id: `${id}-src`, class: 'btn-singleview btn-link', title: i18n.copyLinkTitle }, renderIcon('link')),
     span({ id, class: 'lightbox link-lightbox' },
       a({ href: `#${id}-src`, class: 'lightbox-close' }, '\u00d7'),
       span({ class: 'link-box' },
@@ -297,6 +297,27 @@ const renderFileDownloads = (fileKey, torrentUrl, name, opts = {}) => {
 };
 exports.renderFileDownloads = renderFileDownloads;
 
+const blobUrlOf = (v) => (String(v || '').startsWith('/blob/sealed/') ? String(v) : `/blob/${encodeURIComponent(v)}`);
+exports.blobUrlOf = blobUrlOf;
+const ACTION_ICONS = {
+  hide: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="3" x2="21" y2="21"/>',
+  spread: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>',
+  pin: '<path d="M9 3h6l-1 6 4 4H6l4-4-1-6z"/><line x1="12" y1="13" x2="12" y2="21"/>',
+  report: '<line x1="5" y1="21" x2="5" y2="3"/><path d="M5 4h12l-2.5 4.5L17 13H5"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><polyline points="3 7 12 13 21 7"/>',
+  call: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2z"/>',
+  link: '<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L11.8 5.8"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4l1.4-1.4"/>',
+  block: '<path d="M12 2.5l8.5 4.75v9.5L12 21.5l-8.5-4.75v-9.5z"/><polyline points="3.5 7.25 12 12 20.5 7.25"/><line x1="12" y1="12" x2="12" y2="21.5"/>',
+  datagram: '<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="3" y1="12" x2="21" y2="12"/>',
+  open: '<path d="M7 17L17 7M8 7h9v9"/>',
+  donate: '<line x1="12" y1="2" x2="12" y2="22"/><line x1="3.3" y1="7" x2="20.7" y2="17"/><line x1="3.3" y1="17" x2="20.7" y2="7"/><polyline points="9.5 4 12 6 14.5 4"/><polyline points="9.5 20 12 18 14.5 20"/>',
+  torrent: '<line x1="7" y1="20" x2="7" y2="4"/><polyline points="3 8 7 4 11 8"/><line x1="17" y1="4" x2="17" y2="20"/><polyline points="13 16 17 20 21 16"/>',
+  close: '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>'
+};
+const renderIcon = (name) => span({ class: 'btn-icon', [RAW_HTML]: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ACTION_ICONS[name] || ''}</svg>` });
+const renderHideIcon = () => renderIcon('hide');
+exports.renderIcon = renderIcon;
+exports.renderHideIcon = renderHideIcon;
 const renderContentActions = (msgId, viewHref, opts = {}) => {
   const o = (opts && typeof opts === 'object') ? opts : {};
   const blockId = (typeof msgId === 'string' && msgId.startsWith('%')) ? msgId : null;
@@ -306,7 +327,7 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
   const pinBtn = o.favKind && blockId
     ? form({ method: 'POST', action: `/${o.favKind}/favorites/${o.isFavorite ? 'remove' : 'add'}/${encodeURIComponent(blockId)}`, class: 'content-action-form' },
         o.returnTo ? input({ type: 'hidden', name: 'returnTo', value: o.returnTo }) : null,
-        button({ type: 'submit', class: o.isFavorite ? 'btn-singleview btn-pin-on' : 'btn-singleview', title: o.isFavorite ? i18n.favoriteRemove : i18n.favoriteAdd }, o.isFavorite ? '✜' : '✛')
+        button({ type: 'submit', class: o.isFavorite ? 'btn-singleview btn-pin-on' : 'btn-singleview', title: o.isFavorite ? i18n.favoriteRemove : i18n.favoriteAdd }, renderIcon('pin'))
       )
     : null;
 
@@ -317,17 +338,17 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     if (!src || typeof src.blobId !== 'string' || !src.blobId.startsWith('&')) return null;
     try { if (getConfig().modules.torrentsMod !== 'on') return null; } catch (_) { return null; }
     const name = String(src.name || o.reportTitle || '').slice(0, 100);
-    return a({ href: `/torrents?filter=create&fromBlob=${encodeURIComponent(src.blobId)}&name=${encodeURIComponent(name)}`, class: 'btn-singleview btn-torrent', title: i18n.torrentFromContent }, '\u21C5');
+    return a({ href: `/torrents?filter=create&fromBlob=${encodeURIComponent(src.blobId)}&name=${encodeURIComponent(name)}`, class: 'btn-singleview btn-torrent', title: i18n.torrentFromContent }, renderIcon('torrent'));
   })();
 
   const chainBtn = blockId
-    ? a({ href: `/blockexplorer/block/${encodeURIComponent(blockId)}`, class: 'btn-singleview', title: i18n.blockchainViewBlockexplorer }, '⦿')
+    ? a({ href: `/blockexplorer/block/${encodeURIComponent(blockId)}`, class: 'btn-singleview', title: i18n.blockchainViewBlockexplorer }, renderIcon('block'))
     : null;
 
   const herePath = (listScope() || {}).path;
   const onItself = (() => { try { return !!herePath && decodeURIComponent(String(viewHref || '').split(/[?#]/)[0]) === decodeURIComponent(String(herePath)); } catch (_) { return false; } })();
   const contentBtn = viewHref && !onItself
-    ? a({ href: viewHref, class: 'btn-singleview btn-content', title: i18n.visitContent }, '↗')
+    ? a({ href: viewHref, class: 'btn-singleview btn-content', title: i18n.visitContent }, renderIcon('open'))
     : null;
 
   const donateBtn = (() => {
@@ -336,32 +357,41 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     const donatable = sharedState.getDonatableAuthors ? sharedState.getDonatableAuthors() : null;
     if (!donatable || !donatable.has(String(o.author))) return null;
     const ref = viewHref ? `?returnTo=${encodeURIComponent(viewHref)}` : '';
-    return a({ href: `/wallet/donate/${encodeURIComponent(o.author)}${ref}`, class: 'btn-singleview btn-donate', title: i18n.donateTooltip }, '\u2744');
+    return a({ href: `/wallet/donate/${encodeURIComponent(o.author)}${ref}`, class: 'btn-singleview btn-donate', title: i18n.donateTooltip }, renderIcon('donate'));
   })();
 
   const reportHref = blockId
     ? `/reports?filter=create&category=CONTENT&title=${encodeURIComponent(String(o.reportTitle || blockId).slice(0, 120))}&description=${encodeURIComponent(`${viewHref || blockId}`)}`
     : null;
   const reportBtn = o.report !== false && reportHref && !(o.author && String(o.author) === String(myId))
-    ? a({ href: reportHref, class: 'btn-singleview btn-report', title: i18n.reportContent }, '⚑')
+    ? a({ href: reportHref, class: 'btn-singleview btn-report', title: i18n.reportContent }, renderIcon('report'))
     : null;
 
   const pmBtn = o.author && String(o.author) !== String(myId)
-    ? a({ href: `/pm?recipients=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-pm', title: i18n.pmContentTooltip }, '✉')
+    ? a({ href: `/pm?recipients=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-pm', title: i18n.pmContentTooltip }, renderIcon('mail'))
     : null;
   const callBtn = o.author && String(o.author) !== String(myId) && phoneOn() && !sharedState.isPubId(o.author)
-    ? a({ href: `/phone?filter=create&to=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-call', title: i18n.phoneCallTooltip }, '✆')
+    ? a({ href: `/phone?filter=create&to=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-call', title: i18n.phoneCallTooltip }, renderIcon('call'))
     : null;
 
   const deleteBtn = o.deleteAction
     ? form({ method: 'POST', action: o.deleteAction, class: 'content-action-form' },
         o.returnTo && o.returnTo !== viewHref ? input({ type: 'hidden', name: 'returnTo', value: o.returnTo }) : null,
-        button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.chatDelete }, '✕')
+        button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.chatDelete }, renderIcon('close'))
       )
     : null;
 
-  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !callBtn && !deleteBtn && !donateBtn && !torrentBtn) return null;
-  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, donateBtn, pmBtn, callBtn, torrentBtn, linkBtn, chainBtn, contentBtn);
+  const hideBtn = blockId && o.hide !== false && !(o.author && String(o.author) === String(myId))
+    ? form({ method: 'POST', action: `/hide/${encodeURIComponent(blockId)}`, class: 'content-action-form' },
+        input({ type: 'hidden', name: 'returnTo', value: o.returnTo || viewHref || '/' }),
+        viewHref ? input({ type: 'hidden', name: 'href', value: viewHref }) : null,
+        o.reportTitle ? input({ type: 'hidden', name: 'label', value: String(o.reportTitle).slice(0, 120) }) : null,
+        button({ type: 'submit', class: 'btn-singleview btn-hide', title: i18n.hideContent }, renderHideIcon())
+      )
+    : null;
+
+  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !callBtn && !deleteBtn && !donateBtn && !torrentBtn && !hideBtn) return null;
+  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, callBtn, torrentBtn, linkBtn, chainBtn, contentBtn);
 };
 exports.renderContentActions = renderContentActions;
 const CONTENT_FAV_KIND = {
@@ -415,8 +445,9 @@ exports.renderDocumentActions = renderDocumentActions;
 const renderRelationshipBlock = (relationship, feedId) => {
   const rel = relationship || {};
   if (rel.me) return span({ class: 'status you' }, i18n.relationshipYou);
+  const muted = (() => { try { return require('../models/viewer_filters').isMuted(feedId); } catch (_) { return false; } })();
   const actions = [];
-  const icons = { follow: '♥', unfollow: '✕', block: '⊘', unblock: '↺' };
+  const icons = { follow: '♥', unfollow: '✕', block: '⊘', unblock: '↺', mute: '◌', unmute: '●' };
   const addAction = (action) => actions.push(
     form({ action: `/${action}/${encodeURIComponent(feedId)}`, method: 'post' },
       button({ type: 'submit', class: 'filter-btn' }, `${icons[action]} ${i18n[action]}`)
@@ -425,7 +456,9 @@ const renderRelationshipBlock = (relationship, feedId) => {
   if (rel.following) addAction('unfollow');
   else if (rel.blocking) addAction('unblock');
   else { addAction('follow'); addAction('block'); }
+  if (!rel.blocking) addAction(muted ? 'unmute' : 'mute');
   return div({ class: 'relationship-status' },
+    muted ? span({ class: 'status blocked' }, i18n.relationshipMuted) : null,
     rel.blocking && rel.blockedBy
       ? span({ class: 'status blocked' }, i18n.relationshipMutualBlock)
       : [
@@ -684,7 +717,7 @@ const renderSpreadButton = (msgKey, opts, title = null, showCount = true) => {
     { method: 'POST', action: `/spread/${encodeURIComponent(msgKey)}`, class: 'spread-form' },
     button(
       { type: 'submit', class: alreadySpread ? 'btn-singleview btn-spread-on' : 'btn-singleview', title: title || i18n.spreadContent },
-      showCount ? `⟳ ${count}` : '⟳'
+      renderIcon('spread'), showCount ? span({ class: 'btn-count' }, String(count)) : null
     )
   );
 };
@@ -2792,6 +2825,15 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
             p({ class: "post-text" }, ...renderStyledText(rawText))
         );
     }
+    const postTags = String(content.type || '') === 'post' && Array.isArray(content.tags) ? content.tags.filter(Boolean) : [];
+    if (postTags.length) {
+        articleElement = div(
+            articleElement,
+            div({ class: 'card-tags card-tags-mt' },
+                ...postTags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`))
+            )
+        );
+    }
 
     if (preview) {
         return section(
@@ -3079,8 +3121,8 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
   );
 };
 
-exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWarning, sentAt }) => {
-  const { escapeHtml: esc, renderKindTag, renderClearnetPage, renderRichText } = require('./clearnet_view');
+exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWarning, sentAt, tags = [] }) => {
+  const { escapeHtml: esc, renderKindTag, renderClearnetPage, renderRichText, renderTagChips } = require('./clearnet_view');
   const rawText = String(text || '');
   const renderedHtml = sanitizeHtml(renderRichText(rawText));
   const plainPreview = rawText.replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/<[^>]+>/g, '').slice(0, 200);
@@ -3110,6 +3152,7 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
   ${cw ? `<div class="cn-blog-cw">${cw}</div>` : ''}
   <hr class="cn-sep"/>
   <article class="cn-blog-body">${renderedHtml}</article>
+  ${renderTagChips(tags)}
 `;
   return renderClearnetPage({
     title: `${titleText} | Oasis`,
@@ -3437,7 +3480,17 @@ const renderUserSensors = (u, opts = {}) => {
       })()
     : null;
   const items = [];
-  if (show('karma')) items.push(span({ class: 'karma-line' }, `${i18n.bankingUserEngagementScore}: `, strong(String(u.karmaScore !== undefined ? u.karmaScore : 0))));
+  const kr = u.karmaReceived && typeof u.karmaReceived === 'object' ? u.karmaReceived : null;
+  const krPos = kr ? Number(kr.positive) || 0 : 0;
+  const krNeg = kr ? Number(kr.negative) || 0 : 0;
+  const krTone = !kr ? '' : krPos > krNeg ? ' karma-value-positive' : krPos < krNeg ? ' karma-value-negative' : ' karma-value-neutral';
+  if (show('karma')) items.push(span({ class: kr ? 'karma-line karma-line-stacked' : 'karma-line' },
+    span({ class: 'karma-line-main' }, `${i18n.bankingUserEngagementScore}: `, strong({ class: 'karma-value' + krTone }, String(u.karmaScore !== undefined ? u.karmaScore : 0))),
+    kr ? span({ class: 'karma-received-row' },
+      span({ class: 'karma-received karma-received-up' }, span({ class: 'karma-arrow' }, '▲'), String(krPos)),
+      span({ class: 'karma-received karma-received-down' }, span({ class: 'karma-arrow' }, '▼'), String(krNeg))
+    ) : null
+  ));
   if (show('ecoTax')) items.push(span({ class: 'karma-line eco-tax-line' }, `${i18n.profileVisibilityEcoTax || 'ECO Tax'}: `, strong(fmtCarbon(u.carbonGrams))));
   if (activityChip) items.push(activityChip);
   if (deviceChip) items.push(deviceChip);
@@ -3508,6 +3561,7 @@ exports.authorView = async ({
   relationship,
   ecoAddress,
   karmaScore = 0,
+  karmaReceived = null,
   estimatedUBI = 0,
   lastClaimedDate = null,
   totalClaimed = 0,
@@ -3557,7 +3611,7 @@ exports.authorView = async ({
 
   const userSensors = renderUserSensors({
     isMe: isOwnProfile, fediverseConfigured, prefs, id: feedId,
-    karmaScore, carbonGrams, deviceSource, activityBucket: lastActivityBucket,
+    karmaScore, karmaReceived, carbonGrams, deviceSource, activityBucket: lastActivityBucket,
     gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
     larpHouse, stats,
     mutual: !!(relationship && relationship.following && relationship.followsMe)
@@ -4739,7 +4793,10 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
 }
 
 
-exports.threadView = ({ messages, spreadMap = null }) => {
+exports.threadView = ({ messages, spreadMap = null, hiddenRoot = false }) => {
+  if (!Array.isArray(messages) || !messages.length) {
+    return template(i18n.hiddenByYou, section(p({ class: 'muted hidden-note' }, i18n.hiddenByYou)));
+  }
   const rootMessage = messages[0];
   const rootAuthorName = rootMessage.value.meta.author.name;
 
@@ -4750,6 +4807,7 @@ exports.threadView = ({ messages, spreadMap = null }) => {
 
   const tpl = template(
     [`@${rootAuthorName}`],
+    hiddenRoot ? p({ class: 'muted hidden-note' }, i18n.hiddenByYou) : null,
     div(thread(messages, spreadMap))
   );
 

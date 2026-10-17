@@ -335,7 +335,7 @@ describe('spread: where the button lives', (t) => {
     const withSpread = String(renderContentActions('%abc.sha256', '/tasks/%abc.sha256',
       { spread: null, favKind: 'tasks', isFavorite: false }).outerHTML);
     ok(withSpread.includes('spread-form'), 'the spread button is in the header');
-    ok(withSpread.indexOf('spread-form') < withSpread.indexOf('✛'), 'and it comes before pin/unpin');
+    ok(withSpread.indexOf('spread-form') < withSpread.indexOf('/favorites/add/'), 'and it comes before pin/unpin');
 
     const plain = String(renderContentActions('%abc.sha256', '/tasks/%abc.sha256', { favKind: 'tasks' }).outerHTML);
     ok(!plain.includes('spread-form'), 'a card that does not pass it keeps its header clean');
@@ -349,12 +349,12 @@ describe('spread: what the button says', (t) => {
     const i18n = require('../../../src/views/main_views').i18n;
 
     const none = String(renderSpreadButton('%abc.sha256', { count: 0, voters: [] }).outerHTML);
-    ok(none.includes('⟳ 0'), 'with nobody spreading it the counter still reads zero');
+    ok(none.includes('class="btn-count">0<'), 'with nobody spreading it the counter still reads zero');
     ok(none.includes(`title="${String(i18n.spreadContent)}"`), 'and the tooltip is just the action');
 
     const voters = ['@one.ed25519', '@two.ed25519', '@three.ed25519', '@four.ed25519', '@five.ed25519', '@six.ed25519'];
     const many = String(renderSpreadButton('%abc.sha256', { count: 6, voters }).outerHTML);
-    ok(many.includes('⟳ 6'), 'the counter shows every spread');
+    ok(many.includes('class="btn-count">6<'), 'the counter shows every spread');
     ok(!many.includes('@one'), 'no inhabitant is named in the tooltip');
     ok(many.includes(`title="${String(i18n.spreadContent)}"`), 'the tooltip stays the same whoever spread it');
   });

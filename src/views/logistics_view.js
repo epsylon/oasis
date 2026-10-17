@@ -126,7 +126,6 @@ const renderFilters = (filter, q, zone, census, zones, emptyMod) =>
   section(
     div({ class: "filters" },
       form({ method: "GET", action: "/logistics", class: "ui-toolbar ui-toolbar--filters" },
-        input({ type: "hidden", name: "q", value: q || "" }),
         input({ type: "hidden", name: "zone", value: zone || "" }),
         ...(emptyMod ? [] : [
           ...chipButtons(BASE_FILTERS, filter, census, filterLabel),

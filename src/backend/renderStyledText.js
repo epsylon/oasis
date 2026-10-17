@@ -26,12 +26,12 @@ const UNDERLINE_RE = /(?<![A-Za-z0-9])__(?!\s)((?:[^_\n]|_(?!_))+?)(?<!\s)__(?![
 const STRIKE_RE = /~~(?!\s)([^~\n]+?)(?<!\s)~~/g;
 const ITALIC_RE = /\*(?!\s)((?:[^*\n]|\*\*)+?)(?<!\s)\*(?!\*)/g;
 const INLINE_CODE_RE = /`([^`\n]+)`/g;
-const BLOB_IMAGE_RE = /!\[([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256)\s*\)/g;
-const BLOB_VIDEO_RE = /\[video:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256)\s*\)/g;
-const BLOB_AUDIO_RE = /\[audio:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256)\s*\)/g;
-const BLOB_PDF_RE = /\[pdf:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256)\s*\)/g;
-const BLOB_TORRENT_RE = /\[torrent:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256)\s*\)/g;
-const BLOB_FILE_RE = /(?<!!)\[(?!(?:video|audio|pdf|torrent):)([^\]\n]{1,160})\]\(\s*(&[^)\s]+\.sha256)\s*\)/g;
+const BLOB_IMAGE_RE = /!\[([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256|\/blob\/sealed\/[^)\s]{1,600})\s*\)/g;
+const BLOB_VIDEO_RE = /\[video:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256|\/blob\/sealed\/[^)\s]{1,600})\s*\)/g;
+const BLOB_AUDIO_RE = /\[audio:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256|\/blob\/sealed\/[^)\s]{1,600})\s*\)/g;
+const BLOB_PDF_RE = /\[pdf:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256|\/blob\/sealed\/[^)\s]{1,600})\s*\)/g;
+const BLOB_TORRENT_RE = /\[torrent:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha256|\/blob\/sealed\/[^)\s]{1,600})\s*\)/g;
+const BLOB_FILE_RE = /(?<!!)\[(?!(?:video|audio|pdf|torrent):)([^\]\n]{1,160})\]\(\s*(&[^)\s]+\.sha256|\/blob\/sealed\/[^)\s]{1,600})\s*\)/g;
 const MD_MENTION_RE = /\[@([^\]\[\n]{1,120})\]\(@?([A-Za-z0-9+/=.\-]{1,120}\.ed25519)\)/g;
 const RAW_MENTION_RE = /@([A-Za-z0-9+/=.\-]+\.ed25519)/g;
 const BARE_MENTION_RE = /(^|[^\p{L}\p{N}_\[\]/@])@([\p{L}\p{N}_.\-]{1,64})(?=$|[^\p{L}\p{N}_/+=])/gu;
@@ -141,7 +141,7 @@ function renderStyledText(value, opts = {}) {
     filtered.push(m);
     lastEnd = m.index + m.length;
   }
-  const blobHref = (id) => `${opts.blobPrefix || '/blob/'}${encodeURIComponent(id)}`;
+  const blobHref = (id) => String(id).startsWith('/blob/sealed/') ? String(id) : `${opts.blobPrefix || '/blob/'}${encodeURIComponent(id)}`;
   const linksOn = opts.links !== false;
   const internalOn = opts.internalLinks !== false;
   const plain = (value) => opts.plainUrlClass ? span({ class: opts.plainUrlClass }, value) : value;

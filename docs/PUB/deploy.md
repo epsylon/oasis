@@ -230,7 +230,7 @@ The PUB also serves a read-only web HUB with the items its inhabitants chose to 
 
 ## 16) Disk: media cache and snapshots
 
-**Media cache.** Every Oasis node keeps the blobs it downloads in a cache that is **unlimited by default** (Settings → Media cache); when a limit is set, the least recently opened ones are removed once it is exceeded. A PUB is the place others fetch media from, so it has its own limit: `oasis-config.json` carries a separate `pubMaxMB`, which the example leaves unlimited (`0`). If the disk fills up, set a limit in megabytes and restart; the PUB then keeps its own files and anything opened recently, and periodically drops the rest, oldest first. Dropped blobs are fetched again from whoever still has them the next time someone opens them.
+**Media cache.** Every Oasis node keeps the blobs it downloads in a cache that is **unlimited by default** (Settings → Content → Media cache); when a limit is set, the least recently opened ones are removed once it is exceeded. A PUB is the place others fetch media from, so it has its own limit: `oasis-config.json` carries a separate `pubMaxMB`, which the example leaves unlimited (`0`). If the disk fills up, set a limit in megabytes and restart; the PUB then keeps its own files and anything opened recently, and periodically drops the rest, oldest first. Dropped blobs are fetched again from whoever still has them the next time someone opens them.
 
 ```json
 "blobCache": { "maxMB": 0, "pubMaxMB": <megabytes> }

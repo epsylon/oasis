@@ -25,9 +25,9 @@ config.blobs.max = 75 * megabyte;
 config.db2 = { automigrate: false, dangerouslyKillFlumeWhenMigrated: false, ...(config.db2 || {}) };
 
 const lanOn = (() => { try { return require('../configs/config-manager').getConfig().lanBroadcasting !== false; } catch (_) { return true; } })();
-const bindHost = config.pub || lanOn ? '0.0.0.0' : '127.0.0.1';
+const bindHost = config.pub ? '0.0.0.0' : lanOn ? null : '127.0.0.1';
 for (const entry of (config.connections && config.connections.incoming && config.connections.incoming.net) || []) {
-  if (entry && typeof entry === 'object' && !entry.host) entry.host = bindHost;
+  if (entry && typeof entry === 'object' && !entry.host && bindHost) entry.host = bindHost;
 }
 
 config.statePath = (name) => {

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon } = require("./main_views")
 const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
@@ -68,7 +68,7 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
     )
   )
 
-const renderCover = (room, cls) => room.image ? img({ loading: "lazy", src: `/blob/${encodeURIComponent(room.image)}`, class: cls, alt: "" }) : null
+const renderCover = (room, cls) => room.image ? img({ loading: "lazy", src: String(room.image).startsWith("/blob/sealed/") ? room.image : `/blob/${encodeURIComponent(room.image)}`, class: cls, alt: "" }) : null
 
 const roomIsFull = (occ) => !!occ && occ.count >= ((occ && occ.max) || ROOM_MAX)
 
@@ -245,7 +245,7 @@ const renderRecordings = (recordings) => safeArr(recordings).length
         span({ class: "phone-call-clock" }, fmtDuration(r.durationMs)),
         a({ href: `/rooms/recordings/${encodeURIComponent(r.name)}`, class: "tribe-action-btn", download: r.name }, String(i18n.fileDownload).toUpperCase()),
         form({ method: "POST", action: `/rooms/recordings/${encodeURIComponent(r.name)}/delete`, class: "phone-action-form" },
-          button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.delete }, "✕"))
+          button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.delete }, renderIcon("close")))
       )))
     )
   : null

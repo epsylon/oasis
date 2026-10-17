@@ -126,7 +126,7 @@ const renderFeedCard = exports.renderFeedCard = (feed, spreadMap = null, opts = 
     const signerId = feed.value.author || "";
     const refeedsNum = Number(content.refeeds || 0) || 0;
     const commentCount = Number(content.commentCount || 0);
-    const styledNodes = renderStyledText(safeText, { zoomImages: true });
+    const styledNodes = renderStyledText(safeText, { zoomImages: true, ...(typeof opts.hashtagHref === 'function' ? { hashtagHref: opts.hashtagHref } : {}) });
     const refeedAction = opts.refeedAction || `/feed/refeed/${encodeURIComponent(feed.key)}`;
     const canRefeed = opts.canRefeed !== false && !(authorId && String(authorId) === String(me));
     const headerActions = opts.headerActions !== undefined

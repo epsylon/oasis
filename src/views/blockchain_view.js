@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, input, span, pre, table, tr, td, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, paged } = require("../views/main_views");
+const { template, i18n, userLink, paged, renderIcon } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
@@ -175,7 +175,9 @@ const getViewDetailsAction = (type, block) => {
     case 'event': return `/events/${encodeURIComponent(block.id)}`;
     case 'task': return `/tasks/${encodeURIComponent(block.id)}`;
     case 'about': return `/author/${encodeURIComponent(block.author)}`;
-    case 'post': return `/thread/${encodeURIComponent(block.id)}#${encodeURIComponent(block.id)}`;
+    case 'post': return block.content && typeof block.content.root === 'string'
+      ? `/thread/${encodeURIComponent(block.content.root)}#${encodeURIComponent(block.id)}`
+      : `/blogs/${encodeURIComponent(block.id)}`;
     case 'vote': return `/thread/${encodeURIComponent(block.content.vote.link)}#${encodeURIComponent(block.content.vote.link)}`;
     case 'contact': return `/inhabitants`;
     case 'pub': return `/invites`;
@@ -424,7 +426,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
           button({ type:'submit', class:'filter-btn' }, `← ${i18n.blockchainBack}`)
         ),
         !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
-          a({ href:getViewDetailsAction(block.type, block), class:'btn-singleview btn-content', title:i18n.visitContent }, '↗')
+          a({ href:getViewDetailsAction(block.type, block), class:'btn-singleview btn-content', title:i18n.visitContent }, renderIcon('open'))
         : (block.isTombstoned || block.isReplaced) ?
           div({ class: 'deleted-label' },
             i18n.blockchainContentDeleted || "This content has been deleted."
@@ -534,10 +536,10 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
             .map(block=>
               div({ class:'block' },
                 div({ class:'block-buttons' },
-                  block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}`, class:'btn-singleview', title:i18n.blockchainDetails }, '⦿'),
-                  block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}&view=datagram`, class:'btn-singleview btn-datagram', title:i18n.blockchainDatagram }, '⊞'),
+                  block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}`, class:'btn-singleview', title:i18n.blockchainDetails }, renderIcon('block')),
+                  block.restricted ? null : a({ href:`/blockexplorer/block/${encodeURIComponent(block.id)}${qs}&view=datagram`, class:'btn-singleview btn-datagram', title:i18n.blockchainDatagram }, renderIcon('datagram')),
                   !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
-                    a({ href:getViewDetailsAction(block.type, block), class:'btn-singleview btn-content', title:i18n.visitContent }, '↗')
+                    a({ href:getViewDetailsAction(block.type, block), class:'btn-singleview btn-content', title:i18n.visitContent }, renderIcon('open'))
                   : (block.isTombstoned || block.isReplaced) ?
                     div({ class: 'deleted-label' },
                       i18n.blockchainContentDeleted || "This content has been deleted."

@@ -308,7 +308,7 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
       : (poll.voters.length
           ? div({ class: "card-assigned-list" }, ...poll.voters.map(v => userLink(v)))
           : null),
-    renderEngagement(poll.id,
+    poll.tribeId ? null : renderEngagement(poll.id,
       renderOpinionsVoting('/polls/opinions', poll.id, poll.opinions, href, poll.opinions_inhabitants),
       renderComments(poll, comments, basePath)
     )

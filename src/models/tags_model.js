@@ -107,8 +107,10 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
   };
 
   return {
-    async listTags(filter = 'all', search = '') {
+    async listTags(filter = 'all', search = '', opts = {}) {
       const ssbClient = await openSsb();
+      const hiddenAuthors = opts.hiddenAuthors instanceof Set ? opts.hiddenAuthors : null;
+      const hiddenIds = opts.hiddenIds instanceof Set ? opts.hiddenIds : null;
 
       const messages = await readTyped(ssbClient, CONTENT_TYPES, { limit: logLimit, withWindow: true });
 
@@ -140,6 +142,8 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
       let filtered = Array.from(latestByKey.values()).filter(msg => {
         const c = msg?.value?.content;
         if (!c || c.type === 'tombstone') return false;
+        if (hiddenAuthors && hiddenAuthors.has(String(msg?.value?.author || ''))) return false;
+        if (hiddenIds && hiddenIds.has(msg.key)) return false;
         if (tombstoned.has(msg.key)) return false;
         if (c.encryptedPayload) return false;
         if (!Array.isArray(c.tags) || !c.tags.filter(Boolean).length) return false;
@@ -185,6 +189,8 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
         const viewerId = ssbClient2.id;
         const pads = await padsModel.listAll({ filter: 'all', viewerId }).catch(() => []);
         for (const pad of pads) {
+          if (hiddenAuthors && hiddenAuthors.has(String(pad.author || ''))) continue;
+          if (hiddenIds && (hiddenIds.has(pad.id) || hiddenIds.has(pad.key) || hiddenIds.has(pad.rootId))) continue;
           if (pad.status === 'INVITE-ONLY' && pad.author !== viewerId && !(Array.isArray(pad.members) && pad.members.includes(viewerId))) continue;
           if (!Array.isArray(pad.tags)) continue;
           const uniquePadTags = new Set(pad.tags.map(tagKey).filter(Boolean));

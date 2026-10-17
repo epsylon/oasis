@@ -175,7 +175,7 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
       user.name ? p({ class: 'inhabitant-left-name' }, userLink(user.id, user.name)) : null,
       ...renderUserSensors({
         isMe, fediverseConfigured, prefs, id: user.id,
-        karmaScore: user.karmaScore, carbonGrams: user.carbonGrams,
+        karmaScore: user.karmaScore, karmaReceived: user.karmaReceived || null, carbonGrams: user.carbonGrams,
         deviceSource: user.deviceSource, activityBucket: user.lastActivityBucket,
         gpgFingerprint: user.gpgFingerprint, ecoAddress: user.ecoAddress,
         estimatedUBI: user.estimatedUBI, lastClaimedDate: user.lastClaimedDate, totalClaimed: user.totalClaimed,
@@ -411,7 +411,7 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
           safe.oasisVersion ? div({ class: 'profile-side-version' }, '🌴 ' + (i18n.oasisVersionLabel || 'Oasis Version') + ': ', strong(safe.oasisVersion)) : null,
           ...renderUserSensors({
             isMe, fediverseConfigured, prefs, id: id || viewedId,
-            karmaScore, carbonGrams, deviceSource: safe.deviceSource, activityBucket: providedBucket,
+            karmaScore, karmaReceived: safe.karmaReceived || null, carbonGrams, deviceSource: safe.deviceSource, activityBucket: providedBucket,
             gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
             larpHouse, stats: safe.stats,
             mutual: !!(safe.relationship && safe.relationship.following && safe.relationship.followsMe)

@@ -1,7 +1,7 @@
 const { div, p, h2, span, a, form, input, textarea, button, label, br, details, summary } = require("../server/node_modules/hyperaxe");
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
-const { i18n, userLink } = require("./main_views");
+const { i18n, userLink, renderHideIcon, renderIcon } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -15,7 +15,7 @@ const visibleComments = (comments) => (Array.isArray(comments) ? comments : []).
   return t && String(t).trim();
 });
 
-const renderCommentCard = (c, extra = null) => {
+const renderCommentCard = (c, extra = null, returnTo = null) => {
   const author = (c && c.value && c.value.author) || "";
   const ts = (c && c.value && c.value.timestamp) || (c && c.timestamp);
   const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm") : "";
@@ -28,7 +28,13 @@ const renderCommentCard = (c, extra = null) => {
   return div({ class: own ? "votations-comment-card own-comment" : "votations-comment-card", id: c && c.key ? c.key : undefined },
     own && c.key
       ? form({ method: "POST", action: `/comments/delete/${encodeURIComponent(c.key)}`, class: "comment-delete-form" },
-          button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.chatDelete }, "✕"))
+          button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.chatDelete }, renderIcon("close")))
+      : null,
+    !own && c.key
+      ? form({ method: "POST", action: `/hide/${encodeURIComponent(c.key)}`, class: "comment-delete-form" },
+          input({ type: "hidden", name: "returnTo", value: returnTo || (rootId ? `/thread/${encodeURIComponent(rootId)}` : "/activity") }),
+          input({ type: "hidden", name: "label", value: String(text).replace(/\s+/g, " ").trim().slice(0, 80) }),
+          button({ type: "submit", class: "btn-singleview btn-hide", title: i18n.hideContent }, renderHideIcon()))
       : null,
     span({ class: "created-at" },
       author ? userLink(author) : span("(unknown)"),
@@ -52,7 +58,7 @@ const renderCommentsSection = ({ action, comments = [], returnTo = null, closedN
     div({ class: "vote-comments-section" },
       list.length
         ? div({ class: "comments-list" }, ...list.map((c, i) => {
-            const card = renderCommentCard(c, typeof commentExtra === "function" ? commentExtra(c) : null);
+            const card = renderCommentCard(c, typeof commentExtra === "function" ? commentExtra(c) : null, returnTo);
             return i === list.length - 1 ? div({ id: "comments-latest", class: "comments-latest-anchor" }, card) : card;
           }))
         : (closedNote ? null : p({ class: "votations-no-comments" }, i18n.voteNoCommentsYet)),

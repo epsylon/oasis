@@ -65,6 +65,7 @@ module.exports = ({ cooler, isPublic = false }) => {
       text: longText.joinText(c.text || '', c.chunks, longText.lookupIn(idx.chunks), node.author),
       mentions: Array.isArray(c.mentions) ? c.mentions : [],
       allowComments: c.allowComments !== false,
+      tags: Array.isArray(c.tags) ? c.tags.map(t => String(t || '').trim().replace(/^#+/, '')).filter(Boolean) : [],
       createdAt: new Date(node.ts).toISOString(),
       commentCount: idx.commentsByRoot.get(node.key) || 0,
       opinions: op.counts,
@@ -99,7 +100,8 @@ module.exports = ({ cooler, isPublic = false }) => {
 
       const q = String(opts.q || '').trim().toLowerCase();
       if (q) out = out.filter(b =>
-        b.text.toLowerCase().includes(q) || b.subject.toLowerCase().includes(q));
+        b.text.toLowerCase().includes(q) || b.subject.toLowerCase().includes(q) ||
+        b.tags.some(t => t.toLowerCase().includes(q.replace(/^#/, ''))));
 
       if (f === 'TOP') {
         out.sort((a, b) => (opinionScore(b) + b.commentCount) - (opinionScore(a) + a.commentCount) ||
@@ -118,7 +120,7 @@ module.exports = ({ cooler, isPublic = false }) => {
       return blog;
     },
 
-    async createBlog({ text, subject = '', mentions = [], allowComments = true } = {}) {
+    async createBlog({ text, subject = '', mentions = [], allowComments = true, tags = [] } = {}) {
       if (isPublic) throw new Error('Not available in public mode');
       const body = String(text || '').trim();
       if (!body) throw new Error('Blog text is required');
@@ -128,6 +130,7 @@ module.exports = ({ cooler, isPublic = false }) => {
         type: 'post',
         text: body,
         allowComments: allowComments !== false,
+        ...(Array.isArray(tags) && tags.length ? { tags: Array.from(new Set(tags.map(t => String(t || '').trim().replace(/^#+/, '')).filter(Boolean))) } : {}),
         ...(Array.isArray(mentions) && mentions.length ? { mentions } : {}),
         ...(String(subject || '').trim() ? { contentWarning: String(subject).trim() } : {})
       }, 'text', { publish });

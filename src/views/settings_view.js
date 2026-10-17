@@ -2,13 +2,16 @@ const { form, button, div, h2, h3, p, section, select, option, input, br, a, lab
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
-const { template, selectedLanguage, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel, THEMES } = require('./main_views');
+const { template, selectedLanguage, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel, THEMES, userLink } = require('./main_views');
 const i18nBase = require("../client/assets/translations/i18n");
+const moment = require("../server/node_modules/moment");
 const { WORKFLOWS, currentWorkflow } = require('../models/workflows_model');
 const { renderVerificationReport, renderRebuildReport } = require('./backup_view');
 
 const snhUrl = "https://wiki.solarnethub.com/socialnet/overview";
 const BLOB_CACHE_OPTIONS = [512, 1024, 2048, 5120, 10240, 0];
+const plainLabel = (s) => String(s || '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
+const hiddenAt = (at) => at ? moment(at).format("YYYY/MM/DD HH:mm") : "—";
 const sizeLabel = (bytes) => {
   let value = Number(bytes) || 0;
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -41,7 +44,9 @@ const settingsView = (params) => {
   const walletUser = currentConfig.wallet.user;
   const walletFee = currentConfig.wallet.fee;
   const currentWish = ['mutuals', 'only-lan', 'local'].includes(currentConfig.wish) ? currentConfig.wish : 'whole';
-  const currentPmVisibility = currentConfig.pmVisibility === 'mutuals' ? 'mutuals' : 'whole';
+  const currentPmVisibility = ['mutuals', 'following'].includes(currentConfig.pmVisibility) ? currentConfig.pmVisibility : 'whole';
+  const currentMentionsVisibility = ['mutuals', 'following'].includes(currentConfig.mentionsVisibility) ? currentConfig.mentionsVisibility : 'whole';
+  const viewerHidden = (() => { try { const vf = require('../models/viewer_filters'); return { muted: vf.mutedList(), hidden: vf.hiddenList() }; } catch (_) { return { muted: [], hidden: [] }; } })();
   const currentPhone = currentConfig.phone && typeof currentConfig.phone === 'object' ? currentConfig.phone : {};
 
   const themeElements = THEMES.map(([value, name]) => option({ value, ...(theme === value ? { selected: true } : {}) }, name));
@@ -107,7 +112,7 @@ const settingsView = (params) => {
     );
   }
 
-  const filter = params.filter === 'multiverse' && modOn('fediverse') ? 'multiverse' : 'oasis';
+  const filter = params.filter === 'multiverse' && modOn('fediverse') ? 'multiverse' : params.filter === 'content' ? 'content' : 'oasis';
   const oasisParts = [
     updatePanel,
     section({ id: "language" },
@@ -175,22 +180,6 @@ const settingsView = (params) => {
           br(),
           br(),
           button({ type: "submit" }, i18n.setTheme)
-        )
-      )
-    ),
-    section({ id: "wish" },
-      div({ class: "tags-header" },
-        h2(i18n.settingsWishTitle),
-        p(i18n.settingsWishDesc),
-        form(
-          { action: "/settings/wish", method: "POST" },
-          select({ name: "wish" },
-            option({ value: "whole", ...(currentWish === "whole" ? { selected: true } : {})}, i18n.settingsWishWhole),
-            option({ value: "mutuals", ...(currentWish === "mutuals" ? { selected: true } : {})}, i18n.settingsWishMutuals),
-            option({ value: "only-lan", ...(currentWish === "only-lan" ? { selected: true } : {})}, i18n.settingsWishOnlyLan || "Only LAN"),
-            option({ value: "local", ...(currentWish === "local" ? { selected: true } : {})}, i18n.settingsWishLocal || "Local")
-          ), br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
         )
       )
     ),
@@ -273,48 +262,10 @@ const settingsView = (params) => {
       )
      )
     ),
-    blobCache ? section({ id: "blobcache" },
-      div({ class: "tags-header" },
-        h2(i18n.settingsBlobCacheTitle),
-        p(i18n.settingsBlobCacheDesc),
-        blobCache.usage ? p({ class: "blob-cache-usage" }, strong(`${i18n.settingsBlobCacheUsage}: `), `${sizeLabel(blobCache.usage.bytes)} · ${blobCache.usage.count} ${i18n.settingsBlobCacheFiles}`) : null,
-        blobCache.cleaned !== null ? p({ class: "blob-cache-notice" }, String(i18n.settingsBlobCacheCleaned).replace('{n}', String(blobCache.cleaned)).replace('{size}', sizeLabel(blobCache.freed))) : null,
-        form(
-          { action: "/settings/blob-cache", method: "POST" },
-          label({ for: "blob_cache_mb" }, i18n.settingsBlobCacheLimit),
-          br(),
-          select({ id: "blob_cache_mb", name: "blob_cache_mb" }, ...BLOB_CACHE_OPTIONS.map(mb => option({ value: String(mb), ...(mb === blobCache.maxMB ? { selected: true } : {}) }, blobCacheOptionLabel(mb)))),
-          br(), br(),
-          button({ type: "submit" }, i18n.saveSettings),
-          blobCache.maxMB > 0 ? button({ type: "submit", formaction: "/settings/blob-cache/collect", class: "blob-cache-clean-btn" }, i18n.settingsBlobCacheCleanNow) : null
-        )
-      )
-    ) : null,
-    section({ id: "replication" },
-      div({ class: "tags-header" },
-        h2(i18n.settingsReplicationTitle || 'Replication'),
-        p(i18n.settingsReplicationDesc || 'Configure the number of hops your peer follows out from your own feed when replicating content.'),
-        form(
-          { action: "/settings/replication", method: "POST" },
-          label({ for: "replication_hops" }, i18n.settingsReplicationHopsLabel || 'Hops'),
-          br(),
-          input({
-            type: "number",
-            id: "replication_hops",
-            name: "hops",
-            min: 0,
-            max: 6,
-            value: currentHops
-          }),
-          br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
-        )
-      )
-    ),
     section({ id: "lan" },
       div({ class: "tags-header" },
         h2(i18n.settingsLanTitle || 'LAN Broadcasting'),
-        p(i18n.settingsLanDesc || 'Periodically announce this peer to other Oasis instances on the same local network. Disable to stop UDP broadcasts.'),
+        p(i18n.settingsLanDesc || 'Periodically announce this peer to other Oasis instances on the same local network.'),
         form(
           { action: "/settings/lan-broadcasting", method: "POST" },
           label({ for: "lanBroadcasting", class: "lan-checkbox-label" },
@@ -329,20 +280,6 @@ const settingsView = (params) => {
             span({ class: "lan-checkbox-text" }, i18n.settingsLanEnable || 'Enable LAN broadcasting')
           ),
           br(),
-          button({ type: "submit" }, i18n.saveSettings)
-        )
-      )
-    ),
-    section({ id: "pm-visibility" },
-      div({ class: "tags-header" },
-        h2(i18n.settingsPmVisibilityTitle),
-        p(i18n.settingsPmVisibilityDesc),
-        form(
-          { action: "/settings/pm-visibility", method: "POST" },
-          select({ name: "pmVisibility" },
-            option({ value: "whole", ...(currentPmVisibility === "whole" ? { selected: true } : {})}, i18n.settingsPmVisibilityWhole),
-            option({ value: "mutuals", ...(currentPmVisibility === "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals)
-          ), br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
         )
       )
@@ -363,30 +300,6 @@ const settingsView = (params) => {
             option({ value: "on", ...(currentPhone.video !== false ? { selected: true } : {}) }, i18n.settingsPhoneVideoOn),
             option({ value: "off", ...(currentPhone.video === false ? { selected: true } : {}) }, i18n.settingsPhoneVideoOff)
           ), br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
-        )
-      )
-    ) : null,
-    modOn('inbox') ? section({ id: "inbox-bots" },
-      div({ class: "tags-header" },
-        h2(i18n.settingsInboxBotsTitle),
-        p(i18n.settingsInboxBotsDesc),
-        form(
-          { action: "/settings/inbox-bots", method: "POST" },
-          ...INBOX_BOT_ORDER.map(bot =>
-            label({ for: `inbox-bot-${bot}`, class: "lan-checkbox-label inbox-bot-label" },
-              input({
-                type: "checkbox",
-                id: `inbox-bot-${bot}`,
-                name: "bots",
-                value: bot,
-                class: "lan-checkbox-input",
-                checked: (Array.isArray(currentConfig.inboxMutedBots) && currentConfig.inboxMutedBots.includes(bot)) ? undefined : true
-              }),
-              span({ class: "lan-checkbox-text" }, inboxBotLabel(bot))
-            )
-          ),
-          br(),
           button({ type: "submit" }, i18n.saveSettings)
         )
       )
@@ -450,6 +363,156 @@ const settingsView = (params) => {
         )
       )
     )
+  ];
+  const contentParts = [
+    section({ id: "wish" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsWishTitle),
+        p(i18n.settingsWishDesc),
+        form(
+          { action: "/settings/wish", method: "POST" },
+          select({ name: "wish" },
+            option({ value: "whole", ...(currentWish === "whole" ? { selected: true } : {})}, i18n.settingsWishWhole),
+            option({ value: "mutuals", ...(currentWish === "mutuals" ? { selected: true } : {})}, i18n.settingsWishMutuals),
+            option({ value: "only-lan", ...(currentWish === "only-lan" ? { selected: true } : {})}, i18n.settingsWishOnlyLan || "Only LAN"),
+            option({ value: "local", ...(currentWish === "local" ? { selected: true } : {})}, i18n.settingsWishLocal || "Local")
+          ), br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    section({ id: "replication" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsReplicationTitle || 'Replication'),
+        p(i18n.settingsReplicationDesc || 'Configure the number of hops your peer follows out from your own feed when replicating content.'),
+        form(
+          { action: "/settings/replication", method: "POST" },
+          label({ for: "replication_hops" }, i18n.settingsReplicationHopsLabel || 'Hops'),
+          br(),
+          input({
+            type: "number",
+            id: "replication_hops",
+            name: "hops",
+            min: 0,
+            max: 6,
+            value: currentHops
+          }),
+          br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    blobCache ? section({ id: "blobcache" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsBlobCacheTitle),
+        p(i18n.settingsBlobCacheDesc),
+        blobCache.usage ? p({ class: "blob-cache-usage" }, strong(`${i18n.settingsBlobCacheUsage}: `), `${sizeLabel(blobCache.usage.bytes)} · ${blobCache.usage.count} ${i18n.settingsBlobCacheFiles}`) : null,
+        blobCache.cleaned !== null ? p({ class: "blob-cache-notice" }, String(i18n.settingsBlobCacheCleaned).replace('{n}', String(blobCache.cleaned)).replace('{size}', sizeLabel(blobCache.freed))) : null,
+        form(
+          { action: "/settings/blob-cache", method: "POST" },
+          label({ for: "blob_cache_mb" }, i18n.settingsBlobCacheLimit),
+          br(),
+          select({ id: "blob_cache_mb", name: "blob_cache_mb" }, ...BLOB_CACHE_OPTIONS.map(mb => option({ value: String(mb), ...(mb === blobCache.maxMB ? { selected: true } : {}) }, blobCacheOptionLabel(mb)))),
+          br(), br(),
+          button({ type: "submit" }, i18n.saveSettings),
+          blobCache.maxMB > 0 ? button({ type: "submit", formaction: "/settings/blob-cache/collect", class: "blob-cache-clean-btn" }, i18n.settingsBlobCacheCleanNow) : null
+        )
+      )
+    ) : null,
+    section({ id: "pm-visibility" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsPmVisibilityTitle),
+        p(i18n.settingsPmVisibilityDesc),
+        form(
+          { action: "/settings/pm-visibility", method: "POST" },
+          select({ name: "pmVisibility" },
+            option({ value: "whole", ...(currentPmVisibility === "whole" ? { selected: true } : {})}, i18n.settingsPmVisibilityWhole),
+            option({ value: "following", ...(currentPmVisibility === "following" ? { selected: true } : {})}, i18n.settingsPmVisibilityFollowing),
+            option({ value: "mutuals", ...(currentPmVisibility === "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals)
+          ), br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    section({ id: "mentions-visibility" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsMentionsVisibilityTitle),
+        p(i18n.settingsMentionsVisibilityDesc),
+        form(
+          { action: "/settings/mentions-visibility", method: "POST" },
+          select({ name: "mentionsVisibility" },
+            option({ value: "whole", ...(currentMentionsVisibility === "whole" ? { selected: true } : {})}, i18n.settingsPmVisibilityWhole),
+            option({ value: "following", ...(currentMentionsVisibility === "following" ? { selected: true } : {})}, i18n.settingsPmVisibilityFollowing),
+            option({ value: "mutuals", ...(currentMentionsVisibility === "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals)
+          ), br(), br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    modOn('inbox') ? section({ id: "inbox-bots" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsInboxBotsTitle),
+        p(i18n.settingsInboxBotsDesc),
+        form(
+          { action: "/settings/inbox-bots", method: "POST" },
+          ...INBOX_BOT_ORDER.map(bot =>
+            label({ for: `inbox-bot-${bot}`, class: "lan-checkbox-label inbox-bot-label" },
+              input({
+                type: "checkbox",
+                id: `inbox-bot-${bot}`,
+                name: "bots",
+                value: bot,
+                class: "lan-checkbox-input",
+                checked: (Array.isArray(currentConfig.inboxMutedBots) && currentConfig.inboxMutedBots.includes(bot)) ? undefined : true
+              }),
+              span({ class: "lan-checkbox-text" }, inboxBotLabel(bot))
+            )
+          ),
+          br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ) : null,
+    section({ id: "hidden" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsHiddenTitle),
+        p(i18n.settingsHiddenDesc),
+        p(strong(`${i18n.settingsMutedLabel} (${viewerHidden.muted.length})`)),
+        viewerHidden.muted.length
+          ? div({ class: "viewer-hidden-block" }, table({ class: "block-info-table" },
+              tr(
+                td({ class: "card-label" }, i18n.inhabitantProfileTitle),
+                td({ class: "card-label" }, i18n.date),
+                td({ class: "card-label" }, "")
+              ),
+              ...viewerHidden.muted.map(m => tr(
+                td({ "data-label": i18n.inhabitantProfileTitle }, userLink(m.id)),
+                td({ "data-label": i18n.date }, hiddenAt(m.at)),
+                td({ "data-label": "" }, form({ action: `/unmute/${encodeURIComponent(m.id)}`, method: "POST" },
+                  input({ type: "hidden", name: "returnTo", value: "/settings?filter=content#hidden" }),
+                  button({ type: "submit", class: "filter-btn" }, i18n.unmute)))
+              ))
+            ))
+          : p({ class: "muted" }, i18n.settingsMutedEmpty),
+        p(strong(`${i18n.settingsHiddenLabel} (${viewerHidden.hidden.length})`)),
+        viewerHidden.hidden.length
+          ? div({ class: "viewer-hidden-block" }, table({ class: "block-info-table" },
+              tr(
+                td({ class: "card-label" }, i18n.settingsTabContent),
+                td({ class: "card-label" }, i18n.date),
+                td({ class: "card-label" }, "")
+              ),
+              ...viewerHidden.hidden.map(h => tr(
+                td({ "data-label": i18n.settingsTabContent }, h.href ? a({ href: h.href }, plainLabel(h.label) || h.id) : span(plainLabel(h.label) || h.id)),
+                td({ "data-label": i18n.date }, hiddenAt(h.at)),
+                td({ "data-label": "" }, form({ action: `/unhide/${encodeURIComponent(h.id)}`, method: "POST" },
+                  input({ type: "hidden", name: "returnTo", value: "/settings?filter=content#hidden" }),
+                  button({ type: "submit", class: "filter-btn" }, i18n.unhideContent)))
+              ))
+            ))
+          : p({ class: "muted" }, i18n.settingsHiddenEmpty)
+      )
+    ),
   ];
   const multiverseParts = modOn('fediverse') ? [
     section({ id: "mastodon" },
@@ -576,10 +639,11 @@ const settingsView = (params) => {
       ),
       div({ class: "mode-buttons-row" },
         a({ class: filter === 'oasis' ? 'filter-btn active' : 'filter-btn', href: '/settings?filter=oasis' }, String(i18n.linkBoxOasis).toUpperCase()),
+        a({ class: filter === 'content' ? 'filter-btn active' : 'filter-btn', href: '/settings?filter=content' }, String(i18n.settingsTabContent).toUpperCase()),
         modOn('fediverse') ? a({ class: filter === 'multiverse' ? 'filter-btn active' : 'filter-btn', href: '/settings?filter=multiverse' }, String(i18n.multiverse).toUpperCase()) : null
       )
     ),
-    ...(filter === 'multiverse' ? multiverseParts : oasisParts)
+    ...(filter === 'multiverse' ? multiverseParts : filter === 'content' ? contentParts : oasisParts)
   );
 };
 

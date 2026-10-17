@@ -21,6 +21,7 @@ const catLabel = (c) => i18n[catKey(c)] || c
 
 const blobSrcOf = (value) => {
   const s = String(value || "").trim()
+  if (s.startsWith("/blob/sealed/")) return s
   if (s.startsWith("&")) return `/blob/${encodeURIComponent(s)}`
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   return mImg ? `/blob/${encodeURIComponent(mImg[1])}` : null
@@ -30,9 +31,10 @@ const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
   if (!value) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
   const s = String(value).trim()
   if (!s) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
+  if (s.startsWith("/blob/sealed/")) return img({ loading: 'lazy', src: s, ...attrs })
   if (s.startsWith("&")) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(s)}`, ...attrs })
-  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mImg) return img({ loading: 'lazy', src: `/blob/${encodeURIComponent(mImg[1])}`, ...attrs })
+  const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256|\/blob\/sealed\/[^)\s]+)\s*\)/)
+  if (mImg) return img({ loading: 'lazy', src: mImg[1].startsWith("/blob/sealed/") ? mImg[1] : `/blob/${encodeURIComponent(mImg[1])}`, ...attrs })
   return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
 }
 

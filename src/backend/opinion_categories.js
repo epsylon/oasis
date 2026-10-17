@@ -46,12 +46,21 @@ const all = [...positive, ...constructive, ...moderation];
 all.positive = positive;
 all.constructive = constructive;
 all.moderation = moderation;
+const karmaNeutral = ["adultOnly", "nsfw", "triggering", "duplicate", "offTopic", "needsSources"];
+const karmaModeration = [...moderation.filter(c => !karmaNeutral.includes(c)), "propaganda"];
+all.karma = {
+  positive,
+  neutral: karmaNeutral,
+  constructive: constructive.filter(c => !karmaNeutral.includes(c) && !karmaModeration.includes(c)),
+  moderation: karmaModeration
+};
 all.messageTypes = {
   bookmark: 'bookmarkOpinion',
   votes: 'votesOpinion',
   poll: 'pollOpinion',
   transfer: 'transferOpinion',
   feed: 'feedOpinion',
+  post: 'blogOpinion',
   image: 'imageOpinion',
   audio: 'audioOpinion',
   video: 'videoOpinion',

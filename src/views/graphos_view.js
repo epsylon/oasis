@@ -94,9 +94,12 @@ const buildGraphSvg = (me, peers, links = []) => {
     + `</svg>`;
 };
 
-const zoomableGraph = (id, svg) => [
-  div({ class: 'graphos-zoom-row' }, a({ href: process.env.OASIS_MOBILE === '1' ? `#${id}-focus` : `#${id}`, id: `${id}-src`, class: 'tribe-action-btn graphos-zoom-btn' }, `\u2922 ${i18n.graphosZoom || 'Enlarge'}`)),
-  div({ class: 'graphos-canvas', [RAW_HTML]: svg }),
+const zoomableGraph = (id, svg, stats = []) => [
+  div({ class: 'graphos-legend graphos-statsbar' }, ...stats.filter(Boolean)),
+  div({ class: 'graphos-canvas' },
+    a({ href: process.env.OASIS_MOBILE === '1' ? `#${id}-focus` : `#${id}`, id: `${id}-src`, class: 'tribe-action-btn graphos-zoom-btn' }, `\u2922 ${i18n.graphosZoom || 'Enlarge'}`),
+    div({ class: 'graphos-canvas-svg', [RAW_HTML]: svg })
+  ),
   div({ id, class: 'lightbox graphos-lightbox' },
     a({ href: `#${id}-src`, class: 'lightbox-close' }, '\u00d7'),
     div({ class: 'graphos-canvas-zoom' },
@@ -108,7 +111,7 @@ const zoomableGraph = (id, svg) => [
   )
 ];
 
-const kpi = (label, value) => div({ class: 'stats-kpi stats-kpi-inline' },
+const kpi = (label, value) => span({ class: 'graphos-legend-item graphos-kpi' },
   span({ class: 'stats-kpi-label' }, String(label).toUpperCase()),
   span({ class: 'stats-kpi-value' }, String(value))
 );
@@ -153,15 +156,12 @@ exports.graphosView = ({ filter, me, peers, links = [], kpis, focus = null, focu
       capped
         ? p({ class: 'graphos-cap-note' }, `${i18n.graphosShowing || 'Showing'} ${shown} / ${total}`)
         : null,
-      div({ class: 'stats-block graphos-stats' },
-        div({ class: 'stats-grid' },
-          kpi(i18n.graphosTotalNodes || 'Total nodes', kpis.total),
-          kpi(i18n.online || 'Online', kpis.online),
-          filter !== 'MINE' ? kpi(i18n.discovered || 'Discovered', kpis.discovered) : null,
-          filter !== 'MINE' ? kpi(i18n.unknown || 'Unknown', kpis.unknown) : null
-        )
-      ),
-      ...zoomableGraph('graphos-zoom', buildGraphSvg(me, peers, links)),
+      ...zoomableGraph('graphos-zoom', buildGraphSvg(me, peers, links), [
+        kpi(i18n.graphosTotalNodes || 'Total nodes', kpis.total),
+        kpi(i18n.online || 'Online', kpis.online),
+        filter !== 'MINE' ? kpi(i18n.discovered || 'Discovered', kpis.discovered) : null,
+        filter !== 'MINE' ? kpi(i18n.unknown || 'Unknown', kpis.unknown) : null
+      ]),
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
         legendItem('online', i18n.online || 'Online'),
@@ -267,18 +267,15 @@ exports.graphosFederationView = ({ myName, rows = [], links = [], ownVersion = '
           )
         )
       ),
-      div({ class: 'stats-block graphos-stats' },
-        div({ class: 'stats-grid' },
-          kpi(i18n.graphosFedPubs, sorted.length),
-          kpi(i18n.peerStateConnected, count(r => r.state === 'connected')),
-          kpi(i18n.graphosFedUnreachable, count(r => r.state === 'unreachable')),
-          kpi(i18n.peerOutdated, count(outdated)),
-          kpi(i18n.peerErrTor, count(r => r.transport === 'tor')),
-          kpi(i18n.graphosFedLinks, links.filter(l => l.mutual).length),
-          kpi(i18n.graphosFedIsolated, count(r => r.isolated))
-        )
-      ),
-      ...(sorted.length ? zoomableGraph('graphos-fed-zoom', buildFederationSvg(myName || '', sorted, links, ownVersion)) : [p(i18n.graphosFedEmpty)]),
+      ...(sorted.length ? zoomableGraph('graphos-fed-zoom', buildFederationSvg(myName || '', sorted, links, ownVersion), [
+        kpi(i18n.graphosFedPubs, sorted.length),
+        kpi(i18n.peerStateConnected, count(r => r.state === 'connected')),
+        kpi(i18n.graphosFedUnreachable, count(r => r.state === 'unreachable')),
+        kpi(i18n.peerOutdated, count(outdated)),
+        kpi(i18n.peerErrTor, count(r => r.transport === 'tor')),
+        kpi(i18n.graphosFedLinks, links.filter(l => l.mutual).length),
+        kpi(i18n.graphosFedIsolated, count(r => r.isolated))
+      ]) : [p(i18n.graphosFedEmpty)]),
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
         span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-connected' }), span(i18n.peerStateConnected)),

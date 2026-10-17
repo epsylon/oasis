@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, span, pre, table, thead, tbody, tr, td, th, br, strong, label, ul, li } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, userLink, formatCarbon, renderStateChip, renderModuleStats, renderWalletChip, paged } = require("../views/main_views");
+const { template, i18n, userLink, formatCarbon, renderStateChip, renderModuleStats, renderWalletChip, paged, renderIcon } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
@@ -489,7 +489,7 @@ const renderUbiPubs = (pubs, hasValidWallet) => {
         userLink(p.pubId),
         p.isThisNode || p.isConnected ? span({ class: "status you" }, p.isThisNode ? i18n.bankUbiPubThisNode : i18n.bankUbiPubConnected) : null,
         hasValidWallet && p.address
-          ? div({ class: "content-actions" }, form({ method: "GET", action: "/banking/fund", class: "content-action-form" }, input({ type: "hidden", name: "pub", value: p.pubId }), button({ type: "submit", class: "btn-singleview btn-donate", title: i18n.bankDonateEco }, "\u2744")))
+          ? div({ class: "content-actions" }, form({ method: "GET", action: "/banking/fund", class: "content-action-form" }, input({ type: "hidden", name: "pub", value: p.pubId }), button({ type: "submit", class: "btn-singleview btn-donate", title: i18n.bankDonateEco }, renderIcon("donate"))))
           : null
       ),
       div({ class: "bank-summary ubi-pub-summary" },

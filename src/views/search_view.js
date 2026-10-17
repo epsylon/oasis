@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, userLink, renderContentActions, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel } = require('./main_views');
+const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -18,16 +18,51 @@ const industryStatusLabel = (status) => {
 };
 
 
-const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, spreadMap = null, favIndex = null }) => {
-  const searchInput = input({
-    id: "search_query",
-    name: "query",
-    required: false,
-    type: "search",
-    value: query,
-    placeholder: i18n.searchPlaceholder
-  });
+const renderSearchForm = ({ action, query = "", queryName = "query", hidden = [] } = {}) => {
+  const searchInput = input({ id: "search_query", name: queryName, required: false, type: "search", value: query, placeholder: i18n.searchPlaceholder });
   searchInput.setAttribute("minlength", 3);
+  const resultCount = currentPerPage();
+  const resultsPerPageSelect = select(
+    { id: "results-per-page", name: "perPage", class: "input-select search-select" },
+    LIST_PAGE_SIZES.map(s => option({ value: s, selected: resultCount === s ? "selected" : undefined }, pageSizeLabel(s)))
+  );
+  return form(
+    { action, method: "GET", class: "search-form" },
+    ...hidden.map(([name, value]) => input({ type: "hidden", name, value })),
+    div({ class: "search-filters-row" },
+      table({ class: "search-filters-table" },
+        tr(
+          td({ class: 'card-label' }, label({ for: "search_from" }, i18n.searchFromLabel || "From")),
+          td(input({ id: "search_from", type: "datetime-local", name: "from" }))
+        ),
+        tr(
+          td({ class: 'card-label' }, label({ for: "search_to" }, i18n.searchToLabel || "To")),
+          td(input({ id: "search_to", type: "datetime-local", name: "to" }))
+        ),
+        tr(
+          td({ class: 'card-label' }, label({ for: "search_inhabitant" }, "Oasis ID")),
+          td(input({ id: "search_inhabitant", type: "text", name: "inhabitant", placeholder: "@...=.ed25519", pattern: "@[A-Za-z0-9+/_\\-]{43}=\\.ed25519", maxlength: 56, class: "search-oasis-id" }))
+        )
+      ),
+      table({ class: "search-filters-table" },
+        tr(
+          td({ class: 'card-label' }, label({ for: "search_query" }, i18n.searchQueryLabel || "Query")),
+          td(searchInput)
+        ),
+        tr(
+          td({ class: 'card-label' }, label({ for: "results-per-page" }, i18n.searchPerPageLabel || "Results per page")),
+          td(resultsPerPageSelect)
+        )
+      )
+    ),
+    div({ class: "search-submit-row" },
+      button({ type: "submit" }, i18n.searchSubmit)
+    )
+  );
+};
+exports.renderSearchForm = renderSearchForm;
+
+const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, spreadMap = null, favIndex = null }) => {
 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
@@ -49,15 +84,6 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     )
   );
 
-  const resultCount = currentPerPage();
-  const resultsPerPageSelect = select(
-    {
-      id: "results-per-page",
-      name: "perPage",
-      class: "input-select search-select"
-    },
-    LIST_PAGE_SIZES.map(s => option({ value: s, selected: resultCount === s ? "selected" : undefined }, pageSizeLabel(s)))
-  );
 
   const getViewDetailsActionForSearch = (type, contentId, content) => {
     switch (type) {
@@ -75,7 +101,9 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       case 'bookmark': return `/bookmarks/${encodeURIComponent(contentId)}`;
       case 'event': return `/events/${encodeURIComponent(contentId)}`;
       case 'task': return `/tasks/${encodeURIComponent(contentId)}`;
-      case 'post': return `/thread/${encodeURIComponent(contentId)}#${encodeURIComponent(contentId)}`;
+      case 'post': return content && typeof content.root === 'string'
+        ? `/thread/${encodeURIComponent(content.root)}#${encodeURIComponent(contentId)}`
+        : `/blogs/${encodeURIComponent(contentId)}`;
       case 'market': return `/market/${encodeURIComponent(contentId)}`;
       case 'report': return `/reports/${encodeURIComponent(contentId)}`;
       case 'project': return `/projects/${encodeURIComponent(contentId)}`;
@@ -124,8 +152,11 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     switch (content.type) {
       case 'post':
         return div({ class: 'search-post' },
-          content.contentWarning ? h2({ class: 'card-field' }, span({ class: 'card-value' }, content.contentWarning)) : null,
-          content.text ? div({ class: 'card-field' }, span({ class: 'card-value', [RAW_HTML]: sanitizeHtml(renderStyledHtml(content.text)) })) : null
+          content.contentWarning ? div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, content.contentWarning)) : null,
+          content.text ? div({ class: 'blog-card-text post-text-clamped', [RAW_HTML]: sanitizeHtml(renderStyledHtml(String(content.text).trim().length > 1000 ? String(content.text).trim().slice(0, 1000).replace(/\s+$/, '') + '…' : String(content.text).trim())) }) : null,
+          Array.isArray(content.tags) && content.tags.length
+            ? div({ class: 'card-tags' }, content.tags.map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)))
+            : null
         );
       case 'about':
         return div({ class: 'card-section about' },
@@ -596,6 +627,12 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     }
   };
 
+  const typeLabel = (type) => String(i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)] || type || '').toUpperCase();
+  const totalResults = Object.values(results).reduce((n, msgs) => n + (Array.isArray(msgs) ? msgs.length : 0), 0);
+  const resultStats = renderModuleStats(totalResults,
+    Object.entries(results)
+      .map(([type, msgs]) => ({ label: typeLabel(type), count: Array.isArray(msgs) ? msgs.length : 0 }))
+      .sort((x, y) => y.count - x.count || x.label.localeCompare(y.label)));
   const pageGroups = paged(Object.entries(results).flatMap(([key, msgs]) => msgs.map((msg) => [key, msg])))
     .reduce((acc, [key, msg]) => { (acc[key] = acc[key] || []).push(msg); return acc; }, {});
   const resultSection = Object.entries(results).length > 0
@@ -642,7 +679,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
             div({ class: 'card-header activity-card-header' },
               div({ class: 'card-chips-row' },
                 span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                  span({ class: 'pm-exposition-text' }, String(content.type || '').toUpperCase())
+                  span({ class: 'pm-exposition-text' }, String(i18n['type' + String(content.type || '').charAt(0).toUpperCase() + String(content.type || '').slice(1)] || content.type || '').toUpperCase())
                 )
               ),
               renderContentActions(contentId, getViewDetailsActionForSearch(content.type, contentId, content), {
@@ -676,46 +713,18 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         : null);
 
   let html = template(
-    hashtag ? `#${hashtag}` : i18n.searchTitle,
+    i18n.searchTitle,
     section(
       div({ class: "tags-header module-header-line" },
-        h2(hashtag ? `#${hashtag}` : i18n.searchTitle),
+        h2(i18n.searchTitle),
         p(hashtag ? i18n.hashtagDescription : i18n.searchDescriptionLabel)
       ),
-      form(
-        { action: "/search", method: "GET", class: "search-form" },
-        div({ class: "search-filters-row" },
-          table({ class: "search-filters-table" },
-            tr(
-              td({ class: 'card-label' }, label({ for: "search_from" }, i18n.searchFromLabel || "From")),
-              td(input({ id: "search_from", type: "datetime-local", name: "from" }))
-            ),
-            tr(
-              td({ class: 'card-label' }, label({ for: "search_to" }, i18n.searchToLabel || "To")),
-              td(input({ id: "search_to", type: "datetime-local", name: "to" }))
-            ),
-            tr(
-              td({ class: 'card-label' }, label({ for: "search_inhabitant" }, "Oasis ID")),
-              td(input({ id: "search_inhabitant", type: "text", name: "inhabitant", placeholder: "@...=.ed25519", pattern: "@[A-Za-z0-9+/_\\-]{43}=\\.ed25519", maxlength: 56, class: "search-oasis-id" }))
-            )
-          ),
-          table({ class: "search-filters-table" },
-            tr(
-              td({ class: 'card-label' }, label({ for: "search_query" }, i18n.searchQueryLabel || "Query")),
-              td(searchInput)
-            ),
-            tr(
-              td({ class: 'card-label' }, label({ for: "results-per-page" }, i18n.searchPerPageLabel || "Results per page")),
-              td(resultsPerPageSelect)
-            )
-          )
-        ),
-        div({ class: "search-submit-row" },
-          button({ type: "submit" }, i18n.searchSubmit)
-        )
-      )
+      renderSearchForm({ action: "/search", query })
     ),
-    section(resultSection)
+    section(
+      resultStats ? div({ class: 'filters activity-filter-chips activity-toolbar-row search-stats-row' }, resultStats) : null,
+      resultSection
+    )
   );
 
   if (hasDocument) {

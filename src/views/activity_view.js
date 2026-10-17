@@ -837,7 +837,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               )
             : '',
           contentWarning ? h2({ class: 'content-warning' }, contentWarning) : '',
-          bodyNode
+          bodyNode,
+          Array.isArray(content?.tags) && content.tags.filter(Boolean).length
+            ? div({ class: 'card-tags' }, content.tags.filter(Boolean).map(tag =>
+              a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
+            : ''
         )
       );
     }

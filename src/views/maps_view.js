@@ -4,7 +4,7 @@ const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/renderStyledText");
 
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
@@ -37,8 +37,9 @@ const renderTags = (tags) => {
 let areaCounter = 0;
 const lastOf = (v) => (Array.isArray(v) ? v[v.length - 1] : v);
 const numOrNull = (v) => { const n = parseFloat(lastOf(v)); return isFinite(n) ? n : null; };
-const isBlob = (v) => !!v && String(v).startsWith("&");
-const blobSrc = (image, base) => (isBlob(image) ? `${base}/blob/${encodeURIComponent(image)}` : "");
+const isSealed = (v) => !!v && String(v).startsWith("/blob/sealed/");
+const isBlob = (v) => !!v && (String(v).startsWith("&") || isSealed(v));
+const blobSrc = (image, base) => (isSealed(image) ? (base ? "" : String(image)) : (isBlob(image) ? `${base}/blob/${encodeURIComponent(image)}` : ""));
 
 const buildQuery = (params) => Object.entries(params || {})
   .filter(([, v]) => v !== undefined && v !== null && String(v) !== "")
@@ -174,7 +175,6 @@ const renderMapOwnerActions = (filter, mapObj, params = {}) => {
 const renderFilters = (filter, q, emptyMod = false, chip = null, search = null) =>
   div({ class: search ? "filters activity-filter-chips activity-toolbar-row" : "filters" },
     form({ method: "GET", action: "/maps", class: "ui-toolbar ui-toolbar--filters" },
-      input({ type: "hidden", name: "q", value: q || "" }),
       ...(emptyMod ? [] : [
       button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterAll).toUpperCase()),
       ...(!chip || chip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterRecent).toUpperCase())] : []),
@@ -362,7 +362,7 @@ const renderPinPopup = (mk, i, ctx = {}) => {
       (ctx.centerHref ? `<a class="map-center-link" href="${escapeHtml(ctx.centerHref)}">${escapeHtml(i18n.mapCenterHere)}</a>` : "") +
       (own ? form({ method: "POST", action: contentDeleteAction('mapMarker', mk.key) },
         ctx.returnTo ? input({ type: "hidden", name: "returnTo", value: ctx.returnTo }) : null,
-        button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.mapDeleteMarker }, "✕")).outerHTML : "") + `</div>`
+        button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.mapDeleteMarker }, renderIcon("close"))).outerHTML : "") + `</div>`
   ];
   return parts.join("");
 };
@@ -393,7 +393,7 @@ const renderMarkersList = (markers, mapObj, ctx = {}) => {
           centerHref ? a({ href: centerHref, class: "map-center-link" }, i18n.mapCenterHere) : null,
           own ? form({ method: "POST", action: contentDeleteAction('mapMarker', mk.key) },
             ctx.returnTo ? input({ type: "hidden", name: "returnTo", value: ctx.returnTo }) : null,
-            button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.mapDeleteMarker }, "✕")) : null));
+            button({ type: "submit", class: "btn-singleview btn-delete", title: i18n.mapDeleteMarker }, renderIcon("close"))) : null));
     })));
 };
 
