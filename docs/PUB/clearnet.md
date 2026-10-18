@@ -35,6 +35,8 @@ Content of a **public tribe** has its own reach level, chosen by its members: TR
 
 Public pages show what the author published, never what other inhabitants added to it: confirmations, signatures, requests, attendees, votes and comments stay inside Oasis.
 
+The page of a CLEARNET room also shows it live: the PUB stays inside the room and serves its picture and sound, never names nor participants. Everyone inside the room sees that it is public. Images on public pages can be enlarged, and the picture of a room can also be shown at full screen.
+
 ## Exposing it on the web
 
 Put a reverse proxy in front of the backend port and terminate TLS there.

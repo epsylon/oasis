@@ -2,9 +2,15 @@ const { ok } = require('../../helpers/assert');
 const { renderContentActions } = require('../../../src/views/main_views');
 
 describe('content actions: the order of the icon bar', (t) => {
+  t('the private message is only offered where contacting the author is', () => {
+    const plain = renderContentActions('%item.sha256', '/housing/%item.sha256', { author: '@someone.ed25519' }).outerHTML;
+    const contact = renderContentActions('%item.sha256', '/housing/%item.sha256', { author: '@someone.ed25519', contact: true }).outerHTML;
+    ok(!plain.includes('/pm?recipients='), 'an ordinary card does not offer it');
+    ok(contact.includes('/pm?recipients='), 'a card about the inhabitant does');
+  });
   t('pin, spread, report and message come before the chain and visit icons', () => {
     const node = renderContentActions('%item.sha256', '/housing/%item.sha256', {
-      author: '@someone.ed25519', favKind: 'housing', isFavorite: false, reportTitle: 'a place'
+      author: '@someone.ed25519', contact: true, favKind: 'housing', isFavorite: false, reportTitle: 'a place'
     });
     const html = node.outerHTML;
 

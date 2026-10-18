@@ -111,18 +111,27 @@ const renderLiveFeed = (src, imgClass) => {
     a({ href: `#${id}`, id: `${id}-src`, class: 'zoom-link zoom-inline' }, img({ src, alt: '', class: imgClass })),
     div({ id, class: 'lightbox live-lightbox' },
       a({ href: `#${id}-src`, class: 'lightbox-close' }, '\u00d7'),
+      a({ href: `#${id}-full`, class: 'live-fullscreen-btn', title: i18n.liveFullscreen }, renderIcon('fullscreen')),
       a({ href: `#${id}-src`, class: 'lightbox-image-link' }, img({ src, alt: '', class: 'lightbox-image', loading: 'lazy' }))
+    ),
+    div({ id: `${id}-full`, class: 'lightbox live-lightbox live-fullscreen' },
+      a({ href: `#${id}`, class: 'lightbox-close' }, '\u00d7'),
+      a({ href: `#${id}`, class: 'lightbox-image-link' }, img({ src, alt: '', class: 'lightbox-image', loading: 'lazy' }))
     )
   ];
 };
 exports.renderLiveFeed = renderLiveFeed;
 
-const renderVideoGrid = (peers, me) => {
+const renderVideoGrid = (peers, me, { film = false } = {}) => {
+  const list = (Array.isArray(peers) ? peers : []).filter(p => p && p.id);
+  const filmName = (...label) => span({ class: 'video-tile-name video-tile-film' }, '▶ ', ...label);
   const tiles = [
     me ? div({ class: 'video-tile video-tile-me' }, ...renderLiveFeed('/phone/video/me', 'video-feed'), span({ class: 'video-tile-name' }, i18n.roomYou)) : null,
-    ...(Array.isArray(peers) ? peers : []).filter(p => p && p.id && p.on).map(p => div({ class: 'video-tile' }, ...renderLiveFeed(`/phone/video/${encodeURIComponent(p.id)}`, 'video-feed'), userLink(p.id)))
+    film ? div({ class: 'video-tile' }, ...renderLiveFeed(`/phone/video/${encodeURIComponent('film:me')}`, 'video-feed'), filmName(i18n.roomYou)) : null,
+    ...list.filter(p => p.on).map(p => div({ class: 'video-tile' }, ...renderLiveFeed(`/phone/video/${encodeURIComponent(p.id)}`, 'video-feed'), userLink(p.id))),
+    ...list.filter(p => p.film).map(p => div({ class: 'video-tile' }, ...renderLiveFeed(`/phone/video/${encodeURIComponent(`film:${p.id}`)}`, 'video-feed'), filmName(userLink(p.id))))
   ].filter(Boolean);
-  return tiles.length ? div({ class: 'video-grid' }, ...tiles) : null;
+  return tiles.length ? div({ class: tiles.length === 1 ? 'video-grid video-grid-solo' : 'video-grid' }, ...tiles) : null;
 };
 exports.renderVideoGrid = renderVideoGrid;
 
@@ -312,7 +321,9 @@ const ACTION_ICONS = {
   open: '<path d="M7 17L17 7M8 7h9v9"/>',
   donate: '<line x1="12" y1="2" x2="12" y2="22"/><line x1="3.3" y1="7" x2="20.7" y2="17"/><line x1="3.3" y1="17" x2="20.7" y2="7"/><polyline points="9.5 4 12 6 14.5 4"/><polyline points="9.5 20 12 18 14.5 20"/>',
   torrent: '<line x1="7" y1="20" x2="7" y2="4"/><polyline points="3 8 7 4 11 8"/><line x1="17" y1="4" x2="17" y2="20"/><polyline points="13 16 17 20 21 16"/>',
-  close: '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>'
+  close: '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>',
+  film: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="17" y2="20"/><line x1="3" y1="12" x2="21" y2="12"/>',
+  fullscreen: '<polyline points="4 9 4 4 9 4"/><polyline points="15 4 20 4 20 9"/><polyline points="20 15 20 20 15 20"/><polyline points="9 20 4 20 4 15"/>'
 };
 const renderIcon = (name) => span({ class: 'btn-icon', [RAW_HTML]: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ACTION_ICONS[name] || ''}</svg>` });
 const renderHideIcon = () => renderIcon('hide');
@@ -367,10 +378,10 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     ? a({ href: reportHref, class: 'btn-singleview btn-report', title: i18n.reportContent }, renderIcon('report'))
     : null;
 
-  const pmBtn = o.author && String(o.author) !== String(myId)
+  const pmBtn = o.contact === true && o.author && String(o.author) !== String(myId)
     ? a({ href: `/pm?recipients=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-pm', title: i18n.pmContentTooltip }, renderIcon('mail'))
     : null;
-  const callBtn = o.author && String(o.author) !== String(myId) && phoneOn() && !sharedState.isPubId(o.author)
+  const callBtn = o.contact === true && o.author && String(o.author) !== String(myId) && phoneOn() && !sharedState.isPubId(o.author)
     ? a({ href: `/phone?filter=create&to=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-call', title: i18n.phoneCallTooltip }, renderIcon('call'))
     : null;
 
@@ -1948,7 +1959,7 @@ const template = (titlePrefix, ...elements) => {
       return renderEmergencyBanner(featured, { compact });
     } catch (_) { return null; }
   };
-  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : currentConfig.ux?.current === "phone" ? "phone" : "blocks";
+  const uxMode = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : currentConfig.ux?.current === "phone" ? "phone" : currentConfig.ux?.current === "rooms" ? "rooms" : "blocks";
   const themeLink = link({
     rel: "stylesheet",
     href: `/assets/themes/${theme}.css?v=${assetVersion()}`
@@ -2018,7 +2029,7 @@ const template = (titlePrefix, ...elements) => {
                 );
               })(),
               renderPhoneTopLink(),
-              (uxMode === "chats" || uxMode === "feed" || uxMode === "phone")
+              (uxMode === "chats" || uxMode === "feed" || uxMode === "phone" || uxMode === "rooms")
                 ? navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
                 : null
             )
@@ -2058,7 +2069,7 @@ const template = (titlePrefix, ...elements) => {
               navLink({ href: "/peers", emoji: "⧖", text: i18n.peers })
             )
           )
-        ) : (uxMode === "chats" || uxMode === "feed" || uxMode === "phone") ? div(
+        ) : (uxMode === "chats" || uxMode === "feed" || uxMode === "phone" || uxMode === "rooms") ? div(
           { class: "top-bar-right" },
           nav(
             ul(
@@ -2116,7 +2127,7 @@ const template = (titlePrefix, ...elements) => {
       buildPhoneBanner(),
       buildEmergencyBanner(false),
       div(
-        { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" || uxMode === "phone" ? "main-content chatsux-only" : "main-content" },
+        { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" || uxMode === "phone" || uxMode === "rooms" ? "main-content chatsux-only" : "main-content" },
         uxMode !== "blocks" ? null : div(
           { class: "sidebar-left" },
           nav(
@@ -3298,7 +3309,7 @@ const buildClearnetHub = ({ items = {}, filterBase, filterType = '', query = '',
 exports.CLEARNET_HUB_CSS = CLEARNET_HUB_CSS;
 
 exports.clearnetHubView = async ({ authors = [], items = {}, tribes = [], filterType = '', query = '', page = 1, tribesPage = 1 }) => {
-  const { escapeHtml: esc, renderClearnetPage, blobUrl: cnBlob, CLEARNET_PAGER_CSS, renderClearnetPager } = require('./clearnet_view');
+  const { escapeHtml: esc, renderClearnetPage, renderClearnetHubSearch, blobUrl: cnBlob, CLEARNET_PAGER_CSS, renderClearnetPager } = require('./clearnet_view');
   const hub = buildClearnetHub({ items, filterBase: '/c', filterType, query, page });
   const extraCss = CLEARNET_HUB_CSS + CLEARNET_PAGER_CSS + `
 `;
@@ -3325,7 +3336,7 @@ exports.clearnetHubView = async ({ authors = [], items = {}, tribes = [], filter
     ogDescription: i18n.cnHubDescription,
     extraCss,
     body,
-    headerExtra: `<form class="cn-search" method="GET" action="/c">${filterType ? `<input type="hidden" name="type" value="${esc(filterType)}"/>` : ''}<input type="text" name="q" value="${esc(query || '')}" placeholder="${esc(i18n.cnSearchPlaceholder)}" autocomplete="off"/></form>`
+    headerExtra: renderClearnetHubSearch({ type: filterType, query })
   });
 };
 

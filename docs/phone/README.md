@@ -85,6 +85,8 @@ A chime tells you when someone enters, and a different one when someone leaves, 
 
 Rooms are videoconference rooms: everyone hears everyone, and anyone can also show their camera. **Camera on**, on the room page, starts yours; everyone inside sees the cameras that are on tiled into one picture above the participants, with the names in the same order underneath, and a camera mark next to whoever is showing theirs. **Camera off** stops yours at once. The pictures are encrypted with the room key, like the voice, and are never kept anywhere; the PUB that hosts the room only forwards them. On a PUB that does not forward video, the room is voice only and the button does not appear. Several cameras at once cost bandwidth to everyone inside: in a large room, keep yours off unless you are speaking.
 
+**Stream** plays a video from your device in the room, in its own picture next to your camera; **Stop** ends it. It needs `ffmpeg` or GStreamer on the device. Any picture in a room or call can be enlarged and shown at full screen. A room on the CLEARNET can also be seen and heard on the public web, without names; the room shows it to everyone inside.
+
 Any participant can **Record** the room. Everyone inside hears a signal when a recording starts and another when it stops, and sees a **REC** mark next to whoever is recording. The recording stays on the device of the one who made it, under **Recordings** on the room page, to download or delete.
 
 ### The room's number

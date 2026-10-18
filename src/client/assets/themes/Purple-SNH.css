@@ -381,6 +381,7 @@ a.user-link:focus, button.user-link:focus {
 .tribe-members-count { color: #FFD600 !important; }
 .tribe-card-actions { border-color: #B86ADE !important; background: #2D0B47 !important; }
 .tribe-action-btn { border-color: #B86ADE !important; color: #B86ADE !important; }
+button.tribe-action-btn { background: transparent !important; }
 .tribe-action-btn:hover { background: #B86ADE !important; color: #000 !important; }
 .tribe-subtribe-link { background: #4B1A72 !important; border-color: #B86ADE !important; color: #FFD600 !important; }
 .tribe-thumb-link { border-color: #B86ADE !important; }

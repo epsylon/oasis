@@ -194,18 +194,6 @@ const renderRecChip = () => span({ class: "room-rec-chip" }, "● " + String(i18
 const fmtDuration = (ms) => { const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000)); return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}` }
 const refreshLink = (room) => a({ href: roomHref(room), class: "tribe-action-btn room-refresh-btn" }, String(i18n.liveRefresh).toUpperCase())
 const renderLiveControls = (room, live) => div({ class: "room-live-controls" },
-  form({ method: "POST", action: "/rooms/notify", class: "phone-action-form" },
-    input({ type: "hidden", name: "on", value: live.notify ? "0" : "1" }),
-    button({ type: "submit", class: live.notify ? "tribe-action-btn" : "tribe-action-btn room-notify-off" }, "🔔 " + String(live.notify ? i18n.roomNotificationsOn : i18n.roomNotificationsOff).toUpperCase())
-  ),
-  form({ method: "POST", action: "/rooms/hand", class: "phone-action-form" },
-    input({ type: "hidden", name: "hand", value: live.hand ? "0" : "1" }),
-    input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
-    button({ type: "submit", class: live.hand ? "tribe-action-btn room-hand-btn-on" : "tribe-action-btn" }, "✋ " + String(live.hand ? i18n.roomLowerHand : i18n.roomRaiseHand).toUpperCase())
-  ),
-  live.notify && safeArr(live.events).length
-    ? form({ method: "POST", action: "/rooms/notify/clear", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.roomClearNotices).toUpperCase()))
-    : null,
   form({ method: "POST", action: "/rooms/mute", class: "phone-action-form" },
     input({ type: "hidden", name: "mute", value: live.muted ? "0" : "1" }),
     input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
@@ -214,14 +202,40 @@ const renderLiveControls = (room, live) => div({ class: "room-live-controls" },
   live.videoAvailable
     ? form({ method: "POST", action: "/rooms/camera", class: "phone-action-form" },
         input({ type: "hidden", name: "cam", value: live.cam ? "0" : "1" }),
-        input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
+        input({ type: "hidden", name: "returnTo", value: `${roomHref(room)}#room-video` }),
         button({ type: "submit", class: live.cam ? "tribe-action-btn room-cam-btn-on" : "tribe-action-btn" }, String(live.cam ? i18n.phoneCameraOff : i18n.phoneCameraOn).toUpperCase())
       )
     : null,
+  live.streaming != null
+    ? form({ method: "POST", action: "/rooms/stream", class: "phone-action-form" },
+        input({ type: "hidden", name: "stop", value: "1" }),
+        input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
+        button({ type: "submit", class: "tribe-action-btn room-cam-btn-on" }, String(i18n.roomStreamStop).toUpperCase())
+      )
+    : live.streamAvailable
+      ? form({ method: "POST", action: "/rooms/stream", class: "phone-action-form room-stream-form" },
+          input({ type: "hidden", name: "returnTo", value: `${roomHref(room)}#room-video` }),
+          input({ type: "file", id: "room-stream-file", name: "video", accept: "video/*", required: true, class: "room-stream-input" }),
+          label({ for: "room-stream-file", class: "tribe-action-btn room-stream-pick" }, String(i18n.roomStreamFile).toUpperCase()),
+          button({ type: "submit", class: "tribe-action-btn room-cam-btn-on room-stream-go", title: i18n.roomStreamGo }, "▶")
+        )
+      : null,
+  form({ method: "POST", action: "/rooms/hand", class: "phone-action-form" },
+    input({ type: "hidden", name: "hand", value: live.hand ? "0" : "1" }),
+    input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
+    button({ type: "submit", class: live.hand ? "tribe-action-btn room-hand-btn-on" : "tribe-action-btn" }, "✋ " + String(live.hand ? i18n.roomLowerHand : i18n.roomRaiseHand).toUpperCase())
+  ),
   live.recording
     ? form({ method: "POST", action: "/rooms/rec/stop", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.roomRecStop).toUpperCase()))
     : form({ method: "POST", action: "/rooms/rec/start", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.roomRec).toUpperCase())),
   live.recording || safeArr(live.recordingBy).length ? renderRecChip() : null,
+  form({ method: "POST", action: "/rooms/notify", class: "phone-action-form" },
+    input({ type: "hidden", name: "on", value: live.notify ? "0" : "1" }),
+    button({ type: "submit", class: live.notify ? "tribe-action-btn" : "tribe-action-btn room-notify-off" }, "🔔 " + String(live.notify ? i18n.roomNotificationsOn : i18n.roomNotificationsOff).toUpperCase())
+  ),
+  live.notify && safeArr(live.events).length
+    ? form({ method: "POST", action: "/rooms/notify/clear", class: "phone-action-form" }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.roomClearNotices).toUpperCase()))
+    : null,
   refreshLink(room),
   form({ method: "POST", action: "/rooms/leave", class: "phone-action-form" },
     input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
@@ -260,34 +274,44 @@ const renderLivePanel = (room, live, occ, canJoin = false) => {
       input({ type: "hidden", name: "on", value: on ? "0" : "1" }),
       button({ type: "submit", class: on ? "tribe-action-btn danger-btn" : "tribe-action-btn" }, String(on ? i18n.phoneUnsilence : i18n.phoneSilence).toUpperCase())
     )
-    const who = (id, muted, you, silenced = false, recording = false, turn = 0, cam = false) => div({ class: "phone-contact room-peer" + (turn ? " room-peer-raised" : "") },
+    const isPublic = !!live.public || (room.clearnet === true && clearnetEligible(room))
+    const who = (id, muted, you, silenced = false, recording = false, turn = 0, cam = false, film = false, viewer = false) => viewer
+      ? div({ class: "phone-contact room-peer" }, userLink(id), renderReachChip(true, i18n))
+      : div({ class: "phone-contact room-peer" + (turn ? " room-peer-raised" : "") },
       turn ? span({ class: "room-peer-hand" }, `✋ ${turn}`) : null,
       userLink(id),
       you ? span({ class: "room-peer-you" }, i18n.roomYou) : null,
       muted ? span({ class: "room-peer-muted" }, String(i18n.roomMuted).toUpperCase()) : null,
       cam ? span({ class: "room-peer-cam" }, "CAM") : null,
+      film ? span({ class: "room-peer-cam" }, "▶") : null,
       recording ? renderRecChip() : null,
       you ? null : silenceForm(id, silenced)
     )
     return div({ class: "phone-call-panel room-live-panel" },
-      head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null), renderLiveControls(room, live)),
+      head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), isPublic ? renderReachChip(true, i18n, roomClearnetHref(room)) : null, renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null, live.streaming != null ? span({ class: "room-stream-chip", title: live.streaming || "" }, "▶ " + String(live.streaming || i18n.roomStreaming)) : null), renderLiveControls(room, live)),
       live.grid
         ? (safeArr(live.gridOrder).length
-            ? div({ class: "video-grid video-grid-one" },
+            ? div({ id: "room-video", class: safeArr(live.gridOrder).length === 1 ? "video-grid video-grid-one video-grid-solo" : "video-grid video-grid-one" },
                 ...renderLiveFeed("/phone/video/grid", "video-feed video-feed-grid"),
-                div({ class: "video-grid-names" }, ...safeArr(live.gridOrder).map(id => id === userId ? span({ class: "video-tile-name" }, i18n.roomYou) : userLink(id)))
+                div({ class: "video-grid-names" }, ...safeArr(live.gridOrder).map(key => {
+                  const film = String(key).startsWith("film:")
+                  const id = film ? String(key).slice(5) : key
+                  const name = id === userId ? i18n.roomYou : userLink(id)
+                  return film ? span({ class: "video-tile-name video-tile-film" }, "▶ ", name) : (id === userId ? span({ class: "video-tile-name" }, name) : name)
+                }))
               )
             : null)
-        : renderVideoGrid(safeArr(live.peers).map(p => ({ id: p.id, on: !!p.cam })), !!live.cam),
+        : div({ id: "room-video" }, renderVideoGrid(safeArr(live.peers).map(p => ({ id: p.id, on: !!p.cam, film: !!p.film })), !!live.cam, { film: live.streaming != null })),
       div({ class: "phone-contacts" }, ...handOrder(live).map(e => e.you
-        ? who(userId, live.muted, true, false, !!live.recording, e.turn, !!live.cam)
-        : who(e.peer.id, e.peer.muted, false, !!e.peer.silenced, !!e.peer.recording, e.turn, !!e.peer.cam))),
+        ? who(userId, live.muted, true, false, !!live.recording, e.turn, !!live.cam, live.streaming != null)
+        : who(e.peer.id, e.peer.muted, false, !!e.peer.silenced, !!e.peer.recording, e.turn, !!e.peer.cam, !!e.peer.film, !!e.peer.viewer))),
       renderRoomEvents(live)
     )
   }
   const count = occ ? occ.count : 0
   return div({ class: "phone-block room-live-panel" },
-    head(p({ class: "phone-empty" }, count > 0 ? String(i18n.roomSomeone).replace("{n}", String(count)) : i18n.roomNobody), canJoin ? div({ class: "room-live-controls" }, refreshLink(room), joinForm(room, occ)) : null)
+    head(p({ class: "phone-empty" }, count > 0 ? String(i18n.roomSomeone).replace("{n}", String(count)) : i18n.roomNobody), canJoin ? div({ class: "room-live-controls" }, refreshLink(room), joinForm(room, occ)) : null),
+    canJoin && room.clearnet === true && clearnetEligible(room) ? p({ class: "room-public-warning" }, i18n.roomPublicWarning) : null
   )
 }
 
@@ -327,9 +351,13 @@ exports.singleRoomView = async (room, params = {}) => {
 
   const ownerActions = isAuthor
     ? [
-        room.isClosed ? null : form({ method: "POST", action: `/rooms/close/${encodeURIComponent(room.rootId)}` },
-          button({ type: "submit", class: "update-btn" }, i18n.roomClose)
-        ),
+        room.isClosed
+          ? form({ method: "POST", action: `/rooms/reopen/${encodeURIComponent(room.rootId)}` },
+              button({ type: "submit", class: "update-btn" }, i18n.roomReopen)
+            )
+          : form({ method: "POST", action: `/rooms/close/${encodeURIComponent(room.rootId)}` },
+              button({ type: "submit", class: "update-btn delete-btn" }, i18n.roomClose)
+            ),
         form({ method: "GET", action: "/rooms" },
           input({ type: "hidden", name: "filter", value: "edit" }),
           input({ type: "hidden", name: "id", value: room.rootId }),
@@ -423,8 +451,8 @@ exports.renderTribeRoomsSection = (tribe, rooms, occupancy, live, toolbar = null
 exports.renderRoomItem = renderRoomItem
 exports.roomStatsBy = (rooms) => renderModuleStatsBy(safeArr(rooms), r => r.isClosed ? "CLOSED" : r.type, [{ value: "OPEN", label: i18n.roomStatusOpen }, { value: "INVITE-ONLY", label: i18n.roomStatusInviteOnly }, { value: "CLOSED", label: i18n.roomStatusClosed }])
 
-exports.clearnetRoomView = async (room) => {
-  const { escapeHtml: esc, renderKindTag, renderClearnetPage } = require("./clearnet_view")
+exports.clearnetRoomView = async (room, { live = false, sound = true, base = "" } = {}) => {
+  const { escapeHtml: esc, renderKindTag, renderClearnetPage, cnZoom } = require("./clearnet_view")
   const name = room.title || i18n.cnKindRoom
   const extraCss = `
 .cn-room-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700;word-break:break-word}
@@ -432,6 +460,13 @@ exports.clearnetRoomView = async (room) => {
 .cn-room-number{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--fg);border-radius:10px;padding:4px 12px;font-size:16px;font-weight:600;color:var(--fg);background:var(--bg-sub)}
 .cn-room-number .pm-exposition-icon{font-size:18px;line-height:1}
 .cn-room-number .pm-exposition-text{line-height:1;letter-spacing:1px;font-family:monospace}
+.cn-room-live{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:24px}
+.cn-room-live-chip{align-self:flex-start;border:1px solid #2ecc71;border-radius:10px;padding:3px 10px;color:#2ecc71;font-size:13px;font-weight:700;letter-spacing:1px}
+.cn-room-live .cn-zoom{display:block;width:100%;max-width:960px}
+.cn-room-grid{width:100%;aspect-ratio:4/3;object-fit:contain;background:#000;border-radius:8px}
+.cn-room-sound{width:100%;max-width:960px}
+.cn-room-live .cn-lightbox-img{width:92vw;height:88vh;object-fit:contain}
+.cn-room-live .cn-lightbox-full .cn-lightbox-img{width:100vw;height:100vh}
 `
   const body = `
   <h1 class="cn-room-title">${esc(name)}</h1>
@@ -439,6 +474,11 @@ exports.clearnetRoomView = async (room) => {
     ${renderKindTag("room")}
     ${room.number ? `<span class="pm-exposition-chip pm-exposition-whole cn-room-number"><span class="pm-exposition-icon">✆</span><span class="pm-exposition-text">${esc(room.number)}</span></span>` : ""}
   </div>
+  ${live && base ? `<section class="cn-room-live">
+    <span class="cn-room-live-chip">● ${esc(String(i18n.roomLiveChip || "LIVE").toUpperCase())}</span>
+    ${cnZoom("room-live", `${base}/live`, name, { full: true, imgClass: "cn-room-grid" })}
+    ${sound ? `<audio class="cn-room-sound" controls preload="none" src="${esc(`${base}/sound`)}"></audio>` : ""}
+  </section>` : ""}
 `
   return renderClearnetPage({
     title: `${name} | Oasis`,
@@ -461,3 +501,26 @@ exports.roomModesFromCensus = (census, me, occupancy) => {
     closed: list.some(x => x.isClosed)
   }
 }
+
+const pickerSize = (bytes) => {
+  const n = Number(bytes) || 0
+  if (n >= 1073741824) return `${(n / 1073741824).toFixed(1)} GB`
+  if (n >= 1048576) return `${(n / 1048576).toFixed(1)} MB`
+  return `${Math.max(1, Math.round(n / 1024))} KB`
+}
+
+exports.roomStreamMatchesView = ({ files, returnTo }) => template(
+  i18n.roomStreamPickTitle,
+  section(
+    div({ class: "tags-header module-header-line" }, h2(i18n.roomStreamPickTitle), p(i18n.roomStreamPickHint)),
+    div({ class: "mode-buttons-row" }, a({ href: returnTo, class: "filter-btn" }, String(i18n.phoneCancel).toUpperCase())),
+    ul({ class: "stream-picker-list" }, ...safeArr(files).map(f => li({ class: "stream-picker-item" },
+      span({ class: "stream-picker-link" }, renderIcon("film"), span({ class: "stream-picker-name" }, f.path), span({ class: "stream-picker-size" }, pickerSize(f.size))),
+      form({ method: "POST", action: "/rooms/stream", class: "phone-action-form" },
+        input({ type: "hidden", name: "file", value: f.path }),
+        input({ type: "hidden", name: "returnTo", value: returnTo }),
+        button({ type: "submit", class: "tribe-action-btn" }, String(i18n.roomStreamFile).toUpperCase())
+      )
+    )))
+  )
+)

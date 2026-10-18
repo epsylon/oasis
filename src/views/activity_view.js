@@ -1887,6 +1887,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         ),
         renderContentActions(msgId, detailHref, {
           author: action.author,
+          contact: type === 'about',
           reportTitle: (content && (content.title || content.question || content.concept || content.name)) || '',
           spread: SPREADABLE_TYPES.has(type) ? (spreadMap.get(action.id) || null) : undefined,
           ...(type === 'torrent' || type === 'file' ? { spreadTitle: i18n.seedAction } : {}),

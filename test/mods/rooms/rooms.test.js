@@ -587,6 +587,27 @@ describe('rooms: model', (t) => {
     await A.use('rooms').deleteRoomById(r.key);
     eq(await A.use('rooms').getRoomById(r.key), null, 'deleting removes it');
   });
+
+  t('only the creator reopens a closed room, as it was before closing', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    for (const status of ['OPEN', 'INVITE-ONLY']) {
+      const r = await A.use('rooms').createRoom({ title: `Was ${status}`, status });
+      const before = await A.use('rooms').getRoomById(r.key);
+      await A.use('rooms').closeRoomById(r.key);
+      B.setActor();
+      let refused = false;
+      try { await B.use('rooms').reopenRoomById(r.key); } catch (_) { refused = true; }
+      ok(refused, 'others cannot reopen it');
+      A.setActor();
+      await A.use('rooms').reopenRoomById(r.key);
+      const after = await A.use('rooms').getRoomById(r.key);
+      notOk(after.isClosed, 'the room is open again');
+      eq(after.status, status, 'with the access it had');
+      eq(after.title, before.title, 'and its content');
+      eq(after.rid, before.rid, 'in the same meeting place');
+    }
+  });
 });
 
 describe('rooms: versions republished by other inhabitants', (t) => {
@@ -712,7 +733,8 @@ describe('rooms: cameras in a room', (t) => {
 describe('rooms: all the cameras in one picture', (t) => {
   t('the cameras that are on are tiled into a single stream, in the order the page lists them', async () => {
     const sharp = require('../../../src/server/node_modules/sharp');
-    const solid = (r, g, b) => sharp({ create: { width: 320, height: 240, channels: 3, background: { r, g, b } } }).jpeg().toBuffer();
+    const tile = { w: 320, h: 240 };
+    const solid = (r, g, b) => sharp({ create: { width: tile.w, height: tile.h, channels: 3, background: { r, g, b } } }).jpeg().toBuffer();
     const pub = makeNode({ relayOpen: true });
     const a = makeNode(); const b = makeNode(); const c = makeNode();
     try {
@@ -731,10 +753,49 @@ describe('rooms: all the cameras in one picture', (t) => {
       for (let i = 0; i < 4 && !seen.length; i++) { show(a.id, red); show(b.id, green); await sleep(400); }
       ok(seen.length >= 1, 'a mosaic arrives');
       const meta = await sharp(seen[seen.length - 1]).metadata();
-      eq([meta.width, meta.height].join('x'), '640x240', 'two cameras side by side');
+      eq(meta.width * tile.h, meta.height * tile.w * 2, 'two cameras side by side');
       eq(c.phone.roomState().gridOrder.length, 2, 'and the page knows whose tile is whose');
       await asP(a.phone.camera, false); await asP(b.phone.camera, false);
       ok(await waitFor(() => c.phone.roomState().gridOrder.length === 0));
     } finally { await closeAll(a, b, c, pub); }
+  });
+});
+
+describe('rooms: a public relay watching a room', (t) => {
+  const feedOf = (node, rid, kind) => { const got = []; pull(node.phone.publicFeed({ rid, kind }), pull.drain(b => got.push(Buffer.from(b)), () => { got.ended = true; })); return got; };
+  t('it is not counted as a person, it is shown to everyone, and it carries the cameras and voices', async () => {
+    const sharp = require('../../../src/server/node_modules/sharp');
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    try {
+      await link(a, pub); await link(b, pub);
+      const room = roomFor(a, pub);
+      await asP(pub.phone.viewerJoin, room);
+      eq(JSON.stringify(pub.phone.viewerRooms()), JSON.stringify([room.rid]), 'the relay is inside');
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b)), 'the inhabitants get the room key, even from a relay that came first');
+      eq(count(a), 2, 'the relay is not counted as a person');
+      ok(a.phone.roomState().public && a.phone.roomState().peers.some(p => p.viewer), 'everyone inside sees that the room is public');
+      ok(await waitFor(() => a.phone.roomState().peers.some(p => p.viewer && p.muted)), 'and that the relay never speaks');
+      const grid = feedOf(pub, room.rid, 'grid');
+      await asP(a.phone.camera, true);
+      const red = await sharp({ create: { width: 320, height: 240, channels: 3, background: { r: 255, g: 0, b: 0 } } }).jpeg().toBuffer();
+      const shown = setInterval(() => show(a.id, red), 125);
+      try {
+        ok(await waitFor(async () => {
+          if (!grid.length) return false;
+          const { data, info } = await sharp(grid[grid.length - 1]).raw().toBuffer({ resolveWithObject: true });
+          const mid = ((info.height >> 1) * info.width + (info.width >> 1)) * info.channels;
+          return data[mid] > 200 && data[mid + 1] < 60;
+        }), 'its picture carries the camera');
+      } finally { clearInterval(shown); }
+      const sound = feedOf(pub, room.rid, 'sound');
+      ok(await waitFor(async () => { speakTone(a.id, 8000, 5); await sleep(40); return sound.some(buf => rms(buf) > 2000); }), 'its sound carries the voices');
+      await asP(pub.phone.viewerLeave, { rid: room.rid });
+      ok(await waitFor(() => grid.ended && sound.ended), 'leaving closes what it served');
+      ok(await waitFor(() => !a.phone.roomState().peers.some(p => p.viewer)), 'and the inhabitants see it go');
+      speak(a.id, 8000);
+      ok(await hears(b.id, 8000), 'the room goes on without it');
+    } finally { await closeAll(a, b, pub); }
   });
 });

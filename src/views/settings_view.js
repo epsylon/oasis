@@ -152,7 +152,8 @@ const settingsView = (params) => {
             const aiNavEnabled = currentConfig.modules && currentConfig.modules.aiNavMod === 'on';
             const chatsEnabled = currentConfig.modules && currentConfig.modules.chatsMod === 'on';
             const phoneEnabled = !!(currentConfig.modules && currentConfig.modules.phoneMod !== 'off');
-            const cur = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : currentConfig.ux?.current === "phone" ? "phone" : "blocks";
+            const roomsEnabled = !!(currentConfig.modules && currentConfig.modules.roomsMod !== 'off');
+            const cur = currentConfig.ux?.current === "ainav" ? "ainav" : currentConfig.ux?.current === "chats" ? "chats" : currentConfig.ux?.current === "feed" ? "feed" : currentConfig.ux?.current === "phone" ? "phone" : currentConfig.ux?.current === "rooms" ? "rooms" : "blocks";
             const uxCard = (value, title, image) => label({ class: "welcome-ux-option" },
               input({ type: "radio", name: "ux", value, ...(cur === value ? { checked: true } : {}) }),
               img({ src: image, class: "welcome-ux-shot", alt: title }),
@@ -163,7 +164,8 @@ const settingsView = (params) => {
               aiNavEnabled ? uxCard("ainav", i18n.uxModeAINav || "AI", "/assets/images/ux-ainav.png") : null,
               chatsEnabled ? uxCard("chats", i18n.uxModeChats || "Conversations", "/assets/images/ux-chats.png") : null,
               uxCard("feed", i18n.uxModeFeed || "Microblogging", "/assets/images/ux-feed.png"),
-              phoneEnabled ? uxCard("phone", i18n.phoneTitle || "Phone", "/assets/images/ux-phone.png") : null
+              phoneEnabled ? uxCard("phone", i18n.phoneTitle || "Phone", "/assets/images/ux-phone.png") : null,
+              roomsEnabled ? uxCard("rooms", i18n.roomsTitle || "Rooms", "/assets/images/ux-rooms.png") : null
             );
           })(),
           button({ type: "submit" }, i18n.saveSettings)

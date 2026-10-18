@@ -37,14 +37,15 @@ const stepAction = (key, profile, status) => {
   if (key === "ux") {
     let cfg = {}
     try { cfg = require("../configs/config-manager.js").getConfig() || {} } catch (_) {}
-    const cur = ["ainav", "chats", "feed", "phone"].includes(cfg.ux?.current) ? cfg.ux.current : "blocks"
+    const cur = ["ainav", "chats", "feed", "phone", "rooms"].includes(cfg.ux?.current) ? cfg.ux.current : "blocks"
     return form({ method: "POST", action: "/welcome/ux", class: "welcome-ux-form" },
       div({ class: "welcome-ux-grid" },
         pickCard("ux", "blocks", cur, i18n.uxModeMenus, "/assets/images/ux-blocks.png"),
         cfg.modules?.aiNavMod === "on" ? pickCard("ux", "ainav", cur, i18n.uxModeAINav, "/assets/images/ux-ainav.png") : null,
         cfg.modules?.chatsMod === "on" ? pickCard("ux", "chats", cur, i18n.uxModeChats, "/assets/images/ux-chats.png") : null,
         pickCard("ux", "feed", cur, i18n.uxModeFeed, "/assets/images/ux-feed.png"),
-        cfg.modules?.phoneMod !== "off" ? pickCard("ux", "phone", cur, i18n.phoneTitle, "/assets/images/ux-phone.png") : null
+        cfg.modules?.phoneMod !== "off" ? pickCard("ux", "phone", cur, i18n.phoneTitle, "/assets/images/ux-phone.png") : null,
+        cfg.modules?.roomsMod !== "off" ? pickCard("ux", "rooms", cur, i18n.roomsTitle, "/assets/images/ux-rooms.png") : null
       ),
       submitRow(i18n.welcomeStepUxAction)
     )

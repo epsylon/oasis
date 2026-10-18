@@ -24,15 +24,8 @@ const blobUsageOnDisk = (ssbPath) => {
 
 let printed = false;
 let checkedForUpdate = false;
-let pendingClearnetModules = null;
-let clearnetReady = false;
 let pendingWarmup = null;
 let warmupReady = false;
-
-function setClearnetModules(modules) {
-  pendingClearnetModules = Array.isArray(modules) ? modules : [];
-  clearnetReady = true;
-}
 
 function setWarmupTime(str) {
   pendingWarmup = str;
@@ -79,19 +72,6 @@ async function checkForUpdate() {
     fs.unlinkSync(updateFlagPath);
   }
   await updater.getRemoteVersion();
-}
-
-function waitForClearnet(timeoutMs = 25000) {
-  return new Promise((resolve) => {
-    if (clearnetReady) return resolve(pendingClearnetModules || []);
-    const started = Date.now();
-    const tick = () => {
-      if (clearnetReady) return resolve(pendingClearnetModules || []);
-      if (Date.now() - started >= timeoutMs) return resolve(null);
-      setTimeout(tick, 250);
-    };
-    tick();
-  });
 }
 
 async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, httpHost = 'localhost', offline = false, isPublic = false) {
@@ -151,8 +131,6 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   console.log(`- Media cache limit: ${cacheMb > 0 ? formatMB(cacheMb * 1024 * 1024) : 'Unlimited'}`);
   console.log(`- Current usage: ${formatMB(cacheUsage.bytes, 1)} · ${cacheUsage.files} files`);
   console.log(`- LAN Broadcasting (UDP): ${localDiscovery ? 'enabled' : 'disabled'}`);
-  const clearnetModules = await waitForClearnet();
-  const clearnetStatus = (clearnetModules && clearnetModules.length > 0) ? clearnetModules.join(', ') : 'disabled';
   const multiverse = (() => {
     if ((oasisCfg.modules || {}).fediverseMod === 'off') return [];
     try {
@@ -164,12 +142,10 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
       ].filter(Boolean);
     } catch (_) { return []; }
   })();
-  console.log(`- Internet Broadcasting:`);
-  console.log(`  - Clearnet: ${clearnetStatus}`);
-  console.log(`  - Multiverse: ${multiverse.length ? multiverse.join(', ') : 'disabled'}`);
+  console.log(`- Multiverse: ${multiverse.length ? multiverse.join(', ') : 'disabled'}`);
   if (hasHttp) {
     const en = (() => { try { return require('../client/assets/translations/i18n').en || {}; } catch (_) { return {}; } })();
-    const uxNames = { blocks: en.uxModeMenus, ainav: en.uxModeAINav, chats: en.uxModeChats, feed: en.uxModeFeed, phone: en.phoneTitle };
+    const uxNames = { blocks: en.uxModeMenus, ainav: en.uxModeAINav, chats: en.uxModeChats, feed: en.uxModeFeed, phone: en.phoneTitle, rooms: en.roomsTitle };
     const wishNames = { whole: en.settingsWishWhole, mutuals: en.settingsWishMutuals, 'only-lan': en.settingsWishOnlyLan, local: en.settingsWishLocal };
     const workflow = (() => {
       try {
@@ -202,7 +178,6 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
 
 module.exports = {
   printMetadata,
-  setClearnetModules,
   setWarmupTime,
   colors
 };

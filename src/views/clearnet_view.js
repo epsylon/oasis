@@ -238,6 +238,47 @@ const renderClearnetUrlBlock = ({ baseUrl = '', path, i18nObj = {} }) => {
   );
 };
 
+const CLEARNET_ZOOM_CSS = `
+.cn-zoom{display:contents}
+.cn-zoom img{cursor:zoom-in}
+.cn-lightbox{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.9);align-items:center;justify-content:center}
+.cn-lightbox:target{display:flex}
+.cn-lightbox-link{display:flex;align-items:center;justify-content:center;width:100%;height:100%;cursor:zoom-out}
+.cn-lightbox-img{display:block;max-width:92vw;max-height:88vh;object-fit:contain}
+.cn-lightbox-full{background:#000}
+.cn-lightbox-full .cn-lightbox-img{width:100vw;height:100vh;max-width:100vw;max-height:100vh}
+.cn-lightbox-close,.cn-lightbox-fs{position:absolute;top:14px;z-index:1;width:42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;text-decoration:none;font-size:24px;line-height:1}
+.cn-lightbox-close{right:16px}
+.cn-lightbox-fs{right:66px}
+.cn-lightbox-fs svg{display:block;width:20px;height:20px}
+`;
+const CN_FULLSCREEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 9 4 4 9 4"/><polyline points="15 4 20 4 20 9"/><polyline points="20 15 20 20 15 20"/><polyline points="9 20 4 20 4 15"/></svg>';
+const cnZoom = (id, src, alt = '', { full = false, imgClass = '' } = {}) => {
+  const zid = `cnz-${String(id).replace(/[^A-Za-z0-9_-]/g, '')}`;
+  const a = escapeHtml(alt);
+  const u = escapeHtml(src);
+  const cls = imgClass ? ` class="${escapeHtml(imgClass)}"` : '';
+  const fs = full ? `<a class="cn-lightbox-fs" href="#${zid}-full" title="${escapeHtml(cnText('liveFullscreen', 'Full screen'))}">${CN_FULLSCREEN_ICON}</a>` : '';
+  return `<a class="cn-zoom" id="${zid}-src" href="#${zid}"><img${cls} src="${u}" alt="${a}"/></a>`
+    + `<div class="cn-lightbox" id="${zid}"><a class="cn-lightbox-close" href="#${zid}-src">×</a>${fs}<a class="cn-lightbox-link" href="#${zid}-src"><img class="cn-lightbox-img" src="${u}" alt="${a}" loading="lazy"/></a></div>`
+    + (full ? `<div class="cn-lightbox cn-lightbox-full" id="${zid}-full"><a class="cn-lightbox-close" href="#${zid}">×</a><a class="cn-lightbox-link" href="#${zid}"><img class="cn-lightbox-img" src="${u}" alt="${a}" loading="lazy"/></a></div>` : '');
+};
+const CN_ZOOM_SKIP = /\bcn-(lightbox-img|footer-logo)\b/;
+const zoomClearnetImages = (html) => {
+  let depth = 0;
+  let n = 0;
+  return String(html || '').replace(/<a\b[^>]*>|<\/a\s*>|<img\b[^>]*>/gi, (tag) => {
+    if (/^<a\b/i.test(tag)) { depth++; return tag; }
+    if (/^<\/a/i.test(tag)) { depth = Math.max(0, depth - 1); return tag; }
+    if (depth > 0) return tag;
+    const cls = (tag.match(/\sclass="([^"]*)"/i) || [])[1] || '';
+    const src = (tag.match(/\ssrc="([^"]*)"/i) || [])[1] || '';
+    if (!src || CN_ZOOM_SKIP.test(cls)) return tag;
+    const alt = (tag.match(/\salt="([^"]*)"/i) || [])[1] || '';
+    const zid = `cnz-i${++n}`;
+    return `<a class="cn-zoom" id="${zid}-src" href="#${zid}">${tag}</a><span class="cn-lightbox" id="${zid}"><a class="cn-lightbox-close" href="#${zid}-src">×</a><a class="cn-lightbox-link" href="#${zid}-src"><img class="cn-lightbox-img" src="${src}" alt="${alt}" loading="lazy"/></a></span>`;
+  });
+};
 const CLEARNET_TEXT_CSS = `
 .cn-tags{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
 .cn-hub-priceline{margin:10px 0 0 0}
@@ -266,8 +307,11 @@ a.tag-link:hover{text-decoration:underline}
 .rt-rule{display:block;border-top:1px solid currentColor;opacity:.4;margin:10px 0}
 .rt-code{font-family:monospace;background:rgba(128,128,128,.18);padding:1px 4px;border-radius:3px;word-break:break-word}
 .rt-code-block{display:block;font-family:monospace;white-space:pre-wrap;background:rgba(128,128,128,.18);padding:10px;border-radius:5px;margin:8px 0;overflow-x:auto;word-break:break-word}
-.post-image{display:block;max-width:100%;height:auto;margin:12px 0;border:1px solid var(--border);border-radius:6px}
-.post-video,.post-audio{display:block;width:100%;max-width:100%;margin:12px 0;border-radius:6px;background:#000}
+.post-image{display:block;width:auto;max-width:100%;max-height:480px;height:auto;margin:12px auto;border:1px solid var(--border);border-radius:6px}
+.post-video{display:block;width:100%;max-width:100%;max-height:480px;margin:12px auto;border-radius:6px;background:#000}
+.post-audio{display:block;width:100%;max-width:100%;margin:12px 0}
+.cn-media-frame img{max-height:480px;width:auto;margin:0 auto}
+.cn-media-frame video{max-height:480px}
 .post-pdf{display:inline-block;margin:8px 0;padding:8px 14px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;color:var(--fg);text-decoration:none}
 .post-pdf:hover{border-color:var(--fg)}
 `;
@@ -346,7 +390,10 @@ footer.cn-footer .cn-footer-logo{width:56px;height:auto;display:block;margin:0 a
 footer.cn-footer .cn-footer-line{margin:3px 0}
 `;
 
-const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null, extraCss = '', body, headerExtra = '', hubFeedId = null }) => {
+const renderClearnetHubSearch = ({ type = '', query = '' } = {}) =>
+  `<form class="cn-search" method="GET" action="/c">${type ? `<input type="hidden" name="type" value="${escapeHtml(type)}"/>` : ''}<input type="text" name="q" value="${escapeHtml(query || '')}" placeholder="${escapeHtml(cnText('cnSearchPlaceholder', 'Search…'))}" autocomplete="off"/></form>`;
+
+const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null, extraCss = '', body, headerExtra = null, hubFeedId = null }) => {
   const safeTitle = escapeHtml(title || 'Oasis');
   const safeOgTitle = escapeHtml(ogTitle || title || 'Oasis');
   const safeOgDesc = escapeHtml(ogDescription || '');
@@ -368,7 +415,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   <meta name="description" content="${safeOgDesc}"/>
   <meta name="robots" content="index, follow"/>
   <link rel="icon" href="/c/assets/images/favicon.svg"/>
-  <style>${baseCss}${CLEARNET_SEARCH_CSS}${CLEARNET_TEXT_CSS}${extraCss}
+  <style>${baseCss}${CLEARNET_SEARCH_CSS}${CLEARNET_TEXT_CSS}${CLEARNET_ZOOM_CSS}${extraCss}
 .cn-brand-link{display:block;text-decoration:none}
 
 .cn-brand-link:hover .cn-brand{color:var(--accent)}
@@ -386,9 +433,9 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
 <body>
   <header class="cn-header">
     ${brandBlock}
-    <div class="cn-header-extra">${renderLangSelector(lang)}${propagateLang(headerExtra || '', langOverride)}</div>
+    <div class="cn-header-extra">${renderLangSelector(lang)}${propagateLang(headerExtra == null ? renderClearnetHubSearch() : headerExtra, langOverride)}</div>
   </header>
-  ${propagateLang(stripInternalAnchors(body), langOverride)}
+  ${propagateLang(stripInternalAnchors(zoomClearnetImages(body)), langOverride)}
   <footer class="cn-footer">
     <a href="https://wiki.solarnethub.com" target="_blank" rel="noopener"><img class="cn-footer-logo" src="/c/assets/images/snh-oasis.jpg" alt="Oasis"/></a>
     <div class="cn-footer-line">${escapeHtml(cnText('cnSyncedPeers', 'Synced-peers'))}: [ <strong>${Number(sharedState.getSyncedPeerCount ? sharedState.getSyncedPeerCount() : 0) || 0}</strong> ]</div>
@@ -550,6 +597,7 @@ const renderClearnetPodcastView = ({ channel }) => {
 };
 
 module.exports = {
+  cnZoom,
   kindLabel,
   renderTagChips,
   renderClearnetPodcastView,
@@ -575,6 +623,7 @@ module.exports = {
   renderDoubleEncryptionChip,
   renderClearnetUrlBlock,
   renderClearnetSearchForm,
+  renderClearnetHubSearch,
   renderClearnetPage,
   renderClearnetNotFound,
   CLEARNET_PAGER_CSS,

@@ -460,7 +460,7 @@ const contentTypeVerb = (ct) => {
 };
 
 const contentTypeName = (ct) => {
-  const map = { event: i18n.tribeSectionEvents, task: i18n.tribeSectionTasks, votation: i18n.tribeSectionVotations, poll: i18n.pollsTitle, forum: i18n.tribeSectionForum, 'forum-reply': i18n.tribeSectionForum, blog: i18n.blogTitle, media: i18n.tribeSectionMedia, feed: i18n.tribeSectionFeed, pad: i18n.tribeSectionPads || 'PADS', chat: i18n.tribeSectionChats || 'CHATS', calendar: i18n.tribeSectionCalendars || 'CALENDARS', map: i18n.tribeSectionMaps || 'MAPS', wiki: i18n.tribeSectionWiki || 'WIKI' };
+  const map = { event: i18n.tribeSectionEvents, task: i18n.tribeSectionTasks, votation: i18n.tribeSectionVotations, poll: String(i18n.pollsTitle || 'POLLS').toUpperCase(), forum: i18n.tribeSectionForum, 'forum-reply': i18n.tribeSectionForum, blog: String(i18n.blogTitle || 'BLOGS').toUpperCase(), media: i18n.tribeSectionMedia, feed: i18n.tribeSectionFeed, pad: i18n.tribeSectionPads || 'PADS', chat: i18n.tribeSectionChats || 'CHATS', calendar: i18n.tribeSectionCalendars || 'CALENDARS', map: i18n.tribeSectionMaps || 'MAPS', wiki: i18n.tribeSectionWiki || 'WIKI' };
   return map[ct] || ct;
 };
 
@@ -1867,7 +1867,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
     ? `<div class="cn-filter-row">${btn(hrefFor('', activeAuthor), i18n.all, byAuthor.length, !activeType)}${[...typeCounts.entries()].map(([k, n]) => btn(hrefFor(k, activeAuthor), kindName(byAuthor.find(it => kindKey(it) === k)), n, activeType === k)).join('')}</div>`
     : '';
   const authorRow = authorCounts.size > 1
-    ? `<div class="cn-filter-row">${btn(hrefFor(activeType, ''), i18n.all, [...authorCounts.values()].reduce((a, b) => a + b, 0), !activeAuthor)}${[...authorCounts.entries()].map(([id, n]) => btn(hrefFor(activeType, id), who(id), n, activeAuthor === id)).join('')}</div>`
+    ? `<div class="cn-filter-row">${[...authorCounts.entries()].map(([id, n]) => btn(hrefFor(activeType, activeAuthor === id ? '' : id), who(id), n, activeAuthor === id)).join('')}</div>`
     : '';
   const renderItem = (it) => {
     const mt = it.contentType === 'media' ? String(it.mediaType || '') : '';
@@ -1875,9 +1875,9 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
     const title = escapeHtml(it.title || '');
     const blob = cnBlobUrl(it.image);
     const media = !blob ? ''
-      : mt === 'image' ? `<img class="cn-tribe-img" src="${blob}" alt="${title}" loading="lazy"/>`
-      : mt === 'audio' ? `<audio class="cn-tribe-player" controls preload="metadata" src="${blob}"></audio>`
-      : mt === 'video' ? `<video class="cn-tribe-player" controls preload="metadata" src="${blob}"></video>`
+      : mt === 'image' ? `<img class="post-image" src="${blob}" alt="${title}" loading="lazy"/>`
+      : mt === 'audio' ? `<audio class="post-audio" controls preload="metadata" src="${blob}"></audio>`
+      : mt === 'video' ? `<video class="post-video" controls preload="metadata" src="${blob}"></video>`
       : ['document', 'file', 'torrent'].includes(mt) ? `<a class="cn-tribe-link" href="${blob}" rel="noopener">⇩ ${title || escapeHtml(kind)}</a>`
       : '';
     const url = mt === 'bookmark' ? String(it.url || '') : '';
@@ -1925,8 +1925,6 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
 .cn-tribe-meta{display:flex;gap:12px;flex-wrap:wrap;align-items:baseline;color:var(--fg-dim);font-size:12px;word-break:break-all}
 .cn-tribe-title{color:var(--fg);font-size:18px;font-weight:700;margin:8px 0;word-break:break-word}
 .cn-tribe-text{color:var(--fg-soft);line-height:1.5;margin:8px 0;word-break:break-word}
-.cn-tribe-img{display:block;max-width:100%;height:auto;border-radius:6px;border:1px solid var(--border);margin:10px 0}
-.cn-tribe-player{display:block;width:100%;max-width:100%;margin:10px 0;border-radius:6px;background:#000}
 .cn-tribe-link{display:inline-block;margin:8px 0;padding:6px 12px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;color:var(--fg);word-break:break-all}
 .cn-tribe-options{margin:8px 0;padding-left:20px;color:var(--fg-soft)}
 .cn-tribe-replies{margin-top:12px;border-top:1px solid var(--border);padding-top:8px}

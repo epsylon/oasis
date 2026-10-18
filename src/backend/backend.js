@@ -4137,6 +4137,46 @@ const preparePreview = async function (ctx) {
 }
 const megabyte = Math.pow(2, 20);
 const maxSize = 75 * megabyte;
+const STREAM_VIDEO_EXT = /\.(mp4|m4v|mkv|webm|mov|avi|ogv|ogg|mpg|mpeg|mpe|ts|m2ts|mts|wmv|asf|flv|3gp|3g2|vob|divx)$/i;
+const streamRoots = () => {
+  let user = '';
+  try { user = os.userInfo().username; } catch (_) {}
+  const out = [];
+  for (const c of [os.homedir(), process.env.EXTERNAL_STORAGE, '/storage/emulated/0', '/sdcard', '/media', user ? `/run/media/${user}` : null, '/mnt', '/Volumes']) {
+    if (!c) continue;
+    try {
+      const real = fs.realpathSync(c);
+      if (out.includes(real) || !fs.statSync(real).isDirectory()) continue;
+      fs.accessSync(real, fs.constants.R_OK);
+      out.push(real);
+    } catch (_) {}
+  }
+  return out;
+};
+const insideStreamRoots = (target, roots) => roots.some(root => target === root || target.startsWith(root.endsWith(path.sep) ? root : root + path.sep));
+const streamReturnTo = (ctx) => safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']);
+const STREAM_SEARCH_MS = 8000;
+const STREAM_SKIP_DIRS = new Set(['node_modules', 'proc', 'sys', 'dev', 'lost+found']);
+const findStreamFiles = async (name, roots) => {
+  const found = [];
+  const seen = new Set();
+  const queue = [...roots];
+  const deadline = Date.now() + STREAM_SEARCH_MS;
+  while (queue.length && Date.now() < deadline) {
+    const dir = queue.shift();
+    const real = await promisesFs.realpath(dir).catch(() => null);
+    if (!real || seen.has(real)) continue;
+    seen.add(real);
+    const entries = await promisesFs.readdir(real, { withFileTypes: true }).catch(() => []);
+    for (const e of entries) {
+      if (e.name.startsWith('.') || STREAM_SKIP_DIRS.has(e.name)) continue;
+      const full = path.join(real, e.name);
+      if (e.isDirectory()) queue.push(full);
+      else if (e.name === name) { const target = await promisesFs.realpath(full).catch(() => null); if (target) found.push(target); }
+    }
+  }
+  return found;
+};
 const collectFediverseMedia = async (ctx) => {
   const files = ctx.request.files && ctx.request.files.media;
   if (!files) return [];
@@ -4431,7 +4471,7 @@ const { housingView, singleHousingView, clearnetHousingView } = require("../view
 const { shopsView, singleShopView, singleProductView, editProductView, shopOrdersView, myPurchasesView, clearnetShopView, renderShopInvitePage } = require("../views/shops_view");
 const { chatsView, singleChatView, renderChatInvitePage } = require("../views/chats_view");
 const { padsView, singlePadView, renderPadInvitePage } = require("../views/pads_view");
-const { roomsView, singleRoomView, renderRoomInvitePage, roomModesFromCensus, clearnetRoomView } = require("../views/rooms_view");
+const { roomsView, singleRoomView, renderRoomInvitePage, roomModesFromCensus, clearnetRoomView, roomStreamMatchesView } = require("../views/rooms_view");
 const { wikiView, wikiPageView, wikiHistoryView, wikiChangesView } = require('../views/wiki_view');
 const { emergenciesView, singleEmergencyView, clearnetEmergencyView } = require('../views/emergencies_view');
 const { mailingView, singleMailingView } = require('../views/mailing_view');
@@ -4586,6 +4626,10 @@ router
     }
     if (currentConfig.ux?.current === "phone" && !config.public) {
       ctx.redirect("/phone");
+      return;
+    }
+    if (currentConfig.ux?.current === "rooms" && !config.public) {
+      ctx.redirect("/rooms");
       return;
     }
     const homePage = /^[a-z0-9-]+$/i.test(String(currentConfig.homePage || "")) ? currentConfig.homePage : "activity";
@@ -5706,7 +5750,7 @@ router
           const me = getViewerId();
           if (!asNumber && !asId) ctx.state.inlineError = t.pmInvalidRecipients;
           else if (asId === me || (asNumber && asNumber === phoneNumbers.phoneNumberOf(me))) ctx.state.inlineError = t.phoneOwnNumber;
-          else if (recipients.length >= PHONE_GROUP_MAX) ctx.state.inlineError = t.phoneLimitsHint;
+          else if (recipients.length >= PHONE_GROUP_MAX) ctx.state.inlineError = String(t.phoneLimitsHint).replace('{n}', String(PHONE_GROUP_MAX));
           else { const v = asNumber || asId; if (!recipients.includes(v)) recipients.push(v); dial = ''; }
         }
         const to = recipients.join(',');
@@ -5728,7 +5772,7 @@ router
     const raw = [ctx.request.body.to, ctx.request.body.dial].map(v => String(v || '').trim()).filter(Boolean).join(',').slice(0, 511);
     const fromForm = String(ctx.request.body.compose || '') === '1';
     const t = require('../views/main_views').i18n;
-    const PHONE_ERRORS = { invalid: t.pmInvalidRecipients, max: t.phoneLimitsHint, pub: t.phoneErrorPub, busy: t.roomErrorBusy, unavailable: t.phoneUnavailable, self: t.phoneOwnNumber, roomDnd: t.roomLineDndError, refuses: t.phoneRecipientRefuses, nobody: t.roomNobodyInside };
+    const PHONE_ERRORS = { invalid: t.pmInvalidRecipients, max: String(t.phoneLimitsHint).replace('{n}', String(PHONE_GROUP_MAX)), pub: t.phoneErrorPub, busy: t.roomErrorBusy, unavailable: t.phoneUnavailable, self: t.phoneOwnNumber, roomDnd: t.roomLineDndError, refuses: t.phoneRecipientRefuses, nobody: t.roomNobodyInside };
     const me = (await cooler.open()).id;
     const tokens = raw.split(/[,\n]+/).map(t => t.trim()).filter(Boolean).flatMap(t => phoneNumbers.normalizeNumber(t) ? [t] : t.split(/\s+/));
     const typed = new Map();
@@ -5814,7 +5858,7 @@ router
   .get('/phone/video/:peer', async (ctx) => {
     if (config.public || !checkMod(ctx, 'phoneMod') || !isLoopbackRequest(ctx)) { ctx.status = 404; return; }
     const peer = String(ctx.params.peer || '');
-    if (peer !== 'me' && peer !== 'grid' && !FEED_ID_RE.test(peer)) { ctx.status = 404; return; }
+    if (peer !== 'me' && peer !== 'grid' && peer !== 'film:me' && !FEED_ID_RE.test(peer) && !(peer.startsWith('film:') && FEED_ID_RE.test(peer.slice(5)))) { ctx.status = 404; return; }
     const source = await phoneModel.videoFrames(peer).catch(() => null);
     if (!source) { ctx.status = 404; return; }
     const { PassThrough } = require('stream');
@@ -8479,7 +8523,8 @@ router
     const aiNavEnabled = cfg.modules && cfg.modules.aiNavMod === 'on';
     const chatsEnabled = cfg.modules && cfg.modules.chatsMod === 'on';
     const phoneEnabled = !!(cfg.modules && cfg.modules.phoneMod !== 'off');
-    const next = (v === 'ainav' && aiNavEnabled) ? 'ainav' : (v === 'chats' && chatsEnabled) ? 'chats' : v === 'feed' ? 'feed' : (v === 'phone' && phoneEnabled) ? 'phone' : 'blocks';
+    const roomsEnabled = !!(cfg.modules && cfg.modules.roomsMod !== 'off');
+    const next = (v === 'ainav' && aiNavEnabled) ? 'ainav' : (v === 'chats' && chatsEnabled) ? 'chats' : v === 'feed' ? 'feed' : (v === 'phone' && phoneEnabled) ? 'phone' : (v === 'rooms' && roomsEnabled) ? 'rooms' : 'blocks';
     cfg.ux = { ...(cfg.ux && typeof cfg.ux === 'object' ? cfg.ux : {}), current: next };
     saveConfig(cfg);
     try { onboardingModel.markStep('ux'); } catch (_) {}
@@ -9020,7 +9065,49 @@ router
       ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
       return;
     }
-    ctx.body = await clearnetRoomView(room);
+    const preview = !config.public && await clearnetRoomPreview(ctx, room);
+    const live = preview || (config.public && (await roomsModel.viewerRooms()).includes(room.rid));
+    ctx.body = await clearnetRoomView(room, { live, sound: !preview, base: `/c/rooms/${encodeURIComponent(ctx.params.id)}` });
+  })
+  .get('/c/rooms/:id/:stream', async (ctx) => {
+    const feed = String(ctx.params.stream || '');
+    if (feed !== 'live' && feed !== 'sound') { ctx.status = 404; ctx.body = ''; return; }
+    const room = await roomsModel.getRoomById(await clearnetIdFor('rooms', ctx.params.id)).catch(() => null);
+    if (!(await clearnetRoomOk(room)) || (clearnetRoomWatchers.get(room.rid) || 0) >= CLEARNET_ROOM_WATCHERS_MAX) { ctx.status = 404; ctx.body = ''; return; }
+    const source = config.public
+      ? await roomsModel.publicFeed(room.rid, feed === 'sound' ? 'sound' : 'grid').catch(() => null)
+      : feed === 'live' && await clearnetRoomPreview(ctx, room) ? await phoneModel.videoFrames('grid').catch(() => null) : null;
+    if (!source) { ctx.status = 404; ctx.body = ''; return; }
+    const { PassThrough } = require('stream');
+    const body = new PassThrough();
+    const rid = room.rid;
+    clearnetRoomWatchers.set(rid, (clearnetRoomWatchers.get(rid) || 0) + 1);
+    let released = false;
+    const release = () => { if (released) return; released = true; const n = (clearnetRoomWatchers.get(rid) || 1) - 1; if (n > 0) clearnetRoomWatchers.set(rid, n); else clearnetRoomWatchers.delete(rid); };
+    ctx.status = 200;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.set('X-Content-Type-Options', 'nosniff');
+    if (feed === 'sound') {
+      ctx.set('Content-Type', 'audio/wav');
+      const h = Buffer.alloc(44);
+      h.write('RIFF', 0); h.writeUInt32LE(0xffffffff, 4); h.write('WAVE', 8);
+      h.write('fmt ', 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22);
+      h.writeUInt32LE(SOUND_RATE, 24); h.writeUInt32LE(SOUND_RATE * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34);
+      h.write('data', 36); h.writeUInt32LE(0xffffffff - 36, 40);
+      body.write(h);
+    } else {
+      ctx.set('Content-Type', 'multipart/x-mixed-replace; boundary=oasisframe');
+    }
+    ctx.body = body;
+    const sink = pull.drain((chunk) => {
+      if (body.destroyed) { sink.abort(); return; }
+      if (feed === 'sound') { if (body.writableLength < SOUND_BACKLOG_MAX) body.write(Buffer.from(chunk)); return; }
+      body.write(`--oasisframe\r\nContent-Type: image/jpeg\r\nContent-Length: ${chunk.length}\r\n\r\n`);
+      body.write(Buffer.from(chunk));
+      body.write('\r\n');
+    }, () => { release(); try { body.end(); } catch (_) {} });
+    ctx.req.on('close', () => { release(); try { sink.abort(); } catch (_) {} });
+    pull(source, sink);
   })
   .get('/c/maps/:id', async (ctx) => {
     const mapItem = await mapsModel.getMapById(await clearnetIdFor('maps', ctx.params.id)).catch(() => null);
@@ -13933,6 +14020,11 @@ router
     await applyClearnetChoice(ctx, 'rooms', ctx.params.id, { recheck: true, allowed: false });
     ctx.redirect(`/rooms/${encodeURIComponent(ctx.params.id)}`);
   })
+  .post("/rooms/reopen/:id", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    try { await roomsModel.reopenRoomById(ctx.params.id); } catch (_) { return actionFail(ctx); }
+    ctx.redirect(`/rooms/${encodeURIComponent(ctx.params.id)}`);
+  })
   .post("/rooms/line/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
     try { await roomsModel.setRoomLine(ctx.params.id, String((ctx.request.body || {}).line || '')); } catch (_) { return actionFail(ctx); }
@@ -13987,6 +14079,38 @@ router
     await roomsModel.camera(String((ctx.request.body || {}).cam) === '1').catch(() => null);
     if ((ctx.request.body || {}).returnTo) ctx.redirect(safeReturnTo(ctx, '/rooms', ['/rooms', '/tribe']));
     else safeRefererRedirect(ctx, '/rooms');
+  })
+  .post("/rooms/stream", koaBody(), async (ctx) => {
+    if (config.public || !checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
+    if (!isLoopbackRequest(ctx)) { ctx.status = 403; ctx.body = ''; return; }
+    const b = ctx.request.body || {};
+    const returnTo = streamReturnTo(ctx);
+    if (String(b.stop) === '1') {
+      await roomsModel.stream({ stop: true }).catch(() => null);
+      ctx.redirect(returnTo);
+      return;
+    }
+    const roots = streamRoots();
+    let candidates = [];
+    if (b.file) {
+      try { const asked = String(b.file); if (path.isAbsolute(asked)) candidates = [fs.realpathSync(asked)]; } catch (_) { candidates = []; }
+    } else {
+      const name = path.basename(String(b.video || '').replace(/\\/g, '/'));
+      if (name && STREAM_VIDEO_EXT.test(name)) candidates = await findStreamFiles(name, roots);
+    }
+    candidates = [...new Set(candidates)].filter(f => insideStreamRoots(f, roots) && STREAM_VIDEO_EXT.test(f));
+    if (candidates.length > 1) {
+      const files = [];
+      for (const f of candidates) { const st = await promisesFs.stat(f).catch(() => null); if (st && st.isFile()) files.push({ path: f, size: st.size }); }
+      ctx.body = await roomStreamMatchesView({ files, returnTo });
+      return;
+    }
+    const file = candidates[0];
+    const st = file ? await promisesFs.stat(file).catch(() => null) : null;
+    const kind = st && st.isFile() ? await FileType.fromFile(file).catch(() => null) : null;
+    const started = kind && /^video\//.test(kind.mime) ? await roomsModel.stream({ file, name: path.basename(file) }).catch(() => null) : null;
+    if (!started) { failWith(ctx, file ? 'actionFailed' : 'roomStreamNotFound', returnTo); return; }
+    ctx.redirect(returnTo);
   })
   .post("/rooms/hand", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
@@ -14905,10 +15029,11 @@ router
     const aiNavEnabled = cfg.modules && cfg.modules.aiNavMod === 'on';
     const chatsEnabled = cfg.modules && cfg.modules.chatsMod === 'on';
     const phoneEnabled = !!(cfg.modules && cfg.modules.phoneMod !== 'off');
-    const next = (v === "ainav" && aiNavEnabled) ? "ainav" : (v === "chats" && chatsEnabled) ? "chats" : v === "feed" ? "feed" : (v === "phone" && phoneEnabled) ? "phone" : "blocks";
+    const roomsEnabled = !!(cfg.modules && cfg.modules.roomsMod !== 'off');
+    const next = (v === "ainav" && aiNavEnabled) ? "ainav" : (v === "chats" && chatsEnabled) ? "chats" : v === "feed" ? "feed" : (v === "phone" && phoneEnabled) ? "phone" : (v === "rooms" && roomsEnabled) ? "rooms" : "blocks";
     cfg.ux = { ...(cfg.ux && typeof cfg.ux === 'object' ? cfg.ux : {}), current: next };
     saveConfig(cfg);
-    ctx.redirect(next === "ainav" ? "/" : next === "chats" ? "/chats" : next === "feed" ? "/feed" : next === "phone" ? "/phone" : "/settings");
+    ctx.redirect(next === "ainav" ? "/" : next === "chats" ? "/chats" : next === "feed" ? "/feed" : next === "phone" ? "/phone" : next === "rooms" ? "/rooms" : "/settings");
   })
   .post("/settings/lan-broadcasting", koaBody(), async (ctx) => {
     const enabled = !!(ctx.request.body && (ctx.request.body.lanBroadcasting === 'on' || ctx.request.body.lanBroadcasting === '1' || ctx.request.body.lanBroadcasting === 'true'));
@@ -15512,6 +15637,41 @@ async function runWalletWork(kind) {
     fs.writeFileSync(ubiNoticePath, JSON.stringify({ epochId: avail.epochId, at: new Date().toISOString() }));
   } catch (_) {}
 }
+const CLEARNET_ROOMS_SYNC_MS = 60 * 1000;
+const CLEARNET_ROOM_WATCHERS_MAX = 50;
+const SOUND_RATE = require('../server/phone_module').SOUND_RATE;
+const SOUND_BACKLOG_MAX = SOUND_RATE * 2 * 2;
+const clearnetRoomWatchers = new Map();
+const clearnetRoomOk = async (room) => {
+  if (!room || room.isClosed || !CLEARNET_REACH_OK.rooms(room)) return false;
+  const prefs = await about.visibilityPrefs(room.author).catch(() => null);
+  return clearnetPublicSync('rooms', room, room.author, prefs, await clearnetDecisions());
+};
+const clearnetRoomPreview = async (ctx, room) => {
+  if (!room || !isLoopbackRequest(ctx) || !checkMod(ctx, 'phoneMod')) return false;
+  const state = await roomsModel.liveState().catch(() => null);
+  return !!state && state.phase === 'live' && state.rid === room.rid && Array.isArray(state.gridOrder) && state.gridOrder.length > 0;
+};
+let clearnetRoomsSyncing = false;
+const syncClearnetRooms = async () => {
+  if (clearnetRoomsSyncing || !config.public) return;
+  clearnetRoomsSyncing = true;
+  try {
+    const rooms = await roomsModel.listAll({ filter: 'all', viewerId: getViewerId() }).catch(() => []);
+    const wanted = [];
+    for (const room of rooms || []) if (await clearnetRoomOk(room)) wanted.push(room);
+    const rids = new Set(wanted.map(r => r.rid));
+    for (const rid of await roomsModel.viewerRooms()) if (!rids.has(rid)) await roomsModel.viewerLeave(rid).catch(() => null);
+    const inside = new Set(await roomsModel.viewerRooms());
+    for (const room of wanted) if (!inside.has(room.rid)) await roomsModel.viewerJoin(room).catch(() => null);
+  } catch (_) {}
+  finally { clearnetRoomsSyncing = false; }
+};
+if (config.public) {
+  setTimeout(syncClearnetRooms, 20000);
+  const clearnetRoomsTimer = setInterval(syncClearnetRooms, CLEARNET_ROOMS_SYNC_MS);
+  if (clearnetRoomsTimer.unref) clearnetRoomsTimer.unref();
+}
 const PUB_INVITES_REFRESH_MS = 24 * 60 * 60 * 1000;
 if (ssbConfig.pub === true) {
   const announcePubInvites = async () => { try { await pubInvites.announce(await cooler.open()); } catch (_) {} };
@@ -15804,25 +15964,6 @@ async function checkPoliticalChanges() {
     politicalCheckRunning = false;
   }
 }
-async function logClearnetStatus() {
-  try {
-    const ssbClient = await cooler.open();
-    if (!ssbClient || !ssbClient.id) return;
-    const prefs = await about.visibilityPrefs(ssbClient.id).catch(() => null);
-    const { CLEARNET_MODULES } = require('../views/main_views');
-    const active = prefs ? CLEARNET_MODULES.filter(m => prefs[m.prefKey] === true).map(m => m.label) : [];
-    try {
-      const { setClearnetModules } = require('../server/ssb_metadata');
-      setClearnetModules(active);
-    } catch (_) {}
-  } catch (_) {
-    try {
-      const { setClearnetModules } = require('../server/ssb_metadata');
-      setClearnetModules([]);
-    } catch (_) {}
-  }
-}
-setTimeout(() => { logClearnetStatus(); }, 8000);
 
 app._close = () => {
   if (pubEngineTimer) clearInterval(pubEngineTimer);

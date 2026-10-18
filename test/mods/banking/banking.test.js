@@ -340,8 +340,78 @@ describe('banking: the age of a feed counts from when this node received it', (t
     await publish(B, { type: 'contact', contact: A.keypair.id, following: true });
     eq(await scoreSeenByNewcomer(), base, 'a forged clock does not make the voter old enough');
     await backdated(40 * 86400000, () => publish(C, { type: 'post', text: 'a really old hello' }));
+    for (let i = 0; i < 2; i++) {
+      const F = makePeer(net);
+      await backdated(40 * 86400000, () => publish(F, { type: 'post', text: 'another old hello' }));
+      await publish(F, { type: 'contact', contact: C.keypair.id, following: true });
+    }
     await publish(C, { type: 'vote', vote: { link: post.key, value: 1 } });
-    ok(await scoreSeenByNewcomer() > base, 'a voter this node has known for long does count');
+    ok(await scoreSeenByNewcomer() > base, 'a voter this node has known for long, and that others follow, does count');
+  });
+});
+
+describe('banking: karma from others counts people, not clicks', (t) => {
+  const DAY = 86400000;
+  const karma = require('../../../src/models/karma_model')({});
+  const publish = (peer, content) => new Promise((res, rej) => peer.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+  const backdated = async (ms, fn) => {
+    const realNow = Date.now;
+    Date.now = () => realNow() - ms;
+    try { return await fn(); } finally { Date.now = realNow; }
+  };
+  const oldPeer = async (net) => { const V = makePeer(net); await backdated(40 * DAY, () => publish(V, { type: 'post', text: 'an old hello' })); return V; };
+  const vouchFor = async (net, V) => { for (let i = 0; i < karma.TRUST_MIN_FOLLOWERS; i++) await publish(await oldPeer(net), { type: 'contact', contact: V.keypair.id, following: true }); };
+  const oldVoter = async (net) => { const V = await oldPeer(net); await vouchFor(net, V); return V; };
+  const receivedBy = (net, A) => async () => { const W = makePeer(net); W.setActor(); return W.use('banking').getKarmaReceived(A.keypair.id); };
+
+  t('one inhabitant voting up everything adds no more than the cap for the period', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    const posts = [];
+    for (let i = 0; i < 8; i++) posts.push(await publish(A, { type: 'post', text: `post ${i}` }));
+    const C = await oldVoter(net);
+    const seen = receivedBy(net, A);
+    const before = (await seen()).positive;
+    for (const p of posts) await publish(C, { type: 'vote', vote: { link: p.key, value: 1 } });
+    eq((await seen()).positive - before, karma.POSITIVE_PER_VOTER_CAP, 'many votes from the same inhabitant add only the cap');
+  });
+
+  t('down votes spread over different messages count once enough inhabitants agree, each one once', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    const posts = [];
+    for (let i = 0; i < karma.NEGATIVE_PATTERN_MIN_VOTERS + 1; i++) posts.push(await publish(A, { type: 'post', text: `post ${i}` }));
+    const voters = [];
+    for (let i = 0; i < karma.NEGATIVE_PATTERN_MIN_VOTERS; i++) voters.push(await oldVoter(net));
+    const seen = receivedBy(net, A);
+    const base = (await seen()).negative;
+    for (const p of posts) await publish(voters[0], { type: 'vote', vote: { link: p.key, value: -1 } });
+    for (let i = 1; i < voters.length - 1; i++) await publish(voters[i], { type: 'vote', vote: { link: posts[i].key, value: -1 } });
+    eq((await seen()).negative, base, 'with fewer different inhabitants nothing is taken, however many votes one of them gives');
+    await publish(voters[voters.length - 1], { type: 'vote', vote: { link: posts[posts.length - 1].key, value: -1 } });
+    eq((await seen()).negative - base, karma.NEGATIVE_PATTERN_MIN_VOTERS * karma.NEGATIVE_PATTERN_POINTS, 'once enough agree, each of them counts once');
+  });
+
+  t('a vote counts only once established inhabitants follow the voter', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    const post = await publish(A, { type: 'post', text: 'content by A' });
+    const C = await oldPeer(net);
+    const seen = receivedBy(net, A);
+    const base = (await seen()).positive;
+    await publish(C, { type: 'vote', vote: { link: post.key, value: 1 } });
+    eq((await seen()).positive, base, 'an old voter nobody follows adds nothing');
+    await vouchFor(net, C);
+    ok((await seen()).positive > base, 'once others follow the voter, the vote counts');
+  });
+
+  t('accounts that only vouch for each other cannot sink anyone, even agreeing on the same message', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    const post = await publish(A, { type: 'post', text: 'content by A' });
+    const ring = [];
+    for (let i = 0; i < karma.NEGATIVE_PATTERN_MIN_VOTERS; i++) ring.push(await oldPeer(net));
+    for (const X of ring) for (const Y of ring) if (X !== Y) await publish(X, { type: 'contact', contact: Y.keypair.id, following: true });
+    const seen = receivedBy(net, A);
+    const base = (await seen()).negative;
+    for (const X of ring) await publish(X, { type: 'vote', vote: { link: post.key, value: -1 } });
+    eq((await seen()).negative, base, 'a closed ring of voters takes nothing');
   });
 });
 

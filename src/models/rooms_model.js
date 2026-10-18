@@ -353,6 +353,8 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
     return { title: "", description: "", image: "", tags: [], rid: "", _undec: true }
   }
 
+  const roomTypeOf = (c) => c.status === "INVITE-ONLY" || (c.status === "CLOSED" && c.encrypted === true && !c.tribeId) ? "INVITE-ONLY" : "OPEN"
+
   const buildRoom = (node, rootId, tribeKeys, members) => {
     const c = node.c || {}
     if (c.type !== "room") return null
@@ -369,7 +371,7 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       image: f.image,
       tags: f.tags,
       status: ["OPEN", "INVITE-ONLY", "CLOSED"].includes(c.status) ? c.status : "OPEN",
-      type: c.status === "INVITE-ONLY" || (c.status === "CLOSED" && c.encrypted === true && !c.tribeId) ? "INVITE-ONLY" : "OPEN",
+      type: roomTypeOf(c),
       author,
       members: Array.isArray(members) ? members : (Array.isArray(c.members) ? c.members : []),
       invites: Array.isArray(c.invites) ? c.invites : [],
@@ -554,6 +556,10 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
 
     async closeRoomById(id) {
       return republish(id, (c) => ({ ...c, status: "CLOSED" }))
+    },
+
+    async reopenRoomById(id) {
+      return republish(id, (c) => ({ ...c, status: roomTypeOf(c) }))
     },
 
     async setRoomLine(id, line) {
@@ -781,6 +787,38 @@ module.exports = ({ cooler, tribeCrypto, roomCrypto, tribesModel }) => {
       const ph = await phone()
       if (!ph || typeof ph.camera !== "function") return null
       return asP(ph.camera, !!flag)
+    },
+
+    async stream(opts) {
+      const ph = await phone()
+      if (!ph || typeof ph.stream !== "function") return null
+      return asP(ph.stream, opts || {})
+    },
+
+    async viewerJoin(room) {
+      const ph = await phone()
+      if (!ph || typeof ph.viewerJoin !== "function") return null
+      const params = await this.liveParams(room)
+      if (!params || params.secrets) return null
+      return asP(ph.viewerJoin, params)
+    },
+
+    async viewerLeave(rid) {
+      const ph = await phone()
+      if (!ph || typeof ph.viewerLeave !== "function") return null
+      return asP(ph.viewerLeave, { rid: String(rid || "") })
+    },
+
+    async viewerRooms() {
+      const ph = await phone()
+      if (!ph || typeof ph.viewerRooms !== "function") return []
+      const list = await rpcValue(ph.viewerRooms)
+      return Array.isArray(list) ? list : []
+    },
+
+    async publicFeed(rid, kind) {
+      const ph = await phone()
+      return ph && typeof ph.publicFeed === "function" ? ph.publicFeed({ rid: String(rid || ""), kind: kind === "sound" ? "sound" : "grid" }) : null
     },
 
     async recStart() {

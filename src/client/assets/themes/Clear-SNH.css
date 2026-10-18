@@ -344,6 +344,7 @@ a.user-link:focus, button.user-link:focus {
 .tribe-members-count { color: #FF6F00 !important; }
 .tribe-card-actions { border-color: #E0E0E0 !important; background: #F8F8F8 !important; }
 .tribe-action-btn { border-color: #FF6F00 !important; color: #FF6F00 !important; }
+button.tribe-action-btn { background: transparent !important; border: 1px solid #FF6F00 !important; }
 .tribe-action-btn:hover { background: #FF6F00 !important; color: #fff !important; }
 .tribe-subtribe-link { background: #F0F0F0 !important; border-color: #E0E0E0 !important; color: #FF6F00 !important; }
 .tribe-thumb-link { border-color: #E0E0E0 !important; }

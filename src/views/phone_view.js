@@ -5,6 +5,7 @@ const { phoneNumberOf } = require("../models/phone_number");
 const moment = require("../server/node_modules/moment");
 
 const PAM_MAX_MS = require('../server/phone_module').VOICEMAIL_MAX_MS;
+const GROUP_MAX = require('../server/phone_module').GROUP_MAX;
 
 const clock = (ms) => {
   const s = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
@@ -104,7 +105,7 @@ const NUMBER_TOKEN = /^\d{3}-\d{3}$/;
 
 const renderCompose = (compose) => {
   const recipients = Array.isArray(compose.recipients) ? compose.recipients : [];
-  const max = Number(compose.max) || 7;
+  const max = Number(compose.max) || GROUP_MAX;
   const dial = String(compose.dial || '');
   const full = recipients.length >= max;
   const keep = () => [input({ type: 'hidden', name: 'filter', value: 'create' }), input({ type: 'hidden', name: 'to', value: compose.to || '' })];
@@ -126,7 +127,7 @@ const renderCompose = (compose) => {
           key('clear', '✕', 'phone-key phone-key-fn', { title: i18n.phoneDialClear })
         )
       ),
-      p({ class: 'phone-empty phone-dial-hint' }, i18n.phoneLimitsHint),
+      p({ class: 'phone-empty phone-dial-hint' }, String(i18n.phoneLimitsHint).replace('{n}', String(max))),
       div({ class: 'phone-recipients' },
         span({ class: 'card-label' }, `${i18n.phoneDialInhabitants}: ${recipients.length}/${max}`),
         recipients.length ? div({ class: 'phone-recipient-list' },

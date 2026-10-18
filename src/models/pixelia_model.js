@@ -27,18 +27,41 @@ const resolvePixels = (messages) => {
   }
 
   const replaced = new Set();
-  for (const { m, coordinateKey } of byKey.values()) {
+  const parentOf = (k) => {
+    const { m, coordinateKey } = byKey.get(k);
     const prev = byKey.get(m.value.content.replaces);
-    if (prev && prev.coordinateKey === coordinateKey) replaced.add(prev.m.key);
+    return prev && prev.coordinateKey === coordinateKey ? prev.m.key : null;
+  };
+  for (const k of byKey.keys()) {
+    const parent = parentOf(k);
+    if (parent) replaced.add(parent);
   }
+
+  const depthOf = new Map();
+  const depth = (key) => {
+    const chain = [];
+    const inChain = new Set();
+    let k = key;
+    while (k && !depthOf.has(k) && !inChain.has(k)) {
+      chain.push(k);
+      inChain.add(k);
+      k = parentOf(k);
+    }
+    let d = k && depthOf.has(k) ? depthOf.get(k) + 1 : 0;
+    for (let i = chain.length - 1; i >= 0; i--) depthOf.set(chain[i], d++);
+    return depthOf.get(key);
+  };
 
   const latest = new Map();
   for (const [k, { m, coordinateKey }] of byKey) {
     if (replaced.has(k) || tombstoned.has(k)) continue;
     const cur = latest.get(coordinateKey);
+    if (!cur) { latest.set(coordinateKey, m); continue; }
+    const d = depth(k);
+    const curD = depth(cur.key);
     const ts = m.value.timestamp || 0;
-    const curTs = cur ? cur.value.timestamp || 0 : 0;
-    if (!cur || ts > curTs || (ts === curTs && k > cur.key)) latest.set(coordinateKey, m);
+    const curTs = cur.value.timestamp || 0;
+    if (d > curD || (d === curD && (ts > curTs || (ts === curTs && k > cur.key)))) latest.set(coordinateKey, m);
   }
 
   return latest;

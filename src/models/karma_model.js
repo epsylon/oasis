@@ -14,6 +14,11 @@ const CONSTRUCTIVE_OPINIONS = new Set(opinionCategories.karma.constructive);
 const MODERATION_OPINIONS = new Set(opinionCategories.karma.moderation);
 const NEUTRAL_OPINIONS = new Set(opinionCategories.karma.neutral);
 const NEGATIVE_MIN_VOTERS = 3;
+const KARMA_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+const NEGATIVE_PATTERN_MIN_VOTERS = 5;
+const NEGATIVE_PATTERN_POINTS = 2;
+const POSITIVE_PER_VOTER_CAP = 10;
+const TRUST_MIN_FOLLOWERS = 2;
 const REACTIONS_PER_MESSAGE_CAP = 10;
 const PLAYS_PER_EPISODE_CAP = 20;
 const ACTIONS_CACHE_TTL_MS = 60 * 1000;
@@ -225,17 +230,42 @@ function receivedBreakdownFor(userId, actions) {
   const nowMs = Date.now();
   const mine = new Set();
   const firstTs = new Map();
+  const follows = new Map();
   for (const a of actions) {
     if (!a.author) continue;
     const ts = Number(a.receivedAt) || 0;
     if (ts && (!firstTs.has(a.author) || ts < firstTs.get(a.author))) firstTs.set(a.author, ts);
     if (a.author === userId && a.id) mine.add(a.id);
+    const c = a.content || {};
+    if (c.type === "contact" && typeof c.contact === "string" && c.contact !== a.author) {
+      const k = `${a.author}|${c.contact}`;
+      const at = Number(a.value?.timestamp) || ts;
+      const prev = follows.get(k);
+      if (!prev || at >= prev.at) follows.set(k, { on: c.following === true && c.blocking !== true, at });
+    }
   }
+  const followersOf = new Map();
+  for (const [k, f] of follows) {
+    if (!f.on) continue;
+    const [from, to] = k.split("|");
+    if (!followersOf.has(to)) followersOf.set(to, new Set());
+    followersOf.get(to).add(from);
+  }
+  const known = (id) => firstTs.has(id) && nowMs - firstTs.get(id) >= RECEIVED_AUTHOR_MIN_AGE_MS;
+  const trusted = (voter, sameSide) => {
+    let n = 0;
+    for (const f of followersOf.get(voter) || []) {
+      if (f === userId || sameSide.has(f) || !known(f)) continue;
+      if (++n >= TRUST_MIN_FOLLOWERS) return true;
+    }
+    return false;
+  };
   const seen = new Set();
   const perTarget = new Map();
   const negatives = new Map();
   const votes = new Map();
   const reactions = new Map();
+  const credits = [];
   let positive = 0;
   let negative = 0;
   const add = (author, kind, target, pts, ts, capPerTarget = Infinity) => {
@@ -245,14 +275,14 @@ function receivedBreakdownFor(userId, actions) {
     if (n >= capPerTarget) return;
     seen.add(k);
     perTarget.set(`${kind}:${target}`, n + 1);
-    positive += pts * decayFor(ts, nowMs);
+    credits.push({ voter: author, pts, ts: Number(ts) || 0 });
   };
   const addNegative = (author, target, pts, ts) => {
     const k = `neg:${author}:${target}`;
     if (seen.has(k)) return;
     seen.add(k);
     if (!negatives.has(target)) negatives.set(target, []);
-    negatives.get(target).push({ pts, ts });
+    negatives.get(target).push({ voter: author, pts, ts: Number(ts) || 0 });
   };
   for (const a of actions) {
     const b = a.author;
@@ -298,9 +328,38 @@ function receivedBreakdownFor(userId, actions) {
     if (v.value > 0) add(v.author, "opinion", v.target, 3, v.ts);
     else if (v.value < 0) addNegative(v.author, v.target, -3, v.ts);
   }
-  for (const list of negatives.values()) {
-    if (list.length < NEGATIVE_MIN_VOTERS) continue;
-    for (const n of list) negative += Math.abs(n.pts) * decayFor(n.ts, nowMs);
+  const vouched = new Map();
+  const isTrusted = (voter, side, cache) => {
+    if (!cache.has(voter)) cache.set(voter, trusted(voter, side));
+    return cache.get(voter);
+  };
+  const usedByVoter = new Map();
+  for (const c of credits.sort((x, y) => x.ts - y.ts)) {
+    if (!isTrusted(c.voter, new Set(), vouched)) continue;
+    const k = `${c.voter}:${Math.floor(c.ts / KARMA_PERIOD_MS)}`;
+    const used = usedByVoter.get(k) || 0;
+    const take = Math.min(c.pts, POSITIVE_PER_VOTER_CAP - used);
+    if (take <= 0) continue;
+    usedByVoter.set(k, used + take);
+    positive += take * decayFor(c.ts, nowMs);
+  }
+  const blaming = new Set();
+  for (const list of negatives.values()) for (const n of list) blaming.add(n.voter);
+  const vouchedAgainst = new Map();
+  const pattern = new Map();
+  for (const all of negatives.values()) {
+    const list = all.filter(n => isTrusted(n.voter, blaming, vouchedAgainst));
+    if (list.length >= NEGATIVE_MIN_VOTERS) {
+      for (const n of list) negative += Math.abs(n.pts) * decayFor(n.ts, nowMs);
+      continue;
+    }
+    for (const n of list) {
+      if (!n.ts || nowMs - n.ts > KARMA_PERIOD_MS) continue;
+      if ((pattern.get(n.voter) || 0) < n.ts) pattern.set(n.voter, n.ts);
+    }
+  }
+  if (pattern.size >= NEGATIVE_PATTERN_MIN_VOTERS) {
+    for (const ts of pattern.values()) negative += NEGATIVE_PATTERN_POINTS * decayFor(ts, nowMs);
   }
   positive = Math.round(positive);
   negative = Math.round(negative);
@@ -522,6 +581,11 @@ async function getLastPublishedTimestamp(userId) {
     listKarmaHistory,
     basePointsFor,
     decayFor,
-    NEGATIVE_MIN_VOTERS
+    NEGATIVE_MIN_VOTERS,
+    NEGATIVE_PATTERN_MIN_VOTERS,
+    NEGATIVE_PATTERN_POINTS,
+    POSITIVE_PER_VOTER_CAP,
+    KARMA_PERIOD_MS,
+    TRUST_MIN_FOLLOWERS
   };
 };
