@@ -29,7 +29,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install build dependencies
         run: |
@@ -54,7 +54,7 @@ jobs:
           echo "deb_name=$(basename "$DEB_FILE")" >> "$GITHUB_OUTPUT"
 
       - name: Upload .deb as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: oasis-deb-${{ matrix.arch }}
           path: ${{ steps.find-deb.outputs.deb_path }}
@@ -62,7 +62,7 @@ jobs:
 
       - name: Create GitHub Release (only on tag push)
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ steps.find-deb.outputs.deb_path }}
           generate_release_notes: true
