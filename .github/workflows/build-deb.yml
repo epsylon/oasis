@@ -39,8 +39,8 @@ jobs:
 
       - name: Build .deb package
         run: |
-          chmod +x scripts/build-deb2.sh
-          ./scripts/build-deb2.sh
+          chmod +x scripts/build-deb.sh
+          ./scripts/build-deb.sh
 
       - name: Locate built .deb
         id: find-deb
