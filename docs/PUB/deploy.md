@@ -279,7 +279,7 @@ If ecoind is stopped the engine simply idles and announces *unavailable*; it res
 
 Inhabitants call each other from **Phone**. When two of them cannot reach each other directly (different home networks), their calls go through a PUB they are both connected to, or through the PUB of the inhabitant being called. The PUB only passes the call along: the audio is end-to-end encrypted between the two inhabitants and the PUB never has the key. It relays only when one side is an inhabitant it follows.
 
-**Rooms** meet on the PUB their creator was connected to when the room was opened. The PUB forwards what each participant sends to the others in the room without being able to read it: the room key stays among the participants. The PUB hosts rooms opened by inhabitants it follows.
+**Rooms** meet on the PUB their creator was connected to when the room was opened. The PUB forwards what each participant sends to the others in the room without being able to read it: the room key stays among the participants. CLEARNET rooms are the exception: a public PUB joins them as a viewer to serve their picture and sound on the web. The PUB hosts rooms opened by inhabitants it follows.
 
 **Video** travels the same way, as a stream of its own next to the voice: the PUB forwards the encrypted pictures of every camera that is on to everyone else in the room, and caps how much video one participant can push per second so a single camera cannot flood the others. Cameras cost upload bandwidth on the PUB in proportion to how many are on and how many are inside.
 

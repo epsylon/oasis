@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -332,8 +332,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
               ),
               br(),
               ...renderGalleryFields(formData, currentFilter === "edit"),
-              label(i18n.uploadMedia), br(),
-              input({ type: "file", name: "blob" }), br(), br(),
+              ...(currentFilter === "edit" && renderMediaLockNote(formData) ? [] : [label(i18n.uploadMedia), br(), input({ type: "file", name: "blob" }), br(), br()]),
               br(),
               label(i18n.eventDateLabel),
               br(),
@@ -518,7 +517,8 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       renderContentActions(event.id, returnToSelf, { spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, event.title)
+      h2({ class: "tribe-card-title" }, event.title),
+      renderEditedChip(event.id, event.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     renderPhotoGallery(event, 'event'),

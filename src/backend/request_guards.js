@@ -68,7 +68,7 @@ const publicModeGuard = ({ isPublic, onBlocked }) => async (ctx, next) => {
   await next();
 };
 
-const buildCsp = (isClearnet, { frames = false } = {}) => (isClearnet
+const buildCsp = (isClearnet, { frames = '', framed = false, objects = '' } = {}) => (isClearnet
   ? [
       "default-src 'self'",
       "script-src 'none'",
@@ -76,24 +76,27 @@ const buildCsp = (isClearnet, { frames = false } = {}) => (isClearnet
       "img-src 'self' data:",
       "media-src 'self' blob:",
       "connect-src 'self'",
-      "frame-src 'none'",
+      frames ? `frame-src ${frames}` : "frame-src 'none'",
       "form-action 'self'",
-      "object-src 'none'",
+      objects ? `object-src ${objects}` : "object-src 'none'",
       "base-uri 'none'",
-      "frame-ancestors 'none'"
+      framed ? "frame-ancestors 'self'" : "frame-ancestors 'none'"
     ]
   : [
       "default-src 'self'",
-      "script-src 'self' http://localhost:3000/js",
+      "script-src 'none'",
       "style-src 'self'",
       "img-src 'self'",
       "media-src 'self' blob:",
-      "worker-src 'self' blob:",
-      frames ? "frame-src 'self'" : "frame-src 'none'",
+      frames ? `frame-src ${frames}` : "frame-src 'none'",
       "form-action 'self'",
-      "object-src 'none'",
+      objects ? `object-src ${objects}` : "object-src 'none'",
       "base-uri 'none'",
-      "frame-ancestors 'none'"
+      framed ? "frame-ancestors 'self'" : "frame-ancestors 'none'"
     ]).join('; ');
 
-module.exports = { isMsgKey, pickMsgKeys, isLocalPath, safeReturnTo, refererPath, safeRefererRedirect, isClearnetPath, isTrustedRequest, publicModeGuard, buildCsp };
+const IMAGE_SIZE_MIN = 16;
+const IMAGE_SIZE_MAX = 1024;
+const isImageSize = (value) => { const n = Number(value); return Number.isInteger(n) && n >= IMAGE_SIZE_MIN && n <= IMAGE_SIZE_MAX; };
+
+module.exports = { IMAGE_SIZE_MIN, IMAGE_SIZE_MAX, isImageSize, isMsgKey, pickMsgKeys, isLocalPath, safeReturnTo, refererPath, safeRefererRedirect, isClearnetPath, isTrustedRequest, publicModeGuard, buildCsp };

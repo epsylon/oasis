@@ -131,7 +131,7 @@ module.exports = ({ cooler }) => {
       channels.set(root, {
         id: root, rootId: root, tipId: tip.key,
         title: safeText(c.title), description: safeText(c.description), category: normalizeCategory(c.category),
-        cover: parseMedia(c.cover), tags: normalizeTags(c.tags),
+        cover: parseMedia(c.cover), tags: normalizeTags(c.tags), license: typeof c.license === 'string' ? c.license : '',
         author: first.author, createdAt: first.c.createdAt || new Date(first.ts).toISOString(),
         updatedAt: c.updatedAt || new Date(tip.ts).toISOString(), ts: tip.ts,
         episodes: eps, episodeCount: eps.length, playCount, opinionCount,
@@ -163,10 +163,7 @@ module.exports = ({ cooler }) => {
   };
 
   return {
-    CATEGORIES,
-    parseMedia,
-
-    async createChannel({ title, description, category, cover, tags }) {
+    async createChannel({ title, description, category, cover, tags, license }) {
       const ssbClient = await openSsb();
       const t = safeText(title);
       if (!t) throw new Error('Title is required');
@@ -174,7 +171,7 @@ module.exports = ({ cooler }) => {
       const media = parseMedia(cover);
       return publish(ssbClient, {
         type: CHANNEL_TYPE, title: t, description: safeText(description), category: normalizeCategory(category),
-        ...(media ? { cover: media } : {}), tags: normalizeTags(tags), author: ssbClient.id, createdAt: now, updatedAt: now
+        ...(media ? { cover: media } : {}), tags: normalizeTags(tags), ...(license ? { license } : {}), author: ssbClient.id, createdAt: now, updatedAt: now
       });
     },
 
@@ -183,6 +180,7 @@ module.exports = ({ cooler }) => {
       const ch = findChannel(idx, id);
       if (!ch) throw new Error('Podcast not found');
       if (ch.author !== ssbClient.id) throw new Error('Only the author can update this podcast');
+      categories.assertMediaKept(ch, data.cover !== undefined && !!data.cover);
       const media = data.cover !== undefined && data.cover ? parseMedia(data.cover) : ch.cover;
       const res = await publish(ssbClient, {
         type: CHANNEL_TYPE,
@@ -191,6 +189,7 @@ module.exports = ({ cooler }) => {
         category: data.category !== undefined ? normalizeCategory(data.category) : ch.category,
         ...(media ? { cover: media } : {}),
         tags: data.tags !== undefined ? normalizeTags(data.tags) : ch.tags,
+        ...((data.license !== undefined ? data.license : ch.license) ? { license: data.license !== undefined ? data.license : ch.license } : {}),
         author: ssbClient.id, createdAt: ch.createdAt, updatedAt: new Date().toISOString(), replaces: ch.tipId
       });
       return { key: res.key, rootId: ch.id };
@@ -228,6 +227,7 @@ module.exports = ({ cooler }) => {
       const ep = findEpisode(idx, id);
       if (!ep) throw new Error('Episode not found');
       if (ep.author !== ssbClient.id) throw new Error('Only the author can update this episode');
+      categories.assertMediaKept(ep, !!data.media);
       const m = data.media ? parseMedia(data.media) : ep.media;
       const res = await publish(ssbClient, {
         type: EPISODE_TYPE, channel: ep.channelId, number: data.number !== undefined && num(data.number) ? num(data.number) : ep.number,

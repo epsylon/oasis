@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -212,7 +212,7 @@ const renderProductForm = (shopId, product = {}, isEdit = false, returnTo = "", 
       label(i18n.shopProductStock), br,
       input({ type: "number", name: "stock", min: "0", value: product.stock !== undefined ? product.stock : 1 }), br(), br(),
       label(i18n.blogImage || "Upload media (max-size: 75MB)"), br,
-      input({ type: "file", name: "image", accept: "image/*,video/*" }), br(), br(),
+      (isEdit && renderMediaLockNote(product)) || input({ type: "file", name: "image", accept: "image/*,video/*" }), br(), br(),
       input({ type: "hidden", name: "featured", value: "0" }),
       label(i18n.shopProductFeatured),
       input({ id: "featured", type: "checkbox", name: "featured", value: "1", class: "meme-checkbox", ...(product.featured ? { checked: true } : {}) }),
@@ -438,7 +438,8 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
       renderContentActions(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled)
+      h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled),
+      renderEditedChip(product.key, product.rootId)
     ),
     renderStarRating(product.opinions, safeArr(product.opinions_inhabitants).length),
     product.image ? renderMediaBlob(product.image, null, { class: "tribe-detail-image" }) : null,
@@ -641,10 +642,12 @@ exports.clearnetShopView = async (shop, products = []) => {
     const n = Number(v);
     return Number.isFinite(n) ? n.toFixed(6) : '0.000000';
   };
+  const shopHref = clearnetItemHref('shops', shop.title, shop.key);
   const productCards = (products || []).filter(p => Number(p.stock) > 0 || p.featured).map(prod => {
     const pImg = cnBlobUrl(prod.image);
     const pKind = /^\[video:/.test(String(prod.image || '')) ? 'video' : /^\[audio:/.test(String(prod.image || '')) ? 'audio' : 'img';
     return `<article class="cn-product">
+      <a class="cn-product-cover" href="${cnEscapeHtml(`${shopHref}/product/${encodeURIComponent(prod.rootId || prod.key)}`)}" aria-label="${cnEscapeHtml(prod.title || '')}"></a>
       ${pImg ? (pKind === 'img' ? `<img class="cn-product-img" src="${pImg}" alt="" loading="lazy"/>` : `<${pKind} class="cn-product-img" src="${pImg}" controls preload="metadata"></${pKind}>`) : ''}
       <h3 class="cn-product-title">${cnEscapeHtml(prod.title || '')}</h3>
       ${prod.description ? `<p class="cn-product-desc">${cnRichText(prod.description)}</p>` : ''}
@@ -663,7 +666,9 @@ exports.clearnetShopView = async (shop, products = []) => {
 .cn-shop-meta{display:flex;gap:12px;flex-wrap:wrap;background:var(--bg-sub);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:13px;color:var(--fg-soft)}
 .cn-shop-meta-item{display:inline-flex;align-items:center;gap:6px}
 .cn-products{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px}
-.cn-product{background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:16px;transition:border-color .15s ease}
+.cn-product{position:relative;background:var(--bg-elev);border:1px solid var(--border);border-radius:8px;padding:16px;transition:border-color .15s ease}
+.cn-product-cover{position:absolute;inset:0;z-index:2;border-radius:8px}
+.cn-product video,.cn-product audio{position:relative;z-index:3}
 .cn-product:hover{border-color:var(--fg)}
 .cn-product-img{width:100%;height:180px;object-fit:cover;border-radius:6px;margin-bottom:10px;background:#000;border:1px solid var(--border)}
 .cn-product-title{color:var(--fg);font-size:16px;margin:0 0 8px 0;font-weight:600}
@@ -693,6 +698,48 @@ exports.clearnetShopView = async (shop, products = []) => {
     ogTitle: shop.title || 'Oasis',
     ogDescription: shop.shortDescription || shop.description || '',
     ogImage: shopBlobUrl,
+    extraCss,
+    body,
+    hubFeedId: shop.author || null
+  });
+};
+
+exports.clearnetProductView = async (shop, product) => {
+  const shopHref = clearnetItemHref('shops', shop.title, shop.key);
+  const price = Number.isFinite(Number(product.price)) ? Number(product.price).toFixed(6) : '0.000000';
+  const media = cnBlobUrl(product.image);
+  const kind = /^\[video:/.test(String(product.image || '')) ? 'video' : /^\[audio:/.test(String(product.image || '')) ? 'audio' : 'img';
+  const mediaHtml = !media ? '' : kind === 'img'
+    ? `<img class="cn-product-page-img" src="${media}" alt="${cnEscapeHtml(product.title || '')}"/>`
+    : `<${kind} class="cn-product-page-img" src="${media}" controls preload="metadata"></${kind}>`;
+  const extraCss = `
+.cn-product-back{display:inline-block;margin-bottom:16px;color:var(--fg-soft);text-decoration:none}
+.cn-product-back:hover{color:var(--fg)}
+.cn-product-page{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+.cn-product-page-img{display:block;max-width:420px;width:100%;border:1px solid var(--border);border-radius:8px;background:#000}
+.cn-product-page-body{flex:1 1 320px;min-width:0}
+.cn-product-page-title{color:var(--fg);font-size:26px;font-weight:700;margin:0 0 12px 0}
+.cn-product-page-desc{color:var(--fg-soft);line-height:1.6;margin:0 0 16px 0}
+.cn-product-page-price{color:var(--fg);background:var(--bg-sub);border:1px solid var(--fg);display:inline-block;padding:6px 12px;border-radius:4px;font-weight:bold;font-size:16px}
+.cn-product-page-stock{color:var(--fg-dim);font-size:13px;margin:10px 0 0 0;text-transform:uppercase;letter-spacing:1px}
+`;
+  const body = `
+  <a class="cn-product-back" href="${cnEscapeHtml(shopHref)}">← ${cnEscapeHtml(shop.title || i18n.shopBackToShop)}</a>
+  <div class="cn-product-page">
+    ${mediaHtml}
+    <div class="cn-product-page-body">
+      <h1 class="cn-product-page-title">${cnEscapeHtml(product.title || '')}</h1>
+      ${product.description ? `<div class="cn-product-page-desc">${cnRichText(product.description)}</div>` : ''}
+      <span class="cn-product-page-price">${price} ECO</span>
+      <p class="cn-product-page-stock">${cnEscapeHtml(i18n.shopProductStock)}: ${Number(product.stock) || 0}</p>
+    </div>
+  </div>
+`;
+  return renderClearnetPage({
+    title: `${product.title || 'Product'} | ${shop.title || 'Shop'} | Oasis`,
+    ogTitle: product.title || 'Oasis',
+    ogDescription: product.description || '',
+    ogImage: kind === 'img' ? media : null,
     extraCss,
     body,
     hubFeedId: shop.author || null

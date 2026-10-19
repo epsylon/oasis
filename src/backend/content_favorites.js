@@ -94,15 +94,6 @@ const assertKind = (kind) => {
   return k;
 };
 
-const lastArg = (args, n) => args[args.length - n];
-
-const kindFromArgs = (args) => {
-  const k = String(lastArg(args, 1) || "").trim();
-  return assertKind(k);
-};
-
-const idFromArgs = (args) => String(lastArg(args, 1) || "").trim();
-
 exports.getFavoriteSet = async (kind) => {
   const k = assertKind(kind);
   const data = await readAll();
@@ -142,15 +133,4 @@ exports.removeFavorite = async (kind, id) =>
     await writeAll(data);
   });
 
-exports.getFavoritesSet = async (...args) => exports.getFavoriteSet(kindFromArgs(args));
-exports.addToFavorites = async (...args) => {
-  const kind = kindFromArgs(args.slice(0, -1));
-  const id = idFromArgs(args);
-  return exports.addFavorite(kind, id);
-};
-exports.removeFromFavorites = async (...args) => {
-  const kind = kindFromArgs(args.slice(0, -1));
-  const id = idFromArgs(args);
-  return exports.removeFavorite(kind, id);
-};
 exports.storePath = storePath;

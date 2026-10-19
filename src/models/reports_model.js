@@ -113,6 +113,7 @@ module.exports = ({ cooler }) => {
       for (const cf of (confirmsByRoot.get(root) || [])) confirmSet.add(cf.author);
 
       return {
+        root,
         contentTip,
         contentNode,
         opinions,
@@ -134,6 +135,7 @@ module.exports = ({ cooler }) => {
     return {
       id: node.key,
       ...c,
+      rootId: agg && agg.root ? agg.root : node.key,
       category: cat,
       status: normalizeStatus(c.status || 'OPEN'),
       images: normalizeImages(c.images && c.images.length ? c.images : c.image),

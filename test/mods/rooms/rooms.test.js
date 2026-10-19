@@ -608,6 +608,22 @@ describe('rooms: model', (t) => {
       eq(after.rid, before.rid, 'in the same meeting place');
     }
   });
+
+  t('a participant can leave a room and is no longer listed, while its creator cannot leave it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const r = await A.use('rooms').createRoom({ title: 'Porch', status: 'OPEN' });
+    B.setActor();
+    await B.use('rooms').addMemberToRoom(r.key, B.keypair.id);
+    ok((await B.use('rooms').getRoomById(r.key)).members.includes(B.keypair.id), 'B takes part');
+    await B.use('rooms').leaveRoomMembership(r.key);
+    notOk((await B.use('rooms').getRoomById(r.key)).members.includes(B.keypair.id), 'after leaving, B is no longer a participant');
+    A.setActor();
+    let refused = false;
+    try { await A.use('rooms').leaveRoomMembership(r.key); } catch (_) { refused = true; }
+    ok(refused, 'the creator cannot leave their own room');
+    ok((await A.use('rooms').getRoomById(r.key)).members.includes(A.keypair.id));
+  });
 });
 
 describe('rooms: versions republished by other inhabitants', (t) => {
@@ -726,6 +742,37 @@ describe('rooms: cameras in a room', (t) => {
       eq(refused, 'unavailable');
       speak(a.id, 8000);
       ok(await hears(b.id, 8000), 'voices still meet');
+    } finally { await closeAll(a, b, pub); }
+  });
+
+  t('a shared screen is seen by everyone in its own picture, takes the place of a playing video and ends with stop', async () => {
+    const screens = new Map(); const films = new Map();
+    const holder = (map, id, h) => { map.set(id, h); return { stop() { if (map.get(id) === h) map.delete(id); } }; };
+    phone.setScreenFactory((server) => ({ available: () => true, open: (h) => holder(screens, server.id, h) }));
+    phone.setStreamFactory((server) => ({ open: (file, h) => holder(films, server.id, h) }));
+    const pub = makeNode({ relayOpen: true });
+    const a = makeNode(); const b = makeNode();
+    phone.setScreenFactory(null); phone.setStreamFactory(null);
+    try {
+      await link(a, pub); await link(b, pub);
+      const room = roomFor(a, pub);
+      await asP(a.phone.roomJoin, room); await asP(b.phone.roomJoin, room);
+      ok(await waitFor(() => secure(a) && secure(b)));
+      ok(a.phone.roomState().screenAvailable, 'sharing the screen is offered');
+      await asP(a.phone.stream, { file: __filename, name: 'clip' });
+      ok(films.has(a.id), 'a video is playing');
+      await asP(a.phone.stream, { screen: true });
+      ok(!films.has(a.id) && screens.has(a.id), 'the screen takes the place of the video');
+      ok(a.phone.roomState().sharingScreen);
+      const frame = frameOf(120 * 1024, 4);
+      screens.get(a.id).onJpeg(frame);
+      ok(await waitFor(() => b.phone.roomState().peers[0].film), 'the others see the picture on');
+      const seen = watch(b, 'film:' + a.id);
+      ok(await waitFor(async () => { if (screens.has(a.id)) screens.get(a.id).onJpeg(frame); await sleep(400); return seen.length > 0; }), 'a frame arrives');
+      ok(seen[0].equals(frame), 'a large picture of the screen arrives whole');
+      await asP(a.phone.stream, { stop: true });
+      ok(!screens.has(a.id) && !a.phone.roomState().sharingScreen, 'stop ends it');
+      ok(await waitFor(() => !b.phone.roomState().peers[0].film), 'and the others see it go');
     } finally { await closeAll(a, b, pub); }
   });
 });

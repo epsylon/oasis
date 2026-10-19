@@ -164,3 +164,18 @@ describe('feed: versions republished by other inhabitants', (t) => {
     eq(feeds[0].value.content.opinions.interesting, 1);
   });
 });
+
+describe('feed: what a feed needs', (t) => {
+  t('a feed can be just a picture, but not nothing at all', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const feed = A.use('feed');
+    const picture = '![photo](&' + 'p'.repeat(43) + '=.sha256)';
+    const r = await feed.createFeed('', [], picture);
+    ok(r && r.key, 'a picture alone is published');
+    const listed = await feed.listFeeds('all');
+    ok(listed.some(f => String(f.value?.content?.text || f.content?.text || f.text || '').includes(picture)), 'and listed');
+    let refused = false;
+    try { await feed.createFeed('   ', [], null); } catch (e) { refused = /required/i.test(e.message); }
+    ok(refused, 'an empty feed is refused');
+  });
+});

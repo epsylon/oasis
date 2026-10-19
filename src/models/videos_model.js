@@ -1,4 +1,5 @@
 const pull = require("../server/node_modules/pull-stream");
+const opinionRules = require("../backend/opinion_categories");
 const { getConfig } = require("../configs/config-manager.js");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm, versionGroups } = require('../backend/dedupe');
@@ -171,7 +172,7 @@ module.exports = ({ cooler }) => {
       if (!oldMsg || oldMsg.content?.type !== "video") throw new Error("Video not found");
       if (oldMsg.content.author !== userId) throw new Error("Not the author");
       const aggV = await this.getVideoById(id, userId);
-      if (aggV && Object.keys(aggV.opinions || {}).some(k => (aggV.opinions[k] || 0) > 0)) throw new Error("Cannot edit video after it has received opinions.");
+      opinionRules.assertMediaKept(aggV, !!blobMarkdown);
 
       const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldMsg.content.tags);
       const blobId = blobMarkdown ? parseBlobId(blobMarkdown) : null;

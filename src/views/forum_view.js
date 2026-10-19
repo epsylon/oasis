@@ -4,7 +4,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -107,7 +107,6 @@ const renderForumForm = (draft = null) =>
       label(i18n.forumMessageLabel), br(),
       textarea({ maxlength: String(TEXT_CAP),
         name: 'text',
-        required: true,
         rows: 8,
         placeholder: i18n.forumMessagePlaceholder
       }, draft ? String(draft.text || '') : ''), br(), br(),
@@ -145,7 +144,7 @@ const renderThread = (nodes, level = 0, forumId, bestKey = null) => {
       ].filter(Boolean).join(' ');
 
       const commentBox = div(
-        { class: classList, id: `msg-${String(m.key || '').replace(/[^a-zA-Z0-9]/g, '')}` },
+        { class: classList, id: forumReplyAnchor(m.key) },
         div({ class: 'comment-header' },
           span({ class: 'date-link' },
             `${moment(m.timestamp).format('YYYY/MM/DD HH:mm')}`),
@@ -181,7 +180,6 @@ const renderThread = (nodes, level = 0, forumId, bestKey = null) => {
             textarea({ maxlength: String(TEXT_CAP),
               name: 'message',
               rows: 4,
-              required: true,
               placeholder: i18n.forumMessagePlaceholder,
               class: 'comment-textarea'
             }, draftFor(m.key)),
@@ -420,7 +418,6 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
           textarea({ maxlength: String(TEXT_CAP),
             name: 'message',
             rows: 8,
-            required: true,
             placeholder: i18n.forumMessagePlaceholder,
             class: 'new-message-textarea'
           }, draftFor(null)), br(),

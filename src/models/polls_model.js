@@ -3,6 +3,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, memoIndex } = require('./typed_log');
 const { versionGroups } = require('../backend/dedupe');
+const opinionRules = require('../backend/opinion_categories');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
@@ -338,6 +339,7 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
         if (!Number.isFinite(t)) throw new Error('Invalid deadline');
       }
       const question = data.question !== undefined ? clean(data.question) : poll.question;
+      opinionRules.assertMediaKept(poll, question !== poll.question || JSON.stringify(options) !== JSON.stringify(poll.options));
       const content = {
         type: POLL_TYPE,
         replaces: poll.tipId,

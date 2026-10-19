@@ -9,11 +9,14 @@ A PUB launched with `./oasis.sh server` does two things: it replicates the netwo
 | `/c` (alias `/clearnet`) | Global HUB: every CLEARNET item of every inhabitant the PUB replicates, with type filters, search, a row of inhabitant links and the public tribes. |
 | `/c/inhabitant/<feedId>` | One inhabitant's HUB: avatar, description, QR and the items that inhabitant put on the CLEARNET. |
 | `/c/tribe/<slug>` | The public page of a tribe: its cover, description and the tribe content its members opened to the CLEARNET. |
-| `/c/audios/<id>`, `/c/blog/<key>`, `/c/calendars/<id>`, `/c/campaigns/<id>`, `/c/documents/<id>`, `/c/emergencies/<id>`, `/c/events/<id>`, `/c/feed/<id>`, `/c/files/<id>`, `/c/housing/<id>`, `/c/images/<id>`, `/c/jobs/<id>`, `/c/maps/<id>`, `/c/market/<id>`, `/c/podcasts/<id>`, `/c/projects/<id>`, `/c/rooms/<id>`, `/c/school/<id>`, `/c/shops/<id>`, `/c/torrents/<id>`, `/c/videos/<id>`, `/c/wiki/<id>` | Detail pages, one per module. Links use a readable slug built from the title; the raw id works too. |
+| `/c/audios/<id>`, `/c/blog/<key>`, `/c/bookmarks/<id>`, `/c/calendars/<id>`, `/c/campaigns/<id>`, `/c/documents/<id>`, `/c/emergencies/<id>`, `/c/events/<id>`, `/c/feed/<id>`, `/c/files/<id>`, `/c/housing/<id>`, `/c/images/<id>`, `/c/jobs/<id>`, `/c/maps/<id>`, `/c/market/<id>`, `/c/podcasts/<id>`, `/c/projects/<id>`, `/c/rooms/<id>`, `/c/school/<id>`, `/c/shops/<id>`, `/c/torrents/<id>`, `/c/videos/<id>`, `/c/wiki/<id>` | Detail pages, one per module. Links use a readable slug built from the title; the raw id works too. |
 | `/c/blob/<blobId>` | Media files referenced by the pages above. |
 | `/c/qr/<feedId>` | The QR code of an inhabitant's HUB. |
 | `/c/sitemap.xml` | Every public page: the HUB, the public tribes, each inhabitant's HUB and each item. |
 | `/c/rss/<module>` | An RSS feed of the latest CLEARNET items of one module (for example `/c/rss/blog`, `/c/rss/podcasts`). |
+| `/c/pdf?src=/c/blob/<id>` | The PDF viewer for a CLEARNET document: pages drawn by the PUB, zoom, rotation, full screen and download. Only PDFs that are public can be opened. |
+| `/c/rss` | An RSS feed of the latest CLEARNET items of every module. Every page links its feed from the RSS icon in the header. |
+| `/c/podcasts/<id>/rss` | A podcast feed of one channel, with each episode attached, to subscribe from any podcast app. |
 
 Only items placed on the CLEARNET are ever listed or served. Nothing else of the replicated log is exposed through the HUB.
 

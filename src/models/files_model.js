@@ -1,4 +1,5 @@
 const pull = require("../server/node_modules/pull-stream");
+const opinionRules = require("../backend/opinion_categories");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { readTyped, memoIndex } = require("./typed_log");
@@ -19,6 +20,7 @@ const fileExtra = (extra) => {
   const out = {};
   if (extra.mime) out.mime = String(extra.mime);
   if (extra.fileName) out.fileName = String(extra.fileName);
+  if (typeof extra.license === "string" && extra.license) out.license = extra.license;
   if (typeof extra.torrentKey === "string" && extra.torrentKey.startsWith("%")) out.torrentKey = extra.torrentKey;
   if (typeof extra.torrentUrl === "string" && extra.torrentUrl.startsWith("&")) out.torrentUrl = extra.torrentUrl;
   if (extra.cipher && typeof extra.cipher === "object" && extra.cipher.key && extra.cipher.manifestBlobId) out.cipher = { v: Number(extra.cipher.v) || 1, key: String(extra.cipher.key), manifestBlobId: String(extra.cipher.manifestBlobId), chunkCount: Number(extra.cipher.chunkCount) || 0 };
@@ -141,6 +143,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       size: c.size || 0,
       mime: undec ? "" : (c.mime || ""),
       fileName: undec ? "" : (c.fileName || ""),
+      license: undec ? "" : (c.license || ""),
       torrentKey: undec ? "" : (typeof c.torrentKey === "string" && c.torrentKey.startsWith("%") ? c.torrentKey : ""),
       torrentUrl: undec ? "" : (typeof c.torrentUrl === "string" && c.torrentUrl.startsWith("&") ? c.torrentUrl : ""),
       cipher: undec ? null : (c.cipher && typeof c.cipher === "object" && typeof c.cipher.key === "string" && typeof c.cipher.manifestBlobId === "string" ? { v: Number(c.cipher.v) || 1, key: c.cipher.key, manifestBlobId: c.cipher.manifestBlobId, chunkCount: Number(c.cipher.chunkCount) || 0 } : null),
@@ -241,7 +244,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       assertReadable(oldDec, "File");
       if (oldMsg.author !== userId) throw new Error("Not the author");
       const aggFile = await this.getFileById(id, userId);
-      if (aggFile && Object.keys(aggFile.opinions || {}).some(k => (aggFile.opinions[k] || 0) > 0)) throw new Error("Cannot edit file after it has received opinions.");
+      opinionRules.assertMediaKept(aggFile, !!blobMarkdown);
 
       const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldDec.tags);
       const blobId = blobMarkdown ? parseBlobId(blobMarkdown) : null;
@@ -255,7 +258,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         title: title !== undefined ? title || "" : oldDec.title || "",
         description: description !== undefined ? description || "" : oldDec.description || "",
         size: extra && Number(extra.size) > 0 ? Number(extra.size) : (oldDec.size || 0),
-        ...(extra ? fileExtra(extra) : fileExtra(oldDec)),
+        ...fileExtra(blobId ? { license: oldDec.license, ...(extra || {}) } : { ...oldDec, ...(extra || {}) }),
         opinions: oldDec.opinions || {},
         opinions_inhabitants: oldDec.opinions_inhabitants || [],
         author: oldDec.author || userId,

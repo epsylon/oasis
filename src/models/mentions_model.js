@@ -1,6 +1,7 @@
 const fs = require('fs');
 const pull = require('../server/node_modules/pull-stream');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
+const { isComment } = require('./comments_model');
 
 const SEEN_FILE = 'oasis-mentions-seen';
 
@@ -133,7 +134,7 @@ module.exports = ({ cooler }) => {
           id: m.key,
           key: m.key,
           author: v.author,
-          type: c.type,
+          type: isComment(c) ? 'comment' : c.type,
           title: titleOf(c),
           text: snippet(c),
           content: c,

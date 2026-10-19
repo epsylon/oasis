@@ -19,7 +19,8 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { renderDownloadButton } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
@@ -64,20 +65,17 @@ const renderVideoPlayer = (videoObj) =>
 const renderVideoOwnerActions = (filter, videoObj, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   const isAuthor = String(videoObj.author) === String(userId);
-  const hasOpinions = Object.keys(videoObj.opinions || {}).length > 0;
 
   if (!isAuthor) return [];
 
   const items = [];
-  if (!hasOpinions) {
-    items.push(
-      form(
-        { method: "GET", action: `/videos/edit/${encodeURIComponent(videoObj.key)}` },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        button({ class: "update-btn", type: "submit" }, i18n.videoUpdateButton)
-      )
-    );
-  }
+  items.push(
+    form(
+      { method: "GET", action: `/videos/edit/${encodeURIComponent(videoObj.key)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ class: "update-btn", type: "submit" }, i18n.videoUpdateButton)
+    )
+  );
 
   return items;
 };
@@ -165,7 +163,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       span(i18n.videoFileLabel),
       br(),
-      input({ type: "file", name: "video", required: filter !== "edit" }),
+      (filter === "edit" && renderMediaLockNote(videoToEdit)) || input({ type: "file", name: "video", accept: "video/*", required: filter !== "edit" }),
       br(),
       br(),
       span(i18n.videoTitleLabel),
@@ -321,7 +319,8 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       title ? h2({ class: "tribe-card-title" }, title) : null,
       renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('videos', videoObj.title, videoObj.key) : null),
       isAuthor ? renderClearnetSwitch('videos', videoObj.rootId || videoObj.key, isClearnet) : null,
-      renderLicenseChip(videoObj.license)
+      renderLicenseChip(videoObj.license),
+      renderEditedChip(videoObj.key, videoObj.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(videoObj.description)
@@ -335,6 +334,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   const videoMain = div({ class: "tribe-main" },
     detailActions,
     renderVideoPlayer(videoObj),
+    videoObj?.url ? renderDownloadButton(blobUrlOf(videoObj.url), videoObj.title || "") : null,
     (() => {
       const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
       const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
@@ -370,9 +370,10 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
         form(
           { method: "GET", action: "/videos", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),          ...(mediaChip("favorites") ? [button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase())] : []),
+          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.videoFilterFavorites).toUpperCase()
           )] : []),

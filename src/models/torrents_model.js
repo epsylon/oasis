@@ -1,4 +1,5 @@
 const pull = require("../server/node_modules/pull-stream");
+const opinionRules = require("../backend/opinion_categories");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { readTyped, memoIndex } = require("./typed_log");
@@ -28,6 +29,13 @@ const parseBlobId = (blobMarkdown) => {
 
 const voteSum = (opinions = {}) =>
   Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+
+const torrentMeta = (meta) => {
+  const out = {};
+  if (meta && typeof meta.license === "string" && meta.license) out.license = meta.license;
+  if (meta && /^[0-9a-f]{40}$/.test(String(meta.infoHash || ""))) out.infoHash = meta.infoHash;
+  return out;
+};
 
 module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   let ssb;
@@ -134,6 +142,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       size: c.size || 0,
       source: undec ? "" : (typeof c.source === "string" && c.source.startsWith("&") ? c.source : ""),
       sourceName: undec ? "" : (c.sourceName || ""),
+      license: undec ? "" : (c.license || ""),
+      infoHash: undec ? "" : (/^[0-9a-f]{40}$/.test(String(c.infoHash || "")) ? c.infoHash : ""),
       cipher: undec ? null : (c.cipher && typeof c.cipher === "object" && typeof c.cipher.key === "string" && typeof c.cipher.manifestBlobId === "string" ? { v: Number(c.cipher.v) || 1, key: c.cipher.key, manifestBlobId: c.cipher.manifestBlobId, chunkCount: Number(c.cipher.chunkCount) || 0 } : null),
       sourceMime: undec ? "" : (c.sourceMime || ""),
       opinions,
@@ -169,7 +179,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       return root;
     },
 
-    async createTorrent(blobMarkdown, tagsRaw, title, description, size, tribeId, source = null) {
+    async createTorrent(blobMarkdown, tagsRaw, title, description, size, tribeId, source = null, meta = {}) {
       const ssbClient = await openSsb();
       const blobId = parseBlobId(blobMarkdown);
       const tags = normalizeTags(tagsRaw) || [];
@@ -191,7 +201,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         ...(source && typeof source.source === "string" && source.source.startsWith("&")
           ? { source: source.source, sourceName: String(source.sourceName || ""), sourceMime: String(source.sourceMime || "") }
           : {}),
-        ...cipherField(source && source.cipher)
+        ...cipherField(source && source.cipher),
+        ...torrentMeta(meta)
       };
 
       content = await encryptIfTribe(content);
@@ -213,7 +224,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       assertReadable(oldDec, "Torrent");
       if (oldMsg.author !== userId) throw new Error("Not the author");
       const aggTorrent = await this.getTorrentById(id, userId);
-      if (aggTorrent && Object.keys(aggTorrent.opinions || {}).some(k => (aggTorrent.opinions[k] || 0) > 0)) throw new Error("Cannot edit torrent after it has received opinions.");
+      opinionRules.assertMediaKept(aggTorrent, !!blobMarkdown);
 
       const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldDec.tags);
       const blobId = blobMarkdown ? parseBlobId(blobMarkdown) : null;
@@ -227,7 +238,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         tags,
         title: title !== undefined ? title || "" : oldDec.title || "",
         description: description !== undefined ? description || "" : oldDec.description || "",
-        size: oldDec.size || 0,
+        size: blobId && extra && Number(extra.size) > 0 ? Number(extra.size) : (oldDec.size || 0),
+        ...torrentMeta({ license: oldDec.license, infoHash: blobId ? "" : oldDec.infoHash, ...(extra || {}) }),
         opinions: oldDec.opinions || {},
         opinions_inhabitants: oldDec.opinions_inhabitants || [],
         author: oldDec.author || userId,
@@ -357,3 +369,99 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     }
   };
 };
+
+const BENCODE_MAX_DEPTH = 64;
+const TORRENT_FILES_SHOWN = 50;
+const MAGNET_TRACKERS_MAX = 8;
+const MAGNET_SEEDS_MAX = 4;
+const TORRENT_LINK_RE = /^(https?|udp|wss?):\/\//i;
+
+const decodeBencode = (buf) => {
+  let pos = 0;
+  let infoRange = null;
+  const fail = () => { throw new Error("Invalid torrent"); };
+  const parse = (depth) => {
+    if (depth > BENCODE_MAX_DEPTH || pos >= buf.length) fail();
+    const ch = buf[pos];
+    if (ch === 0x69) {
+      const end = buf.indexOf(0x65, pos);
+      if (end < 0) fail();
+      const n = Number(buf.toString("latin1", pos + 1, end));
+      pos = end + 1;
+      return Number.isFinite(n) ? n : fail();
+    }
+    if (ch === 0x6c) {
+      pos++;
+      const out = [];
+      while (buf[pos] !== 0x65) out.push(parse(depth + 1));
+      pos++;
+      return out;
+    }
+    if (ch === 0x64) {
+      pos++;
+      const out = {};
+      while (buf[pos] !== 0x65) {
+        const key = parse(depth + 1);
+        if (!Buffer.isBuffer(key)) fail();
+        const start = pos;
+        const name = key.toString("latin1");
+        out[name] = parse(depth + 1);
+        if (depth === 0 && name === "info") infoRange = [start, pos];
+      }
+      pos++;
+      return out;
+    }
+    if (ch >= 0x30 && ch <= 0x39) {
+      const colon = buf.indexOf(0x3a, pos);
+      if (colon < 0) fail();
+      const len = Number(buf.toString("latin1", pos, colon));
+      const start = colon + 1;
+      if (!Number.isInteger(len) || len < 0 || start + len > buf.length) fail();
+      pos = start + len;
+      return buf.subarray(start, pos);
+    }
+    return fail();
+  };
+  return { value: parse(0), infoRange };
+};
+
+const text = (v) => (Buffer.isBuffer(v) ? v.toString("utf8") : "");
+
+const parseTorrent = (buf) => {
+  const { value, infoRange } = decodeBencode(Buffer.from(buf));
+  const info = value && value.info;
+  if (!info || typeof info !== "object" || !infoRange) throw new Error("Invalid torrent");
+  const crypto = require("crypto");
+  const raw = Buffer.from(buf).subarray(infoRange[0], infoRange[1]);
+  const v2Only = !info.pieces && info["file tree"];
+  const infoHash = crypto.createHash(v2Only ? "sha256" : "sha1").update(raw).digest("hex");
+  const name = text(info["name.utf-8"] || info.name);
+  const files = Array.isArray(info.files)
+    ? info.files.map(f => ({ path: (Array.isArray(f["path.utf-8"] || f.path) ? (f["path.utf-8"] || f.path) : []).map(text).join("/"), length: Number(f.length) || 0 }))
+    : [{ path: name, length: Number(info.length) || 0 }];
+  const announce = [text(value.announce), ...(Array.isArray(value["announce-list"]) ? value["announce-list"].flat().map(text) : [])];
+  const seeds = Array.isArray(value["url-list"]) ? value["url-list"].map(text) : [text(value["url-list"])];
+  return {
+    infoHash,
+    v2: !!v2Only,
+    name,
+    length: files.reduce((sum, f) => sum + f.length, 0),
+    fileCount: files.length,
+    files: files.slice(0, TORRENT_FILES_SHOWN),
+    trackers: [...new Set(announce.filter(t => TORRENT_LINK_RE.test(t)))].slice(0, MAGNET_TRACKERS_MAX),
+    webSeeds: [...new Set(seeds.filter(u => /^https?:\/\//i.test(u)))].slice(0, MAGNET_SEEDS_MAX)
+  };
+};
+
+const magnetFor = (t) => {
+  if (!t || !t.infoHash) return "";
+  const params = [t.v2 ? `xt=urn:btmh:1220${t.infoHash}` : `xt=urn:btih:${t.infoHash}`];
+  if (t.name) params.push(`dn=${encodeURIComponent(t.name)}`);
+  if (t.length) params.push(`xl=${t.length}`);
+  for (const tr of t.trackers || []) params.push(`tr=${encodeURIComponent(tr)}`);
+  for (const ws of t.webSeeds || []) params.push(`ws=${encodeURIComponent(ws)}`);
+  return `magnet:?${params.join("&")}`;
+};
+
+module.exports.parseTorrent = parseTorrent;
+module.exports.magnetFor = magnetFor;

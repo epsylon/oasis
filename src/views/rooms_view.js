@@ -220,6 +220,13 @@ const renderLiveControls = (room, live) => div({ class: "room-live-controls" },
           button({ type: "submit", class: "tribe-action-btn room-cam-btn-on room-stream-go", title: i18n.roomStreamGo }, "▶")
         )
       : null,
+  live.streaming == null && live.screenAvailable
+    ? form({ method: "POST", action: "/rooms/stream", class: "phone-action-form" },
+        input({ type: "hidden", name: "screen", value: "1" }),
+        input({ type: "hidden", name: "returnTo", value: `${roomHref(room)}#room-video` }),
+        button({ type: "submit", class: "tribe-action-btn", title: i18n.roomScreenWarning }, String(i18n.roomScreen).toUpperCase())
+      )
+    : null,
   form({ method: "POST", action: "/rooms/hand", class: "phone-action-form" },
     input({ type: "hidden", name: "hand", value: live.hand ? "0" : "1" }),
     input({ type: "hidden", name: "returnTo", value: roomHref(room) }),
@@ -288,7 +295,7 @@ const renderLivePanel = (room, live, occ, canJoin = false) => {
       you ? null : silenceForm(id, silenced)
     )
     return div({ class: "phone-call-panel room-live-panel" },
-      head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), isPublic ? renderReachChip(true, i18n, roomClearnetHref(room)) : null, renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null, live.streaming != null ? span({ class: "room-stream-chip", title: live.streaming || "" }, "▶ " + String(live.streaming || i18n.roomStreaming)) : null), renderLiveControls(room, live)),
+      head(div({ class: "card-chips-row" }, renderEncryptedChip(i18n), isPublic ? renderReachChip(true, i18n, roomClearnetHref(room)) : null, renderLiveChip({ count: live.count, max: live.max }), live.joinedAt ? span({ class: "phone-call-clock" }, liveClock(live.joinedAt)) : null, live.sharingScreen ? span({ class: "room-stream-chip", title: i18n.roomScreenWarning }, "🖥 " + String(i18n.roomScreenSharing)) : live.streaming != null ? span({ class: "room-stream-chip", title: live.streaming || "" }, "▶ " + String(live.streaming || i18n.roomStreaming)) : null), renderLiveControls(room, live)),
       live.grid
         ? (safeArr(live.gridOrder).length
             ? div({ id: "room-video", class: safeArr(live.gridOrder).length === 1 ? "video-grid video-grid-one video-grid-solo" : "video-grid video-grid-one" },
@@ -391,6 +398,13 @@ exports.singleRoomView = async (room, params = {}) => {
         )
       : null,
     inviteActions.length ? div({ class: "tribe-side-actions" }, ...inviteActions) : null,
+    !isAuthor && !room.tribeId && safeArr(room.members).includes(userId)
+      ? div({ class: "tribe-side-actions" },
+          form({ method: "POST", action: `/rooms/leave/${encodeURIComponent(room.rootId)}` },
+            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeLeaveButton)
+          )
+        )
+      : null,
     isAuthor && !room.isClosed
       ? div({ class: "tribe-side-actions housing-status-row" },
           span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, input, span } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged } = require("./main_views");
-const { getViewDetailsAction } = require("./activity_view");
+const { getViewDetailsAction, commentHref, commentLabel } = require("./activity_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -12,17 +12,19 @@ const excerpt = (text, max = 320) => {
   return s.length > max ? s.slice(0, max) + "…" : s;
 };
 
-const typeLabel = (type) => i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)] || String(type || '').toUpperCase();
+const typeLabel = (type) => (type === 'comment' ? i18n.comment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)]) || String(type || '').toUpperCase();
 
 const renderMentionCard = (item, readKeys, params = {}) => {
-  const href = getViewDetailsAction(item.type, { id: item.id, key: item.id, author: item.author, content: item.content });
+  const href = item.type === 'comment'
+    ? commentHref(item.comment || { rootId: item.content && item.content.root }, item.id)
+    : getViewDetailsAction(item.type, { id: item.id, key: item.id, author: item.author, content: item.content });
   const isOwn = String(item.author) === String(userId);
   const read = readKeys.has(String(item.key));
   return div({ class: "trending-card mention-card" + (isOwn ? " own-content" : "") },
     div({ class: "card-header activity-card-header" },
       div({ class: 'card-chips-row' },
         span({ class: 'pm-exposition-chip pm-exposition-whole' },
-          span({ class: 'pm-exposition-text' }, typeLabel(item.type))
+          span({ class: 'pm-exposition-text' }, item.comment ? String(commentLabel(item.comment)).toUpperCase() : typeLabel(item.type))
         ),
         read ? null : span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip))
       ),

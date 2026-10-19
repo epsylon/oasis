@@ -2,12 +2,7 @@ const crypto = require('crypto');
 const pull = require('../../src/server/node_modules/pull-stream');
 const ssbKeys = require('../../src/server/node_modules/ssb-keys');
 
-let pullPushable;
-try {
-  pullPushable = require('../../src/server/node_modules/pull-pushable');
-} catch (_) {
-  try { pullPushable = require('../../src/server/node_modules/@krakenslab/pull-pushable'); } catch (__) {}
-}
+const pullPushable = require('../../src/server/node_modules/pull-pushable');
 
 const generateMsgKey = () => '%' + crypto.randomBytes(32).toString('base64').replace(/=+$/, '') + '.sha256';
 
@@ -79,10 +74,6 @@ function makeNode(network, keypair, opts = {}) {
       if (reverse) prepared = prepared.slice().reverse();
       if (limit) prepared = prepared.slice(0, limit);
       if (!live) return pull.values(prepared);
-      if (!pullPushable) {
-        const initial = pull.values(prepared);
-        return initial;
-      }
       const p = pullPushable();
       for (const m of prepared) p.push(m);
       const off = network.listen(m => p.push(m));

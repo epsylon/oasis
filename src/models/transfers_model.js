@@ -175,7 +175,7 @@ module.exports = ({ cooler }) => {
       for (const cf of rootConfirms) { if (cf.author === best.c.to) confirmedBy.add(cf.author) }
       for (const op of (opinionsByRoot.get(root) || [])) { if (!opinionSet.has(op.author)) { opinionSet.add(op.author); opinions[op.category] = (opinions[op.category] || 0) + 1 } }
       const ubiPayerTrusted = !!best.author && (best.author === defaultPub || !!(claimedPubs.get(best.c.to) && claimedPubs.get(best.c.to).has(best.author)))
-      return { contentTip, best, confirmedBy: [...confirmedBy], opinions, opinions_inhabitants: [...opinionSet], tombstoned: tomb.has(contentTip) || tomb.has(best.key), ubiPayerTrusted }
+      return { root, contentTip, best, confirmedBy: [...confirmedBy], opinions, opinions_inhabitants: [...opinionSet], tombstoned: tomb.has(contentTip) || tomb.has(best.key), ubiPayerTrusted }
     }
 
     return { tomb, nodes, parent, child, rootOf, tipByRoot, resolveGroup }
@@ -204,6 +204,7 @@ module.exports = ({ cooler }) => {
     const opinions_inhabitants = agg ? agg.opinions_inhabitants : (Array.isArray(c.opinions_inhabitants) ? c.opinions_inhabitants : [])
     return {
       id: node.key,
+      rootId: agg && agg.root ? agg.root : node.key,
       author: node.author,
       from: c.from,
       to: c.to,
@@ -289,7 +290,6 @@ module.exports = ({ cooler }) => {
       const aggU = gU ? buildTransfer(gU.best, gU) : buildTransfer({ key: tipId, c: current })
       const currentStatus = aggU.status
 
-      if (Object.keys(aggU.opinions || {}).some(k => (aggU.opinions[k] || 0) > 0)) throw new Error("Cannot edit transfer after it has received opinions.")
       if (current.from !== userId) throw new Error("Not the author")
       if (currentStatus !== "UNCONFIRMED") throw new Error("Can only edit unconfirmed")
 
@@ -300,6 +300,7 @@ module.exports = ({ cooler }) => {
 
       const num = parseNum(amount)
       if (!Number.isFinite(num) || num <= 0) throw new Error("Amount must be positive")
+      categories.assertMediaKept(aggU, to !== current.to || num.toFixed(6) !== Number(current.amount || 0).toFixed(6))
 
       const dl = moment(deadline, moment.ISO_8601, true)
       if (!dl.isValid() || dl.isBefore(moment())) throw new Error("Deadline must be in the future")

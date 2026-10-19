@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
@@ -122,6 +122,8 @@ const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls") => {
 const renderCreateForm = (poll = null, params = {}) => {
   const isEdit = !!poll;
   const action = isEdit ? `/polls/update/${encodeURIComponent(poll.id)}` : "/polls/create";
+  const lock = isEdit ? renderMediaLockNote(poll) : null;
+  const ro = lock ? { readonly: true } : {};
   return section(
     params.spreadWarning || null,
     div({ class: "div-center audio-form" },
@@ -129,7 +131,7 @@ const renderCreateForm = (poll = null, params = {}) => {
       form({ method: "POST", action },
         label(i18n.pollQuestion),
         br(),
-        input({ type: "text", name: "question", required: true, maxlength: "300", value: isEdit ? poll.question : "", placeholder: i18n.pollQuestionPlaceholder }),
+        input({ type: "text", name: "question", required: true, maxlength: "300", value: isEdit ? poll.question : "", placeholder: i18n.pollQuestionPlaceholder, ...ro }),
         br(), br(),
         label(i18n.pollOptions),
         br(),
@@ -137,8 +139,10 @@ const renderCreateForm = (poll = null, params = {}) => {
           name: "options",
           rows: String(MAX_OPTIONS),
           required: true,
-          maxlength: String(MAX_OPTIONS * (MAX_OPTION_LENGTH + 1))
+          maxlength: String(MAX_OPTIONS * (MAX_OPTION_LENGTH + 1)),
+          ...ro
         }, isEdit ? poll.options.join("\n") : ""),
+        lock,
         br(),
         div({ class: "poll-switch" },
           input({ type: "hidden", name: "anonymous", value: "0" }),
@@ -276,7 +280,7 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
     div({ class: "card-header activity-card-header" },
       renderContentActions(poll.id, href, { spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined })
     ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question)),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question), renderEditedChip(poll.tipId, poll.rootId)),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(poll.createdAt, poll.author)),
     tagsNode,

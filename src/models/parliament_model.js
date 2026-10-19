@@ -259,7 +259,7 @@ module.exports = ({ cooler, services = {} }) => {
       if ((n.c.replaces && nodes.has(n.c.replaces)) || !settle(n.key)) continue;
       const tip = tipOf(n.key);
       if (tomb.has(tip)) continue;
-      items.push({ ...nodes.get(tip).c, id: tip });
+      items.push({ ...nodes.get(tip).c, id: tip, rootId: n.key });
     }
     const resolve = (k) => (nodes.has(k) && settle(k) ? tipOf(rootOf(k)) : null);
     const authorOf = (k) => (nodes.has(k) ? nodes.get(k).author : null);

@@ -74,7 +74,7 @@ async function checkForUpdate() {
   await updater.getRemoteVersion();
 }
 
-async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, httpHost = 'localhost', offline = false, isPublic = false) {
+async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, httpHost = 'localhost', isPublic = false) {
   if (printed) return;
   printed = true;
 

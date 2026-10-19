@@ -1,7 +1,8 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow, renderOpinionsVoting, paged, renderEngagement } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect, renderTribeOriginChip } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
+const { renderCommentsSection } = require("./comments_view");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -359,6 +360,10 @@ exports.wikiPageView = async (page, params = {}) => {
         page.linkedPages && page.linkedPages.length
           ? ul(...page.linkedPages.map(b => li(a({ href: pageHref(b.tribeId ? b.id : b.slug, b.tribeId) }, b.title))))
           : p(i18n.wikiNoLinkedPages)
+      ),
+      renderEngagement(page.id,
+        params.opinions ? renderOpinionsVoting('/wiki/opinions', page.id, params.opinions.opinions, `/wiki/${encodeURIComponent(page.id)}`, params.opinions.opinions_inhabitants) : null,
+        Array.isArray(params.comments) ? renderCommentsSection({ action: `/wiki/${encodeURIComponent(page.id)}/comments`, comments: params.comments, returnTo: `/wiki/${encodeURIComponent(page.id)}` }) : null
       )
     )
   );

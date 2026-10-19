@@ -92,7 +92,8 @@ const FACTORIES = {
   blogs: '../../src/models/blog_model',
   polls: '../../src/models/polls_model',
   data: '../../src/models/data_model',
-  mentions: '../../src/models/mentions_model'
+  mentions: '../../src/models/mentions_model',
+  comments: '../../src/models/comments_model'
 };
 
 function loadFactory(name) {
@@ -199,6 +200,10 @@ function makePeer(network, keypair) {
       deps = baseDeps;
     } else if (name === 'forum') {
       deps = { cooler, isPublic: false };
+    } else if (name === 'comments') {
+      const publish = (content) => new Promise((res, rej) => node.publish({ type: 'post', ...content }, (e, m) => e ? rej(e) : res(m)));
+      const topicComments = async (root) => network.log.filter(m => m.value && m.value.content && m.value.content.root === root);
+      deps = { cooler, post: { publish, topicComments } };
     } else {
       deps = baseDeps;
     }

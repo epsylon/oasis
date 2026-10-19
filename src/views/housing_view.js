@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
-const { clearnetItemHref, template, i18n, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows, renderEditedChip } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderMediaThumb, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -473,7 +473,8 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
       renderContentActions(item.id, `/housing/${encodeURIComponent(item.id)}`, { spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, deleteAction: isAuthor ? contentDeleteAction("housing", item.id) : null })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, safeText(item.title) || i18n.housingTitle)
+      h2({ class: "tribe-card-title" }, safeText(item.title) || i18n.housingTitle),
+      renderEditedChip(item.id, item.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     renderStarRating(item.opinions, voters.length),

@@ -1,8 +1,8 @@
 const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td, progress, strong } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require('./clearnet_view');
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged , formatSize, renderMediaLockNote, renderEditedChip } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -35,9 +35,8 @@ const renderTags = (tags) => {
 const renderFileOwnerActions = (filter, fileObj, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   const isAuthor = String(fileObj.author) === String(userId);
-  const hasOpinions = Object.keys(fileObj.opinions || {}).length > 0;
 
-  if (!isAuthor || hasOpinions) return [];
+  if (!isAuthor) return [];
 
   return [
     form(
@@ -62,13 +61,6 @@ const blobSha256Hex = (blobId) => {
   try { return Buffer.from(m[1], "base64").toString("hex"); } catch (_) { return ""; }
 };
 
-const formatSize = (bytes) => {
-  const n = Number(bytes) || 0;
-  if (n === 0) return "—";
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
-  return (n / (1024 * 1024)).toFixed(1) + " MB";
-};
 
 const spreadInfoOf = (t, spreadMap) => (spreadMap instanceof Map && spreadMap.get(t.key)) || null;
 const renderFileSeeds = (t, spreadMap) => {
@@ -140,6 +132,7 @@ const renderNextcloudForm = (returnTo) => div(
     input({ type: "text", name: "tags", placeholder: i18n.fileTagsPlaceholder }),
     br(),
     br(),
+    ...renderLicenseSelect(undefined, i18n),
     renderClearnetSelector(false, i18n), br(),
     button({ type: "submit" }, i18n.nextcloudUploadButton)
   )
@@ -162,7 +155,7 @@ const renderFileForm = (filter, fileId, fileToEdit, params = {}) => {
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       span(i18n.fileFileLabel),
       br(),
-      input({ type: "file", name: "file", required: filter !== "edit" }),
+      (filter === "edit" && renderMediaLockNote(fileToEdit)) || input({ type: "file", name: "file", required: filter !== "edit" }),
       br(),
       br(),
       span(i18n.fileTitleLabel),
@@ -183,6 +176,7 @@ const renderFileForm = (filter, fileId, fileToEdit, params = {}) => {
       }),
       br(),
       br(),
+      ...renderLicenseSelect(fileToEdit?.license, i18n),
       ...(clearnetAllowed ? [renderClearnetSelector(filter === "edit" ? !!fileToEdit?.clearnet : false, i18n), br()] : []),
       button({ type: "submit" }, filter === "edit" ? i18n.fileUpdateButton : i18n.fileCreateButton)
     )
@@ -316,7 +310,9 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
       title ? h2({ class: "tribe-card-title" }, title) : null,
       fileObj.tribeId && fileObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
       clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('files', fileObj.title, fileObj.key) : null) : null,
-      clearnetAllowed && isAuthor ? renderClearnetSwitch('files', fileObj.rootId || fileObj.key, isClearnet) : null
+      fileObj.tribeId ? null : renderLicenseChip(fileObj.license),
+      clearnetAllowed && isAuthor ? renderClearnetSwitch('files', fileObj.rootId || fileObj.key, isClearnet) : null,
+      renderEditedChip(fileObj.key, fileObj.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(fileObj.description)

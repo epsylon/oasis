@@ -18,7 +18,8 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { renderDownloadButton } = require("./gallery_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -69,20 +70,17 @@ const renderAudioPlayer = (audioObj, opts = {}) =>
 const renderAudioOwnerActions = (filter, audioObj, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   const isAuthor = String(audioObj.author) === String(userId);
-  const hasOpinions = Object.keys(audioObj.opinions || {}).length > 0;
 
   if (!isAuthor) return [];
 
   const items = [];
-  if (!hasOpinions) {
-    items.push(
-      form(
-        { method: "GET", action: `/audios/edit/${encodeURIComponent(audioObj.key)}` },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        button({ class: "update-btn", type: "submit" }, i18n.audioUpdateButton)
-      )
-    );
-  }
+  items.push(
+    form(
+      { method: "GET", action: `/audios/edit/${encodeURIComponent(audioObj.key)}` },
+      input({ type: "hidden", name: "returnTo", value: returnTo }),
+      button({ class: "update-btn", type: "submit" }, i18n.audioUpdateButton)
+    )
+  );
 
   return items;
 };
@@ -169,7 +167,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       span(i18n.audioFileLabel),
       br(),
-      input({ type: "file", name: "audio", accept: "audio/*", required: filter !== "edit" }),
+      (filter === "edit" && renderMediaLockNote(audioToEdit)) || input({ type: "file", name: "audio", accept: "audio/*", required: filter !== "edit" }),
       br(),
       br(),
       span(i18n.audioTitleLabel),
@@ -331,7 +329,8 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       title ? h2({ class: "tribe-card-title" }, title) : null,
       renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('audios', audioObj.title, audioObj.key) : null),
       isAuthor ? renderClearnetSwitch('audios', audioObj.rootId || audioObj.key, isClearnet) : null,
-      renderLicenseChip(audioObj.license)
+      renderLicenseChip(audioObj.license),
+      renderEditedChip(audioObj.key, audioObj.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(audioObj.description)
@@ -345,6 +344,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   const audioMain = div({ class: "tribe-main" },
     detailActions,
     renderAudioPlayer(audioObj),
+    audioObj?.url ? renderDownloadButton(blobUrlOf(audioObj.url), audioObj.title || "") : null,
     (() => {
       const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;
       const updatedTs = audioObj.updatedAt ? new Date(audioObj.updatedAt).getTime() : NaN;
@@ -464,5 +464,4 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
   );
 };
 
-exports.audiosTranscodeView = exports.audioTranscodeDetailView;
 

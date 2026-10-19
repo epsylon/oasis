@@ -1,191 +1,228 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
 PKG_NAME="oasis"
-ARCH=$(dpkg --print-architecture)
 SRC_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="$(node -p "require('${SRC_DIR}/src/server/package.json').version")"
-BUILD_DIR="/tmp/oasis-deb-build"
-DEB_ROOT="${BUILD_DIR}/${PKG_NAME}_${VERSION}_${ARCH}"
 INSTALL_DIR="/opt/oasis"
+NODE_VERSION="${OASIS_NODE_VERSION:-22.23.3}"
+OUT_DIR="${OASIS_DEB_OUT:-/tmp/oasis-deb-build}"
+CACHE_DIR="${OASIS_DEB_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/oasis-deb}"
+ARCH="$(dpkg --print-architecture)"
 
-if [ "$1" = "--arm64" ]; then
-    ARCH="arm64"
-    DEB_ROOT="${BUILD_DIR}/${PKG_NAME}_${VERSION}_${ARCH}"
+for arg in "$@"; do
+    case "$arg" in
+        --arm64) ARCH="arm64" ;;
+        --amd64) ARCH="amd64" ;;
+        --arch=*) ARCH="${arg#--arch=}" ;;
+        *) echo "Unknown option: $arg (use --amd64, --arm64 or --arch=<arch>)" >&2; exit 2 ;;
+    esac
+done
+
+case "$ARCH" in
+    amd64) NODE_ARCH="x64" ;;
+    arm64) NODE_ARCH="arm64" ;;
+    *) echo "Unsupported architecture: $ARCH (amd64 or arm64)" >&2; exit 1 ;;
+esac
+
+for tool in dpkg-deb tar xz curl sha256sum; do
+    command -v "$tool" >/dev/null 2>&1 || { echo "Missing build tool: $tool" >&2; exit 1; }
+done
+
+VERSION="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "${SRC_DIR}/src/server/package.json" | head -1)"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { echo "Cannot read the version from src/server/package.json" >&2; exit 1; }
+
+echo "=== Building Oasis ${VERSION} .deb (${ARCH}, Node.js ${NODE_VERSION}) ==="
+
+NODE_TARBALL="node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
+NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}"
+mkdir -p "$CACHE_DIR"
+chmod 700 "$CACHE_DIR"
+curl -fsSL "${NODE_URL}/SHASUMS256.txt" -o "${CACHE_DIR}/SHASUMS256-v${NODE_VERSION}.txt"
+if [ ! -f "${CACHE_DIR}/${NODE_TARBALL}" ]; then
+    echo "Downloading ${NODE_TARBALL}..."
+    curl -fL --progress-bar "${NODE_URL}/${NODE_TARBALL}" -o "${CACHE_DIR}/${NODE_TARBALL}.part"
+    mv "${CACHE_DIR}/${NODE_TARBALL}.part" "${CACHE_DIR}/${NODE_TARBALL}"
 fi
+if ! (cd "$CACHE_DIR" && grep " ${NODE_TARBALL}\$" "SHASUMS256-v${NODE_VERSION}.txt" | sha256sum -c --status -); then
+    rm -f "${CACHE_DIR}/${NODE_TARBALL}"
+    echo "The Node.js tarball does not match the official checksum; removed it, run again." >&2
+    exit 1
+fi
+echo "  ✓ Node.js ${NODE_VERSION} verified against SHASUMS256.txt"
 
-echo "=== Building Oasis ${VERSION} .deb (${ARCH}) ==="
-
-rm -rf "${DEB_ROOT}"
-mkdir -p "${DEB_ROOT}/DEBIAN"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/server"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/backend"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/views"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/models"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/client"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/configs"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/AI"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/games"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/src/maps"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/scripts"
-mkdir -p "${DEB_ROOT}${INSTALL_DIR}/docs"
-mkdir -p "${DEB_ROOT}/usr/bin"
-mkdir -p "${DEB_ROOT}/usr/share/applications"
-mkdir -p "${DEB_ROOT}/usr/share/doc/${PKG_NAME}"
-mkdir -p "${DEB_ROOT}/lib/systemd/system"
+BUILD_DIR="$(mktemp -d)"
+trap 'rm -rf "$BUILD_DIR"' EXIT
+DEB_ROOT="${BUILD_DIR}/${PKG_NAME}_${VERSION}_${ARCH}"
+APP="${DEB_ROOT}${INSTALL_DIR}"
+mkdir -p "${DEB_ROOT}/DEBIAN" "${APP}/node" "${DEB_ROOT}/usr/bin" "${DEB_ROOT}/usr/share/applications" \
+    "${DEB_ROOT}/usr/share/doc/${PKG_NAME}" "${DEB_ROOT}/lib/systemd/system" "${DEB_ROOT}/etc/oasis"
 
 echo "Copying application files..."
-
-cp -r "${SRC_DIR}/src/server/package.json" "${DEB_ROOT}${INSTALL_DIR}/src/server/"
-cp -r "${SRC_DIR}/src/server/package-lock.json" "${DEB_ROOT}${INSTALL_DIR}/src/server/" 2>/dev/null || true
-if [ -d "${SRC_DIR}/src/base" ]; then
-    cp -r "${SRC_DIR}/src/base" "${DEB_ROOT}${INSTALL_DIR}/src/base"
-fi
-cp "${SRC_DIR}/src/AI/package.json" "${SRC_DIR}/src/AI/package-lock.json" "${DEB_ROOT}${INSTALL_DIR}/src/AI/" 2>/dev/null || true
-cp "${SRC_DIR}/src/server/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/server/"
-
-if [ -d "${SRC_DIR}/src/server/packages" ]; then
-    cp -r "${SRC_DIR}/src/server/packages" "${DEB_ROOT}${INSTALL_DIR}/src/server/"
-    find "${DEB_ROOT}${INSTALL_DIR}/src/server/packages" -name "node_modules" -type d -exec rm -rf {} + 2>/dev/null || true
-fi
-
-cp "${SRC_DIR}/src/backend/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/backend/"
-cp -r "${SRC_DIR}/src/views/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/views/"
-cp -r "${SRC_DIR}/src/models/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/models/"
-cp -r "${SRC_DIR}/src/client" "${DEB_ROOT}${INSTALL_DIR}/src/"
-find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name "*.py" -delete 2>/dev/null
-find "${DEB_ROOT}${INSTALL_DIR}/src/client" -name ".ruff_cache" -type d -exec rm -rf {} + 2>/dev/null || true
-for f in server-config.json invite-codes.json config-manager.js shared-state.js state-manager.js; do
-    cp "${SRC_DIR}/src/configs/${f}" "${DEB_ROOT}${INSTALL_DIR}/src/configs/"
+tar -C "$SRC_DIR" --anchored \
+    --exclude='src/server/node_modules' --exclude='src/server/node_modules.full' \
+    --exclude='src/AI/node_modules' --exclude='src/AI/embeddings' --exclude='src/AI/.cache' \
+    --exclude='src/configs' --exclude='*.gguf' --exclude='*.onnx' --exclude='*/.update_required' \
+    -cf - src scripts docs oasis.sh LICENSE README.md | tar -C "$APP" -xf -
+mkdir -p "${APP}/src/configs"
+for f in config-manager.js shared-state.js state-manager.js server-config.json invite-codes.json; do
+    cp "${SRC_DIR}/src/configs/${f}" "${APP}/src/configs/"
 done
-cp -r "${SRC_DIR}/src/games/." "${DEB_ROOT}${INSTALL_DIR}/src/games/" 2>/dev/null || true
-cp -r "${SRC_DIR}/src/maps/." "${DEB_ROOT}${INSTALL_DIR}/src/maps/" 2>/dev/null || true
-cp "${SRC_DIR}/src/AI/"*.js "${DEB_ROOT}${INSTALL_DIR}/src/AI/" 2>/dev/null || true
-cp "${SRC_DIR}/src/AI/"*.mjs "${DEB_ROOT}${INSTALL_DIR}/src/AI/" 2>/dev/null || true
-if [ -d "${SRC_DIR}/src/AI/embeddings" ]; then
-    cp -r "${SRC_DIR}/src/AI/embeddings" "${DEB_ROOT}${INSTALL_DIR}/src/AI/"
-fi
-cp -r "${SRC_DIR}/scripts" "${DEB_ROOT}${INSTALL_DIR}/"
-if [ -d "${SRC_DIR}/docs/PUB" ]; then
-    mkdir -p "${DEB_ROOT}${INSTALL_DIR}/docs/PUB"
-    cp "${SRC_DIR}/docs/PUB/"* "${DEB_ROOT}${INSTALL_DIR}/docs/PUB/" 2>/dev/null || true
-fi
-cp "${SRC_DIR}/oasis.sh" "${DEB_ROOT}${INSTALL_DIR}/"
-cp "${SRC_DIR}/install.sh" "${DEB_ROOT}${INSTALL_DIR}/" 2>/dev/null || true
-cp "${SRC_DIR}/LICENSE" "${DEB_ROOT}${INSTALL_DIR}/"
-cp "${SRC_DIR}/README.md" "${DEB_ROOT}${INSTALL_DIR}/" 2>/dev/null || true
+ln -s ../base/node_modules "${APP}/src/server/node_modules"
+chmod 755 "${APP}/oasis.sh"
+[ -d "${APP}/src/base/node_modules" ] || { echo "src/base/node_modules is missing" >&2; exit 1; }
+echo "  ✓ Oasis ${VERSION} (with src/base)"
 
-cat > "${DEB_ROOT}/DEBIAN/control" << EOF
-Package: ${PKG_NAME}
-Version: ${VERSION}
-Architecture: ${ARCH}
-Maintainer: SolarNET.HuB <solarnethub@riseup.net>
-Depends: nodejs (>= 22)
-Recommends: npm
-Installed-Size: $(du -sk "${DEB_ROOT}${INSTALL_DIR}" | cut -f1)
-Section: net
-Priority: optional
-Homepage: https://solarnethub.com
-Description: Oasis P2P Social Network
- Oasis is a P2P encrypted social network built on Secure Scuttlebutt (SSB).
- Zero browser JavaScript — all rendering is server-side HTML+CSS.
- Part of the SolarNET.HuB ecosystem.
-EOF
+tar -C "${APP}/node" --strip-components=1 -xJf "${CACHE_DIR}/${NODE_TARBALL}" \
+    --exclude='*/include' --exclude='*/share' \
+    --exclude='*/lib/node_modules/npm' --exclude='*/lib/node_modules/corepack' \
+    --exclude='*/bin/npm' --exclude='*/bin/npx' --exclude='*/bin/corepack'
+echo "  ✓ Node.js ${NODE_VERSION} embedded"
 
-cat > "${DEB_ROOT}/DEBIAN/postinst" << 'POSTINST'
-#!/bin/bash
-
-INSTALL_DIR="/opt/oasis"
-
-cd "${INSTALL_DIR}/src/server"
-if [ -d ../base/node_modules ]; then
-    [ -e node_modules ] || ln -s ../base/node_modules node_modules
-    echo "Using the packages shipped in src/base."
-else
-    echo "Installing Node.js dependencies..."
-    if [ -f package-lock.json ]; then
-        npm ci --omit=dev --no-audit --no-fund 2>&1 | tail -10
-    else
-        npm install --production 2>&1 | tail -10
-    fi
-    node ../../scripts/patch-node-modules.js 2>/dev/null || true
-fi
-
-if ! id -u oasis >/dev/null 2>&1; then
-    useradd --system --home-dir /var/lib/oasis --create-home --shell /usr/sbin/nologin oasis
-fi
-
-mkdir -p /var/lib/oasis/.ssb
-chown -R oasis:oasis /var/lib/oasis
-chown -R oasis:oasis "${INSTALL_DIR}"
-
-systemctl daemon-reload 2>/dev/null || true
-echo ""
-echo "=== Oasis installed ==="
-echo "Start: systemctl start oasis"
-echo "Enable: systemctl enable oasis"
-echo "Open: http://localhost:3000"
-echo ""
-POSTINST
-chmod 755 "${DEB_ROOT}/DEBIAN/postinst"
-
-cat > "${DEB_ROOT}/DEBIAN/prerm" << 'PRERM'
-#!/bin/bash
+cat > "${DEB_ROOT}/usr/bin/oasis" << 'WRAPPER'
+#!/bin/sh
 set -e
-systemctl stop oasis 2>/dev/null || true
-systemctl disable oasis 2>/dev/null || true
-PRERM
-chmod 755 "${DEB_ROOT}/DEBIAN/prerm"
-
-cat > "${DEB_ROOT}/DEBIAN/postrm" << 'POSTRM'
-#!/bin/bash
-set -e
-if [ "$1" = "purge" ]; then
-    rm -rf /opt/oasis
-    userdel oasis 2>/dev/null || true
-    rm -rf /var/lib/oasis
+OASIS_HOME=/opt/oasis
+if [ "$(id -u)" -eq 0 ]; then
+    echo "Do not run Oasis as root. Run it as your own user; to manage the PUB service: sudo -u oasis oasis <command>" >&2
+    exit 1
 fi
-systemctl daemon-reload 2>/dev/null || true
-POSTRM
-chmod 755 "${DEB_ROOT}/DEBIAN/postrm"
+HOME="$(getent passwd "$(id -un)" | cut -d: -f6)"
+export HOME
+PATH="$OASIS_HOME/node/bin:$PATH"
+export PATH
+uid="$(id -u)"
+slot=0
+if [ "$uid" -gt 1000 ] && [ "$uid" -lt 2000 ]; then
+    slot=$((uid - 1000))
+fi
+if [ "$slot" -gt 0 ]; then
+    ssb_port="${ssb_port:-$((8008 + slot))}"
+    OASIS_AI_PORT="${OASIS_AI_PORT:-$((4001 + slot))}"
+    export ssb_port OASIS_AI_PORT
+    case "${1:-}" in
+        ""|gui|-*)
+            case " $* " in
+                *" --port="*) ;;
+                *) set -- "$@" "--port=$((3000 + slot))" ;;
+            esac
+            ;;
+    esac
+fi
+cd "$OASIS_HOME"
+exec /bin/sh "$OASIS_HOME/oasis.sh" "$@"
+WRAPPER
+chmod 755 "${DEB_ROOT}/usr/bin/oasis"
+
+cat > "${DEB_ROOT}/etc/oasis/oasis.conf" << 'CONF'
+OASIS_ARGS=""
+CONF
 
 cat > "${DEB_ROOT}/lib/systemd/system/oasis.service" << EOF
 [Unit]
-Description=Oasis P2P Social Network
-After=network.target
+Description=Oasis PUB
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=oasis
 Group=oasis
 WorkingDirectory=${INSTALL_DIR}
-ExecStart=/bin/sh ${INSTALL_DIR}/oasis.sh
+EnvironmentFile=-/etc/oasis/oasis.conf
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/oasis server \$OASIS_ARGS
 Restart=on-failure
 RestartSec=10
-Environment=HOME=/var/lib/oasis
-Environment=NODE_ENV=production
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-cat > "${DEB_ROOT}/usr/bin/oasis" << 'LAUNCHER'
-#!/bin/sh
-exec /bin/sh /opt/oasis/oasis.sh "$@"
-LAUNCHER
-chmod 755 "${DEB_ROOT}/usr/bin/oasis"
-
 cat > "${DEB_ROOT}/usr/share/applications/oasis.desktop" << EOF
 [Desktop Entry]
 Name=Oasis
 GenericName=P2P Social Network
-Exec=xdg-open http://localhost:3000
-Icon=applications-internet
-Terminal=false
+Exec=oasis
+Icon=${INSTALL_DIR}/src/client/assets/images/favicon.svg
+Terminal=true
 Type=Application
 Categories=Network;Chat;InstantMessaging;
 EOF
+
+cat > "${DEB_ROOT}/DEBIAN/control" << EOF
+Package: ${PKG_NAME}
+Version: ${VERSION}
+Architecture: ${ARCH}
+Maintainer: SolarNET.HuB <solarnethub@riseup.net>
+Depends: libc6 (>= 2.28)
+Recommends: ffmpeg
+Suggests: pulseaudio-utils | pipewire-bin | alsa-utils, gstreamer1.0-tools, tor
+Installed-Size: $(du -sk "${DEB_ROOT}" | cut -f1)
+Section: net
+Priority: optional
+Homepage: https://solarnethub.com
+Description: Oasis P2P Social Network
+ Oasis is a P2P encrypted social network built on Secure Scuttlebutt (SSB).
+ Zero browser JavaScript — all rendering is server-side HTML+CSS.
+ Ships its own Node.js ${NODE_VERSION}; no npm or registry needed.
+ Part of the SolarNET.HuB ecosystem.
+EOF
+
+cat > "${DEB_ROOT}/DEBIAN/conffiles" << 'EOF'
+/etc/oasis/oasis.conf
+EOF
+
+cat > "${DEB_ROOT}/DEBIAN/postinst" << 'POSTINST'
+#!/bin/sh
+set -e
+if [ "$1" = "configure" ]; then
+    if ! id -u oasis >/dev/null 2>&1; then
+        if getent group oasis >/dev/null 2>&1; then group="--gid oasis"; else group="--user-group"; fi
+        useradd --system $group --home-dir /var/lib/oasis --create-home --shell /usr/sbin/nologin oasis
+    fi
+    install -d -o oasis -g oasis -m 700 /var/lib/oasis/.ssb
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    if [ -n "$2" ]; then
+        systemctl try-restart oasis >/dev/null 2>&1 || true
+    else
+        echo ""
+        echo "=== Oasis installed ==="
+        echo "Desktop: run 'oasis' as your own user (http://localhost:3000)."
+        echo "PUB: follow /opt/oasis/docs/PUB/deploy.md with these paths:"
+        echo "  sudo -u oasis mkdir -p /var/lib/oasis/.ssb/oasis"
+        echo "  sudo -u oasis cp /opt/oasis/docs/PUB/server-config.json.example /var/lib/oasis/.ssb/oasis/oasis-server-config.json"
+        echo "  (edit it), then: sudo systemctl enable --now oasis"
+        echo "  admin commands: sudo -u oasis oasis whoami | invite | announce ..."
+        echo ""
+    fi
+fi
+exit 0
+POSTINST
+chmod 755 "${DEB_ROOT}/DEBIAN/postinst"
+
+cat > "${DEB_ROOT}/DEBIAN/prerm" << 'PRERM'
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ]; then
+    systemctl stop oasis >/dev/null 2>&1 || true
+    systemctl disable oasis >/dev/null 2>&1 || true
+fi
+exit 0
+PRERM
+chmod 755 "${DEB_ROOT}/DEBIAN/prerm"
+
+cat > "${DEB_ROOT}/DEBIAN/postrm" << 'POSTRM'
+#!/bin/sh
+set -e
+if [ "$1" = "purge" ]; then
+    rm -rf /etc/oasis
+    echo "Kept /var/lib/oasis (the PUB identity and data) and the 'oasis' user; remove them by hand if you no longer need them."
+fi
+systemctl daemon-reload >/dev/null 2>&1 || true
+exit 0
+POSTRM
+chmod 755 "${DEB_ROOT}/DEBIAN/postrm"
 
 cat > "${DEB_ROOT}/usr/share/doc/${PKG_NAME}/copyright" << EOF
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
@@ -195,15 +232,17 @@ Source: https://code.03c8.net/KrakensLab/snh-oasis
 Files: *
 Copyright: 2022-2026 SolarNET.HuB / psy <epsylon@riseup.net>
 License: AGPL-3.0
+
+Files: opt/oasis/node/*
+Copyright: Node.js contributors
+License: MIT
 EOF
 
-echo "Building .deb package..."
-DEB_FILE="${BUILD_DIR}/${PKG_NAME}_${VERSION}_${ARCH}.deb"
-dpkg-deb --build "${DEB_ROOT}" "${DEB_FILE}"
+mkdir -p "$OUT_DIR"
+DEB_FILE="${OUT_DIR}/${PKG_NAME}_${VERSION}_${ARCH}.deb"
+dpkg-deb --root-owner-group --build "${DEB_ROOT}" "${DEB_FILE}" >/dev/null
 
 echo ""
 echo "=== Package built: ${DEB_FILE} ==="
-echo "Size: $(du -h "${DEB_FILE}" | cut -f1)"
+echo "Install: sudo apt install ${DEB_FILE}"
 echo ""
-echo "Install: sudo dpkg -i ${DEB_FILE}"
-echo "         sudo apt-get install -f"

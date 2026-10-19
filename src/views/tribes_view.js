@@ -1,9 +1,9 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged, CLEARNET_HUB_CSS } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged, CLEARNET_HUB_CSS, renderPdfDocument } = require('./main_views');
 const { renderTribeWikiSection } = require('./wiki_view');
-const { renderEncryptedChip: renderTribeEncryptedChip, renderLicenseSelect, renderReachChip, renderClearnetPage, escapeHtml, renderRichText, blobUrl: cnBlobUrl, paginateClearnet, renderClearnetPager, CLEARNET_PAGER_CSS } = require('./clearnet_view');
+const { renderEncryptedChip: renderTribeEncryptedChip, renderLicenseSelect, renderReachChip, renderClearnetPage, escapeHtml, renderRichText, blobUrl: cnBlobUrl, paginateClearnet, renderClearnetPager, CLEARNET_PAGER_CSS, renderClearnetPdfFrame, CLEARNET_PDF_CSS } = require('./clearnet_view');
 const { renderPollCard } = require('./polls_view');
 const { renderFeedCard } = require('./feed_view');
 const { renderEventItem } = require('./event_view');
@@ -537,7 +537,7 @@ const renderTribeActivitySection = (tribe, sectionData) => {
         : item.contentType === 'media' && item.mediaType === 'video' && blobUrl
           ? video({ src: blobUrl, controls: true, class: 'tribe-media-thumb', preload: 'metadata' })
         : item.contentType === 'media' && item.mediaType === 'document' && blobUrl
-          ? a({ href: blobUrl, target: '_blank', rel: 'noopener noreferrer', class: 'tribe-action-btn' }, i18n.readDocument || 'Read Document')
+          ? renderPdfDocument(blobUrl, { title: item.title })
         : item.contentType === 'media' && item.mediaType === 'bookmark' && (item.url || item.description)
           ? a({ href: safeExternalHref(item.url || item.description), target: '_blank', rel: 'noopener noreferrer', class: 'tribe-action-btn' }, item.url || item.description)
         : null;
@@ -575,7 +575,6 @@ const renderTribeTrendingSection = (tribe, sectionData, query) => {
   const tribeUrl = `/tribe/${encodeURIComponent(tribe.id)}`;
   const periodBtn = (key, label) => form({ method: 'GET', action: tribeUrl }, input({ type: 'hidden', name: 'section', value: 'trending' }), input({ type: 'hidden', name: 'period', value: key }), button({ type: 'submit', class: period === key ? 'filter-btn active' : 'filter-btn' }, label));
   return div({ class: 'tribe-content-list' },
-    div({ class: 'tribe-content-header' }, h2(i18n.tribeSectionTrending)),
     div({ class: 'tribe-filter-bar' }, periodBtn('day', i18n.tribeTrendingPeriodDay), periodBtn('week', i18n.tribeTrendingPeriodWeek), periodBtn('all', i18n.tribeTrendingPeriodAll)),
     items.length === 0 ? p(i18n.tribeTrendingEmpty) :
       paged(items.map((item, idx) => [item, idx])).map(([item, idx]) => {
@@ -603,10 +602,6 @@ const renderTribeTagsSection = (tribe, sectionData, query) => {
   const sortedTags = tagsList.slice().sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   const tagHref = tribeTagHref(tribe);
   return section(
-    div({ class: 'tags-header module-header-line' },
-      h2(i18n.tribeSectionTags || i18n.tagsTitle || 'TAGS'),
-      p(i18n.tagsDescription || '')
-    ),
     div({ class: 'tags-list' },
       tagsList.length === 0
         ? p(i18n.tagsNoItems || i18n.tribeTagsEmpty || 'No tags yet')
@@ -639,7 +634,6 @@ const renderTribeSearchSection = (tribe, sectionData, query) => {
   }
   const stats = renderModuleStats(results.length, [...typeCounts].map(([label, count]) => ({ label, count })).sort((x, y) => y.count - x.count || x.label.localeCompare(y.label)));
   return div({ class: 'tribe-content-list' },
-    div({ class: 'tags-header module-header-line' }, h2(i18n.tribeSectionSearch), p(hashtag ? i18n.hashtagDescription : i18n.searchDescriptionLabel)),
     renderSearchForm({ action: tribeUrl, query: sq, queryName: 'q', hidden: [['section', 'search']] }),
     sq.length > 0 && sq.length < 2 ? p(i18n.tribeSearchMinChars) : null,
     sq.length >= 2 ? div(
@@ -761,9 +755,6 @@ const openClosedModes = (isClosed) => ({ ...BASE_MODES, open: it => !isClosed(it
 const openClosedStats = (items, isClosed, openLabel, closedLabel) =>
   renderModuleStatsBy(items, it => isClosed(it) ? 'CLOSED' : 'OPEN', [{ value: 'OPEN', label: openLabel }, { value: 'CLOSED', label: closedLabel }]);
 
-const renderTribeSectionHeader = (title, description) =>
-  div({ class: 'tags-header module-header-line' }, h2(title), description ? p(description) : null);
-
 const renderTribeModeChips = (tribe, sectionKey, { modes = [], filter = 'all', labelOf = (m) => m, visible = null, emptyMod = false, create = null }) =>
   div({ class: 'mode-buttons-row' },
     ...(emptyMod ? [] : modes.filter(m => !visible || visible(m)).map(m =>
@@ -847,11 +838,10 @@ const renderFeedTribeView = (feedItems, tribe, query = {}) => {
   const q = String(query.q || '').trim();
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
-  const header = renderTribeSectionHeader(isCreate ? i18n.createFeedTitle : i18n.tribeSectionFeed, i18n.FeedshareYourOpinions);
   const emptyMod = !isCreate && moduleIsEmpty(feed, filter, 'ALL', q);
   const visible = tribeChipVisible(feed, filter, { RECENT: isRecentItem, MINE: isMineItem, ALL: () => true, TOP: () => true });
   const chips = renderTribeModeChips(tribe, 'feed', { modes: FEED_MODES, filter: isCreate ? 'CREATE' : filter, labelOf: m => i18n[`${m}Button`], visible, emptyMod, create: member ? { label: i18n.createFeedTitle || 'Create Feed' } : null });
-  if (isCreate) return div({ class: 'tribe-content-list' }, header, chips, renderFeedComposeForm(tribe));
+  if (isCreate) return div({ class: 'tribe-content-list' }, chips, renderFeedComposeForm(tribe));
   const items = applyTribeFilter(feed, filter.toLowerCase(), q, BASE_MODES, it => Number(it.refeeds || 0));
   const returnTo = sectionHref(tribe, 'feed', { filter, q });
   const banner = query.sent ? div({ class: 'feed-success-msg' }, p('✓ ' + (i18n.feedPublishedSuccess || i18n.tribeFeedSent))) : null;
@@ -868,7 +858,6 @@ const renderFeedTribeView = (feedItems, tribe, query = {}) => {
     });
   }).filter(Boolean);
   return div({ class: 'tribe-content-list' },
-    header,
     banner,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'feed', filter, q, renderModuleStats(items.length), i18n.feedSearchPlaceholder),
@@ -916,12 +905,11 @@ const renderEventsSection = (tribe, items, query = {}) => {
   const q = String(query.q || '').trim();
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
-  const header = renderTribeSectionHeader(i18n.tribeSectionEvents, i18n.eventsDescription);
   const emptyMod = !isCreate && moduleIsEmpty(events, filter, 'all', q);
   const chips = renderTribeModeChips(tribe, 'events', { modes: EVENT_MODE_LIST, filter: isCreate ? 'create' : filter, labelOf: m => i18n[`eventFilter${capFirst(m)}`], visible: tribeChipVisible(events, filter, EVENT_MODES), emptyMod, create: member ? { label: i18n.eventCreateButton } : null });
   if (isCreate) {
     const today = new Date().toISOString().split('T')[0];
-    return div({ class: 'tribe-content-list' }, header, chips,
+    return div({ class: 'tribe-content-list' }, chips,
       div({ class: 'event-form' },
         form({ method: 'POST', action: `${tribeUrl}/events/create` },
           label(i18n.eventTitleLabel), br(),
@@ -941,7 +929,6 @@ const renderEventsSection = (tribe, items, query = {}) => {
   const list = applyTribeFilter(events, filter, q, EVENT_MODES);
   const returnTo = sectionHref(tribe, 'events', { filter, q });
   return div({ class: 'tribe-content-list' },
-    header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'events', filter, q, openClosedStats(list, e => tribeStatusOf(e) === 'CLOSED', i18n.eventStatusOpen, i18n.eventStatusClosed), i18n.eventSearchPlaceholder),
     list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(e => renderTribeEventCard(tribe, e, member, returnTo))) : renderTribeEmpty(i18n.noevents || i18n.tribeEventsEmpty)
@@ -991,12 +978,11 @@ const renderTasksSection = (tribe, items, query = {}) => {
   const q = String(query.q || '').trim();
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
-  const header = renderTribeSectionHeader(i18n.tribeSectionTasks, i18n.tasksDescription);
   const emptyMod = !isCreate && moduleIsEmpty(tasks, filter, 'all', q);
   const chips = renderTribeModeChips(tribe, 'tasks', { modes: TASK_MODE_LIST, filter: isCreate ? 'create' : filter, labelOf: taskModeLabel, visible: tribeChipVisible(tasks, filter, TASK_MODES), emptyMod, create: member ? { label: i18n.taskCreateButton } : null });
   if (isCreate) {
     const today = new Date().toISOString().split('T')[0];
-    return div({ class: 'tribe-content-list' }, header, chips,
+    return div({ class: 'tribe-content-list' }, chips,
       div({ class: 'task-form' },
         form({ method: 'POST', action: `${tribeUrl}/tasks/create` },
           label(i18n.taskTitleLabel), br(),
@@ -1018,7 +1004,6 @@ const renderTasksSection = (tribe, items, query = {}) => {
   const list = applyTribeFilter(tasks, filter, q, TASK_MODES);
   const returnTo = sectionHref(tribe, 'tasks', { filter, q });
   return div({ class: 'tribe-content-list' },
-    header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'tasks', filter, q, renderModuleStatsBy(list, tribeStatusOf, [{ value: 'OPEN', label: i18n.taskStatusOpen }, { value: 'IN-PROGRESS', label: i18n.taskStatusInProgress }, { value: 'CLOSED', label: i18n.taskStatusClosed }]), i18n.taskSearchPlaceholder),
     list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(t => renderTribeTaskCard(tribe, t, member, returnTo))) : renderTribeEmpty(i18n.notasks || i18n.tribeTasksEmpty)
@@ -1068,12 +1053,11 @@ const renderVotationsSection = (tribe, items, query = {}) => {
   const q = String(query.q || '').trim();
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
-  const header = renderTribeSectionHeader(i18n.tribeSectionVotations, i18n.votationsDescription);
   const emptyMod = !isCreate && moduleIsEmpty(votations, filter, 'all', q);
   const chips = renderTribeModeChips(tribe, 'votations', { modes: VOTE_MODE_LIST, filter: isCreate ? 'create' : filter, labelOf: m => i18n[`voteFilter${capFirst(m)}`], visible: tribeChipVisible(votations, filter, VOTE_MODES), emptyMod, create: member ? { label: i18n.voteCreateButton } : null });
   if (isCreate) {
     const today = new Date().toISOString().split('T')[0];
-    return div({ class: 'tribe-content-list' }, header, chips,
+    return div({ class: 'tribe-content-list' }, chips,
       div({ class: 'vote-form' },
         form({ method: 'POST', action: `${tribeUrl}/votations/create` },
           h2(i18n.voteQuestionLabel),
@@ -1096,7 +1080,6 @@ const renderVotationsSection = (tribe, items, query = {}) => {
   const list = applyTribeFilter(votations, filter, q, VOTE_MODES);
   const returnTo = sectionHref(tribe, 'votations', { filter, q });
   return div({ class: 'tribe-content-list' },
-    header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'votations', filter, q, openClosedStats(list, v => tribeStatusOf(v) === 'CLOSED', i18n.voteStatusOpen, i18n.voteStatusClosed), i18n.votesSearchPlaceholder),
     list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(v => renderTribeVotationCard(tribe, v, member, returnTo))) : renderTribeEmpty(i18n.novotes || i18n.tribeVotationsEmpty)
@@ -1118,11 +1101,10 @@ const renderTribePollsSection = (tribe, items, query = {}) => {
   const q = String(query.q || '').trim();
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
-  const header = renderTribeSectionHeader(i18n.pollsTitle, i18n.pollsDescription);
   const emptyMod = !isCreate && moduleIsEmpty(polls, filter, 'ALL', q);
   const chips = renderTribeModeChips(tribe, 'polls', { modes: POLL_MODE_LIST, filter: isCreate ? 'CREATE' : filter, labelOf: pollModeLabel, visible: tribeChipVisible(polls, filter, POLL_MODES), emptyMod, create: member ? { label: i18n.pollCreateButton } : null });
   if (isCreate) {
-    return div({ class: 'tribe-content-list' }, header, chips,
+    return div({ class: 'tribe-content-list' }, chips,
       div({ class: 'div-center audio-form' },
         h2(i18n.pollCreateTitle),
         form({ method: 'POST', action: `${tribeUrl}/polls/create` },
@@ -1148,7 +1130,6 @@ const renderTribePollsSection = (tribe, items, query = {}) => {
   const kept = polls.filter(pl => pred(pl) && matchesTribeQuery(pl, q));
   const list = filter === 'TOP' ? [...kept].sort((a, b) => (b.totalVoters || 0) - (a.totalVoters || 0) || tsOf(b) - tsOf(a)) : sortRecentFirst(kept);
   return div({ class: 'tribe-content-list' },
-    header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'polls', filter, q, openClosedStats(list, pl => tribeStatusOf(pl) === 'CLOSED', i18n.pollStatusOpen, i18n.pollStatusClosed), i18n.pollSearchPlaceholder),
     list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(pl => renderPollCard(pl, filter, null))) : renderTribeEmpty(i18n.pollsNoItems)
@@ -1239,7 +1220,6 @@ const renderForumSection = (tribe, items, query = {}) => {
   const q = String(query.q || '').trim();
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
-  const header = renderTribeSectionHeader(i18n.tribeSectionForum, i18n.forumDescription);
   const replyCount = new Map();
   allItems.filter(i => i.contentType === 'forum-reply').forEach(r => replyCount.set(r.parentId, (replyCount.get(r.parentId) || 0) + 1));
   const forumScore = (t) => (t.refeeds || 0) + (replyCount.get(t.id) || 0);
@@ -1251,7 +1231,7 @@ const renderForumSection = (tribe, items, query = {}) => {
   const chips = renderTribeModeChips(tribe, 'forum', { modes: ['all', 'recent', 'mine', 'top', ...FORUM_CATEGORIES], filter: isCreate ? 'create' : filter, labelOf, visible, emptyMod, create: member ? { label: i18n.forumCreateButton } : null });
 
   if (isCreate) {
-    return div({ class: 'tribe-content-list' }, header, chips,
+    return div({ class: 'tribe-content-list' }, chips,
       div({ class: 'forum-form' },
         form({ method: 'POST', action: `${tribeUrl}/forum/create` },
           label(i18n.forumCategoryLabel), br(),
@@ -1268,7 +1248,7 @@ const renderForumSection = (tribe, items, query = {}) => {
   }
 
   if (query.thread) {
-    return div({ class: 'tribe-content-list' }, header, chips,
+    return div({ class: 'tribe-content-list' }, chips,
       form({ method: 'GET', action: tribeUrl, class: 'forum-back-form' },
         input({ type: 'hidden', name: 'section', value: 'forum' }),
         button({ type: 'submit', class: 'tribe-action-btn' }, i18n.walletBack)
@@ -1279,7 +1259,6 @@ const renderForumSection = (tribe, items, query = {}) => {
 
   const list = applyTribeFilter(threads, filter, q, modes, forumScore);
   return div({ class: 'tribe-content-list' },
-    header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'forum', filter, q, renderModuleStats(list.length), i18n.forumSearchPlaceholder),
     list.length
@@ -1320,7 +1299,6 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
   const q = String(query.q || '').trim();
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
-  const header = renderTribeSectionHeader(i18n[cfg.title], i18n[cfg.description]);
   const emptyMod = !isCreate && moduleIsEmpty(media, filter, 'all', q);
   const chips = renderTribeModeChips(tribe, cfg.key, { modes: ['all', 'recent', 'mine', 'top'], filter: isCreate ? 'create' : filter, labelOf: m => i18n[`${cfg.filter}${capFirst(m)}`], visible: tribeChipVisible(media, filter, BASE_MODES), emptyMod, create: member ? { label: i18n[cfg.create] } : null });
 
@@ -1353,7 +1331,7 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
           tribe.reachAllowed ? renderTribeReachSelector() : null, br(),
           button({ type: 'submit' }, i18n[cfg.create])
         );
-    return div({ class: 'tribe-content-list' }, header, chips, div({ class: `div-center ${cfg.formClass}` }, formNode));
+    return div({ class: 'tribe-content-list' }, chips, div({ class: `div-center ${cfg.formClass}` }, formNode));
   }
 
   const list = applyTribeFilter(media, filter, q, BASE_MODES).map(toMediaShape);
@@ -1367,7 +1345,6 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
     engagement: (m) => tribeEngagement(tribe, m, member, returnTo)
   };
   return div({ class: 'tribe-content-list' },
-    header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, cfg.key, filter, q, renderModuleStats(list.length), i18n[cfg.search]),
     list.length ? div({ class: cfg.wrapper }, cfg.list(paged(list), filter, params)) : renderTribeEmpty(i18n[cfg.empty] || i18n.tribeMediaEmpty)
@@ -1381,7 +1358,6 @@ const renderStandaloneSection = (tribe, sectionKey, items, query, cfg) => {
   const q = String(query.q || '').trim();
   const modes = cfg.modes || BASE_MODES;
   const modeList = cfg.modeList || ['all', 'recent', 'mine'];
-  const header = renderTribeSectionHeader(cfg.title, cfg.description);
   const emptyMod = moduleIsEmpty(list, filter, 'all', q);
   const chips = renderTribeModeChips(tribe, sectionKey, {
     modes: modeList, filter, labelOf: cfg.labelOf, visible: tribeChipVisible(list, filter, modes), emptyMod,
@@ -1389,7 +1365,6 @@ const renderStandaloneSection = (tribe, sectionKey, items, query, cfg) => {
   });
   const shown = applyTribeFilter(list, filter, q, modes, cfg.score || (() => 0));
   return div({ class: 'tribe-content-list' },
-    header,
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, sectionKey, filter, q, cfg.stats ? cfg.stats(shown) : renderModuleStats(shown.length), cfg.placeholder),
     shown.length ? cfg.render(paged(shown), member) : renderTribeEmpty(cfg.empty)
@@ -1480,7 +1455,6 @@ const renderTribeWikiSectionPage = (tribe, pages, query = {}) => {
   const emptyMod = moduleIsEmpty(list, filter, 'all', q);
   const shown = applyTribeFilter(list, filter, q, BASE_MODES, () => 0);
   const toolbar = div({ class: 'tribe-content-list' },
-    renderTribeSectionHeader(i18n.tribeSectionWiki || 'WIKI', i18n.wikiDescription),
     div({ class: 'mode-buttons-row' },
       ...(emptyMod ? [] : [
         ...['all', 'recent', 'mine'].filter(tribeChipVisible(list, filter, BASE_MODES)).map(m =>
@@ -1521,7 +1495,6 @@ const renderTribeRoomsSectionPage = (tribe, sectionData, query = {}) => {
   const emptyMod = moduleIsEmpty(rooms, filter, 'all', q);
   const shown = applyTribeFilter(rooms, filter, q, modes, () => 0);
   const toolbar = div({ class: 'tribe-content-list' },
-    renderTribeSectionHeader(i18n.tribeSectionRooms || 'ROOMS', i18n.roomsDescription),
     renderTribeModeChips(tribe, 'rooms', {
       modes: ['all', 'recent', 'mine', 'live', 'open', 'closed'], filter, labelOf: m => i18n[`roomFilter${capFirst(m)}`], visible: tribeChipVisible(rooms, filter, modes), emptyMod,
       create: member ? { action: '/rooms', hidden: { filter: 'create', tribeId: tribe.id }, label: i18n.tribeRoomCreate } : null
@@ -1538,7 +1511,6 @@ const renderInhabitantsSection = (tribe, members, query = {}) => {
     ? resolved.filter(u => [u.name, u.id, u.description].some(v => String(v || '').toLowerCase().includes(search)))
     : resolved;
   return div({ class: 'tribe-content-list' },
-    renderTribeSectionHeader(i18n.tribeSectionInhabitants, i18n.discoverPeople),
     resolved.length ? renderTribeSearchRow(tribe, 'inhabitants', null, search, renderModuleStats(shown.length), i18n.searchInhabitantsPlaceholder, 'search') : null,
     shown.length
       ? div({ class: 'inhabitants-list inhabitants-grid' }, ...paged(shown).map(u => renderInhabitantCard(u, 'all', userId, false)))
@@ -1832,7 +1804,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
     pageTitle,
     tribeDetails
   );
-  return section === 'documents' ? `${page}<script type="module" src="/js/pdf-viewer.js?v=102"></script>` : page;
+  return page;
 };
 
 exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, filterType = '', filterAuthor = '' }) => {
@@ -1878,22 +1850,26 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
       : mt === 'image' ? `<img class="post-image" src="${blob}" alt="${title}" loading="lazy"/>`
       : mt === 'audio' ? `<audio class="post-audio" controls preload="metadata" src="${blob}"></audio>`
       : mt === 'video' ? `<video class="post-video" controls preload="metadata" src="${blob}"></video>`
-      : ['document', 'file', 'torrent'].includes(mt) ? `<a class="cn-tribe-link" href="${blob}" rel="noopener">⇩ ${title || escapeHtml(kind)}</a>`
+      : mt === 'document' ? renderClearnetPdfFrame(blob, it.title)
+      : ['file', 'torrent'].includes(mt) ? `<a class="cn-tribe-link" href="${blob}" rel="noopener">⇩ ${title || escapeHtml(kind)}</a>`
       : '';
     const url = mt === 'bookmark' ? String(it.url || '') : '';
     const href = url ? safeExternalHref(url) : '';
     const bookmark = !url ? ''
       : href ? `<a class="cn-tribe-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(url)}</a>`
       : `<span class="cn-tribe-link">${escapeHtml(url)}</span>`;
-    const details = [
+    const chip = (d) => `<span class="cn-detail">${escapeHtml(String(d))}</span>`;
+    const chips = [
+      it.status ? (statusI18n()[it.status] || it.status) : '',
       it.date ? `${i18n.tribeEventDate || 'Date'}: ${it.date}` : '',
       it.deadline ? `${i18n.tribeTaskDeadline || 'Deadline'}: ${it.deadline}` : '',
-      it.location ? `${i18n.tribeEventLocation || 'Location'}: ${it.location}` : '',
-      it.status ? (statusI18n()[it.status] || it.status) : '',
+      it.location ? `${i18n.tribeEventLocation || 'Location'}: ${it.location}` : ''
+    ].filter(Boolean).map(chip).join('');
+    const details = [
       it.contentType === 'map' && Number.isFinite(Number(it.lat)) ? `📍 ${Number(it.lat).toFixed(4)}, ${Number(it.lng).toFixed(4)}` : '',
       ...(it.contentType === 'map' && Array.isArray(it.markers) ? it.markers.map(mk => `📍 ${Number(mk.lat).toFixed(4)}, ${Number(mk.lng).toFixed(4)}${mk.label ? ` · ${mk.label}` : ''}`) : []),
       ...(it.contentType === 'calendar' && Array.isArray(it.dates) ? it.dates.map(d => `📅 ${day(d.date)}${d.label ? ` · ${d.label}` : ''}`) : [])
-    ].filter(Boolean).map(d => `<span class="cn-detail">${escapeHtml(String(d))}</span>`).join('');
+    ].filter(Boolean).map(chip).join('');
     const options = it.contentType === 'votation' && Array.isArray(it.options) && it.options.length
       ? `<ul class="cn-tribe-options">${it.options.map(o => `<li>${escapeHtml(String(o))}</li>`).join('')}</ul>`
       : '';
@@ -1902,12 +1878,15 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
       ? `<div class="cn-tribe-replies"><div class="cn-tribe-meta">${escapeHtml(String(i18n.forumMessages || i18n.tribeForumReplies || 'MESSAGES').toUpperCase())}: ${replies.length}</div>${replies.map(r => `<div class="cn-tribe-reply"><div class="cn-tribe-reply-meta">${escapeHtml(who(r.author))}${day(r.createdAt) ? ` · ${escapeHtml(day(r.createdAt))}` : ''}</div><p>${renderRichText(r.description || '')}</p></div>`).join('')}</div>`
       : '';
     const text = it.description && it.description !== url ? renderRichText(it.description) : '';
+    const pdfFrames = (Array.isArray(it.pdfs) ? it.pdfs : []).map(p => renderClearnetPdfFrame(cnBlobUrl(p.blob), p.name)).join('');
     const when = day(it.createdAt);
     return `<div class="cn-tribe-item">
       <div class="cn-tribe-meta"><span class="cn-kind-tag">[${escapeHtml(String(kind).toUpperCase())}]</span>${when ? `<span>📅 ${escapeHtml(when)}</span>` : ''}${it.author ? `<span>${escapeHtml(who(it.author))}</span>` : ''}</div>
+      ${chips ? `<div class="cn-hub-details">${chips}</div>` : ''}
       ${title ? `<h2 class="cn-tribe-title">${it.href ? `<a href="${escapeHtml(it.href)}">${title}</a>` : title}</h2>` : ''}
       ${media}
       ${text ? `<p class="cn-tribe-text">${text}</p>` : ''}
+      ${pdfFrames}
       ${bookmark}
       ${details ? `<div class="cn-hub-details">${details}</div>` : ''}
       ${options}
@@ -1951,7 +1930,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
     ogTitle: name,
     ogDescription: t.description || '',
     ogImage: cover,
-    extraCss,
+    extraCss: extraCss + CLEARNET_PDF_CSS,
     body
   });
 };
@@ -2141,10 +2120,6 @@ const rulesBlock = (tribe, rules, isCreator) => div({},
 const renderGovernance = (tribe, data) => {
   const { filter, term, candidatures, rules, leaders, isCreator, canPublishToGlobal, alreadyPublishedThisGlobalCycle, hasElectedCandidate } = data || {};
   const f = filter || 'government';
-  const header = div({ class: 'tags-header module-header-line' },
-    h2(i18n.tribeSectionGovernance || 'GOVERNANCE'),
-    p(i18n.tribeGovernanceDesc || 'Internal governance for this tribe. Propose candidatures, debate rules, elect leaders — mirrors the global Parliament.')
-  );
   let body;
   if (f === 'government') body = governmentCard(tribe, term, leaders);
   else if (f === 'candidatures') body = candidaturesBlock(tribe, candidatures, alreadyPublishedThisGlobalCycle);
@@ -2169,7 +2144,7 @@ const renderGovernance = (tribe, data) => {
   }
 
   const showPublish = !!(canPublishToGlobal && hasElectedCandidate && !alreadyPublishedThisGlobalCycle);
-  return div({ class: 'tribe-governance' }, header, governanceFilterBar(tribe.id, f, showPublish), body);
+  return div({ class: 'tribe-governance' }, governanceFilterBar(tribe.id, f, showPublish), body);
 };
 
 exports.renderGovernance = renderGovernance;

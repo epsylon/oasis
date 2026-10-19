@@ -6,7 +6,7 @@ Oasis does not fetch its libraries at install time. Everything the node needs to
 
 | Path | What it holds |
 | --- | --- |
-| `src/base/node_modules/` | The runtime core: the SSB stack (ssb-db2, EBT, friends, blobs, conn…), koa, hyperaxe, crypto, image handling. |
+| `src/base/node_modules/` | The runtime core: the SSB stack (ssb-db2, EBT, friends, blobs, conn…), koa, hyperaxe, crypto, image handling, and `mupdf` (WebAssembly, no native binary) to draw PDF pages. |
 | `src/server/node_modules` | A symbolic link to `../base/node_modules`. The folder has to be called `node_modules` for Node to resolve the packages' own dependencies next to them. `oasis.sh` and `install.sh` create it when it is missing, so every `require('../server/node_modules/…')` in the code keeps working untouched. |
 | `src/server/package.json`, `package-lock.json` | The declaration of the core, pinned to the exact versions that are in `src/base`. Only used when the core is regenerated. |
 | `src/AI/package.json`, `package-lock.json` | The AI stack: embeddings (`@xenova/transformers`, onnxruntime) as dependencies and the assistant (`node-llama-cpp`) as optional. Mostly large native binaries, so it is **not** in the repository. |
@@ -34,7 +34,7 @@ node scripts/patch-node-modules.js
 ./oasis.sh test                     # the whole suite must pass
 ```
 
-`build-base.js` walks the lockfile from the root dependencies: everything reachable from the non-AI roots goes to `src/base/node_modules`, everything reachable from the AI roots goes to `src/AI/node_modules` (packages needed by both are copied to both, because each tree must resolve on its own), and what is left (dev tools such as nodemon, nyc, typescript) stays behind in `src/server/node_modules.full`, which can be deleted. pdf.js is not part of the core: Oasis only serves its browser build, which lives in `src/client/public/js`.
+`build-base.js` walks the lockfile from the root dependencies: everything reachable from the non-AI roots goes to `src/base/node_modules`, everything reachable from the AI roots goes to `src/AI/node_modules` (packages needed by both are copied to both, because each tree must resolve on its own), and what is left (dev tools such as nodemon, nyc, typescript) stays behind in `src/server/node_modules.full`, which can be deleted.
 
 For a platform other than the one you build on, install its binary packages explicitly before running `build-base.js`, for example `npm install --os=linux --cpu=arm64 sharp` and `npm install --os=linux --cpu=arm64 --libc=musl sharp` for Alpine.
 

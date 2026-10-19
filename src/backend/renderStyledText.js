@@ -1,4 +1,4 @@
-const { a, img, video, audio, span, strong, em, u, s: strike, code, div, textarea } = require("../server/node_modules/hyperaxe");
+const { a, img, video, audio, span, strong, em, u, s: strike, code, div, textarea, object } = require("../server/node_modules/hyperaxe");
 const i18nBase = require("../client/assets/translations/i18n");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
 
@@ -202,7 +202,20 @@ function renderStyledText(value, opts = {}) {
       result.push(audio({ controls: true, class: 'post-audio', src: blobHref(m.blob) }));
     } else if (m.type === 'blob-pdf') {
       const i18n = getI18n();
-      result.push(a({ href: blobHref(m.blob), class: 'post-pdf', target: '_blank', rel: 'noopener noreferrer' }, m.name || i18n.pdfFallbackLabel || 'PDF'));
+      const pdfLabel = m.name || i18n.pdfFallbackLabel || 'PDF';
+      const clearnet = String(opts.blobPrefix || '').startsWith('/c/');
+      let lang = '';
+      try { lang = clearnet ? ((require('../models/typed_log').requestScope.getStore() || {}).cnLang || '') : ''; } catch (_) {}
+      const fid = require('./pdf_view').frameIdOf(blobHref(m.blob));
+      const query = new URLSearchParams({ src: blobHref(m.blob), title: String(m.name || ''), ...(lang ? { lang } : {}), fid });
+      const holder = (src, cls) => span({ class: 'pdf-holder' },
+        object({ id: fid, data: src, type: 'text/html', class: cls, title: pdfLabel, 'aria-label': pdfLabel }, ''),
+        a({ href: '#', class: 'pdf-unmax', title: i18n.pdfClose || 'Close' }, '✕'));
+      result.push(clearnet
+        ? holder(`/c/pdf/embed?${query}`, 'cn-pdf-frame')
+        : opts.blobPrefix
+          ? a({ href: blobHref(m.blob), class: 'post-pdf', target: '_blank', rel: 'noopener noreferrer' }, pdfLabel)
+          : holder(`/pdf/embed?${query}`, 'pdf-frame'));
     } else if (m.type === 'blob-file') {
       result.push(a({ href: blobHref(m.blob), class: 'post-pdf', target: '_blank', rel: 'noopener noreferrer' }, m.name || m.blob.slice(1, 9)));
     } else if (m.type === 'md-mention') {

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderTribeOriginChip } = require("./clearnet_view");
@@ -38,9 +38,9 @@ const statusLabel = (s) => {
   return up;
 };
 
-const { isVoteLocked } = require("../models/votes_model");
+const { isVoteEditLocked } = require("../models/votes_model");
 const isVoteAuthor = (v) => !!(v && v.createdBy && String(v.createdBy) === String(userId));
-const canModifyVote = (v) => isVoteAuthor(v) && !isVoteLocked(v);
+const canModifyVote = (v) => isVoteAuthor(v) && !isVoteEditLocked(v);
 
 const renderVoteOwnerActions = (v, returnTo) => {
   const showUpdateButton = canModifyVote(v);
@@ -198,7 +198,8 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
       renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`, { spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, v.question)
+      h2({ class: "tribe-card-title" }, v.question),
+      renderEditedChip(v.id, v.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(v.createdAt, v.createdBy)),
@@ -298,6 +299,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
     : (voteToEdit.deadline ? moment(voteToEdit.deadline).format("YYYY-MM-DDTHH:mm") : "");
   const questionValue = draft.question !== undefined && draft.question !== "" ? String(draft.question) : (voteToEdit.question || "");
   const tagsValue = draft.tags ? String(draft.tags) : editTags.join(", ");
+  const opinionLock = mode === "edit" ? renderMediaLockNote(voteToEdit) : null;
 
   return template(
     title,
@@ -339,7 +341,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
               { action: mode === "edit" ? `/votes/update/${encodeURIComponent(voteId)}` : "/votes/create", method: "POST" },
               input({ type: "hidden", name: "returnTo", value: listReturnTo }),
               h2(i18n.voteQuestionLabel),
-              input({ type: "text", name: "question", id: "question", required: true, value: questionValue }), br(), br(),
+              input({ type: "text", name: "question", id: "question", required: true, value: questionValue, ...(opinionLock ? { readonly: true } : {}) }), opinionLock, br(), br(),
               label(i18n.voteDeadlineLabel), br(),
               input({
                 type: "datetime-local",

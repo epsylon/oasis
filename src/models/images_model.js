@@ -1,4 +1,5 @@
 const pull = require("../server/node_modules/pull-stream");
+const opinionRules = require("../backend/opinion_categories");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
@@ -170,7 +171,7 @@ module.exports = ({ cooler }) => {
       if (!oldMsg || oldMsg.content?.type !== "image") throw new Error("Image not found");
       if (oldMsg.content.author !== userId) throw new Error("Not the author");
       const aggImg = await this.getImageById(id, userId);
-      if (aggImg && Object.keys(aggImg.opinions || {}).some(k => (aggImg.opinions[k] || 0) > 0)) throw new Error("Cannot edit image after it has received opinions.");
+      opinionRules.assertMediaKept(aggImg, !!blobMarkdown);
 
       const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldMsg.content.tags);
       const blobId = blobMarkdown ? parseBlobId(blobMarkdown) : null;

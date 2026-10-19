@@ -2,7 +2,8 @@ const { form, button, div, h2, h3, p, section, select, option, input, br, a, lab
 const fs = require('fs');
 const path = require('path');
 const { getConfig } = require('../configs/config-manager.js');
-const { template, selectedLanguage, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel, THEMES, userLink } = require('./main_views');
+const mainViews = require('./main_views');
+const { template, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel, THEMES, userLink } = mainViews;
 const i18nBase = require("../client/assets/translations/i18n");
 const moment = require("../server/node_modules/moment");
 const { WORKFLOWS, currentWorkflow } = require('../models/workflows_model');
@@ -72,7 +73,7 @@ const settingsView = (params) => {
   );
 
   const languageOption = (longName, shortName) => {
-    return shortName === selectedLanguage
+    return shortName === mainViews.selectedLanguage
       ? option({ value: shortName, selected: true }, longName)
       : option({ value: shortName }, longName);
   };

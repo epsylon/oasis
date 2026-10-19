@@ -144,6 +144,7 @@ describe('views: a detail screen offers no content filters when the module has n
     ['files_view', 'singleFileView', () => [media({ url: '&f.sha256', size: 10, mime: 'application/zip', fileName: 'a.zip' }), 'all', [], { censusList: [] }]],
     ['bookmark_view', 'singleBookmarkView', () => [media({ url: 'https://example.org', id: '%bk.sha256' }), 'all', [], { censusList: [] }]],
     ['event_view', 'singleEventView', () => [{ id: '%e.sha256', title: 'Party', organizer: me, author: me, date: iso, isPublic: 'public', attendees: [], tags: [], createdAt: iso, opinions: {} }, 'all', [], { censusList: [] }]],
+    ['jobs_view', 'singleJobsView', () => [{ id: '%j.sha256', rootId: '%j.sha256', title: 'Job', author: me, job_type: 'freelancer', job_time: 'partial', languages: 'ES', description: 'd', requirements: 'r', tasks: 't', status: 'OPEN', subscribers: [], tags: [], createdAt: iso, opinions: {}, opinions_inhabitants: [] }, 'ALL', [], { censusList: [], opinions: { opinions: {}, opinions_inhabitants: [] } }]],
     ['task_view', 'singleTaskView', () => [{ id: '%t.sha256', title: 'Task', author: me, status: 'OPEN', priority: 'LOW', assignees: [], startTime: iso, endTime: iso, isPublic: 'PUBLIC', tags: [], createdAt: iso, opinions: {} }, 'all', [], { censusList: [] }]],
     ['market_view', 'singleMarketView', () => [{ id: '%mk.sha256', title: 'Chair', seller: me, author: me, status: 'FOR SALE', item_type: 'exchange', item_status: 'NEW', price: '1', createdAt: iso, tags: [], opinions: {} }, 'all', [], { censusList: [] }]],
     ['report_view', 'singleReportView', () => [{ id: '%r.sha256', title: 'Bug', author: me, category: 'BUGS', status: 'OPEN', severity: 'LOW', createdAt: iso, confirmations: [], tags: [], opinions: {} }, 'all', [], { censusList: [] }]],
@@ -168,7 +169,7 @@ describe('views: a detail screen offers no content filters when the module has n
       const mod = require(`../../../src/views/${file}`);
       if (typeof mod[exportName] !== 'function') return;
       const html = String(await mod[exportName](...argsOf()));
-      const chips = filterChips(html).filter(v => !['create', 'edit', 'rules', 'all', 'top'].includes(v));
+      const chips = filterChips(html).filter(v => !['create', 'edit', 'rules', 'all', 'top', 'downloads'].includes(v));
       eq(chips.length, 0, `content chips offered with an empty census: ${chips.join(', ')}`);
     });
   }
@@ -358,5 +359,24 @@ describe('views: what a form asks the browser to do is not lost', (t) => {
     ok(input({ minlength: 32 }).outerHTML.includes('minlength="32"'), 'a minimum length is kept');
     ok(input({ inputmode: 'numeric' }).outerHTML.includes('inputmode="numeric"'), 'and the keyboard to show');
     ok(img({ loading: 'lazy', src: '/x' }).outerHTML.includes('loading="lazy"'), 'images can wait until they are needed');
+  });
+});
+
+describe('views: pictures are asked for in sizes the image route serves', (t) => {
+  t('every /image/<size>/ that a page or the backend links is accepted by the route', async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const { isImageSize } = require('../../../src/backend/request_guards');
+    const { imageView } = require('../../../src/views/image_view');
+    const me = '@' + 'a'.repeat(43) + '=.ed25519';
+    const pic = { key: '%i.sha256', rootId: '%i.sha256', title: 'Pic', description: '', author: me, url: '&p.sha256', opinions: {}, opinions_inhabitants: [], tags: [], createdAt: new Date().toISOString() };
+    const rendered = [await imageView([pic], 'all', null, {}), await imageView([pic], 'gallery', null, {})].map(String);
+    const pageSizes = new Set(rendered.flatMap(html => [...html.matchAll(/\/image\/(\d+)\//g)].map(m => m[1])));
+    ok(pageSizes.size > 0, 'the image list asks for resized pictures');
+    const root = path.join(__dirname, '../../../src');
+    const files = [...fs.readdirSync(path.join(root, 'views')).filter(f => f.endsWith('.js')).map(f => path.join(root, 'views', f)), path.join(root, 'backend', 'backend.js')];
+    const sizes = new Set([...pageSizes, ...files.flatMap(f => [...fs.readFileSync(f, 'utf8').matchAll(/\/image\/(\d+)\//g)].map(m => m[1]))]);
+    const refused = [...sizes].filter(n => !isImageSize(n));
+    eq(refused.length, 0, `sizes the image route refuses: ${refused.join(', ')}`);
   });
 });

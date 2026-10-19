@@ -1,6 +1,6 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { getConfig } = require('../configs/config-manager.js');
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -272,6 +272,8 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
   const isForm = normalizedFilter === "create" || normalizedFilter === "edit"
   const transferToEdit = normalizedFilter === "edit" ? (list.find(t => t.id === transferId) || {}) : (params.prefill || {})
   const returnToForForm = buildReturnTo("all", {})
+  const opinionLock = normalizedFilter === "edit" ? renderMediaLockNote(transferToEdit) : null
+  const ro = opinionLock ? { readonly: true } : {}
   const validCategories = ["ECONOMIC", "TIME", "TRUST"]
   const paramCategoryRaw = safeText(params.category || "").toUpperCase()
   const selectedCategory =
@@ -352,7 +354,8 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
               normalizedFilter === "create" ? input({ type: "hidden", name: "category", value: selectedCategory }) : null,
               label(i18n.transfersToUser),
               br(),
-              input({ type: "text", name: "to", required: true, pattern: "^@[A-Za-z0-9+/]+={0,2}\\.ed25519$", title: i18n.transfersToUserValidation, value: transferToEdit.to || "" }),
+              input({ type: "text", name: "to", required: true, pattern: "^@[A-Za-z0-9+/]+={0,2}\\.ed25519$", title: i18n.transfersToUserValidation, value: transferToEdit.to || "", ...ro }),
+              opinionLock,
               br(),
               label(i18n.transfersConcept),
               br(),
@@ -376,7 +379,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
                 : [
                     label(`${i18n.transfersAmount} (${amountUnitLabel})`),
                     br(),
-                    input({ type: "number", name: "amount", step: "0.000001", required: true, min: "0.000001", value: transferToEdit.amount || "" }),
+                    input({ type: "number", name: "amount", step: "0.000001", required: true, min: "0.000001", value: transferToEdit.amount || "", ...ro }),
                     renderEcoValueChip(),
                     br(), br()
                   ],
@@ -507,7 +510,8 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
       })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, transferTitle(transfer))
+      h2({ class: "tribe-card-title" }, transferTitle(transfer)),
+      renderEditedChip(transfer.id, transfer.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     table({ class: "tribe-info-table" }, ...renderCreatedRows(transfer.createdAt, transfer.from, transfer.updatedAt)),

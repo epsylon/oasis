@@ -3,6 +3,7 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, memoIndex } = require('./typed_log');
 const longText = require('../backend/long_text');
+const { isComment, isBlogPost } = require('./comments_model');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const OPINION_TYPE = 'blogOpinion';
@@ -15,9 +16,6 @@ module.exports = ({ cooler, isPublic = false }) => {
 
   const getAllMessages = async (ssbClient) => readTyped(ssbClient, BLOG_TYPES, { limit: logLimit });
 
-  const isRootPost = (c) =>
-    !!c && c.type === 'post' && typeof c.text === 'string' &&
-    !c.root && !c.fork && !c.branch && !c.about && !c.target;
 
   const buildIndex = (messages) => {
     const tomb = buildValidatedTombstoneSet(messages);
@@ -33,9 +31,9 @@ module.exports = ({ cooler, isPublic = false }) => {
       if (tomb.has(m.key)) continue;
 
       if (c.type === 'post' && typeof c.text === 'string') {
-        if (isRootPost(c)) {
+        if (isBlogPost(c)) {
           posts.set(m.key, { key: m.key, author: v.author, ts: v.timestamp || m.timestamp || 0, c });
-        } else if (typeof c.root === 'string') {
+        } else if (isComment(c)) {
           commentsByRoot.set(c.root, (commentsByRoot.get(c.root) || 0) + 1);
         }
         continue;
@@ -142,7 +140,7 @@ module.exports = ({ cooler, isPublic = false }) => {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const msg = await new Promise((res, rej) => ssbClient.get(id, (err, m) => (err || !m || !m.content) ? rej(new Error('Blog not found')) : res(m)));
-      if (!isRootPost(msg.content)) throw new Error('Blog not found');
+      if (!isBlogPost(msg.content)) throw new Error('Blog not found');
       if (msg.author !== userId) throw new Error('Not the author');
       const content = { type: 'tombstone', target: id, deletedAt: new Date().toISOString(), author: userId };
       return new Promise((res, rej) => ssbClient.publish(content, (err, result) => err ? rej(err) : res(result)));
@@ -157,27 +155,6 @@ module.exports = ({ cooler, isPublic = false }) => {
       if (blog.opinions_inhabitants.includes(userId)) throw new Error('Already opined');
       const content = { type: OPINION_TYPE, target: blog.id, category, createdAt: new Date().toISOString() };
       return new Promise((res, rej) => ssbClient.publish(content, (err, result) => err ? rej(err) : res(result)));
-    },
-
-    async resolveRootId(id) {
-      const ssbClient = await openSsb();
-      const msg = await new Promise((res) => ssbClient.get(id, (err, m) => res(err ? null : m)));
-      const c = msg && (msg.content || (msg.value && msg.value.content));
-      if (c && c.type === 'post' && typeof c.root === 'string') return c.root;
-      return id;
-    },
-
-    async blogHrefFor(id) {
-      const ssbClient = await openSsb();
-      const msg = await new Promise((res) => ssbClient.get(id, (err, m) => res(err ? null : m)));
-      const c = msg && (msg.content || (msg.value && msg.value.content));
-      if (!c || c.type !== 'post' || typeof c.text !== 'string') return null;
-      if (c.private === true || Array.isArray(c.recps)) return null;
-      if (typeof c.root === 'string') {
-        return `/blogs/${encodeURIComponent(c.root)}#${encodeURIComponent(id)}`;
-      }
-      if (c.fork || c.branch || c.about || c.target) return null;
-      return `/blogs/${encodeURIComponent(id)}`;
     }
   };
 };

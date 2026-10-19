@@ -1,6 +1,6 @@
 {
   "name": "@krakenslab/oasis",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Oasis - Social Networking Utopia",
   "repository": {
     "type": "git",
@@ -42,6 +42,7 @@
     "minimist": "^1.2.8",
     "module-alias": "^2.2.3",
     "moment": "^2.30.1",
+    "mupdf": "^1.28.1",
     "open": "^8.4.2",
     "openpgp": "^6.3.0",
     "opusscript": "^0.1.1",

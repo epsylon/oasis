@@ -1,7 +1,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFile } = require('child_process');
 const nodeCrypto = require('crypto');
 const pull = require('./node_modules/pull-stream');
 const Pushable = require('./node_modules/pull-pushable');
@@ -64,6 +64,10 @@ const VIDEO_FRAME_MAX = 256 * 1024;
 const VIDEO_FPS = 8;
 const VIDEO_SIZE = { w: 320, h: 240 };
 const STREAM_SIZE = { w: 640, h: 480 };
+const SCREEN_SIZE = { w: 1280, h: 720 };
+const SCREEN_FPS = 2;
+const SCREEN_QUALITY = 12;
+const SCREEN_PROBE_MS = 5000;
 const GRID_TILE_LARGE = { w: 640, h: 480 };
 const GRID_LARGE_MAX = 4;
 const ROOM_VIDEO_CHUNK_EXTRA = 45;
@@ -245,45 +249,75 @@ const STREAM_BACKENDS = [
 ];
 const STREAM_STALL_MS = 5000;
 const STREAM_START_MS = 20000;
+const frameProcess = ({ bin, args, retry }, { onJpeg, onPcm, onEnd }) => {
+  let proc = null;
+  let frames = 0;
+  let lastAt = 0;
+  let ended = false;
+  const startedAt = Date.now();
+  const watch = setInterval(() => {
+    const now = Date.now();
+    if (frames ? now - lastAt > STREAM_STALL_MS : now - startedAt > STREAM_START_MS) finish();
+  }, 1000);
+  if (watch.unref) watch.unref();
+  const halt = () => { ended = true; clearInterval(watch); try { if (proc) proc.kill('SIGTERM'); } catch (_) {} };
+  const finish = () => { if (ended) return; halt(); onEnd(); };
+  const run = (first) => {
+    const p = spawn(bin, args(first), { stdio: ['ignore', 'pipe', 'ignore', 'pipe'] });
+    proc = p;
+    p.on('error', () => {});
+    p.stdout.on('error', () => {});
+    p.stdout.on('data', jpegSplitter((jpeg) => { if (ended || proc !== p) return; frames++; lastAt = Date.now(); onJpeg(jpeg); }));
+    if (p.stdio[3]) {
+      p.stdio[3].on('error', () => {});
+      p.stdio[3].on('data', (pcm) => { if (!ended && proc === p && onPcm) onPcm(pcm); });
+    }
+    p.on('close', () => {
+      if (ended || proc !== p) return;
+      if (first && !frames && retry) return run(false);
+      finish();
+    });
+  };
+  run(true);
+  return { stop() { if (!ended) halt(); } };
+};
 const systemStream = () => {
   const backend = STREAM_BACKENDS.find(b => hasBin(b.bin()));
   if (!backend) return null;
   return {
-    open(file, { onJpeg, onPcm, onEnd }) {
-      let proc = null;
-      let frames = 0;
-      let lastAt = 0;
-      let ended = false;
-      const startedAt = Date.now();
-      const watch = setInterval(() => {
-        const now = Date.now();
-        if (frames ? now - lastAt > STREAM_STALL_MS : now - startedAt > STREAM_START_MS) finish();
-      }, 1000);
-      if (watch.unref) watch.unref();
-      const halt = () => { ended = true; clearInterval(watch); try { if (proc) proc.kill('SIGTERM'); } catch (_) {} };
-      const finish = () => { if (ended) return; halt(); onEnd(); };
-      const run = (withAudio) => {
-        const p = spawn(backend.bin(), backend.args(file, withAudio), { stdio: ['ignore', 'pipe', 'ignore', 'pipe'] });
-        proc = p;
-        p.on('error', () => {});
-        p.stdout.on('error', () => {});
-        p.stdout.on('data', jpegSplitter((jpeg) => { if (ended || proc !== p) return; frames++; lastAt = Date.now(); onJpeg(jpeg); }));
-        if (p.stdio[3]) {
-          p.stdio[3].on('error', () => {});
-          p.stdio[3].on('data', (pcm) => { if (!ended && proc === p) onPcm(pcm); });
-        }
-        p.on('close', () => {
-          if (ended || proc !== p) return;
-          if (withAudio && !frames && backend.retryWithoutAudio) return run(false);
-          finish();
-        });
-      };
-      run(true);
-      return { stop() { if (!ended) halt(); } };
+    open(file, handlers) {
+      return frameProcess({ bin: backend.bin(), args: (withAudio) => backend.args(file, withAudio), retry: !!backend.retryWithoutAudio }, handlers);
     }
   };
 };
 let streamFactory = systemStream;
+
+const x11Screen = (env) => (env.DISPLAY && !env.WAYLAND_DISPLAY && String(env.XDG_SESSION_TYPE || '').toLowerCase() !== 'wayland'
+  ? { device: 'x11grab', input: ['-f', 'x11grab', '-framerate', String(SCREEN_FPS), '-i', env.DISPLAY] }
+  : null);
+const SCREEN_SOURCES = {
+  win32: () => ({ device: 'gdigrab', input: ['-f', 'gdigrab', '-framerate', String(SCREEN_FPS), '-i', 'desktop'] }),
+  darwin: () => ({ device: 'avfoundation', input: ['-f', 'avfoundation', '-capture_cursor', '1', '-i', 'Capture screen 0:none'] }),
+  android: () => null
+};
+const screenSource = (platform = process.platform, env = process.env) => (SCREEN_SOURCES[platform] || x11Screen)(env || {});
+const screenArgs = (source) => [
+  '-loglevel', 'quiet', ...source.input,
+  '-vf', `fps=${SCREEN_FPS},scale=${SCREEN_SIZE.w}:${SCREEN_SIZE.h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${SCREEN_SIZE.w}:${SCREEN_SIZE.h}:(ow-iw)/2:(oh-ih)/2`,
+  '-c:v', 'mjpeg', '-q:v', String(SCREEN_QUALITY), '-f', 'image2pipe', 'pipe:1'
+];
+const systemScreen = () => {
+  const source = screenSource();
+  const bin = process.env.OASIS_FFMPEG || 'ffmpeg';
+  if (!source || !hasBin(bin)) return null;
+  let ready = false;
+  execFile(bin, ['-hide_banner', '-devices'], { timeout: SCREEN_PROBE_MS }, (err, out) => { ready = !err && String(out || '').split(/\s+/).includes(source.device); });
+  return {
+    available: () => ready,
+    open(handlers) { return frameProcess({ bin, args: () => screenArgs(source), retry: false }, { onJpeg: handlers.onJpeg, onEnd: handlers.onEnd }); }
+  };
+};
+let screenFactory = systemScreen;
 
 const videoChunks = (seq, jpeg, track = 0) => {
   const n = Math.ceil(jpeg.length / VIDEO_CHUNK);
@@ -526,6 +560,7 @@ module.exports = {
     const roomQuietAt = Number(policy().roomQuietAt) > 0 ? Number(policy().roomQuietAt) : ROOM_QUIET_AT;
     const video = videoFactory(server, policy().videoDevice);
     const streamer = streamFactory(server);
+    const screener = screenFactory(server);
     const videoAllowed = () => policy().video !== false;
     const videoOn = () => !!video && videoAllowed();
     const codecsOffered = () => [...(OpusScript && policy().opus !== false ? ['opus'] : []), ...(videoOn() ? ['mjpeg'] : [])];
@@ -1111,6 +1146,7 @@ module.exports = {
         secure: !!r.kid, count: humansIn(r) + 1, max: r.max, public: [...r.peers.values()].some(p => p.viewer), speaking: now - r.sentAt < 1000,
         cam: !!r.cam, videoAvailable: videoOn() && r.hubVideo === true, grid: !!sharpLib, gridOrder: gridIds(r),
         streaming: r.stream ? r.stream.name : null, streamAvailable: fileStreamOn() && r.hubVideo === true,
+        sharingScreen: !!(r.stream && r.stream.screen), screenAvailable: screenOn() && r.hubVideo === true,
         notify: !!r.notify, recording: !!r.rec, recordingSince: r.rec ? r.rec.at : 0, recordingBy: [...r.recPeers],
         events: r.notify ? r.events.slice(-ROOM_EVENTS_MAX) : [],
         peers: [...r.peers.values()].map(p => ({ id: p.id, speaking: now - p.heardAt < 1000, muted: now - p.mutedAt < MUTE_TTL_MS, hand: now - (p.handBeat || 0) < MUTE_TTL_MS, handSince: p.handSince || 0, silenced: silenced.has(p.id), recording: r.recPeers.has(p.id), cam: now - (p.frameAt || 0) < VIDEO_HOLD_MS, film: now - (p.filmAt || 0) < VIDEO_HOLD_MS, viewer: !!p.viewer }))
@@ -1387,6 +1423,7 @@ module.exports = {
       r.out.push(Buffer.concat([Buffer.from([K_VIDEO]), Buffer.from(r.kid, 'hex'), r.sealer(plain)]));
     };
     const fileStreamOn = () => videoAllowed() && !!streamer;
+    const screenOn = () => videoAllowed() && !!screener && (typeof screener.available !== 'function' || !!screener.available());
     const streamFile = (file) => {
       const raw = String(file || '');
       if (!path.isAbsolute(raw)) return null;
@@ -1418,13 +1455,12 @@ module.exports = {
       if (notify) roomChanged();
       return true;
     };
-    const startRoomStream = (r, file, name) => {
-      if (!r || r.phase !== 'live' || !r.hubVideo || !fileStreamOn()) return false;
+    const startFilm = (r, name, screen, open) => {
       stopRoomStream(r, false);
-      const s = { name: String(name || '').slice(0, 120), pcm: Buffer.alloc(0), seq: 0, handle: null };
+      const s = { name: String(name || '').slice(0, 120), screen, pcm: Buffer.alloc(0), seq: 0, handle: null };
       r.stream = s;
       try {
-        s.handle = streamer.open(file, {
+        s.handle = open({
           onJpeg: (jpeg) => {
             if (r.stream !== s || room !== r || !Buffer.isBuffer(jpeg) || jpeg.length > VIDEO_FRAME_MAX) return;
             s.seq = (s.seq + 1) & 0xffff;
@@ -1433,7 +1469,7 @@ module.exports = {
             sendRoomJpeg(r, s.seq, jpeg, 1);
           },
           onPcm: (pcm) => {
-            if (r.stream !== s || !pcm || !pcm.length) return;
+            if (r.stream !== s || screen || !pcm || !pcm.length) return;
             s.pcm = s.pcm.length ? Buffer.concat([s.pcm, pcm]) : Buffer.from(pcm);
             const drop = (s.pcm.length - RATE * 2) & ~1;
             if (drop > 0) s.pcm = s.pcm.subarray(drop);
@@ -1444,6 +1480,9 @@ module.exports = {
       if (!s.handle || r.stream !== s) { if (r.stream === s) r.stream = null; return false; }
       return true;
     };
+    const filmReady = (r) => !!r && r.phase === 'live' && !!r.hubVideo;
+    const startRoomStream = (r, file, name) => filmReady(r) && fileStreamOn() && startFilm(r, name, false, (h) => streamer.open(file, h));
+    const startRoomScreen = (r) => filmReady(r) && screenOn() && startFilm(r, '', true, (h) => screener.open(h));
     const streamFrame = (r) => {
       const s = r.stream;
       if (!s || s.pcm.length < FRAME_BYTES) return null;
@@ -1789,6 +1828,11 @@ module.exports = {
         const r = room;
         if (!r || r.phase !== 'live') return cb(new Error('no-room'));
         if (o.stop) { stopRoomStream(r); return cb(null, roomSnapshot()); }
+        if (o.screen) {
+          if (!startRoomScreen(r)) return cb(new Error('unavailable'));
+          roomChanged();
+          return cb(null, roomSnapshot());
+        }
         const file = streamFile(o.file);
         if (!file) return cb(new Error('invalid'));
         if (!startRoomStream(r, file, o.name || path.basename(file))) return cb(new Error('unavailable'));
@@ -2099,6 +2143,8 @@ module.exports = {
 module.exports.setAudioFactory = (factory) => { audioFactory = typeof factory === 'function' ? factory : systemAudio; };
 module.exports.setVideoFactory = (factory) => { videoFactory = typeof factory === 'function' ? factory : systemVideo; };
 module.exports.setStreamFactory = (factory) => { streamFactory = typeof factory === 'function' ? factory : systemStream; };
+module.exports.setScreenFactory = (factory) => { screenFactory = typeof factory === 'function' ? factory : systemScreen; };
+module.exports.screenSource = screenSource;
 module.exports.jpegSplitter = jpegSplitter;
 module.exports.VIDEO_CHUNK = VIDEO_CHUNK;
 module.exports.VIDEO_HOLD_MS = VIDEO_HOLD_MS;

@@ -15,8 +15,11 @@ const FILTER_LABELS = {
   map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product',
   pad: i18n.typePad || 'PAD', room: i18n.typeRoom || 'ROOM', roomMember: i18n.typeRoomMember || 'ROOM PARTICIPANT', wikiPage: i18n.typeWiki || 'WIKI', emergency: i18n.typeEmergency || 'EMERGENCY', emergencyConfirm: i18n.typeEmergencyConfirm || 'EMERGENCY CONFIRM', emergencyUpdate: i18n.typeEmergencyUpdate || 'EMERGENCY UPDATE', mailingList: i18n.typeMailingList || 'MAILING LIST', logisticsRoute: i18n.typeLogisticsRoute || 'ROUTE', logisticsRating: i18n.typeLogisticsRating || 'ROUTE RATING', podcast: i18n.typePodcast || 'PODCAST', podcastEpisode: i18n.typePodcastEpisode || 'EPISODE', podcastOpinion: i18n.typePodcastOpinion || 'EPISODE OPINION', podcastPlay: i18n.typePodcastPlay || 'EPISODE PLAY', campaign: i18n.typeCampaign || 'CAMPAIGN', campaignSignature: i18n.typeCampaignSignature || 'SIGNATURE', campaignUpdate: i18n.typeCampaignUpdate || 'CAMPAIGN UPDATE', chat: i18n.typeChat || 'CHAT', gameScore: i18n.typeGameScore || 'GAME SCORE',
   calendar: i18n.typeCalendar || 'CALENDAR', torrent: i18n.typeTorrent, file: i18n.typeFile,
-  school: i18n.typeSchool || 'SCHOOL'
+  school: i18n.typeSchool || 'SCHOOL', comment: i18n.comment || 'Comment'
 };
+
+const blockKind = (block) => block && block.type === 'post' && block.content && typeof block.content.root === 'string' ? 'comment' : block && block.type;
+const blockLabel = (block) => FILTER_LABELS[blockKind(block)] || blockKind(block);
 
 const BASE_FILTERS = ['all', 'recent', 'mine', 'tombstone', 'logs'];
 const CAT_BLOCK1  = ['votes', 'event', 'task', 'report', 'calendar', 'school', 'parliament', 'courts'];
@@ -78,7 +81,7 @@ const filterBlocks = (blocks, filter, userId) => {
   if (filter === 'shop') return blocks.filter(b => b.type === 'shop' || b.type === 'shopProduct');
   if (filter === 'school') return blocks.filter(b => ['schoolCourse', 'schoolLesson', 'schoolEnroll', 'schoolCertificate'].includes(b.type));
   if (filter === 'logs') return blocks.filter(b => b.type === 'log' && b.author === userId);
-  return blocks.filter(b => b.type === filter);
+  return blocks.filter(b => blockKind(b) === filter);
 };
 
 const computeStats = (blocks) => {
@@ -87,7 +90,7 @@ const computeStats = (blocks) => {
   const byAuthor = new Map();
   for (const b of arr) {
     if (!b || !b.type) continue;
-    byType.set(b.type, (byType.get(b.type) || 0) + 1);
+    byType.set(blockKind(b), (byType.get(blockKind(b)) || 0) + 1);
     if (b.author) byAuthor.set(b.author, (byAuthor.get(b.author) || 0) + 1);
   }
   const typeBreakdown = Array.from(byType.entries())
@@ -252,7 +255,7 @@ const renderBlockDiagram = (blocks, qs) => {
     h3({ class: 'block-diagram-title' }, i18n.blockchainLatestDatagram || 'Latest Datagram'),
     ...last2.map(block => {
       const ts = moment(block.ts).format('YYYY-MM-DD HH:mm:ss');
-      const typeLabel = (FILTER_LABELS[block.type] || block.type).toUpperCase();
+      const typeLabel = blockLabel(block).toUpperCase();
       const color = TYPE_COLORS[block.type] || '#95a5a6';
       const shortId = block.id.length > 20 ? block.id.slice(0, 10) + '…' + block.id.slice(-8) : block.id;
       const shortAuthor = block.author.length > 20 ? block.author.slice(0, 10) + '…' + block.author.slice(-8) : block.author;
@@ -345,7 +348,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
           ),
           div({ class: 'block-row block-row--meta' },
             span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
-            span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
+            span({ class: 'blockchain-card-value' }, blockLabel(block).toUpperCase())
           ),
           div({ class: 'block-row block-row--meta' },
             span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockTimestamp}:`),
@@ -366,7 +369,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
             ),
             div({ class: 'block-row block-row--meta' },
               span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockType}:`),
-              span({ class: 'blockchain-card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())
+              span({ class: 'blockchain-card-value' }, blockLabel(block).toUpperCase())
             ),
             div({ class: 'block-row block-row--meta' },
               span({ class: 'blockchain-card-label' }, `${i18n.oasisIdLabel || 'OasisID'}:`),
@@ -550,7 +553,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
                   table({ class:'block-info-table' },
                     tr(td({ class:'card-label' }, i18n.blockchainBlockTimestamp), td({ class:'card-value' }, moment(block.ts).format('YYYY-MM-DDTHH:mm:ss.SSSZ'))),
                     tr(td({ class:'card-label' }, i18n.blockchainBlockID),        td({ class:'card-value' }, block.id)),
-                    tr(td({ class:'card-label' }, i18n.blockchainBlockType),      td({ class:'card-value' }, (FILTER_LABELS[block.type]||block.type).toUpperCase())),
+                    tr(td({ class:'card-label' }, i18n.blockchainBlockType),      td({ class:'card-value' }, blockLabel(block).toUpperCase())),
                     tr(td({ class:'card-label' }, i18n.blockchainBlockAuthor),    td({ class:'card-value' }, a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author))),
                     tr(td({ class:'card-label' }, i18n.blockchainBlockCarbon || 'Carbon footprint'), td({ class:'card-value' }, formatCarbon(block.size)))
                   )

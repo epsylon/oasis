@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
@@ -12,7 +12,7 @@ const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const userId = config.keys.id;
 
 const capFirst = (s) => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
-const typeLabel = (type) => i18n['type' + capFirst(type)] || type;
+const typeLabel = (type) => i18n['type' + capFirst(type)] || require('./activity_view').rootTypeLabel(type) || type;
 
 const filterButton = (mode, currentFilter) =>
   form({ method: 'GET', action: '/trending' },
@@ -111,7 +111,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
       div({ class: 'card-section document' },
         t ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.documentTitleLabel + ':'), span({ class: 'card-value' }, t)) : "",
         description ? [span({ class: 'card-label' }, i18n.documentDescriptionLabel + ":"), p(...renderStyledText(description))] : null,
-        div({ id: `pdf-container-${item.key}`, class: 'pdf-viewer-container', 'data-pdf-url': `/blob/${encodeURIComponent(url)}` })
+        renderPdfDocument(`/blob/${encodeURIComponent(url)}`, { title: t })
       )
     );
   } else if (c.type === 'industry') {
@@ -251,6 +251,9 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     logisticsRoute: 'logistics',
     poll: 'polls',
     schoolCourse: 'school/course',
+    wikiPage: 'wiki',
+    map: 'maps',
+    job: 'jobs',
     industryBlueprint: 'industry/blueprint'
   };
   const detailHref = detailPaths[c.type]
@@ -317,7 +320,8 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
     ['votes', 'event', 'task', 'report'],
     ['feed', 'post', 'project', 'industry', 'shopProduct', 'transfer'],
     ['audio', 'bookmark', 'document', 'file', 'image', 'torrent', 'video'],
-    ['podcast', 'podcastEpisode', 'campaign', 'logisticsRoute']
+    ['podcast', 'podcastEpisode', 'campaign', 'logisticsRoute'],
+    ['wikiPage', 'map', 'industryBlueprint', 'job']
   ];
 
   let filteredItems = items.filter(item => {
@@ -374,7 +378,6 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
     )
     .filter(Boolean);
 
-  const hasDocument = filteredItems.some(item => item.value.content.type === 'document');
 
   let html = template(
     title,
@@ -405,12 +408,6 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
       )
     )
   );
-
-  if (hasDocument) {
-    html += `
-      <script type="module" src="/js/pdf-viewer.js?v=102"></script>
-    `;
-  }
 
   return html;
 };

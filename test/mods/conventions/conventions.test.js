@@ -204,3 +204,10 @@ describe('conventions: the log is read by type, never by "the last N messages"',
     eq(silent.length, 0, `followed without a sentence: ${silent.join(', ')}`);
   });
 });
+
+describe('conventions: ids in the address', (t) => {
+  t('route parameters are never decoded a second time, or ids that start with an escape-like sequence would break', () => {
+    const src = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'backend', 'backend.js'), 'utf8');
+    eq((src.match(/decodeURIComponent\(ctx\.params\./g) || []).length, 0, 'use paramId(ctx.params.x) instead');
+  });
+});

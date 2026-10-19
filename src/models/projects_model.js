@@ -137,7 +137,7 @@ module.exports = ({ cooler }) => {
     const groupKeys = []
     { let x = root, g = 0; groupKeys.push(x); while (naiveNext.has(x) && g++ < 100000) { x = naiveNext.get(x); groupKeys.push(x) } }
 
-    const project = { ...best.c, id: tip }
+    const project = { ...best.c, id: tip, rootId: root }
 
     const followers = new Set()
     const opinions = {}

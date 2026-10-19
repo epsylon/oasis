@@ -18,9 +18,12 @@ module.exports = ({ cooler }) => {
 
   const cleanText = (t) => (typeof t === "string" ? t.replace(/\r\n?/g, "\n").trim() : "");
 
+  const FEED_MEDIA_SRC = String.raw`!?\[[^\]\n]*\]\(\s*&[^)\s]+\.sha256\s*\)`;
   const isValidFeedText = (t) => {
-    const s = cleanText(t).replace(/!?\[[^\]\n]*\]\(\s*&[^)\s]+\.sha256\s*\)/g, "").trim();
-    return s.length >= FEED_TEXT_MIN && s.length <= FEED_TEXT_MAX;
+    const all = cleanText(t);
+    const s = all.replace(new RegExp(FEED_MEDIA_SRC, "g"), "").trim();
+    if (s.length > FEED_TEXT_MAX) return false;
+    return s.length >= FEED_TEXT_MIN || (!s && new RegExp(FEED_MEDIA_SRC).test(all));
   };
 
   const getMsg = (ssbClient, id) =>
@@ -100,16 +103,18 @@ module.exports = ({ cooler }) => {
 
     if (typeof text !== "string") throw new Error("Invalid text");
     const cleaned = cleanText(text);
+    const attached = typeof media === "string" ? media.trim() : "";
+    const full = [cleaned, attached].filter(Boolean).join("\n");
 
-    if (!isValidFeedText(cleaned)) {
-      if (cleaned.length < FEED_TEXT_MIN) throw new Error("Text too short");
+    if (!full) throw new Error("Text required");
+    if (!isValidFeedText(full)) {
       if (cleaned.length > FEED_TEXT_MAX) throw new Error("Text too long");
-      throw new Error("Text required");
+      throw new Error("Text too short");
     }
 
     const content = {
       type: "feed",
-      text: typeof media === "string" && media.trim() ? `${cleaned}\n${media.trim()}` : cleaned,
+      text: full,
       author: userId,
       createdAt: new Date().toISOString(),
       tags: extractTags(cleaned),

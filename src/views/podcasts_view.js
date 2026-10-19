@@ -1,14 +1,15 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, audio: audioHyperaxe, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderStyledText } = require("../backend/renderStyledText");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "TOP", "VIEWERS"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "FAVORITES", "TOP", "VIEWERS"];
+const SORTS = ["recent", "oldest", "top"];
 const CATEGORIES = ["NEWS", "MUSIC", "TALK", "EDUCATION", "TECH", "CULTURE", "COMMUNITY", "OASIS", "OTHER"];
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
@@ -47,6 +48,7 @@ const podcastChipFor = (mode, census) => {
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(c => String(c.author) === String(userId));
   if (mode === "RECENT") return census.length > 0;
+  if (mode === "FAVORITES") return census.some(c => c.isFavorite);
   if (mode === "TOP") return census.some(c => (c.opinionCount || 0) > 0 || (c.spreadCount || 0) > 0);
   if (mode === "VIEWERS") return census.some(c => (c.playCount || 0) > 0);
   if (CATEGORIES.includes(mode)) return census.some(c => c.category === mode);
@@ -93,11 +95,12 @@ const renderChannelForm = (ch) =>
       label(i18n.podcastDescriptionLabel), br(),
       textarea({ name: "description", rows: 5, maxlength: "3000", placeholder: i18n.podcastDescriptionPlaceholder }, ch ? ch.description : ""), br(),
       label(i18n.podcastCoverLabel), br(),
-      input({ type: "file", name: "cover", accept: "image/*,video/*" }), br(), br(),
+      (ch && renderMediaLockNote(ch)) || input({ type: "file", name: "cover", accept: "image/*,video/*" }), br(), br(),
       label(i18n.podcastCategoryLabel), br(),
       select({ name: "category" }, ...CATEGORIES.map(c => option({ value: c, ...((ch ? ch.category : "TALK") === c ? { selected: true } : {}) }, catLabel(c)))), br(), br(),
       label(i18n.podcastTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.podcastTagsPlaceholder, value: ch ? ch.tags.join(", ") : "" }), br(), br(),
+      ...renderLicenseSelect(ch ? ch.license : undefined, i18n),
       renderClearnetSelector(ch ? !!ch.clearnet : false, i18n), br(),
       button({ type: "submit", class: "create-button" }, ch ? i18n.podcastUpdate : i18n.podcastCreate)
     )
@@ -109,10 +112,12 @@ const renderEpisodeForm = (ch, ep) =>
     form({ method: "POST", action: ep ? `/podcasts/episode/update/${encodeURIComponent(ep.id)}` : `/podcasts/${encodeURIComponent(ch.id)}/episodes`, enctype: "multipart/form-data" },
       label(i18n.podcastEpisodeTitleLabel), br(),
       input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.podcastEpisodeTitlePlaceholder, value: ep ? ep.title : "" }), br(),
+      label(i18n.podcastEpisodeNumberLabel), br(),
+      input({ type: "number", name: "number", min: "1", step: "1", value: ep ? String(ep.number || "") : "" }), br(),
       label(i18n.podcastEpisodeDescriptionLabel), br(),
       textarea({ name: "description", rows: 6, maxlength: "5000", placeholder: i18n.podcastEpisodeDescriptionPlaceholder }, ep ? ep.description : ""), br(),
       label(i18n.podcastEpisodeAudioLabel), br(),
-      input({ type: "file", name: "media", accept: "audio/*,video/*", ...(ep ? {} : { required: true }) }), br(), br(),
+      (ep && renderMediaLockNote(ep)) || input({ type: "file", name: "media", accept: "audio/*,video/*", ...(ep ? {} : { required: true }) }), br(), br(),
       label(i18n.podcastTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.podcastTagsPlaceholder, value: ep ? ep.tags.join(", ") : "" }), br(), br(),
       button({ type: "submit", class: "create-button" }, ep ? i18n.podcastUpdate : i18n.podcastEpisodePublish)
@@ -144,7 +149,10 @@ exports.podcastsView = async (channels, filter = "ALL", params = {}) => {
               form({ method: "GET", action: "/podcasts", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: f }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.podcastSearchPlaceholder, class: "filter-box__input" }),
-                div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+                div({ class: "filter-box__controls" },
+                  select({ name: "sort", class: "filter-box__select" },
+                    ...SORTS.map(s => option({ value: s, ...((params.sort || "recent") === s ? { selected: true } : {}) }, i18n[`audioSort${s.charAt(0).toUpperCase()}${s.slice(1)}`]))),
+                  button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
               )
             ),
             div({ class: "tribe-grid" }, list.length ? paged(list).map(c => renderChannelCard(c, params)) : p(i18n.podcastNoItems))
@@ -213,7 +221,7 @@ exports.singleChannelView = async (ch, params = {}) => {
     div({ class: "card-header activity-card-header" },
       renderContentActions(ch.id, href, { author: ch.author, favKind: "podcasts", isFavorite: ch.isFavorite, reportTitle: ch.title, spread: params.spread || null, returnTo: href, deleteAction: isAuthor ? contentDeleteAction("podcast", ch.id) : undefined })
     ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, ch.title), renderReachChip(!!ch.clearnet, i18n, ch.clearnet ? clearnetItemHref('podcasts', ch.title, ch.id) : null)),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, ch.title), renderReachChip(!!ch.clearnet, i18n, ch.clearnet ? clearnetItemHref('podcasts', ch.title, ch.id) : null), renderLicenseChip(ch.license), renderEditedChip(ch.tipId, ch.rootId)),
     isAuthor ? renderClearnetSwitch("podcasts", ch.rootId || ch.id, !!ch.clearnet) : null,
     div({ class: "card-chips-row" }, renderStateChip("neutral", "", catLabel(ch.category))),
     ch.cover && ch.cover.blobId ? a({ href: channelHref(ch), class: "podcast-cover-link" }, renderCover(ch, "podcast-cover podcast-cover-large")) : null,
@@ -291,7 +299,7 @@ exports.singleEpisodeView = async (ep, params = {}) => {
     div({ class: "card-header activity-card-header" },
       renderContentActions(ep.id, href, { author: ep.author, favKind: "podcasts", isFavorite: ep.isFavorite, reportTitle: ep.title, spread: params.spread || null, returnTo: href, torrentFrom: { blobId: ep.media && ep.media.blobId, name: ep.title }, deleteAction: isAuthor ? contentDeleteAction("podcastEpisode", ep.id) : undefined })
     ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: channelHref(ch), class: "user-link" }, ch.title || i18n.podcastsTitle)), renderReachChip(!!ch.clearnet, i18n, ch.clearnet ? clearnetItemHref('podcasts', ch.title, ch.id) : null)),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: channelHref(ch), class: "user-link" }, ch.title || i18n.podcastsTitle)), renderReachChip(!!ch.clearnet, i18n, ch.clearnet ? clearnetItemHref('podcasts', ch.title, ch.id) : null), renderLicenseChip(ch.license)),
     ch.cover && ch.cover.blobId ? a({ href: channelHref(ch), class: "podcast-cover-link" }, renderCover(ch, "podcast-cover podcast-cover-large")) : null,
     ep.description ? p({ class: "tribe-side-description" }, ...renderStyledText(ep.description)) : null,
     infoTable(ep),
@@ -302,7 +310,8 @@ exports.singleEpisodeView = async (ep, params = {}) => {
     div({ class: "emergency-update-head podcast-episode-head" },
       div({ class: "podcast-episode-head-left" },
         h2({ class: "tribe-card-title" }, `#${ep.number} · ${ep.title}`),
-        episodeChips(ep)
+        episodeChips(ep),
+        renderEditedChip(ep.tipId, ep.rootId)
       ),
       headActions.length ? div({ class: "tribe-side-actions emergency-update-actions" }, ...headActions) : null
     ),

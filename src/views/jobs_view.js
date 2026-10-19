@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement } = require("./main_views")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
@@ -177,7 +177,7 @@ const renderJobInfoTable = (job, opts = {}) => {
   return table({ class: "tribe-info-table jobs-info-table" }, ...rows)
 }
 
-const renderJobExtraDetails = (job) => {
+const renderJobExtraDetails = (job, opts = {}) => {
   const langLabel = String(job.languages || "").toUpperCase()
   const isExchange = String(job.job_type || "").toLowerCase() === "exchange"
   const skill = safeText(job.exchangeSkill)
@@ -196,6 +196,21 @@ const renderJobExtraDetails = (job) => {
   }
   return table({ class: "tribe-info-table jobs-info-table" }, ...rows, ...(opts.includeCreated ? renderCreatedRows(job.createdAt, job.author, job.updatedAt) : []))
 }
+
+const jobChipFor = (filter, censusJ, params = {}) => (x) => {
+  const m = x.key;
+  if (m === filter) return true;
+  if (m === "TOP") return censusJ.length > 0;
+  if (m === "MINE") return censusJ.some(j => String(j.author) === String(userId));
+  if (m === "RECENT") return censusJ.length > 0;
+  if (m === "APPLIED") return censusJ.some(j => safeArr(j.subscribers).includes(userId));
+  if (m === "REMOTE") return censusJ.some(j => String(j.location || "").toLowerCase() === "remote");
+  if (m === "PRESENCIAL") return censusJ.some(j => String(j.location || "").toLowerCase() === "presencial");
+  if (m === "FREELANCER" || m === "EMPLOYEE" || m === "EXCHANGE") return censusJ.some(j => String(j.job_type || "").toUpperCase() === m);
+  if (m === "OPEN" || m === "CLOSED") return censusJ.some(j => String(j.status || "OPEN").toUpperCase() === m);
+  if (m === "CV") return params.anyCVs === true;
+  return true;
+};
 
 const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
   const list = safeArr(jobs)
@@ -307,7 +322,7 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null, params =
       br(),
       label(i18n.jobImage),
       br(),
-      input({ type: "file", name: "image" }),
+      (isEdit && renderMediaLockNote(job)) || input({ type: "file", name: "image" }),
       br(),
       job.image ? renderMediaBlob(job.image) : null,
       br(),
@@ -460,20 +475,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
 
   const emptyMod = moduleIsEmpty(Array.isArray(jobsOrCVs) ? jobsOrCVs : [], filter, "ALL", search || String(minSalary || "") || String(maxSalary || ""));
   const censusJ = Array.isArray(params.censusList) ? params.censusList : (Array.isArray(jobsOrCVs) ? jobsOrCVs : []);
-  const jobChip = (x) => {
-    const m = x.key;
-    if (m === filter) return true;
-    if (m === "TOP") return censusJ.length > 0;
-    if (m === "MINE") return censusJ.some(j => String(j.author) === String(userId));
-    if (m === "RECENT") return censusJ.length > 0;
-    if (m === "APPLIED") return censusJ.some(j => safeArr(j.subscribers).includes(userId));
-    if (m === "REMOTE") return censusJ.some(j => String(j.location || "").toLowerCase() === "remote");
-    if (m === "PRESENCIAL") return censusJ.some(j => String(j.location || "").toLowerCase() === "presencial");
-    if (m === "FREELANCER" || m === "EMPLOYEE" || m === "EXCHANGE") return censusJ.some(j => String(j.job_type || "").toUpperCase() === m);
-    if (m === "OPEN" || m === "CLOSED") return censusJ.some(j => String(j.status || "OPEN").toUpperCase() === m);
-    if (m === "CV") return params.anyCVs === true;
-    return true;
-  };
+  const jobChip = jobChipFor(filter, censusJ, params);
   const filterObj = FILTERS.find((f) => f.key === filter) || FILTERS[0]
   const sectionTitle = i18n[filterObj.title] || i18n.jobsTitle
 
@@ -659,7 +661,8 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
       renderContentActions(job.id, `/jobs/${encodeURIComponent(job.id)}`, { spread: params.spreads || null, author: job.author, favKind: 'jobs', isFavorite: job.isFavorite, reportTitle: job.title, returnTo, deleteAction: isAuthor ? contentDeleteAction("job", job.id) : null })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, safeText(job.title) || i18n.jobsTitle)
+      h2({ class: "tribe-card-title" }, safeText(job.title) || i18n.jobsTitle),
+      renderEditedChip(job.id, job.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     job.image
@@ -692,7 +695,10 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     renderJobSection(i18n.jobTasks, job.tasks),
     job.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, job.mapUrl)) : null,
     candidatesBlock ? candidatesBlock : null,
-    renderJobCommentsSection(job.id, returnTo, comments)
+    renderEngagement(job.rootId || job.id,
+      params.opinions ? renderOpinionsVoting('/jobs/opinions', job.rootId || job.id, params.opinions.opinions, `/jobs/${encodeURIComponent(job.rootId || job.id)}`, params.opinions.opinions_inhabitants) : null,
+      renderJobCommentsSection(job.id, returnTo, comments)
+    )
   )
 
   return template(
@@ -707,7 +713,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
           input({ type: "hidden", name: "minSalary", value: String(params.minSalary ?? "") }),
           input({ type: "hidden", name: "maxSalary", value: String(params.maxSalary ?? "") }),
           input({ type: "hidden", name: "sort", value: safeText(params.sort || "recent") }),
-          ...FILTERS.map((f) =>
+          ...FILTERS.filter(jobChipFor(filter, Array.isArray(params.censusList) ? params.censusList : [], params)).map((f) =>
             button({ type: "submit", name: "filter", value: f.key, class: filter === f.key ? "filter-btn active" : "filter-btn" }, String(i18n[f.i18n]).toUpperCase())
           ),
           button({ type: "submit", name: "filter", value: "CREATE", class: "create-button" }, i18n.jobsCreateJob)

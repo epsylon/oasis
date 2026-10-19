@@ -85,7 +85,6 @@ const renderFeedComposer = ({ text = "", media = "", rows = 5, clearnet = false,
     { method: "POST", action: "/feed/create", enctype: "multipart/form-data" },
     textarea({
       name: "text",
-      required: true,
       minlength: String(FEED_TEXT_MIN),
       maxlength: String(FEED_TEXT_MAX),
       rows: String(rows),

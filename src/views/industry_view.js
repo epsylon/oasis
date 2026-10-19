@@ -1,6 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, img, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, renderCardMetaRow, moduleIsEmpty, paged } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderContentActions , renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote } = require("./main_views")
+const { renderCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderMapEmbedWithZoom } = require("./maps_view")
@@ -159,6 +160,7 @@ const renderFacilityForm = (facility, mode, spreadWarning = null) => {
   const returnTo = "/industry?filter=MINE"
   const curPolicy = fc.membershipPolicy || "vote"
   const curSector = fc.sector || "other"
+  const mediaLock = isEdit ? renderMediaLockNote(fc) : null
   return div({ class: "div-center industry-form" },
     isEdit ? spreadWarning : null,
     form({
@@ -177,11 +179,7 @@ const renderFacilityForm = (facility, mode, spreadWarning = null) => {
       br(),
       label(i18n.uploadMedia || "Upload media (max-size: 75MB)"),
       br(),
-      input({ type: "file", name: "image" }),
-      br(),
-      label(i18n.uploadMedia),
-      br(),
-      input({ type: "file", name: "blob" }),
+      ...(mediaLock ? [mediaLock] : [input({ type: "file", name: "image" }), br(), label(i18n.uploadMedia), br(), input({ type: "file", name: "blob" })]),
       fc.image ? div({ class: "industry-form-media" }, renderMediaBlob(fc.image, { class: "industry-hero-image" })) : null,
       br(),
       label(i18n.industrySector || "Sector"),
@@ -564,7 +562,7 @@ const renderBlueprintForm = (fc, bp, mode, spreadWarning = null) => {
       label(i18n.industryDescriptionLabel || "Description"),
       br(), textarea({ name: "description", rows: "4", maxlength: "2000", placeholder: i18n.industryBlueprintDescPlaceholder || "Specs, dimensions, weight, docs…" }, bp.description || ""), br(),
       label(i18n.uploadMedia || "Upload media (max-size: 75MB)"),
-      br(), input({ type: "file", name: "image" }),
+      br(), (isEdit && renderMediaLockNote(bp)) || input({ type: "file", name: "image" }),
       bp.image ? div({ class: "industry-form-media" }, renderMediaBlob(bp.image, { class: "post-image" })) : null,
       br(),
       label(i18n.industryOutputKind || "Product type"),
@@ -659,7 +657,7 @@ const renderFacilitySide = (fc, returnTo, params = {}) => {
   }
 
   return div({ class: "tribe-side" },
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/${encodeURIComponent(fc.id)}` }, safeText(fc.name) || (i18n.industryTitle || "Industry")))),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/${encodeURIComponent(fc.id)}` }, safeText(fc.name) || (i18n.industryTitle || "Industry"))), renderEditedChip(fc.id, fc.root)),
     div({ class: "card-chips-row" }, ...chips),
     fc.image ? renderMediaBlob(fc.image, { class: "tribe-detail-image" }) : null,
     fc.description ? p({ class: "tribe-side-description" }, ...renderStyledText(safeText(fc.description))) : null,
@@ -703,7 +701,7 @@ exports.singleFacilityView = async (facility, filter, params = {}) => {
     renderBlueprintsSection(fc, params.blueprints, isMember, params.childSpreadMap || new Map()),
     renderBuildsSection(fc, params.builds, params.blueprints, isMember, params.childSpreadMap || new Map()),
     renderFacilityJobsSection(fc, params.facilityJobs),
-    renderCardMetaRow(renderOpinionsVoting('/industry/opinions', fc.id || fc.key, fc.opinions, null, fc.opinions_inhabitants)),
+    renderEngagement(fc.id || fc.key, renderOpinionsVoting('/industry/opinions', fc.id || fc.key, fc.opinions, null, fc.opinions_inhabitants)),
     div({ class: "industry-section" },
       h2(i18n.industryMembers || "Members"),
       ul({ class: "industry-members-list" }, safeArr(fc.members).map((mid) => li(
@@ -792,7 +790,8 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
         ),
                 div({ class: "card-chips-row" },
           renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
-          renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase())
+          renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase()),
+          renderEditedChip(bp.id, bp.rootId)
         ),
         p({ class: "industry-facility-line" }, span({ class: "industry-meta-label" }, `${i18n.industryFacility || "Facility"}: `), a({ href: facilityHref }, safeText(bp.facilityName))),
         h2(safeText(bp.name)),
@@ -815,6 +814,10 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
               )))
             )
           : null
+      ),
+      renderEngagement(bp.rootId || bp.id,
+        params.opinions ? renderOpinionsVoting('/industry/blueprint/opinions', bp.rootId || bp.id, params.opinions.opinions, `/industry/blueprint/${encodeURIComponent(bp.rootId || bp.id)}`, params.opinions.opinions_inhabitants) : null,
+        Array.isArray(params.comments) ? renderCommentsSection({ action: `/industry/blueprint/${encodeURIComponent(bp.rootId || bp.id)}/comments`, comments: params.comments, returnTo: `/industry/blueprint/${encodeURIComponent(bp.rootId || bp.id)}` }) : null
       )
     )
   )

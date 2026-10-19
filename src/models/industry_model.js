@@ -724,6 +724,7 @@ module.exports = ({ cooler }) => {
       builds.sort((x, y) => new Date(y.startDate || 0) - new Date(x.startDate || 0))
       return {
         ...b.blueprint,
+        rootId: b.root,
         facilityId: g.root,
         facilityName: g.facility.name,
         members: g.facility.members,

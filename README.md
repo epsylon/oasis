@@ -21,7 +21,7 @@ Main features of the Oasis interface are:
  +  You are the center of your own distributed network. Online or offline, it works anywhere that you are.
  +  Initial identities are randomnly generated (no username or password required).
  +  No personal profile generated (no questions about gender, age, location, etc …).
- +  Automatic exif stripping (such as GPS coordinates) on images for better privacy.
+ +  Automatic exif stripping (such as GPS coordinates) on images, and metadata stripping on audio, video and PDF uploads, for better privacy.
  +  No email or associated mobile phone required.
  +  Automatic updates with new functionalities.
  
@@ -87,7 +87,7 @@ Oasis is TRULY MODULAR. Here's a list of what comes deployed with the "core".
  + Forums: Module to discover and manage forums.
  + Games: Module to play and share your scores in various mini-games.	
  + Governance: Module to discover and manage votes.	
- + Graphos: Module to explore the network as an interactive map of peers and PUBs.
+ + Graphos: Module to explore the network as an interactive map of peers.
  + Housing: Module to discover and manage places.
  + Images: Module to discover and manage images.
  + Industry: Module to manage the means of production collectively.
@@ -247,12 +247,12 @@ Oasis contains its own telephone: voice and video calls between inhabitants, end
 
 Rooms are encrypted videoconference rooms, under **Community → Rooms**, that inhabitants join and leave whenever they want.
 
- + A room is OPEN or INVITE-ONLY (entered with an invite code); tribes and sub-tribes have rooms of their own.
+ + A room is OPEN or INVITE-ONLY (entered with an invite code); tribes and sub-tribes have rooms of their own. Participants can leave a room whenever they want (**Leave**); an INVITE-ONLY room then needs a new invitation.
  + Entering a room joins its call. Anyone inside can turn their camera on; everyone sees the cameras that are on tiled into one picture, with the names underneath.
  + Each room has a phone number, and its creator chooses **Do not disturb** or **Switchboard**: with Switchboard, dialling the number from Phone enters the room.
- + Everything is encrypted end to end: the PUB of the room's creator relays voice and video without being able to read them.
- + Mute yourself or switch your camera off whenever you want.
- + An OPEN room can be published as CLEARNET: its public page shows only its name and number.
+ + Everything is encrypted end to end: the PUB that hosts the room (or the creator's own node) relays voice and video without being able to read them.
+ + Mute yourself, switch your camera off, raise your hand, record the room, play a video (**Stream**) or share your screen (**Screen**).
+ + An OPEN room can be published as CLEARNET: its public page shows its name and number and, while it is live, its picture and sound (never names); a public PUB joins it as a viewer to serve it.
 
 See [docs/phone/README.md](docs/phone/README.md) for both.
 
@@ -262,10 +262,6 @@ See [docs/phone/README.md](docs/phone/README.md) for both.
 
 **Logs** (in the **Personal** menu) is your private diary, encrypted to yourself. Write entries by hand or, with the AI module on, let 42 write them from your own recent actions in the network. Export them all, or a single one, as PDF.
 
-## PDF export
-
-Many content pages offer **Generate PDF** and **Share via PM** (the PDF travels encrypted, attached to a new private message); some can be downloaded as PDF too. The option appears on the page when it applies.
-
 ## Clearnet
 
 Everything you publish is created as **OASIS** (visible to the inhabitants of Oasis only) or **CLEARNET** (also served on the public web pages of every PUB that replicates you, under `/c`). You choose when you create the item and can switch it later from the item's page. Private, hidden, closed, invite-only, paid or tribe content can never be CLEARNET; if an item is later hidden or closed it leaves the CLEARNET and does not come back on its own.
@@ -273,6 +269,7 @@ Everything you publish is created as **OASIS** (visible to the inhabitants of Oa
  + Most modules offer the choice; the module page shows it when it applies.
  + Public pages show what the author published, never what other inhabitants added to it.
  + Your public page lists what you put on the CLEARNET; the hub `/c` and its sitemap list everything public, including the public tribes.
+ + RSS feeds: `/c/rss` (everything) and `/c/rss/<module>`; each podcast channel has its own feed.
 
  + Clearnet guide: [docs/PUB/clearnet.md](docs/PUB/clearnet.md)
 
@@ -345,13 +342,6 @@ of any kind. Like a crypto transaction, SSB posts are censorship-resistant and a
 
 In SSB each inhabitant hosts their own content and the content of the peers they follow, which provides fault tolerance and 
 eventual consistency. 
-
-A node never stores the whole network, only its neighbourhood: you, the inhabitants you follow and the ones they follow. 
-Media is kept in a cache you can limit (Settings → Media cache, unlimited by default); 
-what is dropped is fetched again when somebody opens it. A PUB keeps a snapshot of its log (private messages only as ciphertext) and hands it, over the 
-encrypted SSB connection and only to the inhabitants it follows, to whoever joins through it: the newcomer has the latest 
-content almost at once while replication completes the rest in the background. The real size of your log, your indexes and 
-your media is shown at any time under Stats.
 
 ----------
 

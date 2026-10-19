@@ -1602,7 +1602,58 @@ button.create-button:hover {
 }
 
 /* Documents */
+.pdf-holder {
+  display: block;
+}
+.pdf-frame {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 80vh;
+  min-height: 520px;
+  border: 0;
+  margin-bottom: 1rem;
+  background: transparent;
+}
+.pdf-frame:target {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  min-height: 0;
+  margin: 0;
+  background: #111;
+}
+.pdf-unmax {
+  display: none;
+}
+.pdf-frame:target + .pdf-unmax {
+  display: block;
+  position: fixed;
+  top: 10px;
+  right: 18px;
+  z-index: 100001;
+  background-color: #2d2d2d;
+  color: #eee;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  text-decoration: none;
+}
+.pdf-embed-root,
+body.pdf-embed {
+  height: 100%;
+}
+body.pdf-embed {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent !important;
+}
 .pdf-viewer-container {
+  box-sizing: border-box;
   width: 100%;
   max-width: 100%;
   background: #1e1e1e;
@@ -1611,42 +1662,116 @@ button.create-button:hover {
   border-radius: 6px;
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
 }
-
+.pdf-embedded {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  margin-bottom: 0;
+}
 .pdf-canvas-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
   height: 420px;
+  margin-bottom: 0;
+  overflow: hidden;
+}
+.pdf-wrap-scroll {
+  display: block;
   overflow: auto;
 }
-
-.pdf-viewer-container canvas {
+.pdf-embedded .pdf-canvas-wrap {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+.pdf-page-image {
   display: block;
+  box-sizing: border-box;
+  width: auto;
+  height: auto;
   margin: 0 auto;
   border: 1px solid #333;
   background-color: #fff;
 }
-
-.pdf-viewer-container .pdf-controls {
-  margin-top: 1rem;
+.pdf-z50 {
+  max-width: 50%;
+  max-height: 50%;
 }
-
-.pdf-viewer-container button {
+.pdf-z75 {
+  max-width: 75%;
+  max-height: 75%;
+}
+.pdf-z100 {
+  max-width: 100%;
+  max-height: 100%;
+}
+.pdf-z125 {
+  width: 100%;
+}
+.pdf-z150 {
+  width: 150%;
+}
+.pdf-z200 {
+  width: 200%;
+}
+.pdf-z300 {
+  width: 300%;
+}
+.pdf-viewer-container .pdf-controls {
+  flex-shrink: 0;
+  margin-top: 1rem;
+  margin-bottom: 0;
+}
+.pdf-viewer-container .pdf-controls a,
+.pdf-viewer-container .pdf-controls span {
+  display: inline-block;
+  margin: 0 4px 4px 0;
   background-color: #2d2d2d;
   color: #eee;
   border: none;
   padding: 0.4rem 0.8rem;
   font-size: 1rem;
+  line-height: 1.2;
+  text-decoration: none;
   cursor: pointer;
   border-radius: 4px;
   transition: background-color 0.2s ease;
 }
-
-.pdf-viewer-container button:hover {
+.pdf-viewer-container .pdf-controls a:hover {
   background-color: #444;
 }
-
-.pdf-viewer-container span {
+.pdf-viewer-container .pdf-controls .pdf-off {
+  opacity: 0.4;
+  cursor: default;
+}
+.pdf-message {
+  padding: 12px;
   color: #ccc;
-  margin: 0 1rem;
-  font-family: monospace;
+  text-align: center;
+}
+.pdf-maximized {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  margin: 0;
+  padding: 6px;
+  border-radius: 0;
+  background: #111;
+}
+.pdf-maximized .pdf-canvas-wrap {
+  flex: 1 1 auto;
+  height: auto;
+  max-height: none;
+}
+.pdf-maximized .pdf-controls {
+  flex-shrink: 0;
+  margin: 6px 0;
 }
 
 /* CVs */
@@ -2097,6 +2222,51 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 .lightbox-download {
   right: 112px;
   font-size: 1.15em;
+}
+.lightbox-prev,
+.lightbox-next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  color: #fff;
+  font-size: 2em;
+  line-height: 1;
+  text-decoration: none;
+}
+.lightbox-prev {
+  left: 15px;
+}
+.lightbox-next {
+  right: 15px;
+}
+.media-download-btn {
+  display: inline-flex;
+  margin: 10px 0;
+}
+.edited-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid rgba(128, 128, 128, 0.5);
+  border-radius: 10px;
+  font-size: 0.75em;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.media-lock-note {
+  font-size: 0.9em;
+  opacity: 0.85;
+  margin: 6px 0;
 }
 
 /* Opinions */
@@ -2614,15 +2784,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   text-align: center;
 }
 
-.market-comments {
-  background: #2f2f2f;
-  border-radius: 12px;
-  padding: 12px;
-}
 
-.market-comments .votations-comment-card {
-  background: #3a3a3a;
-}
 
 .countdown-strong {
   font-weight: 700;
@@ -3169,12 +3331,6 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   color: #ffd740;
 }
 
-.comment-footer {
-  font-size: 0.85em;
-  display: flex;
-  justify-content: space-between;
-  color: #ffd740;
-}
 
 .date-link {
   color: #ffd740;
@@ -6927,8 +7083,6 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .jobs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(300px,calc((100% - 40px)/3)),1fr));gap:20px}
 .blogs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(max(300px,calc((100% - 40px)/3)),1fr));gap:20px}
 .jobs-grid .tribe-card,.tribe-grid .tribe-card{margin-bottom:0}
-.tribe-card .card-comments-summary{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
-.tribe-card .card-comments-summary .inline-form{margin:0}
 .jobs-info-table{table-layout:auto}
 .jobs-info-table .tribe-info-label{width:1%;white-space:nowrap}
 .jobs-info-table .tribe-info-value{white-space:normal;word-break:normal;overflow-wrap:anywhere}
@@ -6940,14 +7094,13 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .job-price-line{margin:0;font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace}
 .job-card-view-btn{margin-top:8px}
 .job-card-view-btn form{margin:0}
-.vote-comments-section,.comments-count,.comment-form-wrapper,.comments-list,.vote-buttons-block,.vote-buttons-row,.voting-buttons,.vote-table{border:none;background:transparent;padding:0;margin:0}
+.vote-comments-section,.comment-form-wrapper,.comments-list,.vote-buttons-block,.vote-buttons-row,.voting-buttons,.vote-table{border:none;background:transparent;padding:0;margin:0}
 .vote-buttons-block{display:flex;flex-direction:column;gap:8px}
 .vote-buttons-row{display:flex;gap:8px;flex-wrap:wrap}
 .voting-buttons{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap}
 .vote-comments-section{margin-top:16px}
 .comment-form-wrapper{margin-top:12px}
 .comments-list{margin-top:12px}
-.comments-count{margin-bottom:8px}
 .title-with-chip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:transparent !important;border:0 !important;padding:0 !important}
 .title-with-chip h2{margin:0}
 .pm-exposition-icon{font-size:14px;line-height:1}
@@ -6955,7 +7108,7 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .shop-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;padding:0;background:transparent;border-radius:0;box-shadow:none}
 .shop-title-row h2{margin:0}
 .card-chips-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px 0;padding:0;border:none;background:transparent;border-radius:0;box-shadow:none}
-.tribe-card-body .job-price-line,.tribe-card-body .job-meta-line,.tribe-card-body .job-card-view-btn,.tribe-card-body .card-comments-summary,.tribe-card-body .tribe-card-members{padding:0;background:transparent;border-radius:0;box-shadow:none;border:none}
+.tribe-card-body .job-price-line,.tribe-card-body .job-meta-line,.tribe-card-body .job-card-view-btn,.tribe-card-body .tribe-card-members{padding:0;background:transparent;border-radius:0;box-shadow:none;border:none}
 .tribe-card-body .job-price-line{margin:4px 0}
 .tribe-card-body .job-card-view-btn{margin-top:8px;margin-bottom:0}
 .transfer-block-card{border:none;background:transparent;padding:0;margin:0 0 12px 0}
@@ -7459,7 +7612,6 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .content-actions .spread-form{margin:0;display:inline-flex}
 
 .blog-card-body,
-.blog-detail-body,
 .mention-card-body {
     border: none !important;
     background: transparent !important;
@@ -7490,14 +7642,6 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
     word-break: break-word;
 }
 
-.blog-card-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 6px 0;
-    border: none !important;
-    background: transparent !important;
-}
 
 .blog-allow-comments {
     display: inline-flex;

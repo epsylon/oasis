@@ -10,6 +10,7 @@ If everything is working correctly, it's likely that:
 - Only you can publish a message to your feed.
 - Only the recipients of private messages can read the message.
 - Only basic HTML is supported in blobs, which can't access the rest of Oasis.
+- Pages run no JavaScript: the app's Content-Security-Policy is `script-src 'none'`. The only exception is the Games module, whose bundled games run their own scripts inside a frame. PDFs are never opened by the browser: the node draws their pages as pictures (MuPDF, in a separate worker) and the viewer is plain HTML.
 
 It's important to know that this is not a silver bullet:
 

@@ -4,7 +4,7 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -23,7 +23,6 @@ const buildReturnTo = (filter, params = {}) => {
   return `/documents?${parts.join("&")}`;
 };
 
-const safeDomId = (prefix, key) => `${prefix}${String(key || "").replace(/[^A-Za-z0-9_-]/g, "_")}`;
 
 const renderTags = (tags) => {
   const list = safeArr(tags).map((t) => String(t || "").trim()).filter(Boolean);
@@ -50,7 +49,6 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
     ? documents.map((doc) => {
         const commentCount = typeof doc.commentCount === "number" ? doc.commentCount : 0;
         const title = safeText(doc.title);
-        const pdfId = safeDomId("pdf-container-", doc.key);
 
         const isOwn = doc.author && String(doc.author) === String(userId);
         const headerActions = typeof params.headerActions === "function"
@@ -77,7 +75,7 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
             div({ class: "shop-title-row" }, title ? h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title) : null, doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null, renderLicenseChip(doc.license), ...(typeof params.titleChips === "function" ? params.titleChips(doc) : [])),
             doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
             doc?.url
-              ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": blobUrlOf(doc.url) })
+              ? renderPdfDocument(blobUrlOf(doc.url), { title: doc.title })
               : p(i18n.documentNoFile),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(doc) : []),
             engagement,
@@ -122,7 +120,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       label(i18n.documentFileLabel),
       br(),
-      input({ type: "file", name: "document", accept: "application/pdf", required: filter !== "edit" }),
+      (filter === "edit" && renderMediaLockNote(docToEdit)) || input({ type: "file", name: "document", accept: "application/pdf", required: filter !== "edit" }),
       br(),
       br(),
       label(i18n.documentTitleLabel),
@@ -223,7 +221,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
     )
   );
 
-  return `${tpl}<script type="module" src="/js/pdf-viewer.js?v=102"></script>`;
+  return tpl;
 };
 
 exports.singleDocumentView = async (doc, filter = "all", comments = [], params = {}) => {
@@ -233,9 +231,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(doc.title);
-  const pdfId = safeDomId("pdf-container-", doc.key);
   const isAuthor = String(doc.author) === String(userId);
-  const hasOpinions = Object.keys(doc.opinions || {}).length > 0;
   const isClearnet = !!doc.clearnet;
 
   const chips = [
@@ -244,7 +240,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   ].filter(Boolean);
 
   const sideActions = [];
-  if (isAuthor && !hasOpinions) {
+  if (isAuthor) {
     sideActions.push(form(
       { method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -271,7 +267,8 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
       title ? h2({ class: "tribe-card-title" }, title) : null,
       renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('documents', doc.title, doc.key) : null),
       isAuthor ? renderClearnetSwitch('documents', doc.rootId || doc.key, isClearnet) : null,
-      renderLicenseChip(doc.license)
+      renderLicenseChip(doc.license),
+      renderEditedChip(doc.key, doc.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(doc.description)
@@ -284,7 +281,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   const docMain = div({ class: "tribe-main" },
     detailActions,
     doc?.url
-      ? div({ id: pdfId, class: "pdf-viewer-container", "data-pdf-url": blobUrlOf(doc.url) })
+      ? renderPdfDocument(blobUrlOf(doc.url), { title: doc.title, preview: true })
       : p(i18n.documentNoFile),
     (() => {
       const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
@@ -336,6 +333,6 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
     )
   );
 
-  return `${tpl}<script type="module" src="/js/pdf-viewer.js?v=102"></script>`;
+  return tpl;
 };
 

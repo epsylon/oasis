@@ -165,6 +165,7 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
     const vg = versionGroups(versions);
     const latestByRoot = new Map();
     for (const root of vg.roots) {
+      if (tomb.has(root) || vg.isForeignCopy(root)) continue;
       const tip = candidates.get(vg.tipOf(root));
       if (!tip) continue;
       if (tip.kind !== 'tribes') { latestByRoot.set(root, { ...tip, key: root }); continue; }

@@ -745,7 +745,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
           }
         } else if (textTypes.has(a.type)) {
           const t = norm(c.text);
-          const key = t ? `${a.type}:${a.author}:${t}` : null;
+          const key = t ? `${a.type}:${a.author}:${typeof c.root === 'string' ? c.root : ''}:${t}` : null;
           const prev = key ? byKey.get(key) : null;
           if (!key) {
             byKey.set(`id:${a.id}`, { ...a, __effTs: effTs });

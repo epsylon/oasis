@@ -1,106 +1,144 @@
 const { eq, ok, notOk } = require('../../helpers/assert');
+const { makeNetwork, makePeer } = require('../../helpers/setup');
 
-const { renderCommentsSection, COMMENT_ICON } = require('../../../src/views/comments_view');
+const publish = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
 
-const comment = (text, key = '%c1.sha256') => ({
-  key,
-  value: { author: '@a.ed25519', timestamp: 1700000000000, content: { type: 'post', text } }
-});
-
-describe('comments: one dropdown for every module', (t) => {
-  t('the section is a collapsed icon with a counter', () => {
-    const html = String(renderCommentsSection({
-      action: '/tasks/%t.sha256/comments',
-      comments: [comment('first'), comment('second', '%c2.sha256')],
-      returnTo: '/tasks/%t.sha256'
-    }).outerHTML);
-
-    ok(html.includes('<details'), 'it is a dropdown');
-    ok(html.includes(COMMENT_ICON), 'with an icon');
-    ok(html.includes('(2)'), 'and the number of comments');
-    ok(html.includes('/tasks/%t.sha256/comments'), 'the form posts to the module route');
-    ok(html.includes('name="returnTo"'), 'and comes back where it was opened');
-    ok(html.includes('first') && html.includes('second'), 'both comments are listed');
-    notOk(html.includes('>false<'), 'no falsy value leaked into the html');
-  });
-
-  t('empty comments do not count and the form is still offered', () => {
-    const html = String(renderCommentsSection({
-      action: '/blogs/%b.sha256/comments',
-      comments: [comment(''), comment('   ', '%c2.sha256'), null]
-    }).outerHTML);
-
-    ok(html.includes('(0)'), 'blank comments are not counted');
-    ok(html.includes('/blogs/%b.sha256/comments'), 'anyone can still write one');
-  });
-
-  t('when the author closed the comments there is no form', () => {
-    const html = String(renderCommentsSection({
-      action: '/blogs/%b.sha256/comments',
-      comments: [],
-      closedNote: 'Comments are closed'
-    }).outerHTML);
-
-    ok(html.includes('Comments are closed'), 'it says so');
-    notOk(html.includes('<form'), 'and offers no way to comment');
-  });
-
-});
-
-describe('comments: opinions and comments side by side', (t) => {
-  t('both sit in the same row and can be open at the same time', () => {
-    const { renderEngagement, renderOpinionsVoting } = require('../../../src/views/main_views');
-    const { renderCommentsSection } = require('../../../src/views/comments_view');
-
-    const id = '%item.sha256';
-    const html = String(renderEngagement(id,
-      renderOpinionsVoting('/tasks/opinions', id, {}, null, []),
-      renderCommentsSection({ action: `/tasks/${encodeURIComponent(id)}/comments`, comments: [] })
-    ).outerHTML);
-
-    ok(html.includes('card-engage'), 'both live in the same row');
-    ok(html.indexOf('opinions-summary') < html.indexOf('comments-summary'), 'opinions on the left, comments on the right');
-    notOk(/name="engage/.test(html), 'no accordion group ties them together, so opening one leaves the other alone');
-  });
-
-  t('a panel only lights up when it has something inside', () => {
-    const { renderOpinionsVoting } = require('../../../src/views/main_views');
-    const { renderCommentsSection } = require('../../../src/views/comments_view');
-
-    const htmlOf = (n) => Array.isArray(n) ? n.map(x => (x && x.outerHTML) || String(x)).join('') : String(n && n.outerHTML);
-    const emptyOpinions = htmlOf(renderOpinionsVoting('/tasks/opinions', '%x.sha256', {}, null, []));
-    const emptyComments = String(renderCommentsSection({ action: '/tasks/%x/comments', comments: [] }).outerHTML);
-    notOk(emptyOpinions.includes('engage-on'), 'no opinions, no highlight');
-    notOk(emptyComments.includes('engage-on'), 'no comments, no highlight');
-
-    const withOpinions = htmlOf(renderOpinionsVoting('/tasks/opinions', '%x.sha256', { interesting: 2 }, null, []));
-    const withComments = String(renderCommentsSection({
-      action: '/tasks/%x/comments',
-      comments: [{ key: '%c.sha256', value: { author: '@a.ed25519', timestamp: 1, content: { text: 'hi' } } }]
-    }).outerHTML);
-    ok(withOpinions.includes('engage-on'), 'one opinion lights the button up');
-    ok(withComments.includes('engage-on'), 'one comment lights the button up');
-  });
-
-  t('a row with only one of the two still renders', () => {
-    const { renderEngagement, renderOpinionsVoting } = require('../../../src/views/main_views');
-    const only = renderEngagement('%x.sha256', renderOpinionsVoting('/tasks/opinions', '%x.sha256', {}, null, []), null);
-    ok(String(only.outerHTML).includes('opinions-summary'), 'the opinions panel is there on its own');
-    eq(renderEngagement('%x.sha256', null, null), null, 'and nothing renders when there is neither');
+describe('comments: what a comment is', (t) => {
+  t('a post pointing at any content is a comment, a post without root is a blog', async () => {
+    const comments = require('../../../src/models/comments_model');
+    const root = '%' + 'a'.repeat(43) + '=.sha256';
+    ok(comments.isComment({ type: 'post', text: 'hi', root }));
+    notOk(comments.isComment({ type: 'post', text: 'entry' }), 'a blog is not a comment');
+    notOk(comments.isComment({ type: 'post', text: 'sub', root, fork: root }), 'a subtopic is not a comment');
+    notOk(comments.isComment({ type: 'image', root }), 'only posts are comments');
+    ok(comments.isBlogPost({ type: 'post', text: 'entry' }));
+    notOk(comments.isBlogPost({ type: 'post', text: 'hi', root }));
   });
 });
 
-describe('comments: the same row in a list card', (t) => {
-  t('a card links to the detail with the icon and the counter', () => {
-    const { renderCommentsLink } = require('../../../src/views/comments_view');
+describe('comments: where a comment lives', (t) => {
+  t('a comment is located on the content it comments, whatever its module', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const comments = A.use('comments');
+    const blog = await publish(A, { type: 'post', text: 'an entry' });
+    const doc = await publish(A, { type: 'document', title: 'manual', url: '&' + 'b'.repeat(43) + '=.sha256' });
+    const onBlog = await comments.publish({ rootId: blog.key, text: 'nice entry' });
+    const onDoc = await comments.publish({ rootId: doc.key, text: 'the pdf is broken' });
+    eq((await comments.locate(onBlog.key)).rootType, 'post', 'a blog comment stays in the blog');
+    const at = await comments.locate(onDoc.key);
+    eq(at.rootType, 'document', 'a document comment lives in the document');
+    eq(at.rootId, doc.key);
+    eq(at.commentId, onDoc.key);
+    eq((await comments.locate(doc.key)).rootType, 'document', 'the content itself is located too');
+    const items = await comments.annotate([{ value: { content: { type: 'post', text: 'x', root: doc.key } } }, { value: { content: { type: 'post', text: 'entry' } } }]);
+    eq(items[0].comment.rootType, 'document', 'listed comments know what they comment');
+    notOk(items[1].comment, 'blogs are left as they are');
+  });
 
-    const empty = String(renderCommentsLink({ href: '/feed/%f.sha256', count: 0 }).outerHTML);
-    ok(empty.includes('/feed/%f.sha256'), 'it goes to the detail page');
-    ok(empty.includes('(0)'), 'and carries the counter');
-    notOk(empty.includes('engage-on'), 'with nothing to read it stays neutral');
+  t('comments are listed and counted per content, oldest first', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const comments = A.use('comments');
+    const img = await publish(A, { type: 'image', title: 'pic' });
+    const other = await publish(A, { type: 'video', title: 'clip' });
+    await comments.publish({ rootId: img.key, text: 'first' });
+    B.setActor();
+    await B.use('comments').publish({ rootId: img.key, text: 'second' });
+    A.setActor();
+    await comments.publish({ rootId: other.key, text: 'elsewhere' });
+    const list = await comments.listFor(img.key);
+    eq(list.map(m => m.value.content.text).join(','), 'first,second');
+    const counts = await comments.countsFor([img.key, other.key]);
+    eq(counts.get(img.key), 2);
+    eq(counts.get(other.key), 1);
+    let refused = false;
+    try { await comments.publish({ rootId: 'not-a-message', text: 'x' }); } catch (_) { refused = true; }
+    ok(refused, 'a comment needs a real content to point at');
+  });
+});
 
-    const some = String(renderCommentsLink({ href: '/feed/%f.sha256', count: 4 }).outerHTML);
-    ok(some.includes('engage-on'), 'with comments it lights up like the panel does');
-    eq(renderCommentsLink({}), null, 'without a target there is no button');
+describe('comments: how lists show them', (t) => {
+  const id = (c) => '%' + c.repeat(43) + '=.sha256';
+  const commentAction = (key, root, rootType, author = '@x') =>
+    ({ id: key, type: 'post', author, ts: Date.now(), content: { type: 'post', text: 'the pdf is broken', root }, comment: { rootId: root, rootType } });
+
+  t('activity labels a comment by what it comments and opens it there', async () => {
+    const { activityView } = require('../../../src/views/activity_view');
+    const html = String(await activityView([commentAction(id('c'), id('d'), 'document')], 'all', '@me'));
+    ok(/DOCUMENTS? · COMMENT/i.test(html), 'labelled as a comment on a document');
+    ok(html.includes(`/documents/${encodeURIComponent(id('d'))}?comments=open#${encodeURIComponent(id('c'))}`), 'links to the comment inside the document');
+    notOk(html.includes('/blogs/'), 'never sent to blogs');
+  });
+
+  t('activity filters put comments with their module, not with blogs', async () => {
+    const { activityView } = require('../../../src/views/activity_view');
+    const onImage = commentAction(id('e'), id('i'), 'image');
+    const onBlog = commentAction(id('f'), id('b'), 'post');
+    const blogHtml = String(await activityView([onImage, onBlog], 'post', '@me'));
+    ok(blogHtml.includes(encodeURIComponent(id('b'))), 'a blog comment stays under BLOG');
+    notOk(blogHtml.includes(encodeURIComponent(id('i'))), 'an image comment is not a blog');
+    const imageHtml = String(await activityView([onImage, onBlog], 'image', '@me'));
+    ok(imageHtml.includes(encodeURIComponent(id('i'))), 'an image comment is listed with images');
+  });
+
+  t('a comment whose content is unknown is resolved by the server', async () => {
+    const { commentHref } = require('../../../src/views/activity_view');
+    eq(commentHref({ rootId: id('r'), rootType: null }, id('k')), `/thread/${encodeURIComponent(id('k'))}`);
+  });
+
+  t('own comments can be deleted as comments and are not offered as blog favourites', async () => {
+    const { activityView } = require('../../../src/views/activity_view');
+    const html = String(await activityView([commentAction(id('g'), id('v'), 'video', '@me')], 'all', '@me'));
+    ok(html.includes(`/comments/delete/${encodeURIComponent(id('g'))}`));
+    notOk(html.includes('favKind') || html.includes('value="blogs"'), 'no blog favourite for a comment');
+  });
+
+  t('the block explorer counts comments apart from blogs', () => {
+    const { computeStats } = require('../../../src/views/blockchain_view');
+    const s = computeStats([
+      { type: 'post', author: '@a', content: { text: 'entry' } },
+      { type: 'post', author: '@a', content: { text: 'reply', root: id('z') } },
+      { type: 'post', author: '@b', content: { text: 'reply', root: id('z') } }
+    ]);
+    eq(s.typeBreakdown.find(x => x.type === 'comment').count, 2);
+    eq(s.typeBreakdown.find(x => x.type === 'post').count, 1);
+  });
+});
+
+describe('comments: what a comment is worth', (t) => {
+  t('commenting earns less karma than publishing, wherever the comment is', () => {
+    const karma = require('../../../src/models/karma_model')({});
+    const root = '%' + 'q'.repeat(43) + '=.sha256';
+    const blog = karma.basePointsFor({ type: 'post', content: { type: 'post', text: 'an entry' } });
+    const comment = karma.basePointsFor({ type: 'post', content: { type: 'post', text: 'a reply', root } });
+    ok(comment > 0, 'a comment still counts');
+    ok(comment < blog, 'but less than a blog');
+  });
+});
+
+describe('comments: more places to talk', (t) => {
+  const id = (c) => '%' + c.repeat(43) + '=.sha256';
+  const comment = (root, text) => ({ key: id(text[0]), value: { author: '@x', timestamp: Date.now(), content: { type: 'post', text, root } } });
+
+  t('comments of several contents are read at once, each with its own', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const comments = A.use('comments');
+    const one = await publish(A, { type: 'wikiPage', title: 'one' });
+    const two = await publish(A, { type: 'map', title: 'two' });
+    await comments.publish({ rootId: one.key, text: 'about one' });
+    await comments.publish({ rootId: two.key, text: 'about two' });
+    await comments.publish({ rootId: two.key, text: 'more on two' });
+    const many = await comments.listForMany([one.key, two.key]);
+    eq(many.get(one.key).length, 1);
+    eq(many.get(two.key).map(m => m.value.content.text).join(','), 'about two,more on two');
+  });
+
+  t('public pages show the shared comment section', async () => {
+    const list = [comment(id('w'), 'wiki talk')];
+    const { wikiPageView } = require('../../../src/views/wiki_view');
+    const wiki = String(await wikiPageView({ id: id('w'), title: 'Page', body: 'text', versions: [], linkedPages: [], tags: [], author: '@x', createdAt: new Date().toISOString() }, { comments: list }));
+    ok(wiki.includes(`/wiki/${encodeURIComponent(id('w'))}/comments`) && wiki.includes('wiki talk'), 'wiki');
+    const noComments = String(await wikiPageView({ id: id('w'), title: 'Page', body: 'text', versions: [], linkedPages: [], tags: [], author: '@x', createdAt: new Date().toISOString() }, {}));
+    notOk(noComments.includes('/comments"'), 'no section where comments are not allowed');
   });
 });

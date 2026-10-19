@@ -5,6 +5,7 @@ const ssbDirOf = () => require('../server/ssb_config').path;
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
+const { isComment } = require('./comments_model');
 const { versionGroups, versionEntry } = require('../backend/dedupe');
 const opinionCategories = require('../backend/opinion_categories');
 const CONSTRUCTIVE_OPINIONS = new Set(opinionCategories.karma.constructive);
@@ -203,6 +204,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   };
 
   const normalizeActionType = (a) => {
+    if (isComment(a.content)) return 'comment';
     const t = a.type || a.content?.type || inferType(a.content) || '';
     return String(t).toLowerCase();
   };

@@ -4,11 +4,13 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderStateChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
-const { renderZoomableImage } = require("./gallery_view");
+const { renderZoomableImage, renderDownloadButton, downloadHref } = require("./gallery_view");
+const LIST_THUMB = 640;
+const thumbOf = (url) => String(url || "").startsWith("&") ? `/image/${LIST_THUMB}/${encodeURIComponent(url)}?fit=inside` : null;
 
 const userId = config.keys.id;
 
@@ -41,7 +43,7 @@ const renderImageMedia = (imgObj, filter, params = {}) => {
   return imgObj?.url
     ? div(
         { class: "image-container image-container-row" },
-        renderZoomableImage(src, { alt: imgObj.title || "", imgClass: "post-image" })
+        renderZoomableImage(src, { alt: imgObj.title || "", imgClass: "post-image", thumb: thumbOf(imgObj.url) })
       )
     : p(i18n.imageNoFile);
 };
@@ -49,9 +51,8 @@ const renderImageMedia = (imgObj, filter, params = {}) => {
 const renderImageOwnerActions = (filter, imgObj, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   const isAuthor = String(imgObj.author) === String(userId);
-  const hasOpinions = Object.keys(imgObj.opinions || {}).length > 0;
 
-  if (!isAuthor || hasOpinions) return [];
+  if (!isAuthor) return [];
 
   return [
     form(
@@ -140,7 +141,7 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       label(i18n.imageFileLabel),
       br(),
-      input({ type: "file", name: "image", required: filter !== "edit" }),
+      (filter === "edit" && renderMediaLockNote(imageToEdit)) || input({ type: "file", name: "image", accept: "image/*", required: filter !== "edit" }),
       br(),
       br(),
       imageToEdit?.url
@@ -187,12 +188,18 @@ const renderGallery = (images) => {
 };
 
 const renderLightbox = (images) =>
-  images.map((imgObj) => {
+  images.map((imgObj, i) => {
     const src = imgObj.url ? blobUrlOf(imgObj.url) : "";
+    const idOf = (o) => `img-${encodeURIComponent(o.key)}`;
+    const prev = images[i - 1];
+    const next = images[i + 1];
     return div(
-      { id: `img-${encodeURIComponent(imgObj.key)}`, class: "lightbox" },
-      a({ href: `#img-${encodeURIComponent(imgObj.key)}-src`, class: "lightbox-close" }, "×"),
-      img({ src, class: "lightbox-image", alt: imgObj.title || "" })
+      { id: idOf(imgObj), class: "lightbox" },
+      src ? a({ href: downloadHref(src), class: "lightbox-download", title: i18n.fileShareDownload || "Download" }, "⤓") : null,
+      a({ href: `#${idOf(imgObj)}-src`, class: "lightbox-close" }, "×"),
+      prev ? a({ href: `#${idOf(prev)}`, class: "lightbox-prev", title: "←" }, "‹") : null,
+      next ? a({ href: `#${idOf(next)}`, class: "lightbox-next", title: "→" }, "›") : null,
+      img({ src, class: "lightbox-image", alt: imgObj.title || "", loading: "lazy" })
     );
   });
 
@@ -333,7 +340,8 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
       title ? h2({ class: "tribe-card-title" }, title) : null,
       renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('images', imageObj.title, imageObj.key) : null),
       isAuthor ? renderClearnetSwitch('images', imageObj.rootId || imageObj.key, isClearnet) : null,
-      renderLicenseChip(imageObj.license)
+      renderLicenseChip(imageObj.license),
+      renderEditedChip(imageObj.key, imageObj.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(imageObj.description)
@@ -349,12 +357,8 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
     imageObj?.url
       ? div(
           { class: "image-container" },
-          img({
-            src: blobUrlOf(imageObj.url),
-            alt: imageObj.title || "",
-            class: "media-preview",
-            loading: "lazy"
-          })
+          renderZoomableImage(blobUrlOf(imageObj.url), { alt: imageObj.title || "", imgClass: "media-preview", full: true }),
+          renderDownloadButton(blobUrlOf(imageObj.url), imageObj.title || "")
         )
       : p(i18n.imageNoFile),
     (() => {
@@ -392,9 +396,10 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
         form(
           { method: "GET", action: "/images", class: "ui-toolbar ui-toolbar--filters" },
           input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),          ...(mediaChip("favorites") ? [button(
+          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.imageFilterMine).toUpperCase())] : []),
+          ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.imageFilterFavorites).toUpperCase()
           )] : []),

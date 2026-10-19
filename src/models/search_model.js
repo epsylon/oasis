@@ -74,7 +74,7 @@ module.exports = ({ cooler, padsModel, tribeCrypto, tribesModel }) => {
       case 'market':
         return [content?.item_type, content?.title, content?.description, content?.price, ...(content?.tags || []), content?.status, content?.item_status, content?.deadline, content?.includesShipping, content?.seller, content?.image, content?.auctions_poll, content?.stock];
       case 'bookmark':
-        return [content?.author, content?.url, ...(content?.tags || []), content?.description, content?.category, content?.lastVisit];
+        return [content?.author, content?.title, content?.url, ...(content?.tags || []), content?.description, content?.category, content?.lastVisit];
       case 'task':
         return [content?.title, content?.description, content?.startTime, content?.endTime, content?.priority, content?.location, ...(content?.tags || []), content?.isPublic, content?.assignees?.length, content?.status, content?.author];
       case 'report':

@@ -1,4 +1,5 @@
 const pull = require("../server/node_modules/pull-stream");
+const opinionRules = require("../backend/opinion_categories");
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { dedupeBy, norm, versionGroups } = require('../backend/dedupe');
 const { readTyped, memoIndex } = require('./typed_log');
@@ -230,7 +231,7 @@ module.exports = ({ cooler }) => {
       if (!oldMsg || oldMsg.content?.type !== "audio") throw new Error("Audio not found");
       if (oldMsg.content.author !== userId) throw new Error("Not the author");
       const aggAudio = await this.getAudioById(id, userId);
-      if (aggAudio && Object.keys(aggAudio.opinions || {}).some(k => (aggAudio.opinions[k] || 0) > 0)) throw new Error("Cannot edit audio after it has received opinions.");
+      opinionRules.assertMediaKept(aggAudio, !!blobMarkdown);
 
       const tags = tagsRaw !== undefined ? normalizeTags(tagsRaw) || [] : safeArr(oldMsg.content.tags);
       const blobId = blobMarkdown ? parseBlobId(blobMarkdown) : null;

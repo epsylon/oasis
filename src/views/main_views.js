@@ -27,7 +27,7 @@ const getUserId = async () => {
 };
 exports.getUserId = getUserId;
 
-const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, table, td, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe");
+const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, table, td, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe, object } = require("../server/node_modules/hyperaxe");
 
 const lodash = require("../server/node_modules/lodash");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
@@ -61,6 +61,39 @@ const renderCreatedRows = (createdAt, author, updatedAt) => {
   ];
 };
 exports.renderCreatedRows = renderCreatedRows;
+
+const renderEditedChip = (tipId, rootId) => tipId && rootId && String(tipId) !== String(rootId)
+  ? a({ href: `/versions/${encodeURIComponent(tipId)}`, class: 'edited-chip', title: i18n.wikiHistory }, `✎ ${String(i18n.edited || 'edited').toUpperCase()}`)
+  : null;
+exports.renderEditedChip = renderEditedChip;
+
+const renderMediaLockNote = (item) => (item && item.mediaLocked === true) || require('../backend/opinion_categories').hasOpinions(item)
+  ? p({ class: 'media-lock-note' }, i18n.mediaLockedAfterOpinions)
+  : null;
+exports.renderMediaLockNote = renderMediaLockNote;
+
+const versionTitle = (c) => String(c.title || c.name || c.question || c.concept || c.url || '').trim();
+const versionText = (c) => String(c.description || c.text || '').trim();
+const versionsView = ({ versions = [], backHref = '/' } = {}) => template(
+  i18n.wikiHistory,
+  section(div({ class: 'tags-header module-header-line' }, h2(i18n.wikiHistory), p(versionTitle((versions[0] || {}).content || {})))),
+  section(
+    div({ class: 'versions-list' },
+      ...versions.map((v, i) => div({ class: 'card card-rpg versions-item' },
+        div({ class: 'card-chips-row' },
+          span({ class: 'edited-chip' }, `${i18n.wikiVersion} ${versions.length - i}`),
+          i === 0 ? span({ class: 'edited-chip' }, i18n.wikiCurrentVersion) : null,
+          span({ class: 'votations-comment-date' }, moment(v.ts).format('YYYY/MM/DD HH:mm'))
+        ),
+        versionTitle(v.content) ? h2(versionTitle(v.content)) : null,
+        versionText(v.content) ? p({ class: 'post-text-pre' }, ...renderStyledText(versionText(v.content))) : null,
+        Array.isArray(v.content.tags) && v.content.tags.length ? div({ class: 'card-tags' }, ...v.content.tags.map(t => span({ class: 'tag-link' }, `#${t}`))) : null
+      ))
+    ),
+    p(a({ href: backHref, class: 'filter-btn' }, `← ${i18n.wikiBackToPage}`))
+  )
+);
+exports.versionsView = versionsView;
 
 const inboxBadges = () => {
   const inboxCount = Number(sharedState.getInboxCount()) || 0;
@@ -839,6 +872,100 @@ const renderCardMetaRow = (...nodes) => {
   return div({ class: 'card-meta-row' }, ...flat);
 };
 exports.renderCardMetaRow = renderCardMetaRow;
+const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"];
+const formatSize = (bytes) => {
+  let n = Number(bytes) || 0;
+  if (n <= 0) return "—";
+  let unit = 0;
+  while (n >= 1024 && unit < SIZE_UNITS.length - 1) { n /= 1024; unit++; }
+  return unit === 0 ? `${n} B` : `${n.toFixed(1)} ${SIZE_UNITS[unit]}`;
+};
+exports.formatSize = formatSize;
+const forumReplyAnchor = (key) => `msg-${String(key || "").replace(/[^a-zA-Z0-9]/g, "")}`;
+exports.forumReplyAnchor = forumReplyAnchor;
+const pdfView = require("../backend/pdf_view");
+const pdfFileName = (t) => { const n = String(t || "document").replace(/[\\/:*?"<>|\r\n]+/g, " ").trim().slice(0, 120) || "document"; return n.toLowerCase().endsWith(".pdf") ? n : `${n}.pdf`; };
+const pdfDownloadHref = (src, t) => `${src}${String(src).includes("?") ? "&" : "?"}download=1&name=${encodeURIComponent(pdfFileName(t))}`;
+const pdfPageImage = (src, page, width, rotation, prefix = "") => `${prefix}/pdf/page?${new URLSearchParams({ src, p: String(page), w: String(width), ...(rotation ? { r: String(rotation) } : {}) })}`;
+const pdfEmbedHref = (src, t, fid) => `/pdf/embed?${new URLSearchParams({ src, ...(t ? { title: String(t).slice(0, 200) } : {}), fid })}`;
+const renderPdfDocument = (url, { title: docTitle = "" } = {}) => {
+  if (!url) return null;
+  const fid = pdfView.frameIdOf(url);
+  return span({ class: "pdf-holder" },
+    object({ id: fid, data: pdfEmbedHref(url, docTitle, fid), type: "text/html", class: "pdf-frame", title: String(docTitle || "PDF"), "aria-label": String(docTitle || "PDF") }, ""),
+    a({ href: "#", class: "pdf-unmax", title: i18n.pdfClose, "aria-label": i18n.pdfClose }, "✕")
+  );
+};
+exports.renderPdfDocument = renderPdfDocument;
+
+const renderPdfViewer = (state, { title: docTitle = "", base = "/pdf", keep = {}, embed = false, back = "", prefix = "" } = {}) => {
+  if (!state) return null;
+  if (!state.src && !state.error) state = { ...state, error: "missing" };
+  const src = state.src || "";
+  const clean = (v) => { for (const k of Object.keys(v)) if (v[k] === null || v[k] === undefined || v[k] === "" || v[k] === 0) delete v[k]; return v; };
+  const params = (over = {}) => clean({ ...keep, fid: state.fid || null, p: state.page > 1 ? state.page : null, z: state.zoom !== pdfView.PDF_ZOOM_DEFAULT ? state.zoom : null, r: state.rotation || null, full: state.full ? "1" : null, ...over });
+  const href = (over) => { const q = new URLSearchParams(params(over)).toString(); return `${base}${q ? `?${q}` : ""}#pdf-viewer`; };
+  const ctl = (url, label, tip, extra = {}) => url ? a({ href: url, title: tip, "aria-label": tip, ...extra }, label) : span({ class: "pdf-off", title: tip }, label);
+  const download = a({ href: pdfDownloadHref(src, docTitle), target: "_top", title: i18n.fileShareDownload || "Download", "aria-label": i18n.fileShareDownload || "Download" }, "⬇️");
+  const shell = (...children) => div({ id: "pdf-viewer", class: ["pdf-viewer-container", embed ? "pdf-embedded" : "", state.full ? "pdf-maximized" : ""].filter(Boolean).join(" ") }, ...children);
+  if (state.error) {
+    return shell(
+      div({ class: "pdf-canvas-wrap pdf-message-wrap" }, p({ class: "pdf-message" }, state.error === "unavailable" ? i18n.pdfUnavailable : i18n.pdfMissing)),
+      state.error === "unavailable" ? div({ class: "pdf-controls" }, ctl(href({}), "↻", i18n.pdfRetry), download) : null
+    );
+  }
+  const { page, pages, zoom } = state;
+  const rotation = state.rotation || 0;
+  const zooms = pdfView.PDF_ZOOMS;
+  const zi = zooms.indexOf(zoom);
+  const fullOn = { ...keep, src, title: docTitle || null, back: back || null, p: page > 1 ? page : null, z: zoom !== pdfView.PDF_ZOOM_DEFAULT ? zoom : null, r: rotation || null, full: "1" };
+  const fullscreen = embed
+    ? a({ href: state.fid && back ? `${back}#${state.fid}` : `${prefix}/pdf?${new URLSearchParams(clean(fullOn))}`, target: "_top", title: i18n.pdfFullscreen, "aria-label": i18n.pdfFullscreen }, "🔲")
+    : state.full
+      ? a({ href: back || href({ full: null }), title: i18n.pdfFullscreen, "aria-label": i18n.pdfFullscreen }, "🔲")
+      : ctl(href({ full: "1" }), "🔲", i18n.pdfFullscreen);
+  return shell(
+    div({ class: zoom > pdfView.PDF_ZOOM_DEFAULT ? "pdf-canvas-wrap pdf-wrap-scroll" : "pdf-canvas-wrap" },
+      img({ src: pdfPageImage(src, page, pdfView.widthOf(zoom), rotation, prefix), class: `pdf-page-image pdf-z${zoom}`, alt: `${docTitle || "PDF"} — ${i18n.pdfPage} ${page} / ${pages}` })
+    ),
+    div({ class: "pdf-controls" },
+      ctl(page > 1 ? href({ p: page - 1 }) : null, "⬅️", i18n.pdfPrevPage),
+      ctl(page < pages ? href({ p: page + 1 }) : null, "➡️", i18n.pdfNextPage),
+      ctl(zi < zooms.length - 1 ? href({ z: zooms[zi + 1] }) : null, "🔍+", i18n.pdfZoomIn),
+      ctl(zi > 0 ? href({ z: zooms[zi - 1] }) : null, "🔍−", i18n.pdfZoomOut),
+      ctl(href({ r: (rotation + 90) % 360 || null }), "↻", i18n.pdfRotate),
+      download,
+      fullscreen
+    )
+  );
+};
+exports.renderPdfViewer = renderPdfViewer;
+
+exports.pdfEmbedView = (state, { title: docTitle = "", back = "" } = {}) => {
+  const theme = getConfig().themes.current || "Dark-SNH";
+  return doctypeString + html(
+    { lang: i18nBase[selectedLanguage] ? selectedLanguage : "en", class: "pdf-embed-root" },
+    head(
+      title(docTitle || "PDF"),
+      link({ rel: "stylesheet", href: `/assets/styles/style.css?v=${assetVersion()}` }),
+      link({ rel: "stylesheet", href: `/assets/themes/${theme}.css?v=${assetVersion()}` }),
+      meta({ charset: "utf-8" }),
+      meta({ name: "viewport", content: "width=device-width, initial-scale=1" })
+    ),
+    body({ class: "pdf-embed" }, renderPdfViewer(state, { title: docTitle, base: "/pdf/embed", keep: { src: state && state.src, title: docTitle || null, back: back || null }, embed: true, back }))
+  ).outerHTML;
+};
+
+exports.pdfViewerView = (state, { title: docTitle = "", back = "" } = {}) => template(
+  docTitle || "PDF",
+  section(
+    div({ class: "tags-header module-header-line" },
+      h2(docTitle || "PDF"),
+      back ? a({ href: back, class: "filter-btn" }, `← ${i18n.goBack}`) : null
+    ),
+    renderPdfViewer(state, { title: docTitle, base: "/pdf", keep: { src: state && state.src, title: docTitle || null, back: back || null } })
+  )
+);
 
 const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters, pathFor = null) => {
   const ops = opinions || {};
@@ -2408,23 +2535,6 @@ exports.tribeAccessDeniedView = (tribe) => {
   );
 };
 
-exports.inviteRequiredView = (kind, tribe) => {
-  const msg = kind === 'pad' ? (i18n.tribePadInviteRequired || 'You do not have access to the pad. Ask for an invitation to access the content.')
-            : kind === 'chat' ? (i18n.tribeChatInviteRequired || 'You do not have access to the chat. Ask for an invitation to access the content.')
-            : (i18n.tribeContentAccessDeniedMsg);
-  const backHref = tribe ? `/tribe/${encodeURIComponent(tribe.id)}?section=${kind === 'chat' ? 'chats' : 'pads'}` : (kind === 'chat' ? '/chats' : '/pads');
-  return template(
-    i18n.tribeContentAccessDenied,
-    div({ class: "div-center" },
-      h2(i18n.tribeContentAccessDenied),
-      p(msg),
-      div({ class: "visit-btn-centered" },
-        a({ href: backHref, class: "filter-btn" }, i18n.walletBack || "Back")
-      )
-    )
-  );
-};
-
 const thread = (messages, spreadMap = null) => {
   let lookingForTarget = true;
   let shallowest = Infinity;
@@ -2755,11 +2865,7 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
 	    const safeId = String(msg.key || u).replace(/[^a-zA-Z0-9_-]/g, '');
 	    nodes.push(
 	      div({ class: 'card-field card-field-mt' },
-		div({
-		  id: `pdf-container-${safeId}`,
-		  class: 'pdf-viewer-container',
-		  'data-pdf-url': `/blob/${encodeURIComponent(u)}`
-		})
+		renderPdfDocument(`/blob/${encodeURIComponent(u)}`, { title: c.title || safeId })
 	      )
 	    );
 	  }
@@ -3269,11 +3375,11 @@ const buildClearnetHub = ({ items = {}, filterBase, filterType = '', query = '',
       ${blob ? `<img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/>` : ''}
       <div class="cn-hub-body">
         ${kind ? `<div class="cn-hub-kind">${kind}</div>` : ''}
+        ${chipRow ? `<div class="cn-hub-details">${chipRow}</div>` : ''}
         ${it.title ? `<div class="cn-hub-title">${title}</div>` : ''}
         ${author}
         ${player}
         ${snippet ? `<div class="cn-hub-snippet">${snippet}${raw.length > 300 ? '…' : ''}</div>` : ''}
-        ${chipRow ? `<div class="cn-hub-details">${chipRow}</div>` : ''}
         ${renderTagChips(it.tags)}
       </div>
     </div>`;
@@ -3336,7 +3442,8 @@ exports.clearnetHubView = async ({ authors = [], items = {}, tribes = [], filter
     ogDescription: i18n.cnHubDescription,
     extraCss,
     body,
-    headerExtra: renderClearnetHubSearch({ type: filterType, query })
+    headerExtra: renderClearnetHubSearch({ type: filterType, query }),
+    feed: filterType ? `/c/rss/${encodeURIComponent(filterType)}` : '/c/rss'
   });
 };
 
@@ -3369,10 +3476,10 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
       ${blob ? `<img class="cn-hub-thumb" src="${blob}" alt="" loading="lazy"/>` : ''}
       <div class="cn-hub-body">
         ${kind ? `<div class="cn-hub-kind">${kind}</div>` : ''}
+        ${chipRow ? `<div class="cn-hub-details">${chipRow}</div>` : ''}
         ${it.title ? `<div class="cn-hub-title">${title}</div>` : ''}
         ${preview}
         ${snippet ? `<div class="cn-hub-snippet">${snippet}${raw.length > 300 ? '…' : ''}</div>` : ''}
-        ${chipRow ? `<div class="cn-hub-details">${chipRow}</div>` : ''}
         ${renderTagChips(it.tags)}
       </div>
     </div>`;
@@ -3698,7 +3805,7 @@ exports.authorView = async ({
       const allowedTypes = new Set();
       for (const k of enabledKeys) for (const t of keyToTypes[k]) allowedTypes.add(t);
       const channelsWithEpisodes = new Set(allActions.filter(a => a && a.type === 'podcastEpisode' && a.content && a.content.channel).map(a => String(a.content.channel)));
-      const authorActions = allActions.filter(a => a && a.author === feedId && allowedTypes.has(a.type) && (a.type !== 'podcast' || channelsWithEpisodes.has(String(a.rootId || a.id)) || channelsWithEpisodes.has(String(a.id))));
+      const authorActions = allActions.filter(a => a && a.author === feedId && allowedTypes.has(a.type) && !(a.type === 'post' && a.content && a.content.root) && (a.type !== 'podcast' || channelsWithEpisodes.has(String(a.rootId || a.id)) || channelsWithEpisodes.has(String(a.id))));
       const counts = {};
       for (const k of enabledKeys) counts[k] = 0;
       for (const a of authorActions) {
@@ -3741,12 +3848,6 @@ exports.authorView = async ({
     : section(div({ class: "profile-layout profile-layout-single" }, sideColumn));
 
   let html = template(i18n.profile, layout);
-  const hasDocument = Array.isArray(allActions) && allActions.some(a => a && a.author === feedId && a.type === 'document');
-  if (hasDocument) {
-    html += `
-      <script type="module" src="/js/pdf-viewer.js?v=102"></script>
-    `;
-  }
   return html;
 };
 
@@ -4811,22 +4912,13 @@ exports.threadView = ({ messages, spreadMap = null, hiddenRoot = false }) => {
   const rootMessage = messages[0];
   const rootAuthorName = rootMessage.value.meta.author.name;
 
-  const needsPdfViewer = Array.isArray(messages) && messages.some((m) => {
-    const t = String(m?.value?.content?.type || "").toLowerCase();
-    return t === "document";
-  });
-
   const tpl = template(
     [`@${rootAuthorName}`],
     hiddenRoot ? p({ class: 'muted hidden-note' }, i18n.hiddenByYou) : null,
     div(thread(messages, spreadMap))
   );
 
-  return `${tpl}${
-    needsPdfViewer
-      ? `<script type="module" src="/js/pdf-viewer.js?v=102"></script>`
-      : ""
-  }`;
+  return tpl;
 };
 
 exports.supportersView = async ({ supporters, feed, name }) => {

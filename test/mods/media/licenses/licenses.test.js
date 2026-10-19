@@ -1,7 +1,7 @@
-const { ok, eq, notOk } = require('../../helpers/assert');
+const { ok, eq, notOk } = require('../../../helpers/assert');
 
 describe('media: licenses', (t) => {
-  const { makeNetwork, makePeer } = require('../../helpers/setup');
+  const { makeNetwork, makePeer } = require('../../../helpers/setup');
   const BLOB = '[file](&lic00000000000000000000000000000000000000000000.sha256)';
   const KINDS = [
     ['audios', 'createAudio', 'updateAudioById', true],

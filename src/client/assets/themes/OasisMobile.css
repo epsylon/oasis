@@ -1220,16 +1220,12 @@ audio, video { max-width: 100% !important; }
 .module-table td:first-child a { white-space: normal !important; word-break: keep-all !important; overflow-wrap: normal !important; hyphens: none !important; }
 .module-table td, .module-table th { padding: 8px 6px !important; vertical-align: middle !important; }
 .module-table td:nth-child(2) p { font-size: .85em !important; margin: 0 !important; }
-.pdf-canvas-wrap { height: auto !important; max-height: 70vh !important; overflow: auto !important; }
-.pdf-viewer-container { padding: 8px !important; }
+.pdf-frame { height: 75vh !important; min-height: 420px !important; }
+.pdf-frame:target { height: 100vh !important; }
+.pdf-viewer-container { padding: 8px !important; margin-bottom: 8px !important; }
+.pdf-embedded { margin-bottom: 0 !important; }
 .pdf-viewer-container .pdf-controls { display: flex !important; flex-wrap: wrap !important; gap: 8px !important; justify-content: center !important; align-items: center !important; margin-top: 8px !important; }
-.pdf-viewer-container button { font-size: 1em !important; padding: 7px 10px !important; min-width: 42px !important; }
-.pdf-viewer-container span { margin: 0 4px !important; }
-.pdf-viewer-container { margin-bottom: 8px !important; }
-.pdf-maximized { position: fixed !important; inset: 0 !important; z-index: 9999 !important; margin: 0 !important; border-radius: 0 !important; background: #111 !important; display: flex !important; flex-direction: column !important; padding: 6px !important; overflow: hidden !important; }
-.pdf-maximized .pdf-canvas-wrap { flex: 1 1 auto !important; max-height: none !important; height: auto !important; overflow: auto !important; }
-.pdf-maximized .pdf-controls { flex-shrink: 0 !important; margin: 6px 0 !important; }
-.pdf-maximized-body { overflow: hidden !important; }
+.pdf-viewer-container .pdf-controls a, .pdf-viewer-container .pdf-controls span { font-size: 1em !important; padding: 7px 10px !important; min-width: 42px !important; margin: 0 !important; text-align: center !important; box-sizing: border-box !important; text-decoration: none !important; }
 
 .main-content .feed-workspace { display: flex !important; flex-direction: column !important; gap: 10px !important; }
 .feed-workspace .feed-side { display: block !important; position: static !important; }
@@ -1290,10 +1286,8 @@ audio, video { max-width: 100% !important; }
 .feed-card .refeed-column { flex-wrap: wrap !important; }
 .feed-card .refeed-column .muted { flex-basis: 100% !important; text-align: center !important; margin: 4px 0 0 0 !important; }
 .feed-card .card-engage summary, .feed-card .comments-link { min-height: 40px !important; padding: 8px 10px !important; box-sizing: border-box !important; display: flex !important; align-items: center !important; justify-content: center !important; font-size: .85em !important; }
-.comments-collapse .comments-inline-form { display: flex !important; flex-direction: column !important; gap: 6px !important; padding: 8px !important; }
 .comments-collapse textarea { width: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
 .comments-collapse .filter-btn { width: auto !important; align-self: center !important; padding: 6px 18px !important; }
-.comments-collapse .comments-view-all { display: block !important; text-align: center !important; padding: 6px !important; font-size: .8em !important; }
 .comments-collapse .comment-form { display: flex !important; flex-direction: column !important; gap: 6px !important; width: 100% !important; }
 .comments-collapse .comment-textarea { width: 100% !important; box-sizing: border-box !important; margin: 0 !important; }
 .comments-collapse .comment-file-upload { display: flex !important; flex-direction: column !important; gap: 4px !important; width: 100% !important; }
@@ -3603,6 +3597,10 @@ body > .header {
 .main-column .room-live-panel .room-live-head-main {
   width: 100% !important;
   text-align: center !important;
+}
+.main-column .room-live-panel .room-live-head-main > .card-chips-row {
+  justify-content: center !important;
+  margin-bottom: 1em !important;
 }
 .main-column .tribe-main:has(> .room-live-panel) {
   display: flex !important;

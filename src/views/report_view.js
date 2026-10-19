@@ -1,6 +1,6 @@
 const { hr, div, h2, p, section, button, form, a, textarea, br, input, img, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows, renderEditedChip } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -564,7 +564,8 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
       renderContentActions(report.id, `/reports/${encodeURIComponent(report.id)}`, { spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, returnTo: `/reports/${encodeURIComponent(report.id)}`, deleteAction: isAuthor ? contentDeleteAction('report', report.id) : undefined })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, report.title)
+      h2({ class: "tribe-card-title" }, report.title),
+      renderEditedChip(report.id, report.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(report.createdAt, report.author)),

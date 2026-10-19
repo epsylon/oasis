@@ -54,6 +54,17 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
   const { isClearnetPath, isTrustedRequest, buildCsp } = require(path.join(__dirname, "..", "backend", "request_guards"));
   const isValidRequest = (request) => isTrustedRequest(request, validHosts);
+  const pageFrames = (ctx, isClearnet) => {
+    if (ctx.method !== "GET") return {};
+    const host = String(ctx.host || '');
+    const viewer = /^[A-Za-z0-9.-]+(:\d+)?$/.test(host) ? `${host}${isClearnet ? '/c/pdf/embed' : '/pdf/embed'}` : "'self'";
+    const game = /^\/games\/[a-z0-9]+\/?$/.test(ctx.path);
+    return {
+      objects: viewer,
+      frames: game ? "'self'" : viewer,
+      framed: ctx.path === "/pdf/embed" || ctx.path === "/c/pdf/embed"
+    };
+  };
 
   const httpDebug = process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
 
@@ -92,15 +103,13 @@ module.exports = ({ host, port, middleware, allowHost }) => {
   gamesStatic.use(koaStatic(join(__dirname, "..", "games")));
   app.use(mount("/game-assets", gamesStatic));
 
-  app.use(mount("/js", koaStatic(path.join(__dirname, 'public/js'))));
-  app.use(koaStatic(path.join(__dirname, 'public')));
 
   app.use(async (ctx, next) => {
 
     if (httpDebug) console.log(`[http] ${ctx.method} ${ctx.path}`);
     
     const isClearnet = isClearnetPath(ctx.request);
-    ctx.set("Content-Security-Policy", buildCsp(isClearnet, { frames: ctx.method === "GET" && /^\/games\/[a-z0-9]+\/?$/.test(ctx.path) }));
+    ctx.set("Content-Security-Policy", buildCsp(isClearnet, pageFrames(ctx, isClearnet)));
     ctx.set("X-Frame-Options", "SAMEORIGIN");
 
     ctx.set("X-Content-Type-Options", "nosniff");

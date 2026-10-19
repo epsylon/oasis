@@ -1,7 +1,8 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote } = require("./main_views")
+const { renderCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, renderStyledHtml } = require("../backend/renderStyledText")
@@ -147,7 +148,7 @@ const renderCourseForm = (filter, course = {}, params = {}) => {
       label(i18n.description), br,
       textarea({ name: "description", rows: 5, required: true, maxlength: "2000", placeholder: i18n.schoolCourseDescriptionPlaceholder }, course.description || ""), br,
       label(i18n.blogImage), br,
-      input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
+      (isEdit && renderMediaLockNote(course)) || input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
       label(i18n.schoolTags), br,
       input({ type: "text", name: "tags", placeholder: i18n.schoolTagsPlaceholder, value: Array.isArray(course.tags) ? course.tags.join(", ") : (course.tags || "") }), br,
       ...(reach === "PAID"
@@ -414,7 +415,8 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
         ? ((isTeacher || params.subscription.subscribed === true)
             ? renderStateChip("mutuals", "\u2709", i18n.subscriptionOn)
             : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
-        : null
+        : null,
+      renderEditedChip(course.id, course.rootId)
     ),
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
     course.description ? p({ class: "tribe-side-description" }, ...renderStyledText(course.description)) : null,
@@ -742,7 +744,10 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
               ? renderOpinionsVoting('/school/opinions', course.id, course.opinions, returnTo, course.opinions_inhabitants)
               : null,
             null
-          )
+          ),
+          Array.isArray(params.comments)
+            ? renderCommentsSection({ action: `/school/course/${encodeURIComponent(course.rootId || course.id)}/comments`, comments: params.comments, returnTo: `/school/course/${encodeURIComponent(course.rootId || course.id)}` })
+            : null
         )
       )
     )
@@ -763,9 +768,10 @@ exports.clearnetCourseView = async (course, lessons = []) => {
 .cn-course-section h2{color:var(--fg);font-size:18px;text-transform:uppercase;letter-spacing:2px;margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .cn-course-section p{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;font-size:15px}
 .cn-lesson{background:var(--bg-sub);border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin-bottom:12px}
-.cn-lesson h3{color:var(--fg);margin:0 0 8px 0;font-size:16px}
-.cn-lesson p{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;font-size:14px;margin:0}
-.cn-lesson-date{color:var(--fg-dim);font-size:12px;margin-top:8px}
+.cn-lesson-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 12px;margin:0 0 8px 0}
+.cn-lesson h3{color:var(--fg);margin:0;font-size:16px}
+.cn-lesson-text{color:var(--fg-soft);line-height:1.6;font-size:14px;margin:0}
+.cn-lesson-date{color:var(--fg-dim);font-size:12px}
 `
   const body = `
   <h1 class="cn-course-title">${title}</h1>
@@ -780,9 +786,8 @@ exports.clearnetCourseView = async (course, lessons = []) => {
   ${desc ? `<div class="cn-course-section"><h2>${esc(i18n.description)}</h2><p>${desc}</p></div>` : ""}
   ${visibleLessons.length ? `<div class="cn-course-section"><h2>${esc(i18n.schoolLessons)} (${visibleLessons.length})</h2>${visibleLessons.map(lesson => `
   <div class="cn-lesson">
-    <h3>${esc(lesson.title || "")}</h3>
-    <p>${esc(lesson.text || "")}</p>
-    ${lesson.sessionDate ? `<div class="cn-lesson-date">📅 ${esc(new Date(lesson.sessionDate).toISOString().slice(0, 10))}</div>` : ""}
+    <div class="cn-lesson-head"><h3>${esc(lesson.title || "")}</h3>${lesson.sessionDate ? `<span class="cn-lesson-date">📅 ${esc(new Date(lesson.sessionDate).toISOString().slice(0, 10))}</span>` : ""}</div>
+    <div class="cn-lesson-text">${renderRichText(lesson.text || "")}</div>
   </div>`).join("")}</div>` : ""}
 `
   return renderClearnetPage({
@@ -805,7 +810,7 @@ const renderMaterial = (material, course, isTeacher) => {
   else if (ref && ref.length === 4) {
     const kind = ref[1], name = ref[2], blobId = ref[3]
     const url = `/blob/${encodeURIComponent(blobId)}`
-    if (kind === "pdf") body = div({ class: "pdf-viewer-container", id: `pdf-${material.id.slice(1, 9)}`, "data-pdf-url": url }, a({ href: url }, `📎 ${name || "PDF"}`))
+    if (kind === "pdf") body = renderPdfDocument(url, { title: name || "PDF", preview: true })
     else if (kind === "image") body = img({ src: url, alt: name, class: "school-material-image" })
     else if (kind === "video") body = video({ controls: true, src: url, class: "post-video", preload: 'metadata' })
     else if (kind === "audio") body = audio({ controls: true, src: url })
@@ -926,8 +931,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
     section(renderModeButtons("all", false, (params && params.modesAvail) || null)),
     section(div({ class: "tribe-details" }, lessonSide, lessonMain))
   )
-  const hasPdf = safeArr(materials).some(m => !m.locked && /\[pdf:/.test(String(m.media || "")))
-  return hasPdf ? `${tpl}<script type="module" src="/js/pdf-viewer.js?v=102"></script>` : tpl
+  return tpl
 }
 
 exports.schoolInvitePage = (code) => {

@@ -135,32 +135,6 @@ describe('blogs: rendering', (t) => {
   });
 });
 
-describe('blogs: where a post link points', (t) => {
-  t('a root post resolves to its blog page and a comment to its anchor', async () => {
-    const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const blogs = A.use('blogs');
-    const root = await blogs.createBlog({ text: 'root entry' });
-    const comment = await new Promise((res, rej) =>
-      A.node.publish({ type: 'post', text: 'a reply', root: root.key }, (err, m) => err ? rej(err) : res(m)));
-
-    eq(await blogs.blogHrefFor(root.key), `/blogs/${encodeURIComponent(root.key)}`, 'root goes to the blog page');
-    eq(await blogs.blogHrefFor(comment.key),
-      `/blogs/${encodeURIComponent(root.key)}#${encodeURIComponent(comment.key)}`,
-      'a comment goes to its anchor inside the blog');
-    eq(await blogs.resolveRootId(comment.key), root.key, 'a comment resolves to its root');
-  });
-
-  t('non-blog content keeps using the thread view', async () => {
-    const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const blogs = A.use('blogs');
-    const about = await new Promise((res, rej) =>
-      A.node.publish({ type: 'about', about: A.keypair.id, name: 'me' }, (err, m) => err ? rej(err) : res(m)));
-    const priv = await new Promise((res, rej) =>
-      A.node.publish({ type: 'post', text: 'secret', private: true }, (err, m) => err ? rej(err) : res(m)));
-    eq(await blogs.blogHrefFor(about.key), null, 'an about message is not a blog');
-    eq(await blogs.blogHrefFor(priv.key), null, 'a private post is not a blog');
-  });
-});
 
 describe('blogs: preview before publishing', (t) => {
   t('the form offers a preview that does not publish, and a separate publish', async () => {

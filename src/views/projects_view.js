@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -449,6 +449,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
   const deadlineValue = pr.deadline ? moment(pr.deadline).format("YYYY-MM-DDTHH:mm") : ""
   const milestoneMax = deadlineValue || undefined
   const returnTo = "/projects?filter=MINE"
+  const mediaLock = isEdit ? renderMediaLockNote(pr) : null
 
   return div(
     { class: "div-center project-form" },
@@ -470,10 +471,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       br(),
       label(i18n.projectImage),
       br(),
-      input({ type: "file", name: "image" }),
-      br(),
-      label(i18n.uploadMedia), br(),
-      input({ type: "file", name: "blob" }),
+      ...(mediaLock ? [mediaLock] : [input({ type: "file", name: "image" }), br(), label(i18n.uploadMedia), br(), input({ type: "file", name: "blob" })]),
       br(),
       pr.image ? renderMediaBlob(pr.image) : null,
       br(),
@@ -654,7 +652,8 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
       renderContentActions(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { spread: params.spreads || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, returnTo: `/projects/${encodeURIComponent(pr.id)}`, deleteAction: isAuthor ? contentDeleteAction('project', pr.id || pr.key) : undefined })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, pr.title)
+      h2({ class: "tribe-card-title" }, pr.title),
+      renderEditedChip(pr.id, pr.rootId)
     ),
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     pr.image ? renderMediaBlob(pr.image, { class: "tribe-detail-image" }) : null,

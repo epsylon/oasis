@@ -1,5 +1,6 @@
 const pull = require("../server/node_modules/pull-stream");
 const { readTyped, CONTENT_TYPES } = require("./typed_log");
+const { isComment } = require("./comments_model");
 const { getConfig } = require("../configs/config-manager.js");
 const { config } = require("../server/SSB_server.js");
 
@@ -63,6 +64,7 @@ function idsEqual(a, b) {
   }
 
   function normalizeType(a) {
+    if (isComment(a.content)) return "comment";
     const t = a.type || a.content?.type || inferType(a.content) || "";
     return String(t).toLowerCase();
   }

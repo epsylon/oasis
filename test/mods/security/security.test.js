@@ -507,12 +507,15 @@ describe('security: the data folder keeps the SSB layout and Oasis inside its ow
   });
 });
 
-describe('security: browser code shipped with Oasis is the published release', (t) => {
-  t('pdf.js matches the official pdfjs-dist 5.3.31 build byte for byte', () => {
-    const fs = require('fs'); const path = require('path'); const crypto = require('crypto');
-    const dir = path.join(__dirname, '../../../src/client/public/js');
-    const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, f))).digest('hex');
-    eq(sha('pdf.min.mjs'), 'd52477eb9df74c4541686dc8f93b7b70d011d118ee5a336d7ff109867994a548');
-    eq(sha('pdf.worker.min.mjs'), 'b53a18c9bc0b7296fa96297fc47a09678fa46b4bce38ca469d978653af1d7bd6');
+describe('security: Oasis pages run no code in the browser', (t) => {
+  t('no view ships a script and the app policy forbids them', () => {
+    const fs = require('fs'); const path = require('path');
+    const dir = path.join(__dirname, '../../../src/views');
+    for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.js'))) {
+      notOk(/<script\b|\bscript\(/.test(fs.readFileSync(path.join(dir, f), 'utf8')), f);
+    }
+    const guards = require('../../../src/backend/request_guards');
+    ok(guards.buildCsp(false).includes("script-src 'none'"));
+    ok(guards.buildCsp(true).includes("script-src 'none'"));
   });
 });

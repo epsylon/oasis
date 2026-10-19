@@ -1,5 +1,5 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -166,7 +166,7 @@ const renderForm = (route, params = {}) => {
       label(i18n.logisticsDescriptionLabel), br(),
       textarea({ name: "description", rows: 5, maxlength: "3000", placeholder: i18n.logisticsDescriptionPlaceholder }, route ? route.description : ""), br(),
       label(i18n.uploadMedia), br(),
-      input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
+      (route && renderMediaLockNote(route)) || input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
       label(i18n.logisticsOriginLabel), br(),
       input({ type: "text", name: "origin", maxlength: "100", required: true, placeholder: i18n.logisticsOriginPlaceholder, value: route ? route.origin : "" }), br(),
       label(i18n.logisticsDestinationLabel), br(),
@@ -320,7 +320,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
     div({ class: "card-header activity-card-header" },
       renderContentActions(route.id, href, { author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null })
     ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title)),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title), renderEditedChip(route.tipId, route.rootId)),
     div({ class: "card-chips-row" }, kindChip(route), modeChip(route), statusChip(route), priceChip(route)),
     table({ class: "tribe-info-table jobs-info-table" },
       tr(

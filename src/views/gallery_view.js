@@ -1,5 +1,5 @@
 const { div, a, span, img, video, input, button, label, br } = require("../server/node_modules/hyperaxe")
-const { i18n } = require("./main_views")
+const { i18n, renderIcon, renderMediaLockNote } = require("./main_views")
 const { MAX_IMAGES } = require("../models/media_gallery")
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -33,19 +33,30 @@ const renderMediaThumb = (entry, alt = "") => isVideoEntry(entry)
 const lightboxId = (scope, itemId, index) => `${scope}-photo-${encodeURIComponent(itemId)}-${index}`
 
 let zoomSeq = 0
-const renderZoomableImage = (src, { alt = "", imgClass = "", linkClass = "" } = {}) => {
+const renderZoomableImage = (src, { alt = "", imgClass = "", linkClass = "", thumb = null, full = false } = {}) => {
   if (!src) return null
   zoomSeq = (zoomSeq + 1) % 1000000
   const id = `zoom-${zoomSeq}-${String(src).replace(/[^a-zA-Z0-9]/g, "").slice(-10)}`
   return [
-    a({ href: `#${id}`, id: `${id}-src`, class: linkClass ? `zoom-link ${linkClass}` : "zoom-link" }, img({ src, class: imgClass, alt })),
-    div({ id, class: "lightbox" },
+    a({ href: `#${id}`, id: `${id}-src`, class: linkClass ? `zoom-link ${linkClass}` : "zoom-link" }, img({ src: thumb || src, class: imgClass, alt, loading: "lazy" })),
+    div({ id, class: full ? "lightbox live-lightbox" : "lightbox" },
       a({ href: downloadHref(src), class: "lightbox-download", title: i18n.fileShareDownload || "Download" }, "⤓"),
       a({ href: `#${id}-src`, class: "lightbox-close" }, "×"),
-      img({ src, class: "lightbox-image", alt })
-    )
+      full ? a({ href: `#${id}-full`, class: "live-fullscreen-btn", title: i18n.liveFullscreen }, renderIcon("fullscreen")) : null,
+      img({ src, class: "lightbox-image", alt, loading: "lazy" })
+    ),
+    full
+      ? div({ id: `${id}-full`, class: "lightbox live-lightbox live-fullscreen" },
+          a({ href: `#${id}`, class: "lightbox-close" }, "×"),
+          a({ href: `#${id}`, class: "lightbox-image-link" }, img({ src, class: "lightbox-image", alt, loading: "lazy" }))
+        )
+      : null
   ]
 }
+
+const renderDownloadButton = (src, name = "") => src
+  ? a({ href: `${downloadHref(src)}${name ? `&name=${encodeURIComponent(name)}` : ""}`, class: "filter-btn media-download-btn" }, `⤓ ${i18n.fileShareDownload || "Download"}`)
+  : null
 
 const renderPhotoGallery = (item, scope = "media") => {
   const list = imagesOf(item)
@@ -79,16 +90,17 @@ const renderPhotoGallery = (item, scope = "media") => {
 
 const renderGalleryFields = (item = {}, isEdit = false, maxImages = MAX_IMAGES) => {
   const list = imagesOf(item)
+  const lock = isEdit ? renderMediaLockNote(item) : null
   return [
     label(i18n.galleryImages),
     br(),
     ...list.map(entry => input({ type: "hidden", name: "keepImages", value: entry })),
-    list.length < maxImages
+    lock || (list.length < maxImages
       ? div({ class: "media-file-row" },
           input({ type: "file", name: "images", accept: "image/*", multiple: true }),
           button({ type: "submit", name: "action", value: "addPhoto", attrs: { formnovalidate: "formnovalidate" }, class: "filter-btn media-add-btn" }, i18n.galleryAddPhoto)
         )
-      : null,
+      : null),
     br(),
     list.length
       ? [
@@ -96,7 +108,7 @@ const renderGalleryFields = (item = {}, isEdit = false, maxImages = MAX_IMAGES) 
             list.map((entry, i) =>
               span({ class: "gallery-item" },
                 renderMediaThumb(entry),
-                button({ type: "submit", name: "removePhoto", value: String(i), attrs: { formnovalidate: "formnovalidate" }, class: "media-remove-btn" }, i18n.galleryRemovePhoto)
+                lock ? null : button({ type: "submit", name: "removePhoto", value: String(i), attrs: { formnovalidate: "formnovalidate" }, class: "media-remove-btn" }, i18n.galleryRemovePhoto)
               )
             )
           ),
@@ -117,5 +129,7 @@ module.exports = {
   renderMediaThumb,
   renderPhotoGallery,
   renderGalleryFields,
-  renderZoomableImage
+  renderZoomableImage,
+  renderDownloadButton,
+  downloadHref
 }

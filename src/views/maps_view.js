@@ -4,7 +4,8 @@ const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/renderStyledText");
 
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon } = require("./main_views");
+const { renderCommentsSection } = require("./comments_view");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
@@ -256,7 +257,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         textarea({ maxlength: "5000", name: "markerLabel", placeholder: i18n.mapMarkerLabelPlaceholder, rows: "3" }, markerLabelVal),
         br(), br(),
         label(i18n.markerImageLabel || "Marker Image"), br(),
-        input({ type: "file", name: "image", accept: "image/*" }),
+        (isEdit && renderMediaLockNote(mapToEdit)) || input({ type: "file", name: "image", accept: "image/*" }),
         br(), br(),
         label(i18n.mapLatLabel), br(),
         input({ type: "text", name: "lat", placeholder: i18n.mapLatPlaceholder, value: latVal }),
@@ -534,7 +535,8 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       })
     ),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, mapObj.title || i18n.mapAllSectionTitle)
+      h2({ class: "tribe-card-title" }, mapObj.title || i18n.mapAllSectionTitle),
+      renderEditedChip(mapObj.key, mapObj.rootId)
     ),
     div({ class: "card-chips-row" },
       renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase()),
@@ -614,7 +616,11 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       mapObj.updatedAt && mapObj.updatedAt !== mapObj.createdAt
         ? span({ class: "votations-comment-date" }, ` · ${i18n.mapUpdatedAt}: ${moment(mapObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
         : null),
-    renderMarkerForm(mapObj, returnTo, { ...params, filter }, tribeMembers, { mkLat, mkLng, view, focus })
+    renderMarkerForm(mapObj, returnTo, { ...params, filter }, tribeMembers, { mkLat, mkLng, view, focus }),
+    renderEngagement(mapObj.rootId || mapObj.key,
+      params.opinions ? renderOpinionsVoting('/maps/opinions', mapObj.rootId || mapObj.key, params.opinions.opinions, `/maps/${encodeURIComponent(mapObj.rootId || mapObj.key)}`, params.opinions.opinions_inhabitants) : null,
+      Array.isArray(params.comments) ? renderCommentsSection({ action: `/maps/${encodeURIComponent(mapObj.rootId || mapObj.key)}/comments`, comments: params.comments, returnTo: `/maps/${encodeURIComponent(mapObj.rootId || mapObj.key)}` }) : null
+    )
   );
 
   return template(mapObj.title || i18n.mapTitle,

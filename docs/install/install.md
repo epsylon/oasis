@@ -54,6 +54,12 @@ Then:
     
 ---
 
+## Debian package (.deb)
+
+`scripts/build-deb.sh` (`--arm64` for ARM) builds a `.deb` with its own Node.js, verified against the official checksums. Install it with `sudo apt install ./oasis_<version>_<arch>.deb`, then run `oasis` as your own user. Each user has their own `~/.ssb`; when several users run it at once, the second and next ones get their own ports. For a PUB, the package adds an `oasis` system user and an `oasis` service: set it up as in [docs/PUB/deploy.md](../PUB/deploy.md) under `/var/lib/oasis`, then `sudo systemctl enable --now oasis`.
+
+---
+
 ## 3) Upgrading from an older Oasis
 
 The first start of this version converts your local log from the old `flume` format to `ssb-db2` (`~/.ssb/db2/`), in the background and once. Make a copy of `~/.ssb` before upgrading, as with any upgrade. After it, **do not start an older Oasis on the same `~/.ssb`**: it cannot read the new format and would see your identity with no messages. A guard file is left behind so that such a version refuses to start rather than publish from zero and fork your feed; keep it.

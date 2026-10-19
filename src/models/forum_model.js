@@ -521,7 +521,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       };
     },
 
-    getMessagesByForumId: async forumId => {
+    getMessagesByForumId: async (forumId, ssbReplies = []) => {
       const ssbClient = await openSsb();
       const msgs = await readForumLog();
       const deleted = deletedOf(msgs);
@@ -537,8 +537,11 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
         if (c.root !== forumId) return null;
         return { c, m };
       };
-      const replies = msgs
-        .map(decodeReply)
+      const parentOf = (branch) => [].concat(branch || []).filter(b => typeof b === 'string' && b !== forumId).pop() || null;
+      const fromPosts = (Array.isArray(ssbReplies) ? ssbReplies : [])
+        .filter(m => m && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.root === forumId)
+        .map(m => ({ c: { ...m.value.content, branch: parentOf(m.value.content.branch) }, m }));
+      const replies = [...msgs.map(decodeReply), ...fromPosts]
         .filter(r => r && !deleted.has(r.m.key))
         .map(({ c, m }) => ({
           key: m.key,

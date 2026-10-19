@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -95,7 +95,7 @@ const renderForm = (cp) =>
       label(i18n.campaignTextLabel), br(),
       textarea({ name: "text", rows: 10, maxlength: "8000", placeholder: i18n.campaignTextPlaceholder }, cp ? cp.text : ""), br(),
       label(i18n.uploadMedia), br(),
-      input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
+      (cp && renderMediaLockNote(cp)) || input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
       label(i18n.campaignCategoryLabel), br(),
       select({ name: "category" }, ...CATEGORIES.map(c => option({ value: c, ...((cp ? cp.category : "OTHER") === c ? { selected: true } : {}) }, catLabel(c)))), br(), br(),
       label(i18n.campaignGoalLabel), br(),
@@ -206,7 +206,7 @@ exports.singleCampaignView = async (cp, params = {}) => {
     div({ class: "card-header activity-card-header" },
       renderContentActions(cp.id, href, { author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: params.spread || null, returnTo: href, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined })
     ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, cp.title)),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, cp.title), renderEditedChip(cp.tipId, cp.rootId)),
     div({ class: "card-chips-row" },
       statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.proposalId ? renderStateChip("neutral", "⚖", String(i18n.campaignElevated).toUpperCase()) : null,
       renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("campaigns", cp.title, cp.id) : null),

@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, video: videoHyperaxe, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderEngagement } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -251,7 +251,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
           )
         : null
     ),
-    renderCommentsSection({ action: `/emergencies/${encodeURIComponent(emergency.id)}/comments`, comments: params.comments || [], returnTo: href })
+    renderEngagement(emergency.id, null, renderCommentsSection({ action: `/emergencies/${encodeURIComponent(emergency.id)}/comments`, comments: params.comments || [], returnTo: href }))
   );
   return template(
     emergency.title,

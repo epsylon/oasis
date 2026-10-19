@@ -73,7 +73,7 @@ test/
   mods/actions             actions.test.js
   mods/activity            activity.test.js
   mods/agenda              agenda.test.js
-  mods/ai                  ai_nav.test.js ai_assistant.test.js
+  mods/ai                  ai_assistant.test.js ai_nav.test.js
   mods/backup              backup.test.js
   mods/banking             banking.test.js
   mods/blobcache           blobcache.test.js
@@ -86,7 +86,7 @@ test/
   mods/clearnet            clearnet.test.js hub.test.js
   mods/comments            comments.test.js
   mods/conventions         conventions.test.js
-  mods/courts              courts.test.js rules.test.js
+  mods/courts              courts.test.js rules.test.js verdicts.test.js
   mods/crypto              invite-safety.test.js primitives.test.js tombstone-author.test.js
   mods/cv                  cv.test.js
   mods/data                data.test.js
@@ -102,28 +102,33 @@ test/
   mods/gallery             gallery.test.js
   mods/games               games.test.js
   mods/housing             housing.test.js
+  mods/http                http.test.js
   mods/i18n                i18n.test.js
   mods/industry            industry.test.js
   mods/inhabitants         inhabitants.test.js
   mods/jobs                jobs.test.js
   mods/larp                larp.test.js
+  mods/library             library.test.js
   mods/logistics           logistics.test.js
   mods/logs                logs.test.js
+  mods/longtext            longtext.test.js
   mods/mailing             mailing.test.js
   mods/maps                maps.test.js
   mods/market              market.test.js
-  mods/media               media.test.js
   mods/media/audios        audios.test.js
   mods/media/bookmarks     bookmarks.test.js
   mods/media/documents     documents.test.js
   mods/media/images        images.test.js
+  mods/media/licenses      licenses.test.js
   mods/media/videos        videos.test.js
   mods/melody              melody.test.js
   mods/mentions            mentions.test.js
   mods/multiuser           multiuser.test.js
+  mods/nextcloud           nextcloud.test.js
   mods/opinions            opinions.test.js
   mods/pads                pads.test.js
-  mods/parliament          cycles.test.js parliament.test.js rules.test.js
+  mods/pagination          pagination.test.js
+  mods/parliament          cycles.test.js forgery.test.js parliament.test.js rules.test.js
   mods/pdf                 content-pdf.test.js
   mods/peers               peers.test.js
   mods/phone               phone.test.js
@@ -138,7 +143,7 @@ test/
   mods/rooms               rooms.test.js
   mods/school              school.test.js
   mods/search              search.test.js
-  mods/security            security.test.js request-guards.test.js
+  mods/security            request-guards.test.js security.test.js
   mods/shops               shops.test.js
   mods/spread              spread.test.js
   mods/stats               stats.test.js
@@ -150,7 +155,7 @@ test/
   mods/trending            trending.test.js
   mods/tribes              basic.test.js
   mods/views               views.test.js
-  mods/votes               rules.test.js votes.test.js
+  mods/votes               rules.test.js tally.test.js votes.test.js
   mods/welcome             welcome.test.js
   mods/wiki                wiki.test.js
   mods/workflows           workflows.test.js

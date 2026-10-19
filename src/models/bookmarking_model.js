@@ -1,4 +1,5 @@
 const pull = require("../server/node_modules/pull-stream");
+const opinionRules = require("../backend/opinion_categories");
 const moment = require("../server/node_modules/moment");
 const { getConfig } = require("../configs/config-manager.js");
 const categories = require("../backend/opinion_categories");
@@ -28,6 +29,8 @@ const coerceLastVisit = (lastVisit) => {
 
 const voteSum = (opinions = {}) =>
   Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
+
+const BOOKMARK_TITLE_MAX = 100;
 
 module.exports = ({ cooler }) => {
   let ssb;
@@ -103,6 +106,7 @@ module.exports = ({ cooler }) => {
       id: node.key,
       rootId,
       url: c.url || "",
+      title: c.title || "",
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       lastVisit: c.lastVisit || null,
@@ -139,7 +143,7 @@ module.exports = ({ cooler }) => {
       return root;
     },
 
-    async createBookmark(url, tagsRaw, description, lastVisit) {
+    async createBookmark(url, tagsRaw, description, lastVisit, title = "") {
       const ssbClient = await openSsb();
       const now = new Date().toISOString();
 
@@ -150,6 +154,7 @@ module.exports = ({ cooler }) => {
         type: "bookmark",
         author: ssbClient.id,
         url: u,
+        ...(safeText(title) ? { title: safeText(title).slice(0, BOOKMARK_TITLE_MAX) } : {}),
         tags: normalizeTags(tagsRaw),
         description: description || "",
         createdAt: now,
@@ -174,7 +179,7 @@ module.exports = ({ cooler }) => {
       if (!oldMsg || oldMsg.content?.type !== "bookmark") throw new Error("Bookmark not found");
       if (String(oldMsg.content.author) !== String(userId)) throw new Error("Not the author");
       const aggBm = await this.getBookmarkById(id, userId);
-      if (aggBm && Object.keys(aggBm.opinions || {}).some(k => (aggBm.opinions[k] || 0) > 0)) throw new Error("Cannot edit bookmark after it has received opinions.");
+      opinionRules.assertMediaKept(aggBm, updatedData.url !== undefined && safeText(updatedData.url) !== safeText(oldMsg.content.url));
 
       const url = safeText(updatedData.url || oldMsg.content.url);
       if (!url) throw new Error("URL is required");
@@ -185,6 +190,7 @@ module.exports = ({ cooler }) => {
         ...oldMsg.content,
         replaces: tipId,
         url,
+        title: updatedData.title !== undefined ? safeText(updatedData.title).slice(0, BOOKMARK_TITLE_MAX) : (oldMsg.content.title || ""),
         tags: updatedData.tags !== undefined ? normalizeTags(updatedData.tags) : safeArr(oldMsg.content.tags),
         description: updatedData.description !== undefined ? updatedData.description || "" : oldMsg.content.description || "",
         lastVisit: coerceLastVisit(updatedData.lastVisit || oldMsg.content.lastVisit),

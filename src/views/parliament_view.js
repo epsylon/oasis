@@ -1,8 +1,15 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, paged } = require('./main_views');
+const { template, i18n, userLink, paged, renderEngagement } = require('./main_views');
 const { renderStyledText } = require('../backend/renderStyledText');
+const { renderCommentsSection } = require('./comments_view');
+
+const commentsBlock = (comments, item, returnTo) => {
+  const root = item && item.rootId;
+  if (!root || !(comments instanceof Map)) return null;
+  return renderEngagement(root, null, renderCommentsSection({ action: `/parliament/comments/${encodeURIComponent(root)}`, comments: comments.get(root) || [], returnTo }));
+};
 
 const { seatPositions } = require('../models/parliament_model').hemicycle;
 
@@ -466,7 +473,7 @@ const ProposalForm = () =>
     )
   );
 
-const ProposalsList = (proposals) => {
+const ProposalsList = (proposals, comments = null) => {
   if (!proposals || !proposals.length) return null;
   const cards = proposals.map(pItem => {
     const titleNode = pItem && pItem.voteId
@@ -538,7 +545,8 @@ const ProposalsList = (proposals) => {
             { method: 'GET', action: `/votes/${encodeURIComponent(pItem.voteId)}` },
             button({ type: 'submit', class: 'buy-btn' }, i18n.parliamentVoteAction)
           )
-        : null
+        : null,
+      commentsBlock(comments, pItem, '/parliament?filter=proposals')
     );
   });
   return div(
@@ -731,7 +739,7 @@ const LawsStats = (laws = [], revocatedCount = 0) => {
   );
 };
 
-const LawsList = (laws) => {
+const LawsList = (laws, comments = null) => {
   if (!laws || !laws.length) return NoLaws();
   const cards = laws.map(l => {
     const total = Number((l.votes && (l.votes.total || l.votes.TOTAL)) || 0);
@@ -747,7 +755,8 @@ const LawsList = (laws) => {
       h2(l.question || ''),
       p(l.description || ''),
       showMetricsFlag ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesNeeded + ': ').toUpperCase()), span({ class: 'card-value' }, String(needed))) : null,
-      showMetricsFlag ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesSlashTotal + ': ').toUpperCase()), span({ class: 'card-value' }, `${yes}/${total}`)) : null
+      showMetricsFlag ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesSlashTotal + ': ').toUpperCase()), span({ class: 'card-value' }, `${yes}/${total}`)) : null,
+      commentsBlock(comments, l, '/parliament?filter=laws')
     );
   });
   return div(
@@ -1009,12 +1018,12 @@ const CandidaturesSection = (governmentCard, candidatures, leaderMeta, electionQ
   );
 };
 
-const ProposalsSection = (governmentCard, proposals, futureLaws, canPropose) => {
+const ProposalsSection = (governmentCard, proposals, futureLaws, canPropose, comments = null) => {
   const has = proposals && proposals.length > 0;
   const fl = FutureLawsList(futureLaws || []);
   if (!has && canPropose) return div(h2(i18n.parliamentGovernmentCard), GovHeader(governmentCard || {}), ProposalForm(), fl);
   if (!has && !canPropose) return div(h2(i18n.parliamentGovernmentCard), GovHeader(governmentCard || {}), NoProposals(), fl);
-  return div(h2(i18n.parliamentGovernmentCard), GovHeader(governmentCard || {}), ProposalForm(), ProposalsList(paged(proposals)), fl);
+  return div(h2(i18n.parliamentGovernmentCard), GovHeader(governmentCard || {}), ProposalForm(), ProposalsList(paged(proposals), comments), fl);
 };
 
 const RevocationsSection = (governmentCard, laws, revocations, futureRevocations) =>
@@ -1055,7 +1064,8 @@ const parliamentView = async (state) => {
     revocationsEnactedCount,
     historicalMetas = {},
     leadersMetas = {},
-    inhabitantsTotal
+    inhabitantsTotal,
+    comments = null
   } = state;
 
   const fallbackGov = {
@@ -1084,7 +1094,7 @@ const parliamentView = async (state) => {
   const LawsSectionWrap = () =>
     div(
       LawsStats(laws || [], revocationsEnactedCount || 0),
-      LawsList(paged(laws || []))
+      LawsList(paged(laws || []), comments)
     );
 
   return template(
@@ -1100,7 +1110,7 @@ const parliamentView = async (state) => {
     section(
       filter === 'government' ? GovernmentCard(gov, powerMeta, hemicycle || null, seatsMode || 'election', houseNames || {}) : null,
       filter === 'candidatures' ? CandidaturesSection(gov, candidatures, leaderMeta, electionQuorum) : null,
-      filter === 'proposals' ? ProposalsSection(gov, proposals, futureLaws, canPropose) : null,
+      filter === 'proposals' ? ProposalsSection(gov, proposals, futureLaws, canPropose, comments) : null,
       filter === 'laws' ? LawsSectionWrap() : null,
       filter === 'revocations' ? RevocationsSection(gov, laws, revocations, futureRevocations) : null,
       filter === 'historical' ? div(HistoricalGovsSummary(historical || []), HistoricalList(paged(historical || []), historicalMetas)) : null,

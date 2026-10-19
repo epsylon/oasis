@@ -182,3 +182,23 @@ describe('forum: the highlighted reply', (t) => {
     eq((html2.match(/highlighted-reply/g) || []).length, 1, 'only one reply is highlighted');
   });
 });
+
+describe('forum: replies sent as plain SSB posts', (t) => {
+  t('a post whose root is the thread shows in the thread, under the reply it answers', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    A.setActor();
+    const r = await A.use('forum').createForum('general', 'T', 'b');
+    await A.use('forum').addMessageToForum(r.key, { text: 'forum reply', category: 'general', title: 'reply' });
+    const first = (await A.use('forum').getMessagesByForumId(r.key)).messages[0];
+    const ssb = await A.cooler.open();
+    const publish = (content) => new Promise((res, rej) => ssb.publish(content, (e, m) => e ? rej(e) : res(m)));
+    const direct = await publish({ type: 'post', text: 'plain reply', root: r.key, branch: [r.key] });
+    const nested = await publish({ type: 'post', text: 'answer to the forum reply', root: r.key, branch: [r.key, first.key] });
+    const posts = await A.use('comments').listFor(r.key);
+    const thread = await A.use('forum').getMessagesByForumId(r.key, posts);
+    ok(thread.messages.some(m => m.key === direct.key && m.text === 'plain reply'), 'the plain reply is in the thread');
+    const parent = thread.messages.find(m => m.key === first.key);
+    ok(parent && parent.children.some(c => c.key === nested.key), 'and the answer hangs from the reply it answers');
+    eq(thread.total, 3, 'all replies are counted');
+  });
+});

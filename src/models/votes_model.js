@@ -1,4 +1,5 @@
 const pull = require('../server/node_modules/pull-stream');
+const opinionRules = require('../backend/opinion_categories');
 const moment = require('../server/node_modules/moment');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
@@ -13,6 +14,10 @@ const INSTITUTIONAL_VOTE_TAG = /^(gov|govMethod|courtsCase|courtsMethod):/;
 const isVoteLocked = (v) => !!v && (
   (parseInt(v.totalVotes || 0, 10) || 0) > 0
   || Object.values(v.opinions || {}).some(n => (Number(n) || 0) > 0)
+  || (Array.isArray(v.tags) && v.tags.some(t => INSTITUTIONAL_VOTE_TAG.test(String(t))))
+);
+const isVoteEditLocked = (v) => !!v && (
+  (parseInt(v.totalVotes || 0, 10) || 0) > 0
   || (Array.isArray(v.tags) && v.tags.some(t => INSTITUTIONAL_VOTE_TAG.test(String(t))))
 );
 const lockedError = () => Object.assign(new Error('Vote locked'), { code: 'VOTE_LOCKED' });
@@ -151,6 +156,7 @@ module.exports = ({ cooler }) => {
         id: best.key,
         latestId: best.key,
         ...best.content,
+        rootId: root,
         votes: votesMap,
         voters,
         totalVotes,
@@ -253,7 +259,7 @@ module.exports = ({ cooler }) => {
       if (c.createdBy !== userId) throw new Error('Not the author');
       const agg = await this.getVoteById(id);
       const aggTotalVotes = agg ? (parseInt(agg.totalVotes || 0, 10) || 0) : 0;
-      if (isVoteLocked(c) || isVoteLocked(agg)) throw lockedError();
+      if (isVoteEditLocked(c) || isVoteEditLocked(agg)) throw lockedError();
 
       let newDeadline = c.deadline;
       if (deadline != null && deadline !== '') {
@@ -275,6 +281,9 @@ module.exports = ({ cooler }) => {
         options.length !== newOptions.length ||
         options.some((o, i) => o !== newOptions[i])
       );
+
+      const questionChanged = question !== undefined && String(question) !== String(c.question || '');
+      opinionRules.assertMediaKept(agg && Object.keys(agg.opinions || {}).length ? agg : c, questionChanged || optionsChanged);
 
       if (optionsChanged) {
         if (aggTotalVotes > 0) {
@@ -387,3 +396,4 @@ module.exports = ({ cooler }) => {
   };
 };
 module.exports.isVoteLocked = isVoteLocked;
+module.exports.isVoteEditLocked = isVoteEditLocked;

@@ -161,9 +161,6 @@ module.exports = ({ cooler }) => {
     },
     async hasLocal(blobId) {
       try { return await hasLocal(await openSsb(), String(blobId || '')); } catch (_) { return false; }
-    },
-    async seedsFor(blobId) {
-      try { return (await findSeeds(await openSsb(), String(blobId || ''))).map((s) => s.id); } catch (_) { return []; }
     }
   };
 };

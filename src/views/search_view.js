@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel } = require('./main_views');
+const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel, renderPdfDocument } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -138,7 +138,6 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     }
   };
 
-  let hasDocument = false;
 
   const blobImg = (value) => {
     if (!value) return null;
@@ -299,11 +298,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
           br(),
           content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, content.description)) : null,
           br(),
-          div({
-            id: `pdf-container-${content.key || content.url}`,
-            class: 'pdf-viewer-container',
-            'data-pdf-url': `/blob/${encodeURIComponent(content.url)}`
-          }),
+          renderPdfDocument(`/blob/${encodeURIComponent(content.url)}`, { title: content.title }),
           br(),
           content.tags && content.tags.length
             ? div({ class: 'card-tags' }, content.tags.map(tag =>
@@ -627,7 +622,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     }
   };
 
-  const typeLabel = (type) => String(i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)] || type || '').toUpperCase();
+  const typeLabel = (type) => String((type === 'comment' ? i18n.comment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)]) || type || '').toUpperCase();
   const totalResults = Object.values(results).reduce((n, msgs) => n + (Array.isArray(msgs) ? msgs.length : 0), 0);
   const resultStats = renderModuleStats(totalResults,
     Object.entries(results)
@@ -642,7 +637,6 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         ...msgs.map((msg) => {
           const content = msg.value.content || {};
           const created = moment(msg.timestamp).format("YYYY/MM/DD HH:mm");
-          if (content.type === 'document') hasDocument = true;
           const contentHtml = renderContentHtml(content);
           let author;
           let authorUrl = '#';
@@ -689,7 +683,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
                 ...(CONTENT_TORRENTABLE.has(content.type) && typeof content.url === 'string' && content.url.startsWith('&')
                   ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
                   : {}),
-                ...(CONTENT_FAV_KIND[content.type]
+                ...(key !== 'comment' && CONTENT_FAV_KIND[content.type]
                   ? { favKind: CONTENT_FAV_KIND[content.type], isFavorite: favIndex instanceof Map ? favIndex.get(String(contentId)) === CONTENT_FAV_KIND[content.type] : false, returnTo: `/search?query=${encodeURIComponent(hashtag ? `#${hashtag}` : String(query || ''))}` }
                   : {})
               })
@@ -726,12 +720,6 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
       resultSection
     )
   );
-
-  if (hasDocument) {
-    html += `
-      <script type="module" src="/js/pdf-viewer.js?v=102"></script>
-    `;
-  }
 
   return html;
 };

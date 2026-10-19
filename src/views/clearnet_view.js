@@ -163,7 +163,7 @@ const LICENSES = [
   { id: 'LAL-1.3', label: 'Free Art License 1.3', name: 'Free Art License 1.3' }
 ];
 const DEFAULT_LICENSE = LICENSES[0].id;
-const LICENSED_KINDS = new Set(['wiki', 'audio', 'video', 'image', 'document']);
+const LICENSED_KINDS = new Set(['wiki', 'audio', 'video', 'image', 'document', 'file', 'torrent']);
 const licenseInfo = (id) => {
   const v = String(id || '').trim() || DEFAULT_LICENSE;
   return LICENSES.find(l => l.id === v) || null;
@@ -366,6 +366,7 @@ const getCurrentPalette = () => {
 };
 
 const buildBaseCss = (p) => `
+.cn-pdf-frame{display:block;width:100%;max-width:100%;height:80vh;min-height:520px;border:0;margin:0 0 1rem 0;background:transparent}
 :root{
   --bg:${p.bg}; --bg-elev:${p.bgElev}; --bg-sub:${p.bgSub};
   --fg:${p.fg}; --fg-soft:${p.fgSoft}; --fg-dim:${p.fgDim};
@@ -390,10 +391,12 @@ footer.cn-footer .cn-footer-logo{width:56px;height:auto;display:block;margin:0 a
 footer.cn-footer .cn-footer-line{margin:3px 0}
 `;
 
+const renderRssLink = (href) => `<a class="cn-rss" href="${escapeHtml(href)}" title="RSS" aria-label="RSS"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5.5" cy="18.5" r="2.4" fill="currentColor"/><path d="M3.5 10.5a10 10 0 0 1 10 10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M3.5 3.5a17 17 0 0 1 17 17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></a>`;
+
 const renderClearnetHubSearch = ({ type = '', query = '' } = {}) =>
   `<form class="cn-search" method="GET" action="/c">${type ? `<input type="hidden" name="type" value="${escapeHtml(type)}"/>` : ''}<input type="text" name="q" value="${escapeHtml(query || '')}" placeholder="${escapeHtml(cnText('cnSearchPlaceholder', 'Search…'))}" autocomplete="off"/></form>`;
 
-const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null, extraCss = '', body, headerExtra = null, hubFeedId = null }) => {
+const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null, extraCss = '', body, headerExtra = null, hubFeedId = null, feed = '' }) => {
   const safeTitle = escapeHtml(title || 'Oasis');
   const safeOgTitle = escapeHtml(ogTitle || title || 'Oasis');
   const safeOgDesc = escapeHtml(ogDescription || '');
@@ -415,12 +418,15 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   <meta name="description" content="${safeOgDesc}"/>
   <meta name="robots" content="index, follow"/>
   <link rel="icon" href="/c/assets/images/favicon.svg"/>
+  ${feed ? `<link rel="alternate" type="application/rss+xml" title="${safeTitle}" href="${escapeHtml(feed)}"/>` : ''}
   <style>${baseCss}${CLEARNET_SEARCH_CSS}${CLEARNET_TEXT_CSS}${CLEARNET_ZOOM_CSS}${extraCss}
 .cn-brand-link{display:block;text-decoration:none}
 
 .cn-brand-link:hover .cn-brand{color:var(--accent)}
 .cn-brand-link:hover{text-decoration:none}
 .cn-header-extra{gap:10px}
+.cn-rss{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;background:var(--bg-sub);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;line-height:0;text-decoration:none}
+.cn-rss:hover{border-color:var(--fg);color:var(--accent);text-decoration:none}
 .cn-lang{position:relative;flex:0 0 auto;font-size:13px;outline:none}
 .cn-lang-current{display:block;cursor:pointer;background:var(--bg-sub);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-weight:600;letter-spacing:1px;user-select:none}
 .cn-lang:focus-within .cn-lang-current,.cn-lang:hover .cn-lang-current{border-color:var(--fg)}
@@ -433,7 +439,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
 <body>
   <header class="cn-header">
     ${brandBlock}
-    <div class="cn-header-extra">${renderLangSelector(lang)}${propagateLang(headerExtra == null ? renderClearnetHubSearch() : headerExtra, langOverride)}</div>
+    <div class="cn-header-extra">${renderLangSelector(lang)}${renderRssLink(cnWithLang(feed || '/c/rss', langOverride))}${propagateLang(headerExtra == null ? renderClearnetHubSearch() : headerExtra, langOverride)}</div>
   </header>
   ${propagateLang(stripInternalAnchors(zoomClearnetImages(body)), langOverride)}
   <footer class="cn-footer">
@@ -486,6 +492,63 @@ const renderClearnetPager = ({ base, params = {}, page, pages, per, total, pageP
   return `<div class="cn-pager">${sizeLinks}${info}${prev}${next}</div>`;
 };
 
+const CLEARNET_PDF_CSS = `
+.pdf-holder{display:block}
+.cn-pdf-frame:target{position:fixed;inset:0;z-index:100000;width:100vw;max-width:none;height:100vh;margin:0;background:var(--bg)}
+.pdf-unmax{display:none}
+.cn-pdf-frame:target+.pdf-unmax{display:block;position:fixed;top:10px;right:18px;z-index:100001;background:var(--bg-sub);color:var(--fg);padding:.4rem .8rem;border-radius:4px;font-size:1rem;text-decoration:none}
+html.pdf-embed-root,body.pdf-embed{height:100%}
+body.pdf-embed{max-width:none;width:auto;margin:0;padding:0;overflow:hidden;background:transparent}
+.pdf-viewer-container{box-sizing:border-box;width:100%;max-width:100%;background:var(--bg-elev);margin-bottom:1rem;padding:1rem;border-radius:6px;border:1px solid var(--border)}
+.pdf-embedded{display:flex;flex-direction:column;height:100%;margin-bottom:0}
+.pdf-canvas-wrap{display:flex;align-items:center;justify-content:center;box-sizing:border-box;height:420px;overflow:hidden}
+.pdf-wrap-scroll{display:block;overflow:auto}
+.pdf-embedded .pdf-canvas-wrap{flex:1 1 auto;height:auto;min-height:0}
+.pdf-page-image{display:block;box-sizing:border-box;width:auto;height:auto;margin:0 auto;border:1px solid var(--border);background-color:#fff}
+.pdf-z50{max-width:50%;max-height:50%}.pdf-z75{max-width:75%;max-height:75%}.pdf-z100{max-width:100%;max-height:100%}.pdf-z125{width:100%}.pdf-z150{width:150%}.pdf-z200{width:200%}.pdf-z300{width:300%}
+.pdf-viewer-container .pdf-controls{flex-shrink:0;margin-top:1rem}
+.pdf-viewer-container .pdf-controls a,.pdf-viewer-container .pdf-controls span{display:inline-block;margin:0 4px 4px 0;background-color:var(--bg-sub);color:var(--fg);border:none;padding:.4rem .8rem;font-size:1rem;line-height:1.2;text-decoration:none;cursor:pointer;border-radius:4px;transition:background-color .2s ease}
+.pdf-viewer-container .pdf-controls a:hover{background-color:var(--border)}
+.pdf-viewer-container .pdf-controls .pdf-off{opacity:.4;cursor:default}
+.pdf-message{padding:12px;color:var(--fg-soft);text-align:center}
+.pdf-maximized{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;width:100%;height:100vh;margin:0;padding:6px;border-radius:0;background:var(--bg)}
+.pdf-maximized .pdf-canvas-wrap{flex:1 1 auto;height:auto;max-height:none}
+.pdf-maximized .pdf-controls{flex-shrink:0;margin:6px 0}
+`;
+const clearnetPdfHref = (path, src, t) => {
+  const lang = cnScope().cnLang || '';
+  return `${path}?${new URLSearchParams({ src: String(src || ''), ...(t ? { title: String(t).slice(0, 200) } : {}), ...(lang ? { lang } : {}) })}`;
+};
+const renderPdfViewer = (...args) => mv().renderPdfViewer(...args);
+const renderClearnetPdfFrame = (blob, t) => {
+  const fid = require('../backend/pdf_view').frameIdOf(blob);
+  return `<span class="pdf-holder"><object id="${fid}" class="cn-pdf-frame" type="text/html" data="${escapeHtml(`${clearnetPdfHref('/c/pdf/embed', blob, t)}&fid=${fid}`)}" title="${escapeHtml(t || 'PDF')}" aria-label="${escapeHtml(t || 'PDF')}"></object><a href="#" class="pdf-unmax" title="${escapeHtml(cnText('pdfClose', 'Close'))}">✕</a></span>`;
+};
+const clearnetPdfViewer = (state, { title: t = '', back = '', embed = false } = {}) => {
+  const lang = cnScope().cnLang || '';
+  const keep = { src: state && state.src, title: t || null, back: back || null, lang: lang || null };
+  return renderPdfViewer(state, { title: t, prefix: '/c', base: embed ? '/c/pdf/embed' : '/c/pdf', keep, embed, back }).outerHTML;
+};
+const renderClearnetPdfEmbed = (state, { title: t = '', back = '' } = {}) => {
+  const lang = escapeHtml(mv().getLanguage ? mv().getLanguage() : 'en');
+  return `<!DOCTYPE html>
+<html lang="${lang}" class="pdf-embed-root">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="robots" content="noindex"/>
+  <title>${escapeHtml(t || 'PDF')}</title>
+  <style>${buildBaseCss(getCurrentPalette())}${CLEARNET_PDF_CSS}</style>
+</head>
+<body class="pdf-embed">${clearnetPdfViewer(state, { title: t, back, embed: true })}</body>
+</html>`;
+};
+const renderClearnetPdfView = (state, { title: t = '', back = '' } = {}) => renderClearnetPage({
+  title: t || 'PDF',
+  extraCss: CLEARNET_PDF_CSS,
+  body: `${back ? `<p><a class="cn-media-doc" href="${escapeHtml(back)}">← ${escapeHtml(cnText('goBack', 'Go back'))}</a></p>` : ''}<h1 class="cn-media-title">${escapeHtml(t || 'PDF')}</h1>${clearnetPdfViewer(state, { title: t, back })}`
+});
+
 const renderClearnetMediaView = ({ kind, item }) => {
   const blob = blobUrl(item.url);
   const title = escapeHtml(item.title || cnText('cnUntitled', 'Untitled'));
@@ -501,7 +564,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
 .cn-media-frame audio,.cn-media-frame video{width:100%;max-width:100%;display:block;border-radius:6px;background:#000}
 .cn-media-frame .cn-media-doc{display:inline-block;max-width:100%;box-sizing:border-box;overflow-wrap:anywhere;background:var(--bg-elev);border:1px solid var(--border);border-radius:6px;padding:10px 18px;color:var(--fg);text-decoration:none}
 .cn-media-frame .cn-media-doc:hover{border-color:var(--fg)}
-.cn-media-frame .cn-media-docs{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
+.cn-media-frame .cn-media-docs{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px}
 `;
   const fileKind = kind === 'document' || kind === 'torrent' || kind === 'file';
   let mediaHtml = '';
@@ -514,14 +577,16 @@ const renderClearnetMediaView = ({ kind, item }) => {
       mediaHtml = `<video controls preload="metadata" src="${blob}"></video>`;
     } else if (kind === 'file' || kind === 'torrent') {
       const dlName = (v) => String(v || '').replace(/[\\/:*?"<>|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
-      const dlLink = (href, name) => `<a class="cn-media-doc" href="${href}?name=${encodeURIComponent(name)}" rel="noopener">⇩ ${escapeHtml(name)}</a>`;
+      const extLabel = (name) => { const m = String(name || '').match(/\.([A-Za-z0-9]{1,8})$/); return m ? m[1].toUpperCase() : 'FILE'; };
+      const dlLink = (href, name, label) => `<a class="cn-media-doc" href="${href}?name=${encodeURIComponent(name)}" rel="noopener" title="${escapeHtml(name)}">\u2B07 ${escapeHtml(label)}</a>`;
       const original = kind === 'file' ? blob : blobUrl(item.source);
       const originalName = dlName(kind === 'file' ? item.fileName : item.sourceName) || dlName(item.title) || 'file';
       const torrentBlob = kind === 'file' ? blobUrl(item.torrentUrl) : blob;
       const torrentName = `${kind === 'file' ? originalName : (dlName(item.title) || 'download').replace(/\.torrent$/i, '')}.torrent`;
-      mediaHtml = `<div class="cn-media-docs">${[original ? dlLink(original, originalName) : '', torrentBlob ? dlLink(torrentBlob, torrentName) : ''].filter(Boolean).join('')}</div>`;
+      const magnet = typeof item.magnet === 'string' && item.magnet.startsWith('magnet:?') ? `<a class="cn-media-doc" href="${escapeHtml(item.magnet)}" rel="noopener">\u2B07 ${escapeHtml(cnText('torrentMagnet', 'MAGNET'))}</a>` : '';
+      mediaHtml = `<div class="cn-media-docs">${[original ? dlLink(original, originalName, extLabel(originalName)) : '', torrentBlob ? dlLink(torrentBlob, torrentName, 'TORRENT') : '', magnet].filter(Boolean).join('')}</div>`;
     } else if (kind === 'document') {
-      mediaHtml = `<a class="cn-media-doc" href="${blob}" target="_blank" rel="noopener">⇩ ${title}</a>`;
+      mediaHtml = renderClearnetPdfFrame(blob, item.title);
     } else {
       mediaHtml = `<img src="${blob}" alt="${title}"/>`;
     }
@@ -546,13 +611,13 @@ const renderClearnetMediaView = ({ kind, item }) => {
     ogTitle: item.title || (kind ? kindLabel(kind) : 'Oasis'),
     ogDescription: item.description || '',
     ogImage: (kind === 'image') ? blob : null,
-    extraCss,
+    extraCss: kind === 'document' ? extraCss + CLEARNET_PDF_CSS : extraCss,
     body,
     hubFeedId: item.author || null
   });
 };
 
-const renderClearnetPodcastView = ({ channel }) => {
+const renderClearnetPodcastView = ({ channel, feed = '' }) => {
   const title = escapeHtml(channel.title || cnText('cnUntitled', 'Untitled'));
   const desc = renderRichText(channel.description || '');
   const cover = channel.cover && channel.cover.blobId ? blobUrl(channel.cover.blobId) : null;
@@ -579,7 +644,7 @@ const renderClearnetPodcastView = ({ channel }) => {
     return `<div class="cn-episode"><h2>#${Number(ep.number) || 0} · ${escapeHtml(ep.title || '')}</h2><div class="cn-episode-meta">${epDate}</div>${player}${ep.description ? `<p>${renderRichText(ep.description)}</p>` : ''}</div>`;
   }).join('');
   const body = `
-  <div class="cn-media-meta">${renderKindTag('podcast')}${dateStr ? `<span>📅 ${dateStr}</span>` : ''}<span>🎧 ${episodes.length}</span></div>
+  <div class="cn-media-meta">${renderKindTag('podcast')}${dateStr ? `<span>📅 ${dateStr}</span>` : ''}<span>🎧 ${episodes.length}</span>${renderClearnetLicense(channel.license)}${feed ? `<a class="cn-license" href="${escapeHtml(feed)}">RSS</a>` : ''}</div>
   <h1 class="cn-media-title">${title}</h1>
   ${cover ? (coverIsVideo ? `<video class="cn-podcast-cover" controls muted preload="metadata" src="${cover}"></video>` : `<img class="cn-podcast-cover" src="${cover}" alt="${title}"/>`) : ''}
   ${desc ? `<p class="cn-media-desc">${desc}</p>` : ''}
@@ -592,6 +657,7 @@ const renderClearnetPodcastView = ({ channel }) => {
     ogImage: cover && !coverIsVideo ? cover : null,
     extraCss,
     body,
+    feed,
     hubFeedId: channel.author || null
   });
 };
@@ -629,5 +695,9 @@ module.exports = {
   CLEARNET_PAGER_CSS,
   paginateClearnet,
   renderClearnetPager,
-  renderClearnetMediaView
+  renderClearnetMediaView,
+  renderClearnetPdfEmbed,
+  renderClearnetPdfView,
+  renderClearnetPdfFrame,
+  CLEARNET_PDF_CSS
 };

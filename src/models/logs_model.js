@@ -1,3 +1,4 @@
+const { isComment } = require('./comments_model');
 const pull = require('../server/node_modules/pull-stream');
 const { requestScope } = require('./typed_log');
 const util = require('util');
@@ -60,6 +61,7 @@ const ACTION_TYPES = new Set([
 
 const ACTION_PHRASES = {
   post: 'published a post',
+  comment: 'commented on some content',
   about: 'updated profile information',
   contact: 'followed or unfollowed someone',
   feed: 'shared content in the feed',
@@ -243,7 +245,7 @@ module.exports = ({ cooler }) => {
       if (!ACTION_TYPES.has(c.type)) continue;
       const ts = v.timestamp || 0;
       const summary = c.title || c.text || c.question || c.subject || c.name || c.concept || c.description || '';
-      out.push({ key: m.key, ts, type: c.type, summary: compact(summary) });
+      out.push({ key: m.key, ts, type: isComment(c) ? 'comment' : c.type, summary: compact(summary) });
     }
     return out;
   }

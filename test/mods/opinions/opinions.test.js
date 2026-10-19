@@ -26,7 +26,10 @@ describe('opinions: cast + list', (t) => {
     A.setActor();
     const bm = await A.use('bookmarks').createBookmark('https://oasis.test/agg', [], 'agg', '');
     await A.use('opinions').createVote(bm.key, 'useful');
-    await A.use('opinions').createVote(bm.key, 'useful');
+    let refused = false;
+    try { await A.use('opinions').createVote(bm.key, 'useful'); } catch (_) { refused = true; }
+    ok(refused, 'a second opinion from the same inhabitant is refused');
+    await new Promise((res, rej) => A.node.publish({ type: 'bookmarkOpinion', target: bm.key, category: 'useful' }, (e) => e ? rej(e) : res()));
     B.setActor();
     await B.use('opinions').createVote(bm.key, 'useful');
     A.setActor();
@@ -136,5 +139,92 @@ describe('opinions: versions republished by other inhabitants', (t) => {
     eq(list[0].value.content.title, 'Barn II');
     eq(list[0].value.author, A.keypair.id);
     eq(list[0].value.content.opinions.useful, 1);
+  });
+});
+
+describe('opinions: what can be opined and how it adds up', (t) => {
+  const categories = require('../../../src/backend/opinion_categories');
+  const publish = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+
+  t('every opinion weighs on karma in exactly one way', () => {
+    const groups = ['positive', 'neutral', 'constructive', 'moderation'];
+    for (const category of categories) {
+      eq(groups.filter(g => categories.karma[g].includes(category)).length, 1, category);
+    }
+  });
+
+  t('only public content can be opined', () => {
+    ok(categories.opinable({ type: 'wikiPage', title: 'p' }));
+    ok(!categories.opinable({ type: 'wikiPage', title: 'p', tribeId: '%x' }), 'not tribe pages');
+    ok(categories.opinable({ type: 'map', mapType: 'OPEN' }));
+    ok(!categories.opinable({ type: 'map', mapType: 'CLOSED' }), 'not closed maps');
+    ok(!categories.opinable({ type: 'job', visibility: 'HIDDEN' }), 'not hidden jobs');
+    ok(categories.opinable({ type: 'industryBlueprint', name: 'b' }));
+  });
+
+  t('opinions on any version of a content count once per inhabitant', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const v1 = await publish(A, { type: 'wikiPage', title: 'Page' });
+    const v2 = await publish(A, { type: 'wikiPage', title: 'Page', replaces: v1.key });
+    await A.use('opinions').createVote(v1.key, 'useful');
+    B.setActor();
+    await B.use('opinions').createVote(v2.key, 'outdated');
+    const tally = await B.use('opinions').tallyOf([v1.key, v2.key]);
+    eq(tally.opinions_inhabitants.length, 2);
+    eq(tally.opinions.useful, 1);
+    eq(tally.opinions.outdated, 1);
+  });
+
+  t('opined wiki pages show up in opinions and trending', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const page = await publish(A, { type: 'wikiPage', title: 'Opined page', body: 'text' });
+    await A.use('opinions').createVote(page.key, 'useful');
+    const opined = await A.use('opinions').listOpinions('ALL', '');
+    ok(opined.some(m => m.value.content.title === 'Opined page'), 'in opinions');
+    const trending = await A.use('trending').listTrending('ALL');
+    const items = Array.isArray(trending) ? trending : (trending.filtered || trending.items || []);
+    ok(items.some(m => (m.value?.content || m.content || {}).title === 'Opined page'), 'in trending');
+  });
+});
+
+describe('opinions: what was rated stays as it was', (t) => {
+  const BLOB = '[i](&image000000000000000000000000000000000000000000000.sha256)';
+  const OTHER = '[i](&image111111111111111111111111111111111111111111111.sha256)';
+  const refused = async (fn) => { try { await fn(); return false; } catch (e) { return /received opinions/i.test(e.message); } };
+
+  t('the text of rated content can still be edited, its file cannot be replaced', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const img = await A.use('images').createImage(BLOB, [], 'Old title', '', '');
+    B.setActor();
+    await B.use('images').createOpinion(img.key, 'useful');
+    A.setActor();
+    await A.use('images').updateImageById(img.key, null, [], 'New title', 'now described', '');
+    const edited = (await A.use('images').listAll({ filter: 'mine' })).find(x => x.title === 'New title');
+    ok(edited, 'text edits go through');
+    ok(await refused(() => A.use('images').updateImageById(edited.key, OTHER, [], 'New title', '', '')), 'the file stays');
+  });
+
+  t('a rated bookmark keeps its link and a rated vote keeps its question', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const bm = await A.use('bookmarks').createBookmark('https://example.org', [], 'desc', '2026-01-01');
+    const vote = await A.use('votes').createVote('Same question?', '2026-12-31', ['YES', 'NO']);
+    B.setActor();
+    await B.use('bookmarks').createOpinion(bm.key, 'useful');
+    await B.use('votes').createOpinion(vote.key, 'interesting');
+    A.setActor();
+    await A.use('bookmarks').updateBookmarkById(bm.key, { url: 'https://example.org', description: 'better description' });
+    const current = (await A.use('bookmarks').listAll({ filter: 'mine' }))[0];
+    ok(await refused(() => A.use('bookmarks').updateBookmarkById(current.id, { url: 'https://elsewhere.org' })), 'the link stays');
+    ok(await refused(() => A.use('votes').updateVoteById(vote.key, { question: 'Another question?' })), 'the question stays');
+  });
+
+  t('content without opinions can change anything', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const img = await A.use('images').createImage(BLOB, [], 'Title', '', '');
+    await A.use('images').updateImageById(img.key, OTHER, [], 'Title', '', '');
+    ok((await A.use('images').listAll({ filter: 'mine' })).some(x => String(x.url).includes('image1111')));
   });
 });

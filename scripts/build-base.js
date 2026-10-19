@@ -72,15 +72,13 @@ const resolveDep = (fromKey, name) => {
     base = i === -1 ? '' : base.slice(0, i);
   }
 };
-const SKIP_OPTIONAL_OF = ['pdfjs-dist'];
 const depsOf = (key) => {
   const p = pkgs[key] || {};
-  const name = key.replace(/^.*node_modules\//, '');
   const meta = p.peerDependenciesMeta || {};
   const peers = Object.keys(p.peerDependencies || {}).filter(n => !(meta[n] && meta[n].optional));
   const names = new Set([
     ...Object.keys(p.dependencies || {}),
-    ...(SKIP_OPTIONAL_OF.includes(name) ? [] : Object.keys(p.optionalDependencies || {})),
+    ...Object.keys(p.optionalDependencies || {}),
     ...peers
   ]);
   return [...names];

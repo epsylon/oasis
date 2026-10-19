@@ -504,8 +504,7 @@ exports.clearnetCalendarView = async (calendar, dates, notesByDate = {}) => {
   const entriesHtml = entries.map(e => {
     const notes = (notesByDate[e.key] || []).filter(n => n && String(n.text || "").trim())
     return `<div class="cn-cal-entry">
-      ${e.label ? `<div class="cn-cal-entry-label">${esc(e.label)}</div>` : ""}
-      <div class="cn-cal-dates">${e.when.map(w => `<span class="cn-detail">📅 ${fmt(w)}</span>`).join("")}</div>
+      <div class="cn-cal-entry-head">${e.label ? `<div class="cn-cal-entry-label">${esc(e.label)}</div>` : ""}<div class="cn-cal-dates">${e.when.map(w => `<span class="cn-detail">📅 ${fmt(w)}</span>`).join("")}</div></div>
       ${notes.map(n => `<p class="cn-cal-note">${renderRichText(n.text)}</p>`).join("")}
     </div>`
   }).join("")
@@ -513,7 +512,8 @@ exports.clearnetCalendarView = async (calendar, dates, notesByDate = {}) => {
 .cn-cal-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700;word-break:break-word}
 .cn-cal-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
 .cn-cal-entry{border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin:12px 0;background:var(--bg-elev)}
-.cn-cal-entry-label{color:var(--fg);font-weight:600;font-size:16px;margin-bottom:8px;word-break:break-word}
+.cn-cal-entry-head{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-bottom:8px}
+.cn-cal-entry-label{color:var(--fg);font-weight:600;font-size:16px;word-break:break-word}
 .cn-cal-dates{display:flex;flex-wrap:wrap;gap:6px}
 .cn-cal-note{color:var(--fg-soft);line-height:1.5;margin:10px 0 0 0;word-break:break-word}
 .cn-cal-empty{color:var(--fg-dim)}

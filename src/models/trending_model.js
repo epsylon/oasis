@@ -30,7 +30,7 @@ module.exports = ({ cooler }) => {
     'bookmark', 'votes', 'poll', 'feed', 'post',
     'image', 'audio', 'video', 'document', 'torrent', 'file', 'transfer',
     'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse',
-    'podcast', 'podcastEpisode', 'campaign', 'logisticsRoute'
+    'podcast', 'podcastEpisode', 'campaign', 'logisticsRoute', 'wikiPage', 'map', 'industryBlueprint', 'job'
   ];
 
   const categories = opinionCategories;
@@ -55,7 +55,7 @@ module.exports = ({ cooler }) => {
         continue;
       }
 
-      if (c.opinions && !['task', 'event', 'report'].includes(c.type)) itemsById.set(k, m);
+      if ((c.opinions || categories.opinable(c)) && !['task', 'event', 'report'].includes(c.type)) itemsById.set(k, m);
 
       if (c.type === 'feed' && !itemsById.has(k)) itemsById.set(k, m);
       if (isRootBlogPost(c) && !itemsById.has(k)) itemsById.set(k, m);

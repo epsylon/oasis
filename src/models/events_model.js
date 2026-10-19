@@ -498,6 +498,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
 
       return {
         id: contentTip,
+        rootId: rid,
         title: c.title || '',
         description: c.description || '',
         date: c.date || '',

@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText, renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
@@ -35,6 +35,10 @@ const detailHref = (type, key) => {
     case 'podcastEpisode': return `/podcasts/episode/${encodeURIComponent(key)}`;
     case 'campaign': return `/campaigns/${encodeURIComponent(key)}`;
     case 'logisticsRoute': return `/logistics/${encodeURIComponent(key)}`;
+    case 'wikiPage': return `/wiki/${encodeURIComponent(key)}`;
+    case 'map': return `/maps/${encodeURIComponent(key)}`;
+    case 'industryBlueprint': return `/industry/blueprint/${encodeURIComponent(key)}`;
+    case 'job': return `/jobs/${encodeURIComponent(key)}`;
     default: return null;
   }
 };
@@ -260,7 +264,7 @@ const renderContentHtml = (content, key) => {
               ]
             : null,
           div({ class: 'card-field' },
-            div({ class: 'pdf-viewer-container', 'data-pdf-url': `/blob/${encodeURIComponent(content.url)}` })
+            renderPdfDocument(`/blob/${encodeURIComponent(content.url)}`, { title: content.title })
           )
         )
       );
@@ -448,7 +452,6 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
     })
     .filter(Boolean);
 
-  const hasDocuments = items.some(item => item.value.content?.type === 'document');
   const header = div({ class: 'tags-header module-header-line' },
     h2(title),
     p(i18n.shareYourOpinions)
@@ -543,8 +546,6 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
     )
   );
 
-  return `${html}${hasDocuments
-    ? `<script type="module" src="/js/pdf-viewer.js?v=102"></script>`
-    : ''}`;
+  return html;
 };
 

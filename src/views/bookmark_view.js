@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, textarea, br, a, span, 
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -136,6 +136,11 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
     form(
       { action: filter === "edit" ? `/bookmarks/update/${encodeURIComponent(bookmarkId)}` : "/bookmarks/create", method: "POST" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
+      label(i18n.bookmarkTitleLabel),
+      br(),
+      input({ type: "text", name: "title", maxlength: "100", placeholder: i18n.bookmarkDescriptionPlaceholder, value: filter === "edit" ? bookmarkToEdit.title || "" : "" }),
+      br(),
+      br(),
       label(i18n.bookmarkUrlLabel),
       br(),
       input({
@@ -144,14 +149,16 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
         id: "url",
         required: true,
         placeholder: i18n.bookmarkUrlPlaceholder,
-        value: filter === "edit" ? bookmarkToEdit.url || "" : ""
+        value: filter === "edit" ? bookmarkToEdit.url || "" : "",
+        ...(filter === "edit" && renderMediaLockNote(bookmarkToEdit) ? { readonly: true } : {})
       }),
+      filter === "edit" ? renderMediaLockNote(bookmarkToEdit) : null,
       br(),
       br(),
       label(i18n.bookmarkDescriptionLabel),
       br(),
       textarea(
-        { name: "description", id: "description", placeholder: i18n.bookmarkDescriptionPlaceholder, rows: "4" },
+        { name: "description", id: "description", maxlength: "5000", placeholder: i18n.bookmarkDescriptionPlaceholder, rows: "4" },
         filter === "edit" ? bookmarkToEdit.description || "" : ""
       ),
       br(),
@@ -263,7 +270,6 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   const returnTo = params.returnTo || buildReturnTo(filter, { q, sort });
 
   const isAuthor = String(bookmark.author) === String(userId);
-  const hasOpinions = Object.keys(bookmark.opinions || {}).length > 0;
   const isClearnet = !!bookmark.clearnet;
 
   const lastVisit = bookmark.lastVisit ? moment(bookmark.lastVisit) : null;
@@ -282,7 +288,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   ].filter(Boolean);
 
   const sideActions = [];
-  if (isAuthor && !hasOpinions) {
+  if (isAuthor) {
     sideActions.push(form(
       { method: "GET", action: `/bookmarks/edit/${encodeURIComponent(bookmark.id)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -306,11 +312,12 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
 
   const bookmarkSide = div({ class: "tribe-side" },
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, bookmark.url ? urlLink : (bookmark.title || "")),
-      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id) : null)
+      h2({ class: "tribe-card-title" }, bookmark.title || urlLink || ""),
+      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id) : null),
+      renderEditedChip(bookmark.id, bookmark.rootId)
     ),
     isAuthor ? renderClearnetSwitch("bookmarks", bookmark.rootId || bookmark.id, isClearnet) : null,
-    bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null,
+    bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null,
     chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(bookmark.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(bookmark.description))

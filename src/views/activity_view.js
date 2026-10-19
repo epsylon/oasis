@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, paged, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction } = require('./main_views');
+const { template, i18n, paged, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 const { roomNumberOf } = require('../models/phone_number');
 
@@ -199,7 +199,9 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
       .sort((a, b) => (a.ts || 0) - (b.ts || 0));
 
     if (!rootAction) continue;
-    const rootType = rootAction.type || 'post';
+    const rootUnknown = !byId.has(threadId) && getThreadIdFromPost(rootAction) !== safeMsgId(rootAction);
+    const located = rootUnknown ? commentOf(rootAction) : null;
+    const rootType = rootUnknown ? ((located && located.rootType) || 'comment') : (rootAction.type || 'post');
     out.push({
       id: `thread:${threadId}`,
       type: 'postThread',
@@ -208,7 +210,7 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
       content: {
         threadId,
         rootType,
-        rootHref: rootType === 'post' ? `/blogs/${encodeURIComponent(threadId)}` : getViewDetailsAction(rootType, rootAction),
+        rootHref: rootType === 'post' ? `/blogs/${encodeURIComponent(threadId)}` : rootUnknown ? commentHref({ rootId: threadId, rootType: located && located.rootType }) : getViewDetailsAction(rootType, rootAction),
         root: rootAction
           ? {
               id: safeMsgId(rootAction),
@@ -403,6 +405,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       headerText = `[${String(i18n.typePodcast || 'PODCAST').toUpperCase()} · ${String(i18n.typePodcastEpisode || 'EPISODE').toUpperCase()}]`;
     } else if (type === 'larpHousePost') {
       headerText = `[${String(i18n.typeLarp || 'L.A.R.P.').toUpperCase()}]`;
+    } else if (type === 'post' && commentOf(action)) {
+      headerText = `[${String(commentLabel(commentOf(action))).toUpperCase()}]`;
     } else {
       const typeLabel = i18n[`type${capitalize(type)}`] || type;
       headerText = `[${String(typeLabel).toUpperCase()}]`;
@@ -698,11 +702,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section document' },
           title?.trim() ? h2({ class: 'document-title' }, title) : "",
-          div({
-            id: `pdf-container-${key || url}`,
-            class: 'pdf-viewer-container',
-            'data-pdf-url': `/blob/${encodeURIComponent(url)}`
-          })
+          renderPdfDocument(`/blob/${encodeURIComponent(url)}`, { title })
         )
       );
     }
@@ -818,7 +818,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const threadId = getThreadIdFromPost(action);
       const replyToId = getReplyToIdFromPost(action, byIdAll);
       const isReply = !!(threadId && threadId !== action.id);
-      const ctxHref = isReply ? `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(replyToId || threadId)}` : '';
+      const onContent = commentOf(action) && commentOf(action).rootType && commentOf(action).rootType !== 'post' ? commentOf(action) : null;
+      const ctxHref = !isReply ? '' : onContent ? commentHref({ rootId: threadId, rootType: onContent.rootType }) : `/thread/${encodeURIComponent(threadId)}#${encodeURIComponent(replyToId || threadId)}`;
       const parent = isReply ? (byIdAll.get(replyToId) || byIdAll.get(threadId)) : null;
       const parentContent = parent ? (parent.value?.content || parent.content || {}) : {};
       const parentAuthor = parent?.author || '';
@@ -852,10 +853,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         const rootType = c.rootType || 'post';
         const isBlogThread = rootType === 'post';
         const baseHref = c.rootHref || `/blogs/${encodeURIComponent(threadId)}`;
-        const href = isBlogThread ? baseHref : `${baseHref}${baseHref.includes('?') ? '&' : '?'}comments=open#comments-latest`;
-        const rootTypeLabel = isBlogThread
-          ? (i18n.typePost || 'BLOG')
-          : (i18n[`type${rootType.charAt(0).toUpperCase()}${rootType.slice(1)}`] || rootType);
+        const href = isBlogThread || baseHref.includes('comments=open') ? baseHref : `${baseHref}${baseHref.includes('?') ? '&' : '?'}comments=open#comments-latest`;
+        const threadLabel = rootType === 'comment' ? (i18n.comment || 'Comment') : rootTypeLabel(rootType);
         const root = c.root;
         const replies = Array.isArray(c.replies) ? c.replies : [];
         const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -868,7 +867,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             div({ class: 'card-header activity-card-header' },
                 div({ class: 'card-chips-row' },
                     span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                        span({ class: 'pm-exposition-text' }, `${String(rootTypeLabel).toUpperCase()} · ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
+                        span({ class: 'pm-exposition-text' }, `${String(threadLabel).toUpperCase()} · ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
                     )
                 ),
                 renderContentActions(threadId, baseHref, {
@@ -952,7 +951,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                         const replyNode = quoted
                             ? div({ class: 'reply-context' },
                                 span({ class: 'reply-context-meta' },
-                                  a({ href: `${href}#msg-${String(quoted.id || '').replace(/[^a-zA-Z0-9]/g, '')}`, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
+                                  a({ href: `${href}#${forumReplyAnchor(quoted.id)}`, class: 'tag-link' }, i18n.inReplyTo || 'IN REPLY TO'),
                                   quoted.author ? span(' ', userLink(quoted.author, action.authorNames && action.authorNames[quoted.author])) : ''
                                 ),
                                 quoted.text ? p({ class: 'post-text reply-context-text' }, quoted.text) : ''
@@ -1000,7 +999,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             div(
               { class: 'reply-context' },
               span({ class: 'reply-context-meta' },
-                a({ href: `/forum/${encodeURIComponent(hrefKey)}#msg-${String(action.tipId || action.id || '').replace(/[^a-zA-Z0-9]/g, '')}`, class: 'tag-link' }, repliedAuthor ? i18n.inReplyTo : i18n.forumInThread),
+                a({ href: `/forum/${encodeURIComponent(hrefKey)}#${forumReplyAnchor(action.tipId || action.id)}`, class: 'tag-link' }, repliedAuthor ? i18n.inReplyTo : i18n.forumInThread),
                 repliedAuthor ? span(' ', userLink(repliedAuthor, repliedName)) : ''
               ),
               parentTitle ? p({ class: 'post-text reply-context-text' }, parentTitle) : ''
@@ -1314,7 +1313,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section' },
           div({ class: 'card-field' }, emergencyKey ? a({ href: `/emergencies/${encodeURIComponent(emergencyKey)}`, class: 'card-value user-link' }, emergencyTitle || emergencyKey) : span({ class: 'card-value' }, emergencyTitle || '')),
-          content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.statusLabel || 'Status') + ':'), span({ class: 'card-value' }, String(content.status).toUpperCase())) : '',
           content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.emergencyCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
           renderMediaBlob(content.text, null),
           stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : ''
@@ -1894,8 +1892,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ...(TORRENTABLE_TYPES.has(type) && content && typeof content.url === 'string' && content.url.startsWith('&')
             ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
             : {}),
-          ...favOptsFor(type, msgId, extras),
-          deleteAction: isOwn ? activityDeleteAction(type, action, content, msgId, userId) : undefined
+          ...(commentOf(action) ? {} : favOptsFor(type, msgId, extras)),
+          deleteAction: isOwn ? (commentOf(action) ? `/comments/delete/${encodeURIComponent(msgId)}` : activityDeleteAction(type, action, content, msgId, userId)) : undefined
         })
       ),
       ...cardBody,
@@ -1906,9 +1904,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           userLink(footerAuthorId, (action.authorNames && action.authorNames[footerAuthorId]) || getProfile(footerAuthorId).name)
         );
         const commentTotal = Number(action.commentCount) || 0;
-        const commentsHref = detailHref
-          ? `${detailHref}${detailHref.includes('?') ? '&' : '?'}comments=open${commentTotal ? '#comments-latest' : ''}`
-          : '';
+        const commentsHref = !detailHref ? '' : commentOf(action) ? detailHref
+          : `${detailHref}${detailHref.includes('?') ? '&' : '?'}comments=open${commentTotal ? '#comments-latest' : ''}`;
         const commentsNode = detailHref && type !== 'about'
           ? a({
               href: commentsHref,
@@ -1973,6 +1970,51 @@ const favOptsFor = (type, id, extras = {}) => {
   };
 };
 
+const commentOf = (action) => action && action.comment && action.comment.rootId ? action.comment : null;
+
+function commentHref(comment, commentId) {
+  const rootId = comment && comment.rootId;
+  if (!rootId) return commentId ? `/thread/${encodeURIComponent(commentId)}` : '/activity';
+  if (comment.rootType === 'forum') return `/forum/${encodeURIComponent(rootId)}${commentId ? `#${forumReplyAnchor(commentId)}` : ''}`;
+  const tail = commentId ? `#${encodeURIComponent(commentId)}` : '';
+  const base = comment.rootType === 'post' ? `/blogs/${encodeURIComponent(rootId)}` : comment.rootType ? getViewDetailsAction(comment.rootType, { id: rootId }) : null;
+  if (!base || base === '/activity') return `/thread/${encodeURIComponent(commentId || rootId)}`;
+  if (base.includes('#')) return base;
+  return `${base}${base.includes('?') ? '&' : '?'}comments=open${tail || '#comments-latest'}`;
+}
+
+const GROUP_SUBTYPES = {
+  parliament: ['parliamentCandidature', 'parliamentTerm', 'parliamentProposal', 'parliamentRevocation', 'parliamentLaw'],
+  courts:     ['courtsCase', 'courtsNomination', 'courtsNominationVote'],
+  task:       ['task', 'taskAssignment'],
+  votes:      ['votes', 'poll'],
+  shop:       ['shop', 'shopProduct'],
+  larp:       ['larpHousePost'],
+  inhabitants:['about'],
+  chat:       ['chat', 'chatThread'],
+  wiki:       ['wikiPage'],
+  mailing:    ['mailingList'],
+  emergency:  ['emergency', 'emergencyUpdate'],
+  logistics:  ['logisticsRoute'],
+  podcast:    ['podcast', 'podcastEpisode'],
+  campaign:   ['campaign', 'campaignUpdate'],
+  industry:   ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation']
+};
+const MODULE_OF_TYPE = Object.entries(GROUP_SUBTYPES).reduce((acc, [mod, types]) => {
+  for (const t of types) if (t !== mod && t !== 'poll') acc[t] = mod;
+  return acc;
+}, { schoolCourse: 'school', mapMarker: 'map' });
+
+function rootTypeLabel(rt) {
+  return rt === 'post' ? (i18n.typePost || 'BLOG') : rt === 'poll' ? (i18n.pollsTitle || 'POLLS') : rt ? (i18n[`type${capitalize(MODULE_OF_TYPE[rt] || rt)}`] || rt) : null;
+}
+
+function commentLabel(comment) {
+  const base = rootTypeLabel(comment && comment.rootType);
+  const word = i18n.comment || 'Comment';
+  return base ? `${base} · ${word}` : word;
+}
+
 function getViewDetailsAction(type, action) {
   const id = encodeURIComponent(safeMsgId(action.tipId || action.id || action.key || action));
   switch (type) {
@@ -1996,9 +2038,8 @@ function getViewDetailsAction(type, action) {
     }
     case 'post': {
       const root = action.content && action.content.root;
-      return root
-        ? `/blogs/${encodeURIComponent(root)}#${id}`
-        : `/blogs/${id}`;
+      if (commentOf(action) || root) return commentHref(commentOf(action) || { rootId: root }, safeMsgId(action.tipId || action.id || action.key || action));
+      return `/blogs/${id}`;
     }
     case 'feed':       return `/feed/${id}`;
     case 'vote':       return `/thread/${encodeURIComponent(action.content.vote.link)}#${encodeURIComponent(action.content.vote.link)}`;
@@ -2020,7 +2061,7 @@ function getViewDetailsAction(type, action) {
     case 'forum': {
       const root = action.content?.root;
       const rootId = typeof root === 'string' ? root : (root && (root.key || root.id)) || '';
-      if (rootId) return `/forum/${encodeURIComponent(action.content?.rootKey || rootId)}#msg-${String(action.tipId || action.id || '').replace(/[^a-zA-Z0-9]/g, '')}`;
+      if (rootId) return `/forum/${encodeURIComponent(action.content?.rootKey || rootId)}#${forumReplyAnchor(action.tipId || action.id)}`;
       return `/forum/${encodeURIComponent(action.content?.key || action.tipId || action.id)}`;
     }
     case 'document':   return `/documents/${id}`;
@@ -2060,6 +2101,9 @@ function getViewDetailsAction(type, action) {
 }
 
 exports.getViewDetailsAction = getViewDetailsAction;
+exports.commentHref = commentHref;
+exports.commentLabel = commentLabel;
+exports.rootTypeLabel = rootTypeLabel;
 
 exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const spreadMap = (extras && extras.spreadMap) || new Map();
@@ -2111,23 +2155,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   ];
 
   const FILTER_META = new Set(['all', 'mine', 'recent']);
-  const GROUP_SUBTYPES = {
-    parliament: ['parliamentCandidature', 'parliamentTerm', 'parliamentProposal', 'parliamentRevocation', 'parliamentLaw'],
-    courts:     ['courtsCase', 'courtsNomination', 'courtsNominationVote'],
-    task:       ['task', 'taskAssignment'],
-    votes:      ['votes', 'poll'],
-    shop:       ['shop', 'shopProduct'],
-    larp:       ['larpHousePost'],
-    inhabitants:['about'],
-    chat:       ['chat', 'chatThread'],
-    wiki:       ['wikiPage'],
-    mailing:    ['mailingList'],
-    emergency:  ['emergency', 'emergencyUpdate'],
-    logistics:  ['logisticsRoute'],
-    podcast:    ['podcast', 'podcastEpisode'],
-    campaign:   ['campaign', 'campaignUpdate'],
-    industry:   ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation']
-  };
   const ALLOWED_TYPES = new Set(['tribeOpened']);
   for (const { type } of activityTypes) {
     if (FILTER_META.has(type)) continue;
@@ -2184,12 +2211,17 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     filteredActions = actions.filter(action => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(action.type) && action.type !== 'tombstone');
   } else {
     filteredActions = actions.filter(action =>
-      (action.type === filter
+      ((action.type === filter && !(filter === 'post' && commentOf(action) && commentOf(action).rootType !== 'post'))
         || filter === 'all'
         || openedIn(action, filter)
         || (filter === 'shop' && action.type === 'shopProduct')
         || (filter === 'votes' && action.type === 'poll'))
       && action.type !== 'tombstone');
+  }
+  if (!FILTER_META.has(filter) && filter !== 'post') {
+    const kinds = new Set(GROUP_SUBTYPES[filter] || [filter]);
+    const listed = new Set(filteredActions);
+    filteredActions = filteredActions.concat(actions.filter(a => !listed.has(a) && commentOf(a) && kinds.has(commentOf(a).rootType)));
   }
 
   const larpEarliest = new Map();
@@ -2331,12 +2363,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     )
   );
 
-  const hasDocument = actions.some(a => a && a.type === 'document');
-  if (hasDocument) {
-    html += `
-      <script type="module" src="/js/pdf-viewer.js?v=102"></script>
-    `;
-  }
   return html;
 };
 

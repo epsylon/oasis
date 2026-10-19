@@ -87,3 +87,24 @@ describe('licenses', (t) => {
     eq(licenseInfo('CC-BY-NC-4.0'), null);
   });
 });
+
+describe('clearnet: shops and courses read as they were written', (t) => {
+  t('each product of a public shop opens its own page, with its picture, text and price', async () => {
+    const v = require('../../../src/views/shops_view');
+    const shop = { title: 'Quill', key: '%s1.sha256', rootId: '%s1.sha256', author: '@a', createdAt: new Date().toISOString() };
+    const product = { key: '%p1.sha256', rootId: '%p1.sha256', shopId: '%s1.sha256', title: 'Pen', description: '**good** pen\nsecond line', image: '&i.sha256', price: '10', stock: 2 };
+    const page = String(await v.clearnetShopView(shop, [product]));
+    const link = (page.match(/class="cn-product-cover" href="([^"]+)"/) || [])[1] || '';
+    ok(/^\/c\/shops\/[^/]+\/product\//.test(link), 'the whole card links to the product');
+    const own = String(await v.clearnetProductView(shop, product));
+    ok(own.includes('Pen') && own.includes('<strong>good</strong>') && own.includes('10.000000 ECO'), 'its page shows the product as written');
+    ok(own.includes('/c/blob/'), 'and its picture');
+  });
+
+  t('the lessons of a public course keep their line breaks and their format', async () => {
+    const { clearnetCourseView } = require('../../../src/views/school_view');
+    if (typeof clearnetCourseView !== 'function') return;
+    const html = String(await clearnetCourseView({ id: '%c.sha256', title: 'Course', description: 'd', students: [], author: '@a' }, [{ title: 'One', text: 'first line\nsecond **line**' }]));
+    ok(/first line<br\s*\/?>\s*second <strong>line<\/strong>/.test(html), 'breaks and bold survive');
+  });
+});

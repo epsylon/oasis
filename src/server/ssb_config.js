@@ -24,6 +24,14 @@ config.blobs.max = 75 * megabyte;
 
 config.db2 = { automigrate: false, dangerouslyKillFlumeWhenMigrated: false, ...(config.db2 || {}) };
 
+const envPort = Number(process.env.ssb_port);
+if (Number.isInteger(envPort) && envPort > 0 && envPort < 65536) {
+  config.port = envPort;
+  for (const entry of (config.connections && config.connections.incoming && config.connections.incoming.net) || []) {
+    if (entry && typeof entry === 'object') entry.port = envPort;
+  }
+}
+
 const lanOn = (() => { try { return require('../configs/config-manager').getConfig().lanBroadcasting !== false; } catch (_) { return true; } })();
 const bindHost = config.pub ? '0.0.0.0' : lanOn ? null : '127.0.0.1';
 for (const entry of (config.connections && config.connections.incoming && config.connections.incoming.net) || []) {
