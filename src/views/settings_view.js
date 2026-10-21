@@ -1,7 +1,7 @@
 const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span, img, strong, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe");
 const fs = require('fs');
 const path = require('path');
-const { getConfig } = require('../configs/config-manager.js');
+const { getConfig, CONNECTIONS_MIN, CONNECTIONS_MAX } = require('../configs/config-manager.js');
 const mainViews = require('./main_views');
 const { template, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel, THEMES, userLink } = mainViews;
 const i18nBase = require("../client/assets/translations/i18n");
@@ -283,6 +283,17 @@ const settingsView = (params) => {
             span({ class: "lan-checkbox-text" }, i18n.settingsLanEnable || 'Enable LAN broadcasting')
           ),
           br(),
+          button({ type: "submit" }, i18n.saveSettings)
+        )
+      )
+    ),
+    section({ id: "connections" },
+      div({ class: "tags-header" },
+        h2(i18n.settingsConnectionsTitle),
+        p(i18n.settingsConnectionsDesc),
+        form(
+          { action: "/settings/connections", method: "POST" },
+          input({ type: "number", id: "connections", name: "connections", min: CONNECTIONS_MIN, max: CONNECTIONS_MAX, step: 1, required: true, value: currentConfig.connections }), br(), br(),
           button({ type: "submit" }, i18n.saveSettings)
         )
       )

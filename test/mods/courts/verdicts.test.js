@@ -71,7 +71,7 @@ describe('courts: only who the case names can decide it', (t) => {
     });
     await publish(D, { type: 'courtsVerdict', caseId: c.key, judgeId: D.keypair.id, result: 'GUILTY', orders: '', createdAt: new Date().toISOString() });
     A.setActor();
-    const courtsWith = (terms) => require('../../../src/models/courts_model')({ cooler: A.cooler, tribeCrypto: A.tribeCrypto, services: { parliament: { listTerms: async () => terms } } });
+    const courtsWith = (terms) => require('../../../src/models/courts_model')({ cooler: A.cooler, cryptoModel: A.cryptoModel, services: { parliament: { listTerms: async () => terms } } });
     const start = new Date(Date.now() - 86400000).toISOString();
     const end = new Date(Date.now() + 86400000).toISOString();
     notOk(String((await A.use('courts').getCaseById(c.key)).status).toUpperCase() === 'DECIDED', 'without a ruling dictator the verdict decides nothing');

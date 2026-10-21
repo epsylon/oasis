@@ -320,6 +320,8 @@ a.user-link:focus, button.user-link:focus {
 .btn-spread-on:hover, .content-actions .btn-pin-on:hover { background: #FF8F00 !important; color: #FFFFFF !important; }
 .btn-singleview.btn-content { background: #FF6F00 !important; color: #F0F0F0 !important; border: 1px solid #FF6F00 !important; }
 .btn-singleview.btn-content:hover { background: #FF8F00 !important; color: #FFFFFF !important; border-color: #FF8F00 !important; }
+.card-menu-items { background: #F0F0F0 !important; border-color: #D0D0D0 !important; }
+.card-byline a.user-link { color: #FF6F00 !important; }
 .btn-back { background: #FF6F00 !important; color: #FFFFFF !important; }
 .btn-back:hover { background: #FF8F00 !important; color: #FFFFFF !important; }
 .block-info-table td, .pm-info-table td { border-color: #E0E0E0 !important; }

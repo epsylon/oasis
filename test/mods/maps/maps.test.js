@@ -365,11 +365,11 @@ describe('maps: keys reach members and nobody else', (t) => {
   t('a key slipped in by a stranger is never adopted', async () => {
     const { fresh } = require('../../helpers/setup');
     const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
-    const forger = require('../../../src/models/crypto')(fresh(), 'maps');
+    const forger = require('../../../src/models/crypto_model')(fresh()).scope('maps');
     const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net);
     A.setActor();
     const r = await A.use('maps').createMap(10, 20, 'kept', 'CLOSED', [], 'Kept Map', null, '', null);
-    const fake = forger.generateTribeKey();
+    const fake = forger.generateKey();
     C.setActor();
     await publishAs(C, { type: 'tribe-keys', tribeId: r.key, generation: 2, memberKeys: { [A.keypair.id]: forger.boxKeyForMember(fake, A.keypair.id, ssbKeys) } });
     A.setActor();
@@ -385,7 +385,7 @@ describe('maps: changing the key when someone leaves', (t) => {
   t('the owner changes the key and only those who stay receive it', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
     const pause = () => new Promise(r => setTimeout(r, 5));
-    const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'maps');
+    const keysOf = (P) => require('../../../src/models/crypto_model')(P.configDir).scope('maps');
     A.setActor();
     const r = await A.use('maps').createMap(10, 20, 'd', 'SINGLE', [], 'Rotating Map', null, '', null);
     const codeB = await A.use('maps').generateInvite(r.key);

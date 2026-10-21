@@ -1,10 +1,11 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare } = require("./main_views")
+const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
+const { renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const { resolvePhoto } = require("./inhabitants_view")
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 
@@ -112,7 +113,7 @@ const renderJobOwnerActions = (job, returnTo) => {
     form(
       { method: "POST", action: `/jobs/status/${encodeURIComponent(job.id)}` },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "status-btn", type: "submit", name: "status", value: isOpen ? "CLOSED" : "OPEN" }, isOpen ? i18n.jobSetClosed : i18n.jobSetOpen)
+      button({ class: isOpen ? "update-btn danger-btn" : "update-btn", type: "submit", name: "status", value: isOpen ? "CLOSED" : "OPEN" }, isOpen ? i18n.jobSetClosed : i18n.jobSetOpen)
     ),
     form(
       { method: "GET", action: `/jobs/edit/${encodeURIComponent(job.id)}` },
@@ -194,7 +195,7 @@ const renderJobExtraDetails = (job, opts = {}) => {
     pushRow(i18n.jobsHoursRequested || "Hours requested", `${Number(job.hoursRequested) || 0} h`)
     if (skill) pushRow(i18n.jobsExchangeSkill || "Skill", skill)
   }
-  return table({ class: "tribe-info-table jobs-info-table" }, ...rows, ...(opts.includeCreated ? renderCreatedRows(job.createdAt, job.author, job.updatedAt) : []))
+  return table({ class: "tribe-info-table jobs-info-table" }, ...rows)
 }
 
 const jobChipFor = (filter, censusJ, params = {}) => (x) => {
@@ -244,25 +245,22 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
         : `${fmtSalary(job.salary)} ECO`
 
       const isOwn = job.author && String(job.author) === String(userId)
+      const jobHref = `/jobs/${encodeURIComponent(job.id)}`
       return div({ class: "trending-card job-card" + (isOwn ? " own-content" : "") },
-        div(
-          { class: "card-header activity-card-header" },
-          span(),
-          renderContentActions(job.id, `/jobs/${encodeURIComponent(job.id)}`, { spread: params.spreadMap && params.spreadMap.get(job.id) || null, author: job.author, favKind: 'jobs', isFavorite: job.isFavorite, reportTitle: job.title, returnTo, deleteAction: isOwn ? contentDeleteAction("job", job.id) : null })
-        ),
+        renderCardTop(job.id, jobHref, { date: job.createdAt, chips, spread: params.spreadMap && params.spreadMap.get(job.id) || null, author: job.author, favKind: 'jobs', isFavorite: job.isFavorite, reportTitle: job.title, returnTo, deleteAction: isOwn ? contentDeleteAction("job", job.id) : null }),
         div({ class: "card-section job-card-body" },
           heroNode,
           div({ class: "tribe-card-body" },
             div({ class: "shop-title-row" },
               h2({ class: "tribe-card-title" },
-                a({ href: `/jobs/${encodeURIComponent(job.id)}` }, safeText(job.title) || i18n.jobsTitle)
+                a({ href: jobHref }, safeText(job.title) || i18n.jobsTitle)
               )
             ),
-            chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
             div({ class: "price-chip" }, compensationText),
             div({ class: "tribe-card-members" },
               span({ class: "tribe-members-count" }, `${i18n.jobSubscribers}: ${subs.length}`)
-            )
+            ),
+            null
           )
         )
       )
@@ -634,9 +632,10 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
     renderLifespanChip(job.lifetime, i18n),
     renderEcoTax(job.msgSize, job.id),
-    renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('jobs', job.title, job.id) : null),
-    isAuthor && canClearnet ? renderClearnetSwitch('jobs', job.rootId || job.id, isClearnet) : null
+    renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('jobs', job.title, job.id) : null)
   ].filter(Boolean)
+  const updatedAt = job.updatedAt ? moment(job.updatedAt) : null
+  const showUpdated = updatedAt && updatedAt.isValid() && updatedAt.valueOf() !== new Date(job.createdAt).getTime()
 
   const nextVisibility = visibility === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC'
   const visibilityRow = isAuthor
@@ -657,18 +656,24 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
   for (const a of ownerActions) sideActions.push(a)
 
   const jobSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(job.id, `/jobs/${encodeURIComponent(job.id)}`, { spread: params.spreads || null, author: job.author, favKind: 'jobs', isFavorite: job.isFavorite, reportTitle: job.title, returnTo, deleteAction: isAuthor ? contentDeleteAction("job", job.id) : null })
-    ),
+    renderCardTop(job.id, `/jobs/${encodeURIComponent(job.id)}`, { arrow: false,
+      date: job.createdAt,
+      chips,
+      bylineExtra: [
+        renderEditedChip(job.id, job.rootId),
+        showUpdated ? span({ class: "card-byline-time" }, `${i18n.jobsUpdatedAt}: ${updatedAt.format("YYYY/MM/DD HH:mm")}`) : null
+      ],
+      spread: params.spreads || null, author: job.author, favKind: 'jobs', isFavorite: job.isFavorite, reportTitle: job.title, returnTo, deleteAction: isAuthor ? contentDeleteAction("job", job.id) : null
+    }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, safeText(job.title) || i18n.jobsTitle),
-      renderEditedChip(job.id, job.rootId)
+      h2({ class: "tribe-card-title" }, safeText(job.title) || i18n.jobsTitle)
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    isAuthor && canClearnet ? renderClearnetSwitch('jobs', job.rootId || job.id, isClearnet) : null,
     job.image
       ? renderMediaBlob(job.image, { class: "tribe-detail-image" })
       : null,
-    renderJobInfoTable(job, { includeVacants: true, includeSubscribers: false, includeCreated: true }),
+    renderDetailShare(job.rootId || job.id, `/jobs/${encodeURIComponent(job.id)}`, job.title),
+    renderJobInfoTable(job, { includeVacants: true, includeSubscribers: false }),
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.jobSubscribers}: ${subs.length}`)
     ),
@@ -697,8 +702,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     candidatesBlock ? candidatesBlock : null,
     renderEngagement(job.rootId || job.id,
       params.opinions ? renderOpinionsVoting('/jobs/opinions', job.rootId || job.id, params.opinions.opinions, `/jobs/${encodeURIComponent(job.rootId || job.id)}`, params.opinions.opinions_inhabitants) : null,
-      renderJobCommentsSection(job.id, returnTo, comments)
-    )
+      renderJobCommentsSection(job.id, returnTo, comments))
   )
 
   return template(

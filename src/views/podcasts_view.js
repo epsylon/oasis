@@ -1,9 +1,8 @@
-const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, audio: audioHyperaxe, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
+const { clearnetItemHref, template, i18n, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderStyledText } = require("../backend/renderStyledText");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip } = require("./clearnet_view");
-const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 
@@ -17,7 +16,6 @@ const filterLabel = (f) => String(i18n[`podcastFilter${cap(f)}`] || f).toUpperCa
 const catLabel = (c) => String(i18n[`podcastCategory${cap(c)}`] || c).toUpperCase();
 const channelHref = (ch) => `/podcasts/${encodeURIComponent(ch.id)}`;
 const episodeHref = (ep) => `/podcasts/episode/${encodeURIComponent(ep.id)}`;
-const fmt = (d) => moment(d).format("YYYY/MM/DD HH:mm");
 const blobSrc = (m) => `/blob/${encodeURIComponent(m.blobId)}`;
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
@@ -32,15 +30,6 @@ const renderCover = (ch, cls = "podcast-cover") => {
 
 const countsLine = (ch) => div({ class: "tribe-card-members" },
   span({ class: "tribe-members-count" }, `${i18n.podcastPlaysLabel}: ${ch.playCount || 0}`)
-);
-const infoTable = (item) => table({ class: "tribe-info-table jobs-info-table" },
-  tr(
-    td({ class: "tribe-info-label" }, i18n.createdAtLabel || "Created at"),
-    td({ class: "tribe-info-value", colspan: "3" }, fmt(item.createdAt))
-  ),
-  tr(
-    td({ class: "tribe-info-value", colspan: "4" }, userLink(item.author))
-  )
 );
 
 const podcastChipFor = (mode, census) => {
@@ -58,15 +47,12 @@ exports.podcastChipFor = podcastChipFor;
 
 const renderChannelCard = (ch, params = {}) =>
   div({ class: "tribe-card podcast-card" },
-    div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(ch.id, channelHref(ch), { author: ch.author, favKind: "podcasts", isFavorite: ch.isFavorite, reportTitle: ch.title, spread: (params.spreadMap && params.spreadMap.get(ch.id)) || null, deleteAction: String(ch.author) === String(userId) ? contentDeleteAction("podcast", ch.id) : undefined })
-    ),
+    renderCardTop(ch.id, channelHref(ch), { date: ch.createdAt, chips: [renderStateChip("neutral", "", catLabel(ch.category)), ch.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('podcasts', ch.title, ch.id)) : null], author: ch.author, favKind: "podcasts", isFavorite: ch.isFavorite, reportTitle: ch.title, spread: (params.spreadMap && params.spreadMap.get(ch.id)) || null, deleteAction: String(ch.author) === String(userId) ? contentDeleteAction("podcast", ch.id) : undefined }),
     div({ class: "tribe-card-body" },
       ch.cover && ch.cover.blobId ? a({ href: channelHref(ch) }, renderCover(ch, "podcast-card-cover")) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: channelHref(ch) }, ch.title || "—"))),
-      div({ class: "card-chips-row" }, renderStateChip("neutral", "", catLabel(ch.category)), ch.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('podcasts', ch.title, ch.id)) : null),
-      countsLine(ch)
+      countsLine(ch),
+      null
     )
   );
 
@@ -167,9 +153,11 @@ const episodeChips = (ep) =>
     ep.opinionCount > 0 ? renderStateChip("mutuals", "ꔍ", String(ep.opinionCount)) : null
   );
 
-const episodeActions = (ep, params = {}, returnTo) =>
-  renderContentActions(ep.id, episodeHref(ep), {
+const episodeTop = (ep, params = {}, returnTo) =>
+  renderCardTop(ep.id, episodeHref(ep), {
     author: ep.author,
+    date: ep.createdAt,
+    chips: [episodeChips(ep)],
     favKind: "podcasts",
     isFavorite: ep.isFavorite,
     reportTitle: ep.title,
@@ -183,15 +171,10 @@ const episodeRow = (ch, ep, params = {}, returnTo) =>
   div({ class: "podcast-episode-row" },
     span({ class: "podcast-episode-number" }, `#${ep.number}`),
     div({ class: "podcast-episode-main" },
-      div({ class: "emergency-update-head podcast-episode-head" },
-        div({ class: "podcast-episode-head-left" },
-          a({ href: episodeHref(ep), class: "podcast-episode-title" }, ep.title),
-          episodeChips(ep)
-        ),
-        episodeActions(ep, params, returnTo)
-      ),
+      episodeTop(ep, params, returnTo),
+      a({ href: episodeHref(ep), class: "podcast-episode-title" }, ep.title),
       ep.description ? p({ class: "tribe-side-description" }, ...renderStyledText(ep.description)) : null,
-      p({ class: "card-footer" }, span({ class: "date-link" }, fmt(ep.createdAt)))
+      null
     )
   );
 
@@ -218,15 +201,12 @@ exports.singleChannelView = async (ch, params = {}) => {
       )
     : null;
   const side = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(ch.id, href, { author: ch.author, favKind: "podcasts", isFavorite: ch.isFavorite, reportTitle: ch.title, spread: params.spread || null, returnTo: href, deleteAction: isAuthor ? contentDeleteAction("podcast", ch.id) : undefined })
-    ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, ch.title), renderReachChip(!!ch.clearnet, i18n, ch.clearnet ? clearnetItemHref('podcasts', ch.title, ch.id) : null), renderLicenseChip(ch.license), renderEditedChip(ch.tipId, ch.rootId)),
+    renderCardTop(ch.id, href, { arrow: false, date: ch.createdAt, chips: [renderReachChip(!!ch.clearnet, i18n, ch.clearnet ? clearnetItemHref('podcasts', ch.title, ch.id) : null), renderLicenseChip(ch.license), renderStateChip("neutral", "", catLabel(ch.category))], bylineExtra: [renderEditedChip(ch.tipId, ch.rootId)], author: ch.author, favKind: "podcasts", isFavorite: ch.isFavorite, reportTitle: ch.title, spread: params.spread || null, returnTo: href, deleteAction: isAuthor ? contentDeleteAction("podcast", ch.id) : undefined }),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, ch.title)),
     isAuthor ? renderClearnetSwitch("podcasts", ch.rootId || ch.id, !!ch.clearnet) : null,
-    div({ class: "card-chips-row" }, renderStateChip("neutral", "", catLabel(ch.category))),
     ch.cover && ch.cover.blobId ? a({ href: channelHref(ch), class: "podcast-cover-link" }, renderCover(ch, "podcast-cover podcast-cover-large")) : null,
+    renderDetailShare(ch.id, href, ch.title),
     ch.description ? p({ class: "tribe-side-description" }, ...renderStyledText(ch.description)) : null,
-    infoTable(ch),
     countsLine(ch),
     isAuthor
       ? div({ class: "tribe-side-actions podcast-episode-add" },
@@ -243,16 +223,11 @@ exports.singleChannelView = async (ch, params = {}) => {
     isAuthor && mode === "EPISODE" ? renderEpisodeForm(ch, null) : null,
     allEpisodes.length
       ? div({ class: "podcast-featured" },
-          div({ class: "emergency-update-head podcast-episode-head" },
-            div({ class: "podcast-episode-head-left" },
-              h2({ class: "tribe-card-title" }, a({ href: episodeHref(allEpisodes[0]) }, `#${allEpisodes[0].number} · ${allEpisodes[0].title}`)),
-              episodeChips(allEpisodes[0])
-            ),
-            episodeActions(allEpisodes[0], params, href)
-          ),
+          episodeTop(allEpisodes[0], params, href),
+          h2({ class: "tribe-card-title" }, a({ href: episodeHref(allEpisodes[0]) }, `#${allEpisodes[0].number} · ${allEpisodes[0].title}`)),
           renderPlayer(allEpisodes[0]),
           allEpisodes[0].description ? p({ class: "tribe-side-description" }, ...renderStyledText(allEpisodes[0].description)) : null,
-          p({ class: "card-footer" }, span({ class: "date-link" }, fmt(allEpisodes[0].createdAt)))
+          null
         )
       : null,
     div({ class: "card-section podcast-episodes", id: "episodes" },
@@ -296,30 +271,25 @@ exports.singleEpisodeView = async (ep, params = {}) => {
       ]
     : [];
   const side = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(ep.id, href, { author: ep.author, favKind: "podcasts", isFavorite: ep.isFavorite, reportTitle: ep.title, spread: params.spread || null, returnTo: href, torrentFrom: { blobId: ep.media && ep.media.blobId, name: ep.title }, deleteAction: isAuthor ? contentDeleteAction("podcastEpisode", ep.id) : undefined })
-    ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: channelHref(ch), class: "user-link" }, ch.title || i18n.podcastsTitle)), renderReachChip(!!ch.clearnet, i18n, ch.clearnet ? clearnetItemHref('podcasts', ch.title, ch.id) : null), renderLicenseChip(ch.license)),
+    renderCardTop(ep.id, href, { arrow: false, date: ep.createdAt, chips: [renderReachChip(!!ch.clearnet, i18n, ch.clearnet ? clearnetItemHref('podcasts', ch.title, ch.id) : null), renderLicenseChip(ch.license), episodeChips(ep)], bylineExtra: [renderEditedChip(ep.tipId, ep.rootId)], author: ep.author, favKind: "podcasts", isFavorite: ep.isFavorite, reportTitle: ep.title, spread: params.spread || null, returnTo: href, torrentFrom: { blobId: ep.media && ep.media.blobId, name: ep.title }, deleteAction: isAuthor ? contentDeleteAction("podcastEpisode", ep.id) : undefined }),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: channelHref(ch), class: "user-link" }, ch.title || i18n.podcastsTitle))),
     ch.cover && ch.cover.blobId ? a({ href: channelHref(ch), class: "podcast-cover-link" }, renderCover(ch, "podcast-cover podcast-cover-large")) : null,
+    renderDetailShare(ep.id, href, ep.title),
     ep.description ? p({ class: "tribe-side-description" }, ...renderStyledText(ep.description)) : null,
-    infoTable(ep),
     renderTags(ep.tags),
     ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null
   );
   const main = div({ class: "tribe-main" },
     div({ class: "emergency-update-head podcast-episode-head" },
       div({ class: "podcast-episode-head-left" },
-        h2({ class: "tribe-card-title" }, `#${ep.number} · ${ep.title}`),
-        episodeChips(ep),
-        renderEditedChip(ep.tipId, ep.rootId)
+        h2({ class: "tribe-card-title" }, `#${ep.number} · ${ep.title}`)
       ),
       headActions.length ? div({ class: "tribe-side-actions emergency-update-actions" }, ...headActions) : null
     ),
     renderPlayer(ep),
     renderEngagement(ep.id,
       renderOpinionsVoting("/podcasts/opinions", ep.id, ep.opinions, href, ep.opinions_inhabitants),
-      renderCommentsSection({ action: `/podcasts/episode/${encodeURIComponent(ep.id)}/comments`, comments: params.comments || [], returnTo: href })
-    ),
+      renderCommentsSection({ action: `/podcasts/episode/${encodeURIComponent(ep.id)}/comments`, comments: params.comments || [], returnTo: href })),
     isAuthor && mode === "EDIT" ? renderEpisodeForm(ch, ep) : null
   );
   return template(

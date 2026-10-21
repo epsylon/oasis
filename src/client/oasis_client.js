@@ -27,7 +27,7 @@ PUB admin commands (require the Oasis Sbot to be running):
 GUI options (forwarded to the backend):
   --host=<ip>              Hostname / IP the web UI listens on (default: localhost).
                            Use 0.0.0.0 to expose on a VPS.
-  --port=<n>               Port for the web UI (default: 3000).
+  --port=<n>               Port for the web UI (default: 3000, or OASIS_PORT).
   --allow-host=<host>      Extra hostname allowed when behind a reverse proxy.
   --public                 Public-hosting mode: disables POST and redacts content
                            from people who haven't opted in to public hosting.

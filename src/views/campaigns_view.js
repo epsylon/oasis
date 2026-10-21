@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -56,16 +56,13 @@ exports.campaignChipFor = campaignChipFor;
 
 const renderCampaignCard = (cp, params = {}) =>
   div({ class: `tribe-card campaign-card campaign-${cp.status.toLowerCase()}` },
-    div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(cp.id, campaignHref(cp), { author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: (params.spreadMap && params.spreadMap.get(cp.id)) || null, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined })
-    ),
+    renderCardTop(cp.id, campaignHref(cp), { date: cp.createdAt, chips: [statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.clearnet === true && clearnetEligible(cp) ? renderReachChip(true, i18n, clearnetItemHref("campaigns", cp.title, cp.id)) : null], author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: (params.spreadMap && params.spreadMap.get(cp.id)) || null, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined }),
     div({ class: "tribe-card-body" },
       renderCover(cp),
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: campaignHref(cp) }, cp.title || "—"))),
-      div({ class: "card-chips-row" }, statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.clearnet === true && clearnetEligible(cp) ? renderReachChip(true, i18n, clearnetItemHref("campaigns", cp.title, cp.id)) : null),
       renderProgress(cp),
-      cp.deadline ? p({ class: "job-meta-line" }, `${i18n.campaignDeadlineLabel}: ${fmt(cp.deadline)}`) : null
+      cp.deadline ? p({ class: "job-meta-line" }, `${i18n.campaignDeadlineLabel}: ${fmt(cp.deadline)}`) : null,
+      null
     )
   );
 
@@ -155,25 +152,22 @@ const renderSignatures = (cp) =>
 
 const renderUpdate = (cp, u, href, editing) =>
   div({ class: "campaign-update", id: `update-${encodeURIComponent(u.id)}` },
-    div({ class: "emergency-update-head campaign-update-head" },
-      div({ class: "card-chips-row" },
-        u.edited ? renderStateChip("neutral", "", i18n.campaignUpdateEdited) : null
-      ),
-      cp.isOwner
-        ? div({ class: "tribe-side-actions emergency-update-actions" },
+    renderCardTop(null, null, { author: u.author, date: u.createdAt, chips: [u.edited ? renderStateChip("neutral", "", i18n.campaignUpdateEdited) : null] }),
+    cp.isOwner
+      ? div({ class: "emergency-update-head campaign-update-head" },
+          div({ class: "tribe-side-actions emergency-update-actions" },
             editing ? null : form({ method: "GET", action: `${href}#update-${encodeURIComponent(u.id)}` }, input({ type: "hidden", name: "editUpdate", value: u.id }), button({ type: "submit", class: "update-btn" }, i18n.campaignUpdate)),
             form({ method: "POST", action: `/campaigns/updates/${encodeURIComponent(u.id)}/delete` }, button({ type: "submit", class: "delete-btn" }, i18n.campaignDelete))
           )
-        : null
-    ),
+        )
+      : null,
     editing
       ? form({ method: "POST", action: `/campaigns/updates/${encodeURIComponent(u.id)}/edit`, enctype: "multipart/form-data", class: "campaign-update-form" },
           textarea({ name: "text", rows: 3, maxlength: "3000", required: true, autofocus: true }, u.text), br(),
           input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
           button({ type: "submit", class: "create-button" }, i18n.campaignUpdate)
         )
-      : div({ class: "campaign-update-text" }, ...renderStyledText(u.text)),
-    p({ class: "card-footer" }, span({ class: "date-link" }, `${fmt(u.createdAt)}`), userLink(u.author))
+      : div({ class: "campaign-update-text" }, ...renderStyledText(u.text))
   );
 
 const renderUpdates = (cp, href, editUpdate) =>
@@ -203,34 +197,30 @@ exports.singleCampaignView = async (cp, params = {}) => {
       ].filter(Boolean)
     : [];
   const side = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(cp.id, href, { author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: params.spread || null, returnTo: href, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined })
-    ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, cp.title), renderEditedChip(cp.tipId, cp.rootId)),
-    div({ class: "card-chips-row" },
-      statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.proposalId ? renderStateChip("neutral", "⚖", String(i18n.campaignElevated).toUpperCase()) : null,
-      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("campaigns", cp.title, cp.id) : null),
-      cp.isOwner && canClearnet ? renderClearnetSwitch("campaigns", cp.rootId || cp.id, isClearnet) : null
-    ),
-    table({ class: "tribe-info-table jobs-info-table" },
-      tr(
-        td({ class: "tribe-info-label" }, i18n.createdAtLabel || "Created at"),
-        td({ class: "tribe-info-value", colspan: "3" }, fmt(cp.createdAt))
-      ),
-      cp.deadline
-        ? tr(
+    renderCardTop(cp.id, href, { arrow: false,
+      date: cp.createdAt,
+      chips: [
+        statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.proposalId ? renderStateChip("neutral", "⚖", String(i18n.campaignElevated).toUpperCase()) : null,
+        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("campaigns", cp.title, cp.id) : null)
+      ],
+      bylineExtra: [renderEditedChip(cp.tipId, cp.rootId)],
+      author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: params.spread || null, returnTo: href, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined
+    }),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, cp.title)),
+    cp.isOwner && canClearnet ? renderClearnetSwitch("campaigns", cp.rootId || cp.id, isClearnet) : null,
+    cp.deadline
+      ? table({ class: "tribe-info-table jobs-info-table" },
+          tr(
             td({ class: "tribe-info-label" }, i18n.campaignDeadlineLabel),
             td({ class: "tribe-info-value", colspan: "3" }, fmt(cp.deadline))
           )
-        : null,
-      tr(
-        td({ class: "tribe-info-value", colspan: "4" }, userLink(cp.author))
-      )
-    ),
+        )
+      : null,
     div({ class: "campaign-qr" },
       img({ src: `${href}/qr.png`, alt: i18n.campaignQrAlt, class: "campaign-qr-img" }),
       p({ class: "campaign-qr-caption" }, i18n.campaignQrCaption)
     ),
+    renderDetailShare(cp.id, href, cp.title),
     renderProgress(cp),
     renderMapEmbed(params.mapData, cp.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
@@ -275,8 +265,7 @@ exports.singleCampaignView = async (cp, params = {}) => {
     renderSignatures(cp),
     renderEngagement(cp.id,
       renderOpinionsVoting("/campaigns/opinions", cp.id, cp.opinions, href, cp.opinions_inhabitants),
-      renderCommentsSection({ action: `/campaigns/${encodeURIComponent(cp.id)}/comments`, comments: params.comments || [], returnTo: href })
-    )
+      renderCommentsSection({ action: `/campaigns/${encodeURIComponent(cp.id)}/comments`, comments: params.comments || [], returnTo: href }))
   );
   return template(
     cp.title,

@@ -1,5 +1,5 @@
-const { div, h2, h3, h4, p, section, button, form, a, span, br, textarea, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views")
+const { div, h2, h4, p, section, button, form, a, span, textarea, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -109,24 +109,20 @@ const renderPadCard = exports.renderPadCard = (pad, filter, spreadInfo) => {
       ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
       : (pad.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
+  const href = `/pads/${encodeURIComponent(pad.rootId)}`
   return div({ class: "tribe-card" },
-    div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(pad.rootId || pad.key, `/pads/${encodeURIComponent(pad.rootId)}`, { spread: spreadInfo || null, author: pad.author, favKind: 'pads', isFavorite: pad.isFavorite, reportTitle: pad.title, deleteAction: String(pad.author) === String(userId) ? contentDeleteAction('pad', pad.rootId || pad.key) : undefined })
-    ),
+    renderCardTop(pad.rootId || pad.key, href, { date: pad.createdAt, chips, spread: spreadInfo || null, author: pad.author, favKind: 'pads', isFavorite: pad.isFavorite, reportTitle: pad.title, deleteAction: String(pad.author) === String(userId) ? contentDeleteAction('pad', pad.rootId || pad.key) : undefined }),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: `/pads/${encodeURIComponent(pad.rootId)}` }, pad.title || "\u2014")
+          a({ href }, pad.title || "\u2014")
         )
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-      pad.deadline
-        ? p({ class: "job-meta-line" }, `${i18n.padDeadlineLabel || "Deadline"}: ${moment(pad.deadline).format("YYYY/MM/DD HH:mm")}`)
-        : null,
+      p({ class: "job-meta-line" }, `${i18n.padDeadlineLabel || "Deadline"}: ${pad.deadline ? moment(pad.deadline).format("YYYY/MM/DD HH:mm") : "-"}`),
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.padMembersLabel || "Members"}: ${pad.members.length}`)
-      )
+      ),
+      null
     )
   )
 }
@@ -288,32 +284,25 @@ exports.singlePadView = async (pad, entries, params) => {
   ].filter(Boolean)
 
   const padSide = div({ class: "tribe-side" },
-    div({ class: "tribe-side-actions wiki-actions-top pad-actions-top" },
-      span({ class: "wiki-actions-left" },
-        div({ class: "card-header activity-card-header" },
-          renderContentActions(pad.rootId, returnTo, {
-            author: pad.author,
-            favKind: 'pads',
-            isFavorite: pad.isFavorite,
-            spread: (params && params.spreads) || null,
-            returnTo,
-            reportTitle: pad.title,
-            deleteAction: isAuthor ? contentDeleteAction('pad', pad.rootId) : undefined
-          })
-        )
-      ),
-      ...topButtons
-    ),
+    renderCardTop(pad.rootId, returnTo, { arrow: false,
+      date: pad.createdAt,
+      chips: detailChips,
+      author: pad.author,
+      favKind: 'pads',
+      isFavorite: pad.isFavorite,
+      spread: (params && params.spreads) || null,
+      returnTo,
+      reportTitle: pad.title,
+      deleteAction: isAuthor ? contentDeleteAction('pad', pad.rootId) : undefined
+    }),
+    topButtons.length ? div({ class: "tribe-side-actions wiki-actions-top pad-actions-top" }, ...topButtons) : null,
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, pad.title || "\u2014")
     ),
-    detailChips.length ? div({ class: "card-chips-row" }, ...detailChips) : null,
-    div({ class: "pad-meta" },
-      span({ class: "card-label" }, `${i18n.padCreated || "Created"}: `),
-      span(moment(pad.createdAt).format("YYYY/MM/DD HH:mm")),
-      (isRestrictedInviteOnly || !pad.deadline) ? null : span({ class: "card-label" }, `${i18n.padDeadlineLabel || "Deadline"}: `),
-      (isRestrictedInviteOnly || !pad.deadline) ? null : span(moment(pad.deadline).format("YYYY/MM/DD HH:mm")),
-      isRestrictedInviteOnly ? null : userLink(pad.author)
+    renderDetailShare(pad.rootId, returnTo, pad.title),
+    (isRestrictedInviteOnly || !pad.deadline) ? null : div({ class: "pad-meta" },
+      span({ class: "card-label" }, `${i18n.padDeadlineLabel || "Deadline"}: `),
+      span(moment(pad.deadline).format("YYYY/MM/DD HH:mm"))
     ),
     tags,
     (isRestrictedInviteOnly || !inviteActions.length) ? null : div({ class: "tribe-side-actions" }, ...inviteActions),
@@ -337,7 +326,8 @@ exports.singlePadView = async (pad, entries, params) => {
       div({ class: "pad-members-chips" },
         ...pad.members.map(m => span({ class: "pad-member-chip" }, span({ class: "pad-author-swatch " + memberColorClass(pad.members, m) }), userLink(m)))
       )
-    )
+    ),
+    null
   )
 
   let canonicalEntries = entries

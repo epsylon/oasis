@@ -27,7 +27,7 @@ const COURTS_TYPES = [
 ];
 const VOTE_LOG_TYPES = ['votes', 'votesVote', 'tombstone'];
 
-module.exports = ({ cooler, services = {}, tribeCrypto }) => {
+module.exports = ({ cooler, services = {}, cryptoModel }) => {
   let ssb;
   let userId;
 
@@ -47,7 +47,7 @@ module.exports = ({ cooler, services = {}, tribeCrypto }) => {
     for (const f of fields) {
       if (content[f] !== undefined) payload[f] = content[f];
     }
-    const enc = tribeCrypto.encryptWithKey(JSON.stringify(payload), keyHex);
+    const enc = cryptoModel.encryptWithKey(JSON.stringify(payload), keyHex);
     const result = { ...content };
     for (const f of fields) delete result[f];
     result.encryptedPayload = enc;
@@ -57,7 +57,7 @@ module.exports = ({ cooler, services = {}, tribeCrypto }) => {
   const decryptFields = (content, keyHex) => {
     if (!content || !content.encryptedPayload) return content;
     try {
-      const plain = tribeCrypto.decryptWithKey(content.encryptedPayload, keyHex);
+      const plain = cryptoModel.decryptWithKey(content.encryptedPayload, keyHex);
       const payload = JSON.parse(plain);
       const result = { ...content };
       delete result.encryptedPayload;
@@ -68,15 +68,15 @@ module.exports = ({ cooler, services = {}, tribeCrypto }) => {
   };
 
   const getCaseKey = (obj) => {
-    if (!tribeCrypto || !obj) return null;
-    return tribeCrypto.getKey(obj.rootCaseId || obj.id);
+    if (!cryptoModel || !obj) return null;
+    return cryptoModel.getKey(obj.rootCaseId || obj.id);
   };
 
   const distributeKey = async (caseKey, caseRootId, recipientId) => {
-    if (!tribeCrypto || !recipientId) return;
+    if (!cryptoModel || !recipientId) return;
     const ssbClient = await openSsb();
     const ssbKeys = require('../server/node_modules/ssb-keys');
-    const boxed = tribeCrypto.boxKeyForMember(caseKey, recipientId, ssbKeys);
+    const boxed = cryptoModel.boxKeyForMember(caseKey, recipientId, ssbKeys);
     const content = { type: 'courts-key', caseRootId, for: recipientId, memberKey: boxed };
     await new Promise((res, rej) => ssbClient.publish(content, (e) => e ? rej(e) : res()));
   };
@@ -182,15 +182,15 @@ if (c.type === type) {
       createdAt: openedAt
     };
 
-    if (tribeCrypto) {
+    if (cryptoModel) {
       const stub = { ...content };
       for (const f of CASE_FIELDS) delete stub[f];
       const initialMsg = await new Promise((res, rej) =>
         ssbClient.publish(stub, (err, msg) => (err ? rej(err) : res(msg)))
       );
       const caseRootId = initialMsg.key;
-      const caseKey = tribeCrypto.generateTribeKey();
-      tribeCrypto.setKey(caseRootId, caseKey, 1);
+      const caseKey = cryptoModel.generateKey();
+      cryptoModel.setKey(caseRootId, caseKey, 1);
       const encrypted = encryptFields({ ...content, rootCaseId: caseRootId }, caseKey, CASE_FIELDS);
       const update = { ...encrypted, replaces: caseRootId, updatedAt: openedAt };
       const finalMsg = await new Promise((res, rej) =>
@@ -317,7 +317,7 @@ if (c.type === type) {
     const node = nodes.get(tip);
     if (!node) return null;
     let c = { id: tip, ...node.c };
-    if (tribeCrypto) { const key = getCaseKey(c); if (key) c = decryptFields(c, key); }
+    if (cryptoModel) { const key = getCaseKey(c); if (key) c = decryptFields(c, key); }
     if (!c.rootCaseId) c.rootCaseId = root;
     return c;
   }
@@ -344,7 +344,7 @@ if (c.type === type) {
       const author = String(m.value?.author || '');
       const ts = m.value?.timestamp || m.timestamp || 0;
       if (c.type === 'courtsMediators' && matchC(c)) {
-        let dec = c; if (tribeCrypto && caseKey) dec = decryptFields(c, caseKey);
+        let dec = c; if (cryptoModel && caseKey) dec = decryptFields(c, caseKey);
         const list = ensureArray(dec.mediators || []).map(x => String(x || '').trim()).filter(Boolean).filter(x => x !== accuser && x !== respondentId);
         if (c.side === 'accuser' && author === accuser && ts >= medATs) { medA = list; medATs = ts; }
         else if (c.side === 'respondent' && author === respondentId && ts >= medRTs) { medR = list; medRTs = ts; }
@@ -454,7 +454,7 @@ if (c.type === type) {
     );
     const clean = list.filter((id) => id !== c.accuser && id !== c.respondentId);
     const caseRootId = c.rootCaseId || c.id;
-    if (tribeCrypto) {
+    if (cryptoModel) {
       const caseKey = getCaseKey(c);
       if (caseKey) {
         for (const mediatorId of clean) {
@@ -464,7 +464,7 @@ if (c.type === type) {
     }
     const ssbClient = await openSsb();
     let content = { type: 'courtsMediators', caseId: caseRootId, side, mediators: clean, author: userId, createdAt: nowISO() };
-    if (tribeCrypto) {
+    if (cryptoModel) {
       const caseKey = getCaseKey(c);
       if (caseKey) content = encryptFields(content, caseKey, MEDIATORS_FIELDS);
     }
@@ -488,7 +488,7 @@ if (c.type === type) {
       throw new Error('Judge cannot be a party of the case.');
     }
     const caseRootId = c.rootCaseId || c.id;
-    if (tribeCrypto) {
+    if (cryptoModel) {
       const caseKey = getCaseKey(c);
       if (caseKey) {
         await distributeKey(caseKey, caseRootId, id);
@@ -525,7 +525,7 @@ if (c.type === type) {
       imageUrl,
       createdAt: nowISO()
     };
-    if (tribeCrypto) {
+    if (cryptoModel) {
       const caseKey = getCaseKey(c);
       if (caseKey) content = encryptFields(content, caseKey, EVIDENCE_FIELDS);
     }
@@ -552,7 +552,7 @@ if (c.type === type) {
       text: t,
       createdAt: nowISO()
     };
-    if (tribeCrypto) {
+    if (cryptoModel) {
       const caseKey = getCaseKey(c);
       if (caseKey) content = encryptFields(content, caseKey, ANSWER_FIELDS);
     }
@@ -592,7 +592,7 @@ if (c.type === type) {
       orders: o,
       createdAt: nowISO()
     };
-    if (tribeCrypto) {
+    if (cryptoModel) {
       const caseKey = getCaseKey(c);
       if (caseKey) content = encryptFields(content, caseKey, VERDICT_FIELDS);
     }
@@ -620,7 +620,7 @@ if (c.type === type) {
       terms: t,
       createdAt: nowISO()
     };
-    if (tribeCrypto) {
+    if (cryptoModel) {
       const caseKey = getCaseKey(c);
       if (caseKey) content = encryptFields(content, caseKey, SETTLEMENT_FIELDS);
     }
@@ -972,7 +972,7 @@ if (c.type === type) {
   }
 
   async function processIncomingCourtsKeys() {
-    if (!tribeCrypto) return;
+    if (!cryptoModel) return;
     const ssbKeys = require('../server/node_modules/ssb-keys');
     const ssbConfig = require('../server/ssb_config');
     const ssbClient = await openSsb();
@@ -982,10 +982,10 @@ if (c.type === type) {
       if (!c || c.type !== 'courts-key') continue;
       if (c.for !== ssbClient.id) continue;
       if (!c.memberKey || !c.caseRootId) continue;
-      if (tribeCrypto.getKey(c.caseRootId)) continue;
+      if (cryptoModel.getKey(c.caseRootId)) continue;
       try {
-        const key = tribeCrypto.unboxKeyFromMember(c.memberKey, ssbConfig.keys, ssbKeys);
-        if (key) tribeCrypto.setKey(c.caseRootId, key, 1);
+        const key = cryptoModel.unboxKeyFromMember(c.memberKey, ssbConfig.keys, ssbKeys);
+        if (key) cryptoModel.setKey(c.caseRootId, key, 1);
       } catch (e) {}
     }
   }

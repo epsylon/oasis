@@ -23,8 +23,8 @@ describe('sub-tribes: hierarchy', (t) => {
     const code = await A.use('tribes').generateInvite(s.key);
     B.setActor();
     await B.use('tribes').joinByInvite(code);
-    eq(B.tribeCrypto.getKey(s.key) ? true : false, true);
-    eq(B.tribeCrypto.getKey(p.key), null);
+    eq(B.cryptoModel.getKey(s.key) ? true : false, true);
+    eq(B.cryptoModel.getKey(p.key), null);
   });
 
   t('B in sub cannot read parent', async () => {
@@ -53,12 +53,12 @@ describe('sub-tribes: hierarchy', (t) => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();
     const r = await A.use('tribes').createTribe('Z', '', null, '', [], true, 'strict', null, 'OPEN', '');
-    ok(A.tribeCrypto.getKey(r.key), 'key present before delete');
+    ok(A.cryptoModel.getKey(r.key), 'key present before delete');
     await A.use('tribes').publishTombstone(r.key);
     const removed = await A.use('tribes').pruneOrphanKeys();
     eq(removed, 1);
-    eq(A.tribeCrypto.getKey(r.key), null, 'key gone after prune');
-    notOk(A.tribeCrypto.getAllRootIds().includes(r.key), 'rootId no longer in keyring');
+    eq(A.cryptoModel.getKey(r.key), null, 'key gone after prune');
+    notOk(A.cryptoModel.getAllRootIds().includes(r.key), 'rootId no longer in keyring');
   });
 
   t('pruneOrphanKeys cascades to sub-tribe keyring entries', async () => {
@@ -66,12 +66,12 @@ describe('sub-tribes: hierarchy', (t) => {
     const A = makePeer(net); A.setActor();
     const p = await A.use('tribes').createTribe('P', '', null, '', [], true, 'strict', null, 'OPEN', '');
     const s = await A.use('tribes').createTribe('S', '', null, '', [], true, 'strict', p.key, 'OPEN', '');
-    eq(A.tribeCrypto.getAllRootIds().length, 2, 'two keys before delete');
+    eq(A.cryptoModel.getAllRootIds().length, 2, 'two keys before delete');
     await A.use('tribes').publishTombstone(p.key);
     const removed = await A.use('tribes').pruneOrphanKeys();
     eq(removed, 2, 'both parent and sub keys removed');
-    eq(A.tribeCrypto.getKey(p.key), null);
-    eq(A.tribeCrypto.getKey(s.key), null);
+    eq(A.cryptoModel.getKey(p.key), null);
+    eq(A.cryptoModel.getKey(s.key), null);
   });
 
   t('pruneOrphanKeys leaves active tribes untouched', async () => {
@@ -81,8 +81,8 @@ describe('sub-tribes: hierarchy', (t) => {
     const r2 = await A.use('tribes').createTribe('Keep2', '', null, '', [], true, 'strict', null, 'OPEN', '');
     const removed = await A.use('tribes').pruneOrphanKeys();
     eq(removed, 0);
-    ok(A.tribeCrypto.getKey(r1.key));
-    ok(A.tribeCrypto.getKey(r2.key));
+    ok(A.cryptoModel.getKey(r1.key));
+    ok(A.cryptoModel.getKey(r2.key));
   });
 
   t('cycle in parentTribeId does not infinite-loop', async () => {

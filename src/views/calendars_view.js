@@ -1,6 +1,6 @@
-const { div, h2, h3, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe")
+const { div, h2, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton , renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare } = require("./main_views")
 const { renderMapEmbed } = require("./maps_view")
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -58,16 +58,13 @@ const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
       : (cal.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
   return div({ class: "tribe-card" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(cal.rootId, href, origin
-        ? { author: cal.author, reportTitle: cal.title }
-        : { spread: spreadInfo || null, author: cal.author, favKind: 'calendars', isFavorite: cal.isFavorite, reportTitle: cal.title, deleteAction: String(cal.author) === String(userId) ? contentDeleteAction('calendar', cal.rootId) : undefined })
-    ),
+    renderCardTop(cal.rootId, href, origin
+      ? { author: cal.author, date: cal.createdAt, chips, reportTitle: cal.title }
+      : { date: cal.createdAt, chips, spread: spreadInfo || null, author: cal.author, favKind: 'calendars', isFavorite: cal.isFavorite, reportTitle: cal.title, deleteAction: String(cal.author) === String(userId) ? contentDeleteAction('calendar', cal.rootId) : undefined }),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, a({ href }, cal.title || "\u2014"))
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       cal.deadline
         ? div({ class: "card-field card-field-mb" },
             span({ class: "card-label" }, `${String(i18n.calendarDeadlineLabel).toUpperCase()}: `),
@@ -81,7 +78,8 @@ const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
         ? null
         : div({ class: "tribe-card-members" },
             span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${cal.participants.length}`)
-          )
+          ),
+      null
     )
   )
 }
@@ -286,21 +284,30 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     renderEncryptedChip(i18n),
     renderLifespanChip(calendar.lifetime, i18n),
     canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? calClearnetHref(calendar) : null) : null,
-    isAuthor && canClearnet ? renderClearnetSwitch("calendars", calendar.rootId, isClearnet) : null,
     (isAuthor || isParticipant)
       ? renderStateChip(subscriptionIn ? "mutuals" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff)
       : null
   ].filter(Boolean)
   const calSide = div({ class: "tribe-side" },
+    renderCardTop(calendar.rootId, shareUrl, { arrow: false,
+      date: calendar.createdAt,
+      chips: detailChips,
+      author: calendar.author,
+      favKind: 'calendars',
+      isFavorite: calendar.isFavorite,
+      spread: (params && params.spreads) || null,
+      returnTo: shareUrl,
+      reportTitle: calendar.title,
+      deleteAction: isAuthor ? contentDeleteAction('calendar', calendar.rootId) : undefined
+    }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, calendar.title || "\u2014")
     ),
-    detailChips.length ? div({ class: "card-chips-row" }, ...detailChips) : null,
+    renderDetailShare(calendar.rootId, shareUrl, calendar.title),
+    isAuthor && canClearnet ? renderClearnetSwitch("calendars", calendar.rootId, isClearnet) : null,
     table({ class: "tribe-info-table" },
-      tr(td({ class: "tribe-info-label" }, i18n.calendarCreated || "Created"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.createdAt).format("YYYY/MM/DD HH:mm"))),
       calendar.deadline ? tr(td({ class: "tribe-info-label" }, i18n.calendarDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.deadline).format("YYYY/MM/DD HH:mm"))) : null,
-      tr(td({ class: "tribe-info-label" }, i18n.calendarStatusLabel || "Status"), td({ class: "tribe-info-value", colspan: "3" }, renderStatus(calendar))),
-      tr(td({ class: "tribe-info-value", colspan: "4" }, userLink(calendar.author)))
+      tr(td({ class: "tribe-info-label" }, i18n.calendarStatusLabel || "Status"), td({ class: "tribe-info-value", colspan: "3" }, renderStatus(calendar)))
     ),
     tags,
     renderMapEmbed(params && params.mapData, calendar.mapUrl),
@@ -364,7 +371,8 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           )
         )
       : null,
-    renderDocumentActions('calendars', calendar.rootId)
+    renderDocumentActions('calendars', calendar.rootId),
+    null
   )
 
   const minDate = now.add(1, "minute").format("YYYY-MM-DDTHH:mm")
@@ -456,18 +464,6 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     : null
 
   const calMain = div({ class: "tribe-main" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(calendar.rootId, shareUrl, {
-        author: calendar.author,
-        favKind: 'calendars',
-        isFavorite: calendar.isFavorite,
-        spread: (params && params.spreads) || null,
-        returnTo: shareUrl,
-        reportTitle: calendar.title,
-        deleteAction: isAuthor ? contentDeleteAction('calendar', calendar.rootId) : undefined
-      })
-    ),
-
     calNav,
     grid,
     dayNotesSection,

@@ -1141,14 +1141,14 @@ describe('school: a paid seat needs the right bill signed by the teacher', (t) =
 describe('school: invitation codes come from the teacher', (t) => {
   t('a code planted by a stranger does not open an invite course', async () => {
     const { fresh } = require('../../helpers/setup');
-    const planted = require('../../../src/models/crypto')(fresh(), 'school');
+    const planted = require('../../../src/models/crypto_model')(fresh()).scope('school');
     const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net); const D = makePeer(net);
     A.setActor();
     const r = await A.use('school').createCourse(course({ title: 'Guarded', visibility: 'INVITE' }));
     C.setActor();
     const code = 'cafebabecafebabecafebabecafebabe';
     const salt = planted.generateInviteSalt();
-    await publishAs(C, { type: 'school-invite', target: r.key, ek: planted.encryptForInvite(planted.generateTribeKey(), code, salt), salt, codeHash: planted.hashInviteCode(code, salt) });
+    await publishAs(C, { type: 'school-invite', target: r.key, ek: planted.encryptForInvite(planted.generateKey(), code, salt), salt, codeHash: planted.hashInviteCode(code, salt) });
     D.setActor();
     let threw = false;
     try { await D.use('school').joinByInvite(code); } catch (_) { threw = true; }

@@ -222,8 +222,8 @@ describe('chats: E2E crypto round-trip and key auto-heal (regression)', (t) => {
 
     const os = require('os'); const fs = require('fs'); const path = require('path');
     const lostDir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-lost-keys-'));
-    const lostCrypto = require('../../../src/models/crypto')(lostDir, 'chats');
-    const restored = require('../../../src/models/chats_model')({ cooler: B.cooler, isPublic: false, tribeCrypto: lostCrypto, chatCrypto: lostCrypto, tribesModel: B.use('tribes') });
+    const lostCrypto = require('../../../src/models/crypto_model')(lostDir).scope('chats');
+    const restored = require('../../../src/models/chats_model')({ cooler: B.cooler, isPublic: false, cryptoModel: lostCrypto, chatCrypto: lostCrypto, tribesModel: B.use('tribes') });
     const blind = await restored.listMessages(chat.rootId || chat.key).catch(() => []);
     ok(!blind.some(m => m.text === 'secret from A'), 'without the keyring the member cannot read');
     await restored.ingestKeys();
@@ -259,17 +259,17 @@ describe('chats: invitation codes', (t) => {
     const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
     const planted = require('crypto').randomBytes(32).toString('hex');
     const ssbS = await S.cooler.open();
-    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: chat.key, generation: 1, memberKeys: { [B.keypair.id]: S.tribeCrypto.boxKeyForMember(planted, B.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: chat.key, generation: 1, memberKeys: { [B.keypair.id]: S.cryptoModel.boxKeyForMember(planted, B.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
     B.setActor();
     await B.use('chats').ingestKeys();
-    const ring = require('../../../src/models/crypto')(B.configDir, 'chats');
+    const ring = require('../../../src/models/crypto_model')(B.configDir).scope('chats');
     ok(!ring.getKeys(chat.key).includes(planted), 'the planted key is ignored');
   });
 
   t('when a member leaves, the owner changes the key and only those who stay receive it', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
     const pause = () => new Promise(r => setTimeout(r, 5));
-    const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'chats');
+    const keysOf = (P) => require('../../../src/models/crypto_model')(P.configDir).scope('chats');
     A.setActor();
     const chat = await A.use('chats').createChat('Rotate', 'd', null, '', 'INVITE-ONLY', [], null);
     const codeB = await A.use('chats').generateInvite(chat.key);

@@ -97,7 +97,7 @@ const buildGraphSvg = (me, peers, links = []) => {
 const zoomableGraph = (id, svg, stats = []) => [
   div({ class: 'graphos-legend graphos-statsbar' }, ...stats.filter(Boolean)),
   div({ class: 'graphos-canvas' },
-    a({ href: process.env.OASIS_MOBILE === '1' ? `#${id}-focus` : `#${id}`, id: `${id}-src`, class: 'tribe-action-btn graphos-zoom-btn' }, `\u2922 ${i18n.graphosZoom || 'Enlarge'}`),
+    a({ href: process.env.OASIS_MOBILE === '1' ? `#${id}-focus` : `#${id}`, id: `${id}-src`, class: 'tribe-action-btn graphos-zoom-btn' }, span({ class: 'graphos-zoom-icon' }, '\u2922'), ` ${String(i18n.graphosZoom || 'Enlarge').toUpperCase()}`),
     div({ class: 'graphos-canvas-svg', [RAW_HTML]: svg })
   ),
   div({ id, class: 'lightbox graphos-lightbox' },
@@ -158,13 +158,13 @@ exports.graphosView = ({ filter, me, peers, links = [], kpis, focus = null, focu
         : null,
       ...zoomableGraph('graphos-zoom', buildGraphSvg(me, peers, links), [
         kpi(i18n.graphosTotalNodes || 'Total nodes', kpis.total),
-        kpi(i18n.online || 'Online', kpis.online),
+        kpi(i18n.onlinePlural || i18n.online || 'Online', kpis.online),
         filter !== 'MINE' ? kpi(i18n.discovered || 'Discovered', kpis.discovered) : null,
         filter !== 'MINE' ? kpi(i18n.unknown || 'Unknown', kpis.unknown) : null
       ]),
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
-        legendItem('online', i18n.online || 'Online'),
+        legendItem('online', i18n.onlinePlural || i18n.online || 'Online'),
         filter !== 'MINE' ? legendItem('discovered', i18n.discovered || 'Discovered') : null,
         filter !== 'MINE' ? legendItem('unknown', i18n.unknown || 'Unknown') : null,
         span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-mutual' }), span(i18n.graphosFedMutual)),

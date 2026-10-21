@@ -18,7 +18,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -93,6 +93,15 @@ const renderAudioCommentsSection = (audioId, comments = [], returnTo = null) => 
   });
 };
 
+const renderAudioUpdated = (audioObj) => {
+  const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;
+  const updatedTs = audioObj.updatedAt ? new Date(audioObj.updatedAt).getTime() : NaN;
+  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+  return showUpdated
+    ? span({ class: "votations-comment-date" }, `${i18n.audioUpdatedAt}: ${moment(audioObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
+    : null;
+};
+
 const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
@@ -100,53 +109,37 @@ const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) 
     ? audios.map((audioObj) => {
         const commentCount = typeof audioObj.commentCount === "number" ? audioObj.commentCount : 0;
         const title = safeText(audioObj.title);
+        const href = `/audios/${encodeURIComponent(audioObj.key)}`;
 
         const isOwn = audioObj.author && String(audioObj.author) === String(userId);
-        const headerActions = typeof params.headerActions === "function"
-          ? params.headerActions(audioObj)
+        const byline = {
+          author: audioObj.author,
+          date: audioObj.createdAt,
+          chips: [
+            audioObj.tribeOrigin ? renderTribeOriginChip(audioObj.tribeOrigin) : audioObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('audios', audioObj.title, audioObj.key)) : null,
+            renderLicenseChip(audioObj.license),
+            ...(typeof params.titleChips === "function" ? params.titleChips(audioObj) : []),
+            renderLifespanChip(audioObj.lifetime, i18n)
+          ],
+          bylineExtra: [renderAudioUpdated(audioObj)]
+        };
+        const header = typeof params.headerActions === "function"
+          ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(audioObj))
           : audioObj.tribeOrigin
-            ? renderContentActions(null, audioObj.tribeOrigin.href)
-            : renderContentActions(audioObj.key, `/audios/${encodeURIComponent(audioObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads || null, author: audioObj.author, favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title }, isFavorite: audioObj.isFavorite, reportTitle: audioObj.title, deleteAction: isOwn ? contentDeleteAction('audio', audioObj.key) : undefined, returnTo });
-        const titleHref = typeof params.headerActions === "function" ? null : audioObj.tribeOrigin ? audioObj.tribeOrigin.href : `/audios/${encodeURIComponent(audioObj.key)}`;
-        const engagement = typeof params.engagement === "function"
-          ? params.engagement(audioObj)
-          : audioObj.tribeOrigin ? null : renderEngagement(audioObj.key,
-            renderOpinionsVoting('/audios/opinions', audioObj.key, audioObj.opinions, returnTo, audioObj.opinions_inhabitants),
-            renderCommentsLink({ href: `/audios/${encodeURIComponent(audioObj.key)}`, count: commentCount })
-          );
+            ? renderCardTop(audioObj.key, audioObj.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || null, reportTitle: audioObj.title })
+            : renderCardTop(audioObj.key, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads || null, favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title }, isFavorite: audioObj.isFavorite, reportTitle: audioObj.title, deleteAction: isOwn ? contentDeleteAction('audio', audioObj.key) : undefined, returnTo });
+        const titleHref = typeof params.headerActions === "function" ? null : audioObj.tribeOrigin ? audioObj.tribeOrigin.href : href;
+        const engagement = typeof params.engagement === "function" ? params.engagement(audioObj) : null;
         return div(
           { class: "trending-card audio-card" + (isOwn ? " own-content" : "") },
-          div(
-            { class: "card-header activity-card-header" },
-            span(),
-            headerActions
-          ),
+          header,
           div(
             { class: "card-section audio-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title) : null, audioObj.tribeOrigin ? renderTribeOriginChip(audioObj.tribeOrigin) : audioObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('audios', audioObj.title, audioObj.key)) : null, renderLicenseChip(audioObj.license), ...(typeof params.titleChips === "function" ? params.titleChips(audioObj) : [])),
-            audioObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(audioObj.lifetime, i18n)) : null,
+            title ? div({ class: "shop-title-row" }, h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title)) : null,
             renderAudioPlayer(audioObj),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(audioObj) : []),
-            engagement,
             renderMapLocationVisitLabel(audioObj.mapUrl),
-            br(),
-            (() => {
-              const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;
-              const updatedTs = audioObj.updatedAt ? new Date(audioObj.updatedAt).getTime() : NaN;
-              const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-              return p(
-                { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
-                userLink(audioObj.author),
-                showUpdated
-                  ? span(
-                      { class: "votations-comment-date" },
-                      ` | ${i18n.audioUpdatedAt}: ${moment(audioObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
-                    )
-                  : null
-              );
-            })()
+            engagement
           )
         );
       })
@@ -292,6 +285,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
 
   const title = safeText(audioObj.title);
+  const href = `/audios/${encodeURIComponent(audioObj.key)}`;
   const isAuthor = String(audioObj.author) === String(userId);
   const isClearnet = !!audioObj.clearnet;
 
@@ -312,27 +306,28 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
 
   const tagsNode = renderTags(audioObj.tags);
 
-  const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(audioObj.key, `/audios/${encodeURIComponent(audioObj.key)}`, {
+  const audioSide = div({ class: "tribe-side" },
+    renderCardTop(audioObj.key, href, { arrow: false,
       author: audioObj.author,
+      date: audioObj.createdAt,
+      chips: [
+        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('audios', audioObj.title, audioObj.key) : null),
+        renderLicenseChip(audioObj.license),
+        ...chips
+      ],
+      bylineExtra: [renderEditedChip(audioObj.key, audioObj.rootId), renderAudioUpdated(audioObj)],
       favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title },
       isFavorite: audioObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
       reportTitle: audioObj.title,
       deleteAction: isAuthor ? contentDeleteAction('audio', audioObj.key) : undefined
-    })
-  );
-
-  const audioSide = div({ class: "tribe-side" },
+    }),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('audios', audioObj.title, audioObj.key) : null),
-      isAuthor ? renderClearnetSwitch('audios', audioObj.rootId || audioObj.key, isClearnet) : null,
-      renderLicenseChip(audioObj.license),
-      renderEditedChip(audioObj.key, audioObj.rootId)
+      isAuthor ? renderClearnetSwitch('audios', audioObj.rootId || audioObj.key, isClearnet) : null
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    renderDetailShare(audioObj.key, href, audioObj.title),
     safeText(audioObj.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(audioObj.description))
       : null,
@@ -342,30 +337,11 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   );
 
   const audioMain = div({ class: "tribe-main" },
-    detailActions,
     renderAudioPlayer(audioObj),
     audioObj?.url ? renderDownloadButton(blobUrlOf(audioObj.url), audioObj.title || "") : null,
-    (() => {
-      const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;
-      const updatedTs = audioObj.updatedAt ? new Date(audioObj.updatedAt).getTime() : NaN;
-      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-      return p(
-        { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(audioObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
-        userLink(audioObj.author),
-        showUpdated
-          ? span(
-              { class: "votations-comment-date" },
-              ` | ${i18n.audioUpdatedAt}: ${moment(audioObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
-            )
-          : null
-      );
-    })(),
     renderEngagement(audioObj.key,
       renderOpinionsVoting('/audios/opinions', audioObj.key, audioObj.opinions, returnTo, audioObj.opinions_inhabitants),
-      renderAudioCommentsSection(audioObj.key, comments, returnTo)
-    )
+      renderAudioCommentsSection(audioObj.key, comments, returnTo))
   );
 
   return template(
@@ -419,15 +395,10 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
         )
       ),
       div({ class: "bookmark-item card" },
+        renderCardTop(audio.key, `/audios/${encodeURIComponent(audio.key)}`, { author: audio.author, date: audio.createdAt, chips: [itemSize ? renderEcoTax(itemSize, audio.key) : null], reportTitle: audio.title }),
         audio.title ? h2(audio.title) : null,
         renderAudioPlayer(audio, { skipTranscode: true }),
-        p({ class: "transcode-meta card-footer" },
-          userLink(audio.author),
-          span({ class: "melody-meta-sep" }, " · "),
-          span({ class: "card-value" }, moment(audio.createdAt).format("YYYY/MM/DD HH:mm")),
-          itemSize ? span({ class: "melody-meta-sep" }, " · ") : null,
-          itemSize ? renderEcoTax(itemSize, audio.key) : null
-        ),
+        renderDetailShare(audio.key, `/audios/${encodeURIComponent(audio.key)}`, audio.title),
         safeText(audio.description) ? p({ class: "melody-bcs-desc" }, audio.description) : null,
         renderTags(audio.tags),
         form({ method: "POST", action: `/melody/transcode/${encodeURIComponent(audio.key)}`, class: "audio-transcode-run-form audio-transcode-form" },

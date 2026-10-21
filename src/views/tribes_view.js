@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged, CLEARNET_HUB_CSS, renderPdfDocument } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged, CLEARNET_HUB_CSS, renderPdfDocument, renderDetailShare } = require('./main_views');
 const { renderTribeWikiSection } = require('./wiki_view');
 const { renderEncryptedChip: renderTribeEncryptedChip, renderLicenseSelect, renderReachChip, renderClearnetPage, escapeHtml, renderRichText, blobUrl: cnBlobUrl, paginateClearnet, renderClearnetPager, CLEARNET_PAGER_CSS, renderClearnetPdfFrame, CLEARNET_PDF_CSS } = require('./clearnet_view');
 const { renderPollCard } = require('./polls_view');
@@ -76,7 +76,7 @@ const renderTribeReachListChip = (tribe, item, threadsById) => {
   const parent = item.contentType === 'forum-reply' && threadsById ? threadsById.get(item.parentId) : null;
   const level = reachLevelOf(parent || item);
   if (!tribe.reachAllowed && level === 'tribe') return null;
-  return div({ class: 'card-chips-row' }, renderTribeReachChip(level, item.tribeName ? null : tribe));
+  return renderTribeReachChip(level, item.tribeName ? null : tribe);
 };
 
 const DEFAULT_HASH_ENC = "%260000000000000000000000000000000000000000000%3D.sha256";
@@ -325,29 +325,30 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     const parentTribe = t.parentTribeId ? allT.find(p => p.id === t.parentTribeId) : null;
 
     const isOwn = String(t.author) === String(userId);
+    const tribeHref = `/tribe/${encodeURIComponent(t.id)}`;
     return div({ class: 'trending-card tribes-card' + (isOwn ? ' own-content' : '') },
-      div({ class: 'card-header activity-card-header' },
-        span(),
-        renderContentActions(t.id, `/tribe/${encodeURIComponent(t.id)}`, { author: t.author, reportTitle: t.title, deleteAction: isOwn && !isLarpHouseTribe(t) ? contentDeleteAction('tribe', t.id) : undefined })
-      ),
+      renderCardTop(t.id, tribeHref, {
+        date: t.createdAt,
+        chips: [
+          t.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
+          t.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
+          renderModeChip(t.inviteMode, i18n),
+          renderLifespanChip(t.lifetime, i18n),
+          t.subscriptionIn === true
+            ? renderStateChip('mutuals', '\u2709', i18n.subscriptionOn)
+            : (t.subscriptionIn === false ? renderStateChip('closed', '\u2709', i18n.subscriptionOff) : null)
+        ],
+        author: t.author, reportTitle: t.title, deleteAction: isOwn && !isLarpHouseTribe(t) ? contentDeleteAction('tribe', t.id) : undefined
+      }),
       div({ class: 'card-section tribes-card-body' },
         div({ class: 'tribe-card-image-wrapper' },
-          a({ href: `/tribe/${encodeURIComponent(t.id)}` },
+          a({ href: tribeHref },
             renderMediaBlob(t.image, '/assets/images/default-tribe.png', { class: 'tribe-card-hero-image' })
           )
         ),
         div({ class: 'tribe-card-body' },
           div({ class: 'shop-title-row' },
-            h2({ class: 'tribe-card-title' }, a({ href: `/tribe/${encodeURIComponent(t.id)}` }, t.title))
-          ),
-          div({ class: 'card-chips-row' },
-            t.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
-            t.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
-            renderModeChip(t.inviteMode, i18n),
-            renderLifespanChip(t.lifetime, i18n),
-            t.subscriptionIn === true
-              ? renderStateChip('mutuals', '\u2709', i18n.subscriptionOn)
-              : (t.subscriptionIn === false ? renderStateChip('closed', '\u2709', i18n.subscriptionOff) : null)
+            h2({ class: 'tribe-card-title' }, a({ href: tribeHref }, t.title))
           ),
           t.description ? p({ class: 'tribe-card-description' }, ...renderStyledText(t.description)) : null,
           renderMapLocationVisitLabel(t.mapUrl),
@@ -359,7 +360,8 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
           ) : null,
           div({ class: 'tribe-card-members' },
             span({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${t.memberCount != null ? t.memberCount : t.members.length}`)
-          )
+          ),
+          null
         )
       )
     );
@@ -487,22 +489,17 @@ const activityMediaTypeName = (mt) => {
 const renderTribeActivitySection = (tribe, sectionData) => {
   const { activities } = sectionData || { activities: [] };
   if (activities.length === 0) return div({ class: 'tribe-content-list' }, p(i18n.tribeActivityEmpty));
-  const tribeUrl = `/tribe/${encodeURIComponent(tribe.id)}`;
   const threadsById = reachIndexOf(activities);
   return div({ class: 'tribe-content-list tribe-content-list-spaced' },
     paged(activities).map(item => {
       if (item.encrypted) return div({ class: 'card card-rpg' }, div({ class: 'tribe-card-body' }, p({ class: 'tribe-meta-label' }, i18n.tribeContentEncrypted || 'Encrypted content')));
       if (item.contentType === 'chatThread') {
         const replies = Array.isArray(item.replies) ? item.replies : [];
-        const tDate = item.timestamp ? moment(item.timestamp).format("YYYY/MM/DD HH:mm") : '';
         const headerText = item.tribeName
-          ? `[${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD · ${item.tribeName}]`
-          : `[${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD]`;
+          ? `${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD · ${item.tribeName}`
+          : `${String(i18n.typeChat || 'CHAT').toUpperCase()} · THREAD`;
         return div({ class: 'card card-rpg tribe-card-padded chat-thread' },
-          div({ class: 'card-header' },
-            h2({ class: 'card-label' }, headerText),
-            a({ href: item.directUrl, class: 'tribe-action-btn' }, i18n.viewDetails || 'View Details')
-          ),
+          renderCardTop(item.id, item.directUrl, { ...tribeItemOpts(tribe, item, isTribeMember(tribe), item.title || item.description), author: item.author, authorName: item.authorName, date: item.timestamp, chips: [tribeTypeChip(headerText)] }),
           div({ class: 'tribe-card-body' },
             item.title ? div({ class: 'card-field' }, span({ class: 'card-value' }, item.title)) : null,
             tribeExcerpt(tribe, item.description),
@@ -514,20 +511,16 @@ const renderTribeActivitySection = (tribe, sectionData) => {
               )
             ))
           ),
-          p({ class: 'card-footer' },
-            span({ class: 'date-link' }, `${tDate}`),
-            userLink(item.author, item.authorName)
-          )
+          null
         );
       }
-      const date = item.timestamp ? moment(item.timestamp).format("YYYY/MM/DD HH:mm") : '';
       const typeLabel = item.contentType === 'media' && item.mediaType
         ? activityMediaTypeName(item.mediaType)
         : contentTypeName(item.contentType);
       const headerText = item.tribeName
-        ? `[${String(typeLabel).toUpperCase()} · ${item.tribeName}]`
-        : `[${String(typeLabel).toUpperCase()}]`;
-      const targetSection = activitySectionForItem(item);
+        ? `${String(typeLabel).toUpperCase()} · ${item.tribeName}`
+        : String(typeLabel).toUpperCase();
+      const itemHref = tribeItemHref(tribe, item);
       const blobUrl = item.contentType === 'media' ? toBlobUrl(item.image) : null;
       const mediaContent =
         item.contentType === 'media' && item.mediaType === 'image' && blobUrl
@@ -542,27 +535,15 @@ const renderTribeActivitySection = (tribe, sectionData) => {
           ? a({ href: safeExternalHref(item.url || item.description), target: '_blank', rel: 'noopener noreferrer', class: 'tribe-action-btn' }, item.url || item.description)
         : null;
       return div({ class: 'card card-rpg tribe-card-padded' },
-        div({ class: 'card-header' },
-          h2({ class: 'card-label' }, headerText),
-          item.directUrl
-            ? a({ href: item.directUrl, class: 'tribe-action-btn' }, i18n.viewDetails || 'View Details')
-            : form({ method: 'GET', action: tribeUrl },
-                input({ type: 'hidden', name: 'section', value: targetSection }),
-                button({ type: 'submit', class: 'tribe-action-btn' }, i18n.viewDetails || 'View Details')
-              )
-        ),
+        renderCardTop(item.id, itemHref, { ...tribeItemOpts(tribe, item, isTribeMember(tribe), item.title || item.description), author: item.author, authorName: item.authorName, date: item.timestamp, chips: [div({ class: 'card-chips-row' }, tribeTypeChip(headerText), renderTribeReachListChip(tribe, item, threadsById))] }),
         div({ class: 'tribe-card-body' },
-          renderTribeReachListChip(tribe, item, threadsById),
           item.title ? div({ class: 'card-field' },
-            span({ class: 'card-value' }, item.title)
+            a({ href: itemHref, class: 'card-value' }, item.title)
           ) : null,
           mediaContent,
           item.description && !(item.contentType === 'media' && item.mediaType === 'bookmark' && item.description === item.url) ? tribeExcerpt(tribe, item.description) : null
         ),
-        p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${date}`),
-          userLink(item.author, item.authorName)
-        )
+        null
       );
     })
   );
@@ -579,20 +560,21 @@ const renderTribeTrendingSection = (tribe, sectionData, query) => {
     items.length === 0 ? p(i18n.tribeTrendingEmpty) :
       paged(items.map((item, idx) => [item, idx])).map(([item, idx]) => {
         if (item.encrypted) return div({ class: 'tribe-content-card' }, div({ class: 'tribe-content-meta' }, span(`#${idx + 1}`)), p({ class: 'tribe-meta-label' }, i18n.tribeContentEncrypted || 'Encrypted content'));
+        const itemHref = tribeItemHref(tribe, item);
+        const itemTitle = item.title || item.description;
         return div({ class: 'tribe-content-card' },
+        renderCardTop(item.id, itemHref, { ...tribeItemOpts(tribe, item, isTribeMember(tribe), item.title || item.description), author: item.author, date: item.createdAt, chips: [div({ class: 'card-chips-row' }, tribeTypeChip(contentTypeName(item.contentType)), renderTribeReachListChip(tribe, item, null))] }),
         div({ class: 'tribe-content-meta' },
           span(`#${idx + 1}`),
-          span({ class: 'tribe-badge' }, contentTypeName(item.contentType)),
           span(`${i18n.tribeTrendingEngagement}: ${engagementScore(item)}`),
           (() => { const entries = Object.entries(item.opinions || {}); if (!entries.length) return null; const top = entries.reduce((a, b) => b[1] > a[1] ? b : a); return span(`| ${i18n.tribeTopCategory}: ${i18n['opinionCat' + top[0].charAt(0).toUpperCase() + top[0].slice(1)] || top[0]}`); })()
         ),
-        renderTribeReachListChip(tribe, item, null),
-        item.title ? h2(item.title) : item.description ? h2(item.description) : null,
+        itemTitle ? h2(a({ href: itemHref }, itemTitle)) : null,
         div({ class: 'tribe-content-meta' },
           item.refeeds ? span(`${i18n.tribeActivityRefeed}: ${item.refeeds}`) : null,
           Array.isArray(item.attendees) && item.attendees.length ? span(`${i18n.tribeEventAttendees}: ${item.attendees.length}`) : null
         ),
-        p({ class: 'tribe-meta-label' }, userLink(item.author))
+        null
       ); })
   );
 };
@@ -639,23 +621,20 @@ const renderTribeSearchSection = (tribe, sectionData, query) => {
     sq.length >= 2 ? div(
       stats ? div({ class: 'filters activity-filter-chips activity-toolbar-row search-stats-row' }, stats) : null,
       results.length === 0 ? p(i18n.tribeSearchEmpty) :
-        paged(results).map(item => div({ class: 'card card-rpg' },
-          div({ class: 'card-header' },
-            h2({ class: 'card-label' }, `[${String(contentTypeName(item.contentType)).toUpperCase()}]`)
-          ),
-          div({ class: 'card-body' },
-            renderTribeReachListChip(tribe, item, threadsById),
-            item.title ? div({ class: 'card-field' },
-              span({ class: 'card-label' }, (i18n.title || 'Title') + ':'),
-              span({ class: 'card-value' }, item.title)
-            ) : null,
-            tribeExcerpt(tribe, item.description)
-          ),
-          p({ class: 'card-footer' },
-            span({ class: 'date-link' }, moment(item.createdAt).format("YYYY/MM/DD HH:mm")),
-            userLink(item.author)
-          )
-        ))
+        paged(results).map(item => {
+          const itemHref = tribeItemHref(tribe, item);
+          return div({ class: 'card card-rpg' },
+            renderCardTop(item.id, itemHref, { ...tribeItemOpts(tribe, item, isTribeMember(tribe), item.title || item.description), author: item.author, date: item.createdAt, chips: [div({ class: 'card-chips-row' }, tribeTypeChip(contentTypeName(item.contentType)), renderTribeReachListChip(tribe, item, threadsById))] }),
+            div({ class: 'card-body' },
+              item.title ? div({ class: 'card-field' },
+                span({ class: 'card-label' }, (i18n.title || 'Title') + ':'),
+                a({ href: itemHref, class: 'card-value' }, item.title)
+              ) : null,
+              tribeExcerpt(tribe, item.description)
+            ),
+            null
+          );
+        })
     ) : null
   );
 };
@@ -800,20 +779,32 @@ const renderTribeReachControls = (tribe, item, returnTo) => {
   return levelSwitch || openedBy ? div({ class: 'card-chips-row' }, levelSwitch, openedBy) : null;
 };
 
-const tribeItemActions = (tribe, item, member, title) =>
-  renderContentActions(item.id, null, {
-    author: item.author,
-    reportTitle: title || item.title || item.description,
-    deleteAction: member && isMineItem(item) && item.id ? `${tribeUrlOf(tribe)}/content/delete/${encodeURIComponent(item.id)}` : undefined
-  });
+const tribeItemOpts = (tribe, item, member, title) => ({
+  author: item.author,
+  reportTitle: title || item.title || item.description,
+  deleteAction: member && isMineItem(item) && item.id ? `${tribeUrlOf(tribe)}/content/delete/${encodeURIComponent(item.id)}` : undefined
+});
 
-const tribeEngagement = (tribe, item, member, returnTo) => {
+const tribeItemActions = (tribe, item, member, title) => renderContentActions(item.id, null, tribeItemOpts(tribe, item, member, title));
+
+const tribeCardActions = (tribe, item, member, title) => renderContentActions(item.id, null, { ...tribeItemOpts(tribe, item, member, title), menu: true });
+
+const tribeItemHref = (tribe, item) => item.directUrl
+  || (item.contentType === 'forum' ? sectionHref(tribe, 'forum', { thread: item.id })
+    : item.contentType === 'forum-reply' ? sectionHref(tribe, 'forum', { thread: item.parentId })
+    : sectionHref(tribe, activitySectionForItem(item)));
+
+const tribeTypeChip = (text) => span({ class: 'pm-exposition-chip pm-exposition-whole' }, span({ class: 'pm-exposition-text' }, String(text).toUpperCase()));
+
+const forumCategoryChip = (item) => item.category ? span({ class: 'forum-category' }, `[${forumCatLabel(item.category)}]`) : null;
+
+const tribeEngagement = (tribe, item, member, returnTo, withShare = true) => {
+  const share = withShare ? { href: tribeItemHref(tribe, item), title: item.title || item.description } : null;
   if (member) {
     return renderEngagement(item.id, renderOpinionsVoting(null, item.id, item.opinions, returnTo, item.opinions_inhabitants,
-      (id, category) => `${tribeUrlOf(tribe)}/content/${encodeURIComponent(id)}/opinion/${category}`));
+      (id, category) => `${tribeUrlOf(tribe)}/content/${encodeURIComponent(id)}/opinion/${category}`), null, share);
   }
-  const summary = renderVotesSummary(item.opinions);
-  return summary ? renderEngagement(item.id, summary) : null;
+  return renderEngagement(item.id, renderVotesSummary(item.opinions), null, share);
 };
 
 const toFeedShape = (m) => ({
@@ -852,7 +843,7 @@ const renderFeedTribeView = (feedItems, tribe, query = {}) => {
       hashtagHref: tribeTagHref(tribe),
       refeedAction: `${tribeUrl}/refeed/${encodeURIComponent(m.id)}`,
       canRefeed: member,
-      headerActions: tribeItemActions(tribe, m, member, m.description),
+      headerActions: tribeCardActions(tribe, m, member, m.description),
       chips: chip || controls ? [chip ? div({ class: 'card-chips-row' }, chip) : null, controls] : null,
       engagement: tribeEngagement(tribe, m, member, returnTo)
     });
@@ -881,7 +872,7 @@ const renderTribeEventCard = (tribe, e, member, returnTo) => {
   const attending = asList(e.attendees).includes(userId);
   return renderEventItem({ ...e, organizer: e.author, isPublic: reachLevelOf(e) === 'tribe' ? 'private' : 'public' }, 'all', null, {
     href: null,
-    headerActions: tribeItemActions(tribe, e, member, e.title),
+    headerActions: tribeCardActions(tribe, e, member, e.title),
     extraChips: [tribeReachChipFor(tribe, e)],
     bodyExtra: [
       tribeDescription(e.description),
@@ -958,7 +949,7 @@ const renderTribeTaskCard = (tribe, t, member, returnTo) => {
   const assignRow = member ? renderTaskAssignAction(t, assigned, returnTo, `${tribeUrl}/tasks/assign/${encodeURIComponent(t.id)}`) : null;
   return renderTaskItem({ ...t, isPublic: reachLevelOf(t) === 'tribe' ? 'PRIVATE' : 'PUBLIC' }, 'all', null, {
     href: null,
-    headerActions: tribeItemActions(tribe, t, member, t.title),
+    headerActions: tribeCardActions(tribe, t, member, t.title),
     extraChips: [tribeReachChipFor(tribe, t)],
     bodyExtra: [
       tribeDescription(t.description),
@@ -1028,7 +1019,7 @@ const renderTribeVotationCard = (tribe, v, member, returnTo) => {
   const hasVoted = Object.values(v.votes || {}).some(arr => asList(arr).includes(userId));
   return renderVoteListItem(shaped, shaped.options, 'all', null, {
     href: null,
-    headerActions: tribeItemActions(tribe, v, member, v.title),
+    headerActions: tribeCardActions(tribe, v, member, v.title),
     extraChips: [tribeReachChipFor(tribe, v)],
     bodyExtra: [
       tribeDescription(v.description),
@@ -1180,7 +1171,7 @@ const renderForumThreadDetail = (tribe, allItems, threadId, member) => {
           span({ class: 'date-link' }, `${moment(thread.createdAt).format("YYYY/MM/DD HH:mm")}`),
           userLink(thread.author)
         ),
-        tribeEngagement(tribe, thread, member, returnTo)
+        tribeEngagement(tribe, thread, member, returnTo, false)
       )
     ),
     member
@@ -1265,16 +1256,14 @@ const renderForumSection = (tribe, items, query = {}) => {
       ? ul({ class: 'mailing-archive' },
           ...paged(list).map(t => {
             const participants = new Set([t.author, ...allItems.filter(i => i.contentType === 'forum-reply' && i.parentId === t.id).map(r => r.author)].filter(Boolean));
+            const threadHref = sectionHref(tribe, 'forum', { thread: t.id });
             return li({ class: 'mailing-archive-item' },
-              div({ class: 'emergency-update-head mailing-archive-head' },
-                div({ class: 'mailing-archive-meta' },
-                  a({ href: sectionHref(tribe, 'forum', { thread: t.id }), class: 'user-link' }, t.title || '—'),
-                  t.category ? span({ class: 'forum-category' }, `[${forumCatLabel(t.category)}]`) : null,
-                  span({ class: 'card-label activity-update-counts mailing-counts' }, `👥: ${participants.size} · 💬 ${replyCount.get(t.id) || 0} · ▲ ${t.refeeds || 0}`),
-                  tribeReachChipFor(tribe, t)
-                ),
-                tribeItemActions(tribe, t, member, t.title)
-              )
+              renderCardTop(t.id, null, { ...tribeItemOpts(tribe, t, member, t.title), date: t.createdAt, chips: [forumCategoryChip(t), tribeReachChipFor(tribe, t)] }),
+              div({ class: 'mailing-archive-meta' },
+                a({ href: threadHref, class: 'user-link' }, t.title || '—'),
+                span({ class: 'card-label activity-update-counts mailing-counts' }, `👥: ${participants.size} · 💬 ${replyCount.get(t.id) || 0} · ▲ ${t.refeeds || 0}`)
+              ),
+              null
             );
           })
         )
@@ -1339,7 +1328,7 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
   const params = {
     q,
     hideLastVisit: true,
-    headerActions: (m) => tribeItemActions(tribe, m, member, m.title),
+    headerActions: (m) => tribeCardActions(tribe, m, member, m.title),
     titleChips: (m) => [tribeReachChipFor(tribe, m)],
     bodyExtra: (m) => [tribeDescription(m.description && m.description !== m.url ? m.description : null), renderTribeReachControls(tribe, m, returnTo)],
     engagement: (m) => tribeEngagement(tribe, m, member, returnTo)
@@ -1649,12 +1638,20 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
   const hasOpenInvite = !!tribe.openInviteCode;
   const canManageOpenInvite = hasOpenInvite && (tribe.openInviteBy === userId || isAuthorOfTribe);
   const hasSideActions = canGenerateInvite || showOwnerControls || canLeave || (isOutsider && !showInviteTop);
+  const tribeHref = `/tribe/${encodeURIComponent(tribe.id)}`;
 
   const tribeDetails = div({ class: 'tribe-details' },
     div({ class: 'tribe-side' },
-      div({ class: 'card-header activity-card-header' },
-        renderContentActions(tribe.id, `/tribe/${encodeURIComponent(tribe.id)}`, { author: tribe.author, reportTitle: tribe.title, deleteAction: showOwnerControls ? contentDeleteAction('tribe', tribe.id) : undefined })
-      ),
+      renderCardTop(tribe.id, tribeHref, { arrow: false, spread: tribe.isAnonymous ? undefined : (tribe.spreads || null),
+        date: tribe.createdAt,
+        chips: [
+          tribe.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
+          tribe.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
+          renderModeChip(tribe.inviteMode, i18n),
+          renderLifespanChip(tribe.lifetime, i18n)
+        ],
+        author: tribe.author, reportTitle: tribe.title, deleteAction: showOwnerControls ? contentDeleteAction('tribe', tribe.id) : undefined
+      }),
       tribe.parentTribe
         ? div({ class: 'tribe-parent-box' },
             h2({ class: 'tribe-info-label' }, i18n.tribeMainTribeLabel || 'MAIN TRIBE'),
@@ -1663,29 +1660,17 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
             )
           )
         : null,
+    renderDetailShare(tribe.id, tribeHref, tribe.title),
       div({ class: 'shop-title-row' },
         h2({ class: 'tribe-card-title' }, tribe.title)
       ),
-      div({ class: 'card-chips-row' },
-        tribe.isAnonymous ? renderPrivacyChip(true, i18n) : renderPrivacyChip(false, i18n),
-        tribe.isAnonymous ? renderTribeEncryptedChip(i18n) : null,
-        renderModeChip(tribe.inviteMode, i18n),
-        renderLifespanChip(tribe.lifetime, i18n)
-      ),
       renderMediaBlob(imageSrc, '/assets/images/default-tribe.png', { alt: tribe.title, class: 'tribe-detail-image' }),
-      table({ class: 'tribe-info-table' },
+      tribe.location ? table({ class: 'tribe-info-table' },
         tr(
-          td({ class: 'tribe-info-label' }, i18n.tribeCreatedAt || 'CREATED'),
-          td({ class: 'tribe-info-value', colspan: '3' }, moment(tribe.createdAt).format("YYYY/MM/DD HH:mm"))
-        ),
-        tr(
-          td({ class: 'tribe-info-value tribe-author-cell', colspan: '4' }, userLink(tribe.author))
-        ),
-        tribe.location ? tr(
           td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
           td({ class: 'tribe-info-value', colspan: '3' }, ...renderStyledText(tribe.location))
-        ) : null
-      ),
+        )
+      ) : null,
       h2({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${tribe.memberCount != null ? tribe.memberCount : tribe.members.length}`),
       (isOutsider && hasOpenInvite)
         ? div({ class: 'tribe-side-actions tribe-side-center' },
@@ -1790,6 +1775,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
                 ))
           : null
       ) : null,
+      null
     ),
     div({ class: 'tribe-main' },
       query.inviteCode ? div({ class: 'card card-rpg tribe-banner' },

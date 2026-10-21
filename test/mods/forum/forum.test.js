@@ -97,7 +97,7 @@ describe('forum: the signed author is the author', (t) => {
     await B.use('forum').joinByInvite(code);
     const key = forumKeyOf(net, A, r.key);
     ok(key, 'the forum key is known to the members');
-    const sealer = require('../../../src/models/crypto')(fresh(), 'forum');
+    const sealer = require('../../../src/models/crypto_model')(fresh()).scope('forum');
     await publishAs(B, sealer.encryptContent({ type: 'forum', root: r.key, text: 'sealed impostor', author: A.keypair.id, timestamp: new Date().toISOString() }, [key], true));
     A.setActor();
     const found = (await A.use('forum').getMessagesByForumId(r.key)).messages.find(m => m.text === 'sealed impostor');
@@ -138,14 +138,14 @@ describe('forum: invitations come from the forum author', (t) => {
 
   t('an invitation planted by a stranger hands out nothing', async () => {
     const { fresh } = require('../../helpers/setup');
-    const planted = require('../../../src/models/crypto')(fresh(), 'forum');
+    const planted = require('../../../src/models/crypto_model')(fresh()).scope('forum');
     const net = makeNetwork(); const A = makePeer(net); const C = makePeer(net); const D = makePeer(net);
     A.setActor();
     const r = await A.use('forum').createForum('GENERAL', 'Guarded', 'private', true);
     C.setActor();
     const code = 'cafebabecafebabecafebabecafebabe';
     const salt = planted.generateInviteSalt();
-    await publishAs(C, { type: 'forum-invite', target: r.key, ek: planted.encryptForInvite(planted.generateTribeKey(), code, salt), salt, codeHash: planted.hashInviteCode(code, salt) });
+    await publishAs(C, { type: 'forum-invite', target: r.key, ek: planted.encryptForInvite(planted.generateKey(), code, salt), salt, codeHash: planted.hashInviteCode(code, salt) });
     D.setActor();
     let threw = false;
     try { await D.use('forum').joinByInvite(code); } catch (_) { threw = true; }

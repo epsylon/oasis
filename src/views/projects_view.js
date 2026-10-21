@@ -1,11 +1,11 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
+const { renderMapEmbedWithZoom } = require("./maps_view")
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 
 const renderMediaBlob = (value, attrs = {}) => {
@@ -414,11 +414,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
 
       const isOwn = pr.author && String(pr.author) === String(userId)
       return div({ class: "trending-card project-card" + (isOwn ? " own-content" : "") },
-        div(
-          { class: "card-header activity-card-header" },
-          span(),
-          renderContentActions(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { spread: spreadMap.get(pr.id || pr.key) || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, deleteAction: isOwn ? contentDeleteAction('project', pr.id || pr.key) : undefined })
-        ),
+        renderCardTop(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { date: pr.createdAt, chips, spread: spreadMap.get(pr.id || pr.key) || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, deleteAction: isOwn ? contentDeleteAction('project', pr.id || pr.key) : undefined }),
         div({ class: "card-section project-card-body" },
           heroNode,
           div({ class: "shop-title-row" },
@@ -426,7 +422,6 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
               a({ href: `/projects/${encodeURIComponent(pr.id)}` }, pr.title || i18n.projectsTitle)
             )
           ),
-          chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
           goal > 0
             ? div({ class: "price-chip" }, `${pr.goal} ECO`)
             : null,
@@ -435,7 +430,8 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
             : null,
           div({ class: "tribe-card-members" },
             span({ class: "tribe-members-count" }, `${i18n.projectFollowers}: ${followersCount(pr)}`)
-          )
+          ),
+          null
         )
       )
     })
@@ -602,7 +598,6 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     renderLifespanChip(pr.lifetime, i18n),
     renderEcoTax(pr.msgSize, pr.id || pr.key),
     renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('projects', pr.title, pr.id || pr.key) : null),
-    isAuthor && canClearnet ? renderClearnetSwitch('projects', pr.rootId || pr.id || pr.key, isClearnet) : null,
     pr.subscription
       ? ((isAuthor || pr.subscription.subscribed === true)
           ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
@@ -615,11 +610,11 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     sideActions.push(isFollower
       ? form({ method: "POST", action: `/projects/unfollow/${encodeURIComponent(pr.id)}` },
           input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ type: "submit", class: "unsubscribe-btn" }, i18n.projectUnfollowButton)
+          button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.projectUnfollowButton).toUpperCase())
         )
       : form({ method: "POST", action: `/projects/follow/${encodeURIComponent(pr.id)}` },
           input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ type: "submit", class: "subscribe-btn" }, i18n.projectFollowButton)
+          button({ type: "submit", class: "tribe-action-btn" }, String(i18n.projectFollowButton).toUpperCase())
         )
     )
   }
@@ -648,20 +643,17 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
   }
 
   const projectSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { spread: params.spreads || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, returnTo: `/projects/${encodeURIComponent(pr.id)}`, deleteAction: isAuthor ? contentDeleteAction('project', pr.id || pr.key) : undefined })
-    ),
+    renderCardTop(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { arrow: false, date: pr.createdAt, chips, bylineExtra: [renderEditedChip(pr.id, pr.rootId)], spread: params.spreads || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, returnTo: `/projects/${encodeURIComponent(pr.id)}`, deleteAction: isAuthor ? contentDeleteAction('project', pr.id || pr.key) : undefined }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, pr.title),
-      renderEditedChip(pr.id, pr.rootId)
+      h2({ class: "tribe-card-title" }, pr.title)
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    isAuthor && canClearnet ? renderClearnetSwitch('projects', pr.rootId || pr.id || pr.key, isClearnet) : null,
     pr.image ? renderMediaBlob(pr.image, { class: "tribe-detail-image" }) : null,
+    renderDetailShare(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, pr.title),
     div({ class: "price-chip" }, `${pr.goal || 0} ECO`),
     div({ class: "job-price-line card-salary" }, `${i18n.projectFollowers}: ${followersCount(pr)}`),
     renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
     goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null,
-    table({ class: "tribe-info-table" }, ...renderCreatedRows(pr.createdAt, pr.author)),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     pr.subscription
       ? renderSubscriptionBox({
@@ -696,8 +688,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
         action: `/projects/${encodeURIComponent(pr.id || pr.key)}/comments`,
         comments,
         returnTo: `/projects/${encodeURIComponent(pr.id || pr.key)}`
-      })
-    ),
+      })),
   )
 
   return template(

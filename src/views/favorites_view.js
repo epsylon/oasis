@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, a, span, img } = require("../server/node_modules/hyperaxe");
 
-const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged } = require("./main_views");
+const { template, i18n, renderCardTop, renderModuleStats, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -128,26 +128,26 @@ const renderFavoriteCard = (item, filter, spreadMap = null) => {
 
   const title = safeText(item.title) || safeText(item.name) || safeText(item.category) || safeText(item.url) || "";
 
-  const ts = item.updatedAt || item.createdAt;
-  const absDate = ts ? moment(ts).format("YYYY/MM/DD HH:mm") : "";
+  const updated = item.updatedAt && item.createdAt && moment(item.updatedAt).valueOf() !== moment(item.createdAt).valueOf()
+    ? span({ class: "card-byline-time" }, `${i18n.jobsUpdatedAt}: ${moment(item.updatedAt).format("YYYY/MM/DD HH:mm")}`)
+    : null;
 
   const isOwn = item.author && String(item.author) === String(userId);
   return div(
     { class: "trending-card favorites-card" + (isOwn ? " own-content" : "") },
-    div(
-      { class: "card-header activity-card-header" },
-      div({ class: 'card-chips-row' },
+    renderCardTop(item.favId, item.viewHref, {
+      date: item.createdAt || item.updatedAt,
+      bylineExtra: [updated],
+      chips: [div({ class: 'card-chips-row' },
         span({ class: 'pm-exposition-chip pm-exposition-whole' },
           span({ class: 'pm-exposition-text' }, String(item.kind || '').toUpperCase())
         )
-      ),
-      renderContentActions(item.favId, item.viewHref, {
-        author: item.author,
-        spread: (spreadMap && spreadMap.get(item.favId)) || null,
-        reportTitle: title,
-        ...(TORRENTABLE_KINDS.has(item.kind) && typeof item.url === "string" && item.url.startsWith("&") ? { torrentFrom: { blobId: item.url, name: item.title } } : {})
-      })
-    ),
+      )],
+      author: item.author,
+      spread: (spreadMap && spreadMap.get(item.favId)) || null,
+      reportTitle: title,
+      ...(TORRENTABLE_KINDS.has(item.kind) && typeof item.url === "string" && item.url.startsWith("&") ? { torrentFrom: { blobId: item.url, name: item.title } } : {})
+    }),
     div(
       { class: "card-section favorites-card-body" },
       title ? div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, item.viewHref ? a({ href: item.viewHref }, title) : title)) : null,
@@ -156,11 +156,6 @@ const renderFavoriteCard = (item, filter, spreadMap = null) => {
       safeText(item.description) ? p(...renderStyledText(item.description)) : null,
       renderDetailFields(item),
       renderTags(item.tags),
-      p(
-        { class: "card-footer favorites-meta" },
-        absDate ? span({ class: "date-link" }, `${absDate}`) : "",
-        item.author ? userLink(item.author) : ""
-      ),
       p(
         { class: "card-footer" },
         form(

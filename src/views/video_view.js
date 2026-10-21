@@ -11,7 +11,6 @@ const {
   video: videoHyperaxe,
   span,
   textarea,
-  label,
   select,
   option
 } = require("../server/node_modules/hyperaxe");
@@ -19,7 +18,7 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -88,6 +87,15 @@ const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => 
   });
 };
 
+const renderVideoUpdated = (videoObj) => {
+  const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
+  const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
+  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+  return showUpdated
+    ? span({ class: "votations-comment-date" }, `${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
+    : null;
+};
+
 const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
@@ -95,53 +103,37 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
     ? videos.map((videoObj) => {
         const commentCount = typeof videoObj.commentCount === "number" ? videoObj.commentCount : 0;
         const title = safeText(videoObj.title);
+        const href = `/videos/${encodeURIComponent(videoObj.key)}`;
 
         const isOwn = videoObj.author && String(videoObj.author) === String(userId);
-        const headerActions = typeof params.headerActions === "function"
-          ? params.headerActions(videoObj)
+        const byline = {
+          author: videoObj.author,
+          date: videoObj.createdAt,
+          chips: [
+            videoObj.tribeOrigin ? renderTribeOriginChip(videoObj.tribeOrigin) : videoObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('videos', videoObj.title, videoObj.key)) : null,
+            renderLicenseChip(videoObj.license),
+            ...(typeof params.titleChips === "function" ? params.titleChips(videoObj) : []),
+            renderLifespanChip(videoObj.lifetime, i18n)
+          ],
+          bylineExtra: [renderVideoUpdated(videoObj)]
+        };
+        const header = typeof params.headerActions === "function"
+          ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(videoObj))
           : videoObj.tribeOrigin
-            ? renderContentActions(null, videoObj.tribeOrigin.href)
-            : renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`, { spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads || null, author: videoObj.author, favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title }, isFavorite: videoObj.isFavorite, reportTitle: videoObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('video', videoObj.key) : undefined });
-        const titleHref = typeof params.headerActions === "function" ? null : videoObj.tribeOrigin ? videoObj.tribeOrigin.href : `/videos/${encodeURIComponent(videoObj.key)}`;
-        const engagement = typeof params.engagement === "function"
-          ? params.engagement(videoObj)
-          : videoObj.tribeOrigin ? null : renderEngagement(videoObj.key,
-            renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants),
-            renderCommentsLink({ href: `/videos/${encodeURIComponent(videoObj.key)}`, count: commentCount })
-          );
+            ? renderCardTop(videoObj.key, videoObj.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || null, reportTitle: videoObj.title })
+            : renderCardTop(videoObj.key, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads || null, favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title }, isFavorite: videoObj.isFavorite, reportTitle: videoObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('video', videoObj.key) : undefined });
+        const titleHref = typeof params.headerActions === "function" ? null : videoObj.tribeOrigin ? videoObj.tribeOrigin.href : href;
+        const engagement = typeof params.engagement === "function" ? params.engagement(videoObj) : null;
         return div(
           { class: "trending-card video-card" + (isOwn ? " own-content" : "") },
-          div(
-            { class: "card-header activity-card-header" },
-            span(),
-            headerActions
-          ),
+          header,
           div(
             { class: "card-section video-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title) : null, videoObj.tribeOrigin ? renderTribeOriginChip(videoObj.tribeOrigin) : videoObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('videos', videoObj.title, videoObj.key)) : null, renderLicenseChip(videoObj.license), ...(typeof params.titleChips === "function" ? params.titleChips(videoObj) : [])),
-            videoObj.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(videoObj.lifetime, i18n)) : null,
+            title ? div({ class: "shop-title-row" }, h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title)) : null,
             renderVideoPlayer(videoObj),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(videoObj) : []),
-            engagement,
             renderMapLocationVisitLabel(videoObj.mapUrl),
-            br(),
-            (() => {
-              const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
-              const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
-              const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-              return p(
-                { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
-                userLink(videoObj.author),
-                showUpdated
-                  ? span(
-                      { class: "votations-comment-date" },
-                      ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
-                    )
-                  : null
-              );
-            })()
+            engagement
           )
         );
       })
@@ -301,28 +293,30 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(videoObj.tags);
+  const href = `/videos/${encodeURIComponent(videoObj.key)}`;
 
-  const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(videoObj.key, `/videos/${encodeURIComponent(videoObj.key)}`, {
+  const videoSide = div({ class: "tribe-side" },
+    renderCardTop(videoObj.key, href, { arrow: false,
       author: videoObj.author,
+      date: videoObj.createdAt,
+      chips: [
+        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('videos', videoObj.title, videoObj.key) : null),
+        renderLicenseChip(videoObj.license),
+        ...chips
+      ],
+      bylineExtra: [renderEditedChip(videoObj.key, videoObj.rootId), renderVideoUpdated(videoObj)],
       favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title },
       isFavorite: videoObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
       reportTitle: videoObj.title,
       deleteAction: String(videoObj.author) === String(userId) ? contentDeleteAction('video', videoObj.key) : undefined
-    })
-  );
-
-  const videoSide = div({ class: "tribe-side" },
+    }),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('videos', videoObj.title, videoObj.key) : null),
-      isAuthor ? renderClearnetSwitch('videos', videoObj.rootId || videoObj.key, isClearnet) : null,
-      renderLicenseChip(videoObj.license),
-      renderEditedChip(videoObj.key, videoObj.rootId)
+      isAuthor ? renderClearnetSwitch('videos', videoObj.rootId || videoObj.key, isClearnet) : null
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    renderDetailShare(videoObj.key, href, videoObj.title),
     safeText(videoObj.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(videoObj.description))
       : null,
@@ -332,30 +326,11 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
   );
 
   const videoMain = div({ class: "tribe-main" },
-    detailActions,
     renderVideoPlayer(videoObj),
     videoObj?.url ? renderDownloadButton(blobUrlOf(videoObj.url), videoObj.title || "") : null,
-    (() => {
-      const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
-      const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
-      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-      return p(
-        { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(videoObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
-        userLink(videoObj.author),
-        showUpdated
-          ? span(
-              { class: "votations-comment-date" },
-              ` | ${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
-            )
-          : null
-      );
-    })(),
     renderEngagement(videoObj.key,
       renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants),
-      renderVideoCommentsSection(videoObj.key, comments, returnTo)
-    )
+      renderVideoCommentsSection(videoObj.key, comments, returnTo))
   );
 
   return template(

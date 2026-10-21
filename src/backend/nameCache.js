@@ -17,4 +17,15 @@ const set = (feedId, name, ts) => {
 const has = (feedId) => !!feedId && cache.has(String(feedId))
 const size = () => cache.size
 
-module.exports = { get, set, has, size }
+const images = new Map()
+const NULL_IMAGE_RE = /^&0{43}=\.sha256$/
+
+const image = (feedId) => (feedId && images.get(String(feedId))) || null
+
+const setImage = (feedId, img) => {
+  const link = typeof img === 'string' ? img : (img && typeof img.link === 'string' ? img.link : null)
+  if (!feedId || !link || !link.startsWith('&') || NULL_IMAGE_RE.test(link)) return
+  images.set(String(feedId), link)
+}
+
+module.exports = { get, set, has, size, image, setImage }

@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, textarea, br, a, span, 
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -48,6 +48,15 @@ const renderTags = (tags) => {
     : null;
 };
 
+const renderBookmarkUpdated = (bookmark) => {
+  const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
+  const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
+  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+  return showUpdated
+    ? span({ class: "votations-comment-date" }, `${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm")}`)
+    : null;
+};
+
 const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
@@ -66,53 +75,32 @@ const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filt
           : i18n.noUrl;
 
         const isOwn = bookmark.author && String(bookmark.author) === String(userId);
+        const href = `/bookmarks/${encodeURIComponent(bookmark.id)}`;
         const reachChip = bookmark.tribeOrigin ? renderTribeOriginChip(bookmark.tribeOrigin) : bookmark.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id)) : null;
         const extraChips = typeof params.titleChips === "function" ? params.titleChips(bookmark).filter(Boolean) : [];
-        const headerActions = typeof params.headerActions === "function"
-          ? params.headerActions(bookmark)
+        const byline = {
+          author: bookmark.author,
+          date: bookmark.createdAt,
+          chips: [renderLifespanChip(bookmark.lifetime, i18n), reachChip, ...extraChips],
+          bylineExtra: [renderBookmarkUpdated(bookmark)]
+        };
+        const header = typeof params.headerActions === "function"
+          ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(bookmark))
           : bookmark.tribeOrigin
-            ? renderContentActions(null, bookmark.tribeOrigin.href)
-            : renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, { spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, author: bookmark.author, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title, deleteAction: isOwn ? contentDeleteAction('bookmark', bookmark.id) : undefined, returnTo });
-        const titleHref = typeof params.headerActions === "function" ? null : bookmark.tribeOrigin ? bookmark.tribeOrigin.href : `/bookmarks/${encodeURIComponent(bookmark.id)}`;
-        const engagement = typeof params.engagement === "function"
-          ? params.engagement(bookmark)
-          : bookmark.tribeOrigin ? null : renderEngagement(bookmark.id,
-            renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
-            renderCommentsLink({ href: `/bookmarks/${encodeURIComponent(bookmark.id)}`, count: commentCount })
-          );
+            ? renderCardTop(bookmark.id, bookmark.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || null, reportTitle: bookmark.title || bookmark.url })
+            : renderCardTop(bookmark.id, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title, deleteAction: isOwn ? contentDeleteAction('bookmark', bookmark.id) : undefined, returnTo });
+        const titleHref = typeof params.headerActions === "function" ? null : bookmark.tribeOrigin ? bookmark.tribeOrigin.href : href;
+        const engagement = typeof params.engagement === "function" ? params.engagement(bookmark) : null;
         return div(
           { class: "trending-card bookmark-card" + (isOwn ? " own-content" : "") },
-          div(
-            { class: "card-header activity-card-header" },
-            span(),
-            headerActions
-          ),
+          header,
           div(
             { class: "card-section bookmark-card-body" },
             h2({ class: "bookmark-title" }, titleHref ? a({ href: titleHref, class: "card-title-link" }, bookmark.title || bookmark.url || "") : (bookmark.url ? urlLink : (bookmark.title || ""))),
-            bookmark.lifetime || reachChip || extraChips.length ? div({ class: "card-chips-row" }, renderLifespanChip(bookmark.lifetime, i18n), reachChip, ...extraChips) : null,
             titleHref ? (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null) : (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null),
             params.hideLastVisit ? null : renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(bookmark) : []),
-            br,
-            engagement,
-            (() => {
-              const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
-              const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
-              const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-              return p(
-                { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm")}`),
-                userLink(bookmark.author),
-                showUpdated
-                  ? span(
-                      { class: "votations-comment-date" },
-                      ` | ${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm")}`
-                    )
-                  : null
-              );
-            })()
+            engagement
           )
         );
       })
@@ -297,28 +285,30 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   }
 
   const tagsNode = renderTags(bookmark.tags);
+  const href = `/bookmarks/${encodeURIComponent(bookmark.id)}`;
 
-  const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(bookmark.id, `/bookmarks/${encodeURIComponent(bookmark.id)}`, {
+  const bookmarkSide = div({ class: "tribe-side" },
+    renderCardTop(bookmark.id, href, { arrow: false,
       author: bookmark.author,
+      date: bookmark.createdAt,
+      chips: [
+        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id) : null),
+        ...chips
+      ],
+      bylineExtra: [renderEditedChip(bookmark.id, bookmark.rootId), renderBookmarkUpdated(bookmark)],
       favKind: 'bookmarks',
       isFavorite: bookmark.isFavorite,
       spread: params.spreads || null,
       returnTo,
       reportTitle: bookmark.title,
       deleteAction: isAuthor ? contentDeleteAction('bookmark', bookmark.id) : undefined
-    })
-  );
-
-  const bookmarkSide = div({ class: "tribe-side" },
+    }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, bookmark.title || urlLink || ""),
-      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id) : null),
-      renderEditedChip(bookmark.id, bookmark.rootId)
+      h2({ class: "tribe-card-title" }, bookmark.title || urlLink || "")
     ),
+    renderDetailShare(bookmark.id, href, bookmark.title),
     isAuthor ? renderClearnetSwitch("bookmarks", bookmark.rootId || bookmark.id, isClearnet) : null,
     bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null,
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
     safeText(bookmark.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(bookmark.description))
       : null,
@@ -327,28 +317,10 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   );
 
   const bookmarkMain = div({ class: "tribe-main" },
-    detailActions,
     renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
-    (() => {
-      const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
-      const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
-      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-      return p(
-        { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(bookmark.createdAt).format("YYYY/MM/DD HH:mm")}`),
-        userLink(bookmark.author),
-        showUpdated
-          ? span(
-              { class: "votations-comment-date" },
-              ` | ${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm")}`
-            )
-          : null
-      );
-    })(),
     renderEngagement(bookmark.id,
       renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
-      renderBookmarkCommentsSection(bookmark.id, bookmark.rootId, comments, returnTo)
-    )
+      renderBookmarkCommentsSection(bookmark.id, bookmark.rootId, comments, returnTo))
   );
 
   return template(

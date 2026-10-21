@@ -6,7 +6,7 @@ const { readContentWindow, requestScope, logTip } = require('./typed_log');
 const { versionGroups, versionEntry } = require('../backend/dedupe');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
+module.exports = ({ cooler, cryptoModel, tribesModel }) => {
   let ssb;
 
   const openSsb = async () => {
@@ -40,9 +40,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     } catch (_) {}
     return set;
   };
-
-  const hasBlob = async (ssbClient, url) =>
-    new Promise(resolve => ssbClient.blobs.has(url, (err, has) => resolve(!err && has)));
 
   const isReplacedBlock = (vg, tombstoned, block) => {
     const c = block.content;
@@ -142,7 +139,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     const idToBlock = new Map();
     const versions = [];
 
-    const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+    const fpIdx = cryptoModel ? cryptoModel.buildFingerprintIndex() : null;
     const accessibleTribeIds = await buildAccessibleTribeIds();
     for (const msg of results) {
       const k = msg.key;
@@ -157,8 +154,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       }
       if (!c?.type) continue;
       if (HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
-      if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
-        const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+      if (cryptoModel && cryptoModel.isSealedMsg(c)) {
+        const r = fpIdx ? cryptoModel.unwrapMsg(c, fpIdx) : null;
         if (!r || !r.body) continue;
         const inner = r.body;
         const innerType = inner.k === 'tribe' ? 'tribe' : (inner.k === 'tribe-content' ? `tribe-content:${inner.contentType || ''}` : inner.k || 'tribe-msg');
@@ -264,7 +261,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const tombstoned = buildValidatedTombstoneSet(results);
       const idToBlock = new Map();
       const versions = [];
-      const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+      const fpIdx = cryptoModel ? cryptoModel.buildFingerprintIndex() : null;
       const accessibleTribeIds = await buildAccessibleTribeIds();
 
       for (const msg of results) {
@@ -280,8 +277,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         }
         if (!c?.type) continue;
         if (HIDDEN_ENVELOPE_TYPES.has(c.type)) continue;
-        if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
-          const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+        if (cryptoModel && cryptoModel.isSealedMsg(c)) {
+          const r = fpIdx ? cryptoModel.unwrapMsg(c, fpIdx) : null;
           if (!r || !r.body) continue;
           const inner = r.body;
           const innerType = inner.k === 'tribe' ? 'tribe' : (inner.k === 'tribe-content' ? `tribe-content:${inner.contentType || ''}` : inner.k || 'tribe-msg');
@@ -299,11 +296,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
       const block = idToBlock.get(id);
       if (!block) return null;
-
-      if (block.type === 'document') {
-        const valid = await hasBlob(ssbClient, block.content.url);
-        if (!valid) return null;
-      }
 
       const isTombstoned = tombstoned.has(block.id);
       const isReplaced = isReplacedBlock(versionGroups(versions), tombstoned, block);

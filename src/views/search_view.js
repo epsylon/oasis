@@ -1,6 +1,6 @@
-const { form, button, div, h2, p, section, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, hr, hd, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, p, section, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel, renderPdfDocument } = require('./main_views');
+const { template, i18n, userLink, renderCardTop, renderShareButton, renderCommentsPill, renderOpinionsPill, renderCardMetaRow, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel, renderPdfDocument } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -622,7 +622,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     }
   };
 
-  const typeLabel = (type) => String((type === 'comment' ? i18n.comment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)]) || type || '').toUpperCase();
+  const typeLabel = (type) => String((type === 'comment' ? i18n.typeComment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)]) || type || '').toUpperCase();
   const totalResults = Object.values(results).reduce((n, msgs) => n + (Array.isArray(msgs) ? msgs.length : 0), 0);
   const resultStats = renderModuleStats(totalResults,
     Object.entries(results)
@@ -636,68 +636,43 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         { class: "search-result-group" },
         ...msgs.map((msg) => {
           const content = msg.value.content || {};
-          const created = moment(msg.timestamp).format("YYYY/MM/DD HH:mm");
           const contentHtml = renderContentHtml(content);
-          let author;
-          let authorUrl = '#';
-          if (content.type === 'market') {
-            author = content.seller || i18n.anonymous || "Anonymous";
-            authorUrl = `/author/${encodeURIComponent(content.seller)}`;
-          } else if (content.type === 'event') {
-            author = content.organizer || i18n.anonymous || "Anonymous";
-            authorUrl = `/author/${encodeURIComponent(content.organizer)}`;
-          } else if (content.type === 'transfer') {
-            author = content.from || i18n.anonymous || "Anonymous";
-            authorUrl = `/author/${encodeURIComponent(content.from)}`;
-          } else if (content.type === 'post' || content.type === 'about') {
-            author = msg.value.author || i18n.anonymous || "Anonymous";
-            authorUrl = `/author/${encodeURIComponent(msg.value.author)}`;
-          } else if (content.type === 'report') {
-            author = content.author || i18n.anonymous || "Anonymous";
-            authorUrl = `/author/${encodeURIComponent(content.author || 'Anonymous')}`;
-          } else if (content.type === 'votes') {
-            author = content.createdBy || i18n.anonymous || "Anonymous";
-            authorUrl = `/author/${encodeURIComponent(content.createdBy || 'Anonymous')}`;
-          } else if (content.type === 'shop' || content.type === 'shopProduct' || content.type === 'chat' || content.type === 'gameScore') {
-            author = content.author || content.player || msg.value.author || i18n.anonymous || "Anonymous";
-            authorUrl = `/author/${encodeURIComponent(content.author || content.player || msg.value.author || 'Anonymous')}`;
-          } else {
-            author = content.author;
-            authorUrl = `/author/${encodeURIComponent(content.author || 'Anonymous')}`;
-          }
+          const bylineAuthor = content.type === 'market' ? content.seller
+            : content.type === 'event' ? content.organizer
+            : content.type === 'transfer' ? content.from
+            : content.type === 'post' || content.type === 'about' ? msg.value.author
+            : content.type === 'votes' ? content.createdBy
+            : content.type === 'shop' || content.type === 'shopProduct' || content.type === 'chat' || content.type === 'gameScore' ? (content.author || content.player || msg.value.author)
+            : content.author;
 
           const contentId = msg.key;
           const isOwn = msg.value.author && String(msg.value.author) === String(userId);
+          const viewHref = getViewDetailsActionForSearch(content.type, contentId, content);
+          const shareTitle = content.title || content.question || content.concept || '';
 
           return div({ class: 'trending-card search-card' + (isOwn ? ' own-content' : '') }, [
-            div({ class: 'card-header activity-card-header' },
-              div({ class: 'card-chips-row' },
+            renderCardTop(contentId, viewHref, {
+              date: msg.timestamp || msg.value.timestamp,
+              bylineAuthor: typeof bylineAuthor === 'string' && bylineAuthor.startsWith('@') ? bylineAuthor : undefined,
+              chips: [div({ class: 'card-chips-row' },
                 span({ class: 'pm-exposition-chip pm-exposition-whole' },
                   span({ class: 'pm-exposition-text' }, String(i18n['type' + String(content.type || '').charAt(0).toUpperCase() + String(content.type || '').slice(1)] || content.type || '').toUpperCase())
                 )
-              ),
-              renderContentActions(contentId, getViewDetailsActionForSearch(content.type, contentId, content), {
-                author: msg.value.author,
-                reportTitle: content.title || content.question || content.concept || '',
-                spread: CONTENT_SPREADABLE.has(content.type) ? ((spreadMap instanceof Map && spreadMap.get(contentId)) || null) : undefined,
-                ...(CONTENT_TORRENTABLE.has(content.type) && typeof content.url === 'string' && content.url.startsWith('&')
-                  ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
-                  : {}),
-                ...(key !== 'comment' && CONTENT_FAV_KIND[content.type]
-                  ? { favKind: CONTENT_FAV_KIND[content.type], isFavorite: favIndex instanceof Map ? favIndex.get(String(contentId)) === CONTENT_FAV_KIND[content.type] : false, returnTo: `/search?query=${encodeURIComponent(hashtag ? `#${hashtag}` : String(query || ''))}` }
-                  : {})
-              })
-            ),
+              )],
+              author: msg.value.author,
+              reportTitle: shareTitle,
+              spread: CONTENT_SPREADABLE.has(content.type) ? ((spreadMap instanceof Map && spreadMap.get(contentId)) || null) : undefined,
+              ...(CONTENT_TORRENTABLE.has(content.type) && typeof content.url === 'string' && content.url.startsWith('&')
+                ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
+                : {}),
+              ...(key !== 'comment' && CONTENT_FAV_KIND[content.type]
+                ? { favKind: CONTENT_FAV_KIND[content.type], isFavorite: favIndex instanceof Map ? favIndex.get(String(contentId)) === CONTENT_FAV_KIND[content.type] : false, returnTo: `/search?query=${encodeURIComponent(hashtag ? `#${hashtag}` : String(query || ''))}` }
+                : {})
+            }),
             div({ class: 'card-section search-card-body' },
-              contentHtml,
-              author
-                ? p({ class: 'card-footer' },
-                 span({ class: 'date-link' }, `${created}`),
-                 (authorUrl && authorUrl !== '#' && authorUrl.startsWith('/author/'))
-                   ? userLink(decodeURIComponent(authorUrl.replace(/^\/author\//, '')))
-                   : a({ href: authorUrl, class: 'user-link' }, `${author}`)
-              ): null
-            )
+              contentHtml
+            ),
+            renderCardMetaRow(renderOpinionsPill(contentId, viewHref), renderCommentsPill(contentId, viewHref), renderShareButton(contentId, viewHref, shareTitle))
           ]);
         })
       )

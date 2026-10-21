@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, paged, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor } = require('./main_views');
+const { template, i18n, paged, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 const { roomNumberOf } = require('../models/phone_number');
 
@@ -257,12 +257,15 @@ const renderTribeOpenedCard = (action, date, authorName) => {
     : null;
   const bookmarkHref = c.mediaType === 'bookmark' ? safeExternalHref(c.url) : '';
   return div({ class: 'trending-card' },
-    div({ class: 'card-header activity-card-header' },
-      div({ class: 'card-chips-row' },
+    renderCardTop(null, origin.href, {
+      author: action.author,
+      authorName,
+      date: action.ts,
+      chips: [div({ class: 'card-chips-row' },
         span({ class: 'pm-exposition-chip pm-exposition-whole' }, span({ class: 'pm-exposition-text' }, label)),
         renderTribeOriginChip(origin)
-      )
-    ),
+      )]
+    }),
     div({ class: 'card-section' },
       c.title ? h2(origin.href ? a({ href: origin.href }, c.title) : c.title) : null,
       c.description ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(String(c.description).slice(0, 600))) : null,
@@ -270,10 +273,7 @@ const renderTribeOpenedCard = (action, date, authorName) => {
       media,
       bookmarkHref ? a({ href: bookmarkHref, target: '_blank', rel: 'noopener noreferrer' }, c.url) : null
     ),
-    p({ class: 'card-footer' },
-      span({ class: 'date-link' }, `${date}`),
-      userLink(action.author, authorName)
-    )
+    origin.href ? renderCardMetaRow(renderShareButton(safeMsgId(action.id || action.key), origin.href, c.title || '')) : null
   );
 };
 
@@ -420,7 +420,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const commentCount =
         typeof action.commentCount === 'number'
           ? action.commentCount
-          : (typeof content.commentCount === 'number' ? content.commentCount : 0);
+          : (typeof content.commentCount === 'number' ? content.commentCount : commentCountFor([action.id, action.rootId, action.key]));
 
       const votesList = votes && typeof votes === 'object'
         ? Object.entries(votes).map(([option, count]) => ({ option, count }))
@@ -520,7 +520,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             img({ src: `/assets/larp/images/${encodeURIComponent(String(house).toLowerCase())}.jpg`, alt: house, class: 'larp-house-mini' }),
             span(`L.A.R.P · ${String(house).toUpperCase()}`)
           ) : null,
-          text ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(String(text))) : null
+          text ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(String(text), { zoomImages: true })) : null
         )
       );
     }
@@ -812,7 +812,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
        bodyNode = div({ class: 'feed-text post-text post-text-clamped', [RAW_HTML]: sanitizeHtml(linkified) });
       } else {
         bodyNode = div({ class: 'feed-text' },
-          p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderStyledText(displayText))
+          p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderStyledText(displayText, { zoomImages: true }))
         );
       }
       const threadId = getThreadIdFromPost(action);
@@ -854,7 +854,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         const isBlogThread = rootType === 'post';
         const baseHref = c.rootHref || `/blogs/${encodeURIComponent(threadId)}`;
         const href = isBlogThread || baseHref.includes('comments=open') ? baseHref : `${baseHref}${baseHref.includes('?') ? '&' : '?'}comments=open#comments-latest`;
-        const threadLabel = rootType === 'comment' ? (i18n.comment || 'Comment') : rootTypeLabel(rootType);
+        const threadLabel = rootType === 'comment' ? i18n.typeComment : `${rootTypeLabel(rootType)} · ${i18n.typeComment}`;
         const root = c.root;
         const replies = Array.isArray(c.replies) ? c.replies : [];
         const repliesAsc = replies.slice().sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -864,19 +864,20 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           ? (titleSource.length > 90 ? `${titleSource.slice(0, 90)}…` : titleSource)
           : threadId;
         return div({ class: 'trending-card post-thread' + (String(action.author) === String(userId) ? ' own-content' : '') },
-            div({ class: 'card-header activity-card-header' },
-                div({ class: 'card-chips-row' },
+            renderCardTop(threadId, baseHref, {
+                bylineAuthor: action.author,
+                authorName: action.authorNames && action.authorNames[action.author],
+                date: action.ts,
+                chips: [div({ class: 'card-chips-row' },
                     span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                        span({ class: 'pm-exposition-text' }, `${String(threadLabel).toUpperCase()} · ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
+                        span({ class: 'pm-exposition-text' }, String(threadLabel).toUpperCase())
                     )
-                ),
-                renderContentActions(threadId, baseHref, {
-                  author: c.rootAuthor || (root && root.author) || action.author,
-                  reportTitle: titleText,
-                  spread: spreadMap.get(threadId) || null,
-                  ...favOptsFor(rootType, threadId, extras)
-                })
-            ),
+                )],
+                author: c.rootAuthor || (root && root.author) || action.author,
+                reportTitle: titleText,
+                spread: spreadMap.get(threadId) || null,
+                ...favOptsFor(rootType, threadId, extras)
+            }),
             div({ class: 'card-body' },
                 div({ class: 'card-section' },
                     div({ class: 'card-field activity-update-title' },
@@ -885,15 +886,12 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                     ),
                     latest && latest.text
                         ? div({ class: 'feed-text activity-update-msg' },
-                            p({ class: 'post-text post-text-pre' }, ...renderStyledText(latest.text))
+                            p({ class: 'post-text post-text-pre' }, ...renderStyledText(latest.text, { zoomImages: true }))
                           )
                         : ''
                 )
             ),
-            p({ class: 'card-footer' },
-                span({ class: 'date-link' }, `${action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : ''}`),
-                userLink(action.author, action.authorNames && action.authorNames[action.author])
-            )
+            renderCardMetaRow(renderShareButton(threadId, baseHref, titleText))
         );
     }
 
@@ -908,19 +906,20 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         const limit = 2;
         const show = repliesAsc.slice(Math.max(0, repliesAsc.length - limit));
         return div({ class: 'trending-card post-thread chat-thread' + (String(action.author) === String(userId) ? ' own-content' : '') },
-            div({ class: 'card-header activity-card-header' },
-                div({ class: 'card-chips-row' },
+            renderCardTop(chatRoot, href, {
+                bylineAuthor: action.author,
+                authorName: action.authorNames && action.authorNames[action.author],
+                date: action.ts,
+                chips: [div({ class: 'card-chips-row' },
                     span({ class: 'pm-exposition-chip pm-exposition-whole' },
                         span({ class: 'pm-exposition-text' }, `${String(i18n.typeChat || 'CHAT').toUpperCase()} \u00b7 ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
                     )
-                ),
-                renderContentActions(chatRoot, href, {
-                  author: c.chatAuthor || action.author,
-                  reportTitle: chatTitle,
-                  spread: spreadMap.get(chatRoot) || null,
-                  ...favOptsFor('chat', chatRoot, extras)
-                })
-            ),
+                )],
+                author: c.chatAuthor || action.author,
+                reportTitle: chatTitle,
+                spread: spreadMap.get(chatRoot) || null,
+                ...favOptsFor('chat', chatRoot, extras)
+            }),
             div({ class: 'card-body' },
                 div({ class: 'card-section chat' },
                     div({ class: 'card-field activity-update-title' },
@@ -945,7 +944,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                                       : renderZoomableImage(attSrc, { imgClass: 'post-image' }))
                             : renderMediaBlob(latest.image);
                         const textNode = latest.text
-                            ? p({ class: 'post-text post-text-pre' }, ...(latest.poll ? [span({ class: 'card-label' }, `${String(i18n.pollInChat || 'Poll').toUpperCase()}: `)] : []), ...renderStyledText(latest.text))
+                            ? p({ class: 'post-text post-text-pre' }, ...(latest.poll ? [span({ class: 'card-label' }, `${String(i18n.pollInChat || 'Poll').toUpperCase()}: `)] : []), ...renderStyledText(latest.text, { zoomImages: true }))
                             : null;
                         const quoted = latest.reply || null;
                         const replyNode = quoted
@@ -963,10 +962,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                     })()
                 )
             ),
-            p({ class: 'card-footer' },
-                span({ class: 'date-link' }, `${action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : ''}`),
-                userLink(action.author, action.authorNames && action.authorNames[action.author])
-            )
+            renderCardMetaRow(renderShareButton(chatRoot, href, chatTitle))
         );
     }
 
@@ -1005,7 +1001,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
               parentTitle ? p({ class: 'post-text reply-context-text' }, parentTitle) : ''
             ),
             div({ class: 'card-field forum-reply-body' },
-              p({ class: 'forum-reply-text' }, ...renderStyledText(text))
+              p({ class: 'forum-reply-text' }, ...renderStyledText(text, { zoomImages: true }))
             )
           )
         );
@@ -1048,7 +1044,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       spreadTitle ? h2({ class: 'post-title activity-spread-title' }, spreadTitle) : '',
       spreadContentWarning ? h2({ class: 'content-warning' }, spreadContentWarning) : '',
       spreadExcerpt
-        ? div({ class: 'post-text activity-spread-text post-text-pre activity-spread-clamped' }, ...renderStyledText(spreadExcerpt))
+        ? div({ class: 'post-text activity-spread-text post-text-pre activity-spread-clamped' }, ...renderStyledText(spreadExcerpt, { zoomImages: true }))
         : div({ class: 'post-text activity-spread-text activity-spread-missing' }, i18n.spreadContentUnavailable || 'Content not yet available (pending replication)'),
       spreadOriginalAuthor
         ? div({ class: 'card-field' },
@@ -1523,19 +1519,20 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           .replace('%ACTION%', () => `<strong>${escapeHtml(actionWord)}</strong>`);
 
         return div({ class: 'card card-rpg' },
-          div({ class: 'card-header' },
-            h2({ class: 'card-label' }, `[${(i18n.typeProject || 'PROJECT').toUpperCase()}]`),
-            form({ method: "GET", action: `/projects/${encodeURIComponent(action.tipId || action.id)}` },
-              button({ type: "submit", class: "filter-btn" }, i18n.viewDetails)
-            )
-          ),
+          renderCardTop(null, `/projects/${encodeURIComponent(action.tipId || action.id)}`, {
+            author: action.author,
+            authorName: action.authorNames && action.authorNames[action.author],
+            date: action.ts,
+            chips: [div({ class: 'card-chips-row' },
+              span({ class: 'pm-exposition-chip pm-exposition-whole' },
+                span({ class: 'pm-exposition-text' }, (i18n.typeProject || 'PROJECT').toUpperCase())
+              )
+            )]
+          }),
           div(
             p({ [RAW_HTML]: sanitizeHtml(msgHtml) })
           ),
-          p({ class: 'card-footer' },
-            span({ class: 'date-link' }, `${action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : ''}`),
-            userLink(action.author, action.authorNames && action.authorNames[action.author])
-          )
+          renderEngagement(safeMsgId(action.tipId || action.id), null, null, { href: `/projects/${encodeURIComponent(action.tipId || action.id)}`, title: title || '' })
         );
       }
 
@@ -1876,52 +1873,39 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       : null;
     const msgId = safeMsgId(action.tipId || action.id || action.key);
     const isOwn = action.author && String(action.author) === String(userId);
+    const bylineAuthorId = action.author || (content && content.proposer) || '';
     return div({ class: 'trending-card' + (isOwn ? ' own-content' : '') },
-      div({ class: 'card-header activity-card-header' },
-        div({ class: 'card-chips-row' },
+      renderCardTop(msgId, detailHref, {
+        date: action.ts,
+        authorName: (action.authorNames && action.authorNames[bylineAuthorId]) || getProfile(bylineAuthorId).name,
+        chips: [div({ class: 'card-chips-row' },
           span({ class: 'pm-exposition-chip pm-exposition-whole' },
             span({ class: 'pm-exposition-text' }, String(headerText || type || '').replace(/^\[|\]$/g, ''))
           )
-        ),
-        renderContentActions(msgId, detailHref, {
-          author: action.author,
-          contact: type === 'about',
-          reportTitle: (content && (content.title || content.question || content.concept || content.name)) || '',
-          spread: SPREADABLE_TYPES.has(type) ? (spreadMap.get(action.id) || null) : undefined,
-          ...(type === 'torrent' || type === 'file' ? { spreadTitle: i18n.seedAction } : {}),
-          ...(TORRENTABLE_TYPES.has(type) && content && typeof content.url === 'string' && content.url.startsWith('&')
-            ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
-            : {}),
-          ...(commentOf(action) ? {} : favOptsFor(type, msgId, extras)),
-          deleteAction: isOwn ? (commentOf(action) ? `/comments/delete/${encodeURIComponent(msgId)}` : activityDeleteAction(type, action, content, msgId, userId)) : undefined
-        })
-      ),
+        )],
+        author: bylineAuthorId,
+        contact: type === 'about',
+        reportTitle: (content && (content.title || content.question || content.concept || content.name)) || '',
+        spread: SPREADABLE_TYPES.has(type) ? (spreadMap.get(action.id) || null) : undefined,
+        ...(type === 'torrent' || type === 'file' ? { spreadTitle: i18n.seedAction } : {}),
+        ...(TORRENTABLE_TYPES.has(type) && content && typeof content.url === 'string' && content.url.startsWith('&')
+          ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
+          : {}),
+        ...(commentOf(action) ? {} : favOptsFor(type, msgId, extras)),
+        deleteAction: isOwn ? (commentOf(action) ? `/comments/delete/${encodeURIComponent(msgId)}` : activityDeleteAction(type, action, content, msgId, userId)) : undefined
+      }),
       ...cardBody,
       (() => {
-        const footerAuthorId = action.author || (content && content.proposer) || '';
-        const footerNode = p({ class: 'card-footer' },
-          span({ class: 'date-link' }, `${date}`),
-          userLink(footerAuthorId, (action.authorNames && action.authorNames[footerAuthorId]) || getProfile(footerAuthorId).name)
-        );
-        const commentTotal = Number(action.commentCount) || 0;
-        const commentsHref = !detailHref ? '' : commentOf(action) ? detailHref
-          : `${detailHref}${detailHref.includes('?') ? '&' : '?'}comments=open${commentTotal ? '#comments-latest' : ''}`;
-        const commentsNode = detailHref && type !== 'about'
-          ? a({
-              href: commentsHref,
-              class: commentTotal ? 'comments-summary-link engage-on' : 'comments-summary-link',
-              title: i18n.commentsGoToLast || i18n.voteNewCommentLabel || 'Comments'
-            },
-              span({ class: 'comments-summary-icon' }, '✑'),
-              span({ class: 'comments-summary-count' }, `(${commentTotal})`)
-            )
-          : null;
+        const shareNode = detailHref ? renderShareButton(msgId, detailHref, (content && (content.title || content.question || content.concept || content.name)) || '') : null;
+        const commentTotal = typeof action.commentCount === 'number' ? action.commentCount : commentCountFor([action.id, action.rootId, action.key, msgId]);
+        const commentsHref = !detailHref ? '' : commentOf(action) ? detailHref : commentsOpenHref(detailHref, commentTotal);
+        const commentsNode = type !== 'about' ? renderCommentsSummary(commentsHref, commentTotal) : null;
         const routeFn = OPINION_TYPES.has(type) ? OPINION_ROUTES[type] : null;
-        if (!routeFn) return commentsNode ? [renderCardMetaRow(commentsNode, footerNode)] : footerNode;
+        if (!routeFn) return renderCardMetaRow(type !== 'about' && detailHref ? renderOpinionsPill(msgId, detailHref) : null, commentsNode, shareNode);
         const ops = (action.value?.content?.opinions) || (action.content?.opinions) || {};
         const opsTotal = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
         const votingNode = details({ class: 'opinions-voting-collapse' },
-          summary({ class: 'opinions-summary' },
+          summary({ class: opsTotal > 0 ? 'opinions-summary engage-on' : 'opinions-summary' },
             span({ class: 'opinions-summary-icon' }, 'ꔍ'),
             span({ class: 'opinions-summary-count' }, `(${opsTotal})`)),
           div({ class: 'voting-buttons' },
@@ -1932,7 +1916,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             )
           )
         );
-        return [renderVotesSummary(ops), renderCardMetaRow(votingNode, commentsNode, footerNode)];
+        return [renderVotesSummary(ops), renderCardMetaRow(votingNode, commentsNode, shareNode)];
       })()
     );
   });
@@ -2011,7 +1995,7 @@ function rootTypeLabel(rt) {
 
 function commentLabel(comment) {
   const base = rootTypeLabel(comment && comment.rootType);
-  const word = i18n.comment || 'Comment';
+  const word = i18n.typeComment;
   return base ? `${base} · ${word}` : word;
 }
 

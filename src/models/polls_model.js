@@ -36,7 +36,7 @@ const normalizeTags = (raw) => {
   return list.map(t => clean(t)).filter(Boolean).slice(0, 20);
 };
 
-module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = null }) => {
+module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -45,10 +45,10 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
   const getAllMessages = async (ssbClient) => readTyped(ssbClient, POLLS_TYPES, { limit: logLimit });
 
   const decryptField = (value, keys) => {
-    if (!tribeCrypto || typeof value !== 'string' || !value) return null;
+    if (!cryptoModel || typeof value !== 'string' || !value) return null;
     for (const k of keys) {
       try {
-        const out = tribeCrypto.decryptWithKey(value, k);
+        const out = cryptoModel.decryptWithKey(value, k);
         if (typeof out === 'string' && out) return out;
       } catch (_) {}
     }
@@ -313,9 +313,9 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
         ...(data.houseKey ? { houseKey: String(data.houseKey) } : {})
       };
       const key = await scopeKey({ chatId: data.chatId, tribeId: data.tribeId });
-      if (key && tribeCrypto) {
-        content.encryptedQuestion = tribeCrypto.encryptWithKey(question, key);
-        content.encryptedOptions = tribeCrypto.encryptWithKey(JSON.stringify(options), key);
+      if (key && cryptoModel) {
+        content.encryptedQuestion = cryptoModel.encryptWithKey(question, key);
+        content.encryptedOptions = cryptoModel.encryptWithKey(JSON.stringify(options), key);
       } else {
         content.question = question;
         content.options = options;
@@ -358,9 +358,9 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
         ...(poll.houseKey ? { houseKey: poll.houseKey } : {})
       };
       const key = await scopeKey({ chatId: poll.chatId, tribeId: poll.tribeId });
-      if (key && tribeCrypto) {
-        content.encryptedQuestion = tribeCrypto.encryptWithKey(question, key);
-        content.encryptedOptions = tribeCrypto.encryptWithKey(JSON.stringify(options), key);
+      if (key && cryptoModel) {
+        content.encryptedQuestion = cryptoModel.encryptWithKey(question, key);
+        content.encryptedOptions = cryptoModel.encryptWithKey(JSON.stringify(options), key);
       } else {
         content.question = question;
         content.options = options;
@@ -388,7 +388,7 @@ module.exports = ({ cooler, isPublic = false, tribeCrypto = null, chatsModel = n
         ...(poll.chatId ? { chatId: poll.chatId } : {})
       };
       const key = await scopeKey({ chatId: poll.chatId, tribeId: poll.tribeId });
-      if (key && tribeCrypto) content.encryptedChoices = tribeCrypto.encryptWithKey(JSON.stringify(unique), key);
+      if (key && cryptoModel) content.encryptedChoices = cryptoModel.encryptWithKey(JSON.stringify(unique), key);
       else content.choices = unique;
       return new Promise((res, rej) => ssbClient.publish(content, (err, msg) => err ? rej(err) : res(msg)));
     },

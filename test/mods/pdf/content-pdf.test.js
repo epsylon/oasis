@@ -8,7 +8,6 @@ const SAMPLES = {
   reports: [{
     id: '%report.sha256', title: 'Broken map tiles', category: 'BUGS', severity: 'high', status: 'OPEN',
     description: 'The tiles never load', tags: ['maps', 'ui'],
-    template: { stepsToReproduce: 'open the map', environment: 'firefox' },
     confirmations: ['@peer.ed25519'], opinions: { interesting: 2 },
     author: '@me.ed25519', createdAt: '2026-01-01T10:00:00Z'
   }, {}],
@@ -129,12 +128,12 @@ describe('pdf: content documents', (t) => {
     notOk(isSupported('secrets'), 'unknown kind is not supported');
   });
 
-  t('the report body carries its classification, template and confirmations', () => {
+  t('the report body carries its classification, description and confirmations', () => {
     const [item] = SAMPLES.reports;
     const text = asText(buildContentPdf('reports', item, {}, '@me.ed25519'));
     ok(text.includes('Broken map tiles'), 'title present');
     ok(text.includes('Severity: HIGH'), 'severity present');
-    ok(text.includes('Steps To Reproduce: open the map'), 'template field humanized');
+    ok(text.includes('The tiles never load'), 'description present');
     ok(text.includes('Confirmed by: @peer.ed25519'), 'confirmation listed');
   });
 

@@ -5,7 +5,7 @@ const verbose = process.argv.includes('--verbose') || process.env.OASIS_DEBUG ==
 const log = (msg) => { if (verbose) console.log(`[OASIS] [PATCH] ${msg}`); };
 
 // === Patch ssb-ref ===
-const ssbRefPath = path.resolve(__dirname, '../src/server/node_modules/ssb-ref/index.js');
+const ssbRefPath = path.resolve(__dirname, '../server/node_modules/ssb-ref/index.js');
 if (fs.existsSync(ssbRefPath)) {
   const data = fs.readFileSync(ssbRefPath, 'utf8');
   const alreadyClean = /exports\.parseAddress\s*=\s*parseAddress/.test(data);
@@ -26,7 +26,7 @@ if (fs.existsSync(ssbRefPath)) {
 }
 
 // === Patch ssb-blobs ===
-const ssbBlobsPath = path.resolve(__dirname, '../src/server/node_modules/ssb-blobs/inject.js');
+const ssbBlobsPath = path.resolve(__dirname, '../server/node_modules/ssb-blobs/inject.js');
 if (fs.existsSync(ssbBlobsPath)) {
   let data = fs.readFileSync(ssbBlobsPath, 'utf8');
 
@@ -82,7 +82,7 @@ if (fs.existsSync(ssbBlobsPath)) {
 }
 
 // === Patch ssb-db2 (onceWhen leaks its listener when the condition already holds) ===
-const ssbDb2UtilsPath = path.resolve(__dirname, '../src/server/node_modules/ssb-db2/utils.js');
+const ssbDb2UtilsPath = path.resolve(__dirname, '../server/node_modules/ssb-db2/utils.js');
 if (fs.existsSync(ssbDb2UtilsPath)) {
   const data = fs.readFileSync(ssbDb2UtilsPath, 'utf8');
   if (!data.includes('answered = true\n    cb()\n    return false')) {
@@ -110,7 +110,7 @@ if (fs.existsSync(ssbDb2UtilsPath)) {
   log('ssb-db2 patch skipped: file not found');
 }
 
-const ssbDb2PluginPath = path.resolve(__dirname, '../src/server/node_modules/ssb-db2/indexes/plugin.js');
+const ssbDb2PluginPath = path.resolve(__dirname, '../server/node_modules/ssb-db2/indexes/plugin.js');
 if (fs.existsSync(ssbDb2PluginPath)) {
   const data = fs.readFileSync(ssbDb2PluginPath, 'utf8');
   const target = `    this.onRecord = function onRecord(record, isLive, pValue) {`;
@@ -126,7 +126,7 @@ if (fs.existsSync(ssbDb2PluginPath)) {
 }
 
 // === Patch @xenova/transformers (onnxruntime 1.19 Tensor getter) ===
-const xenovaTensorPath = path.resolve(__dirname, '../src/AI/node_modules/@xenova/transformers/src/utils/tensor.js');
+const xenovaTensorPath = path.resolve(__dirname, '../AI/node_modules/@xenova/transformers/src/utils/tensor.js');
 if (fs.existsSync(xenovaTensorPath)) {
   let data = fs.readFileSync(xenovaTensorPath, 'utf8');
   if (!data.includes('this.data = args[0].data')) {
@@ -151,7 +151,7 @@ if (fs.existsSync(xenovaTensorPath)) {
 }
 
 // === Patch ssb-conn (the scheduler prefers up-to-date peers that replicate what we follow) ===
-const connSchedulerPath = path.resolve(__dirname, '../src/server/node_modules/ssb-conn/lib/conn-scheduler.js');
+const connSchedulerPath = path.resolve(__dirname, '../server/node_modules/ssb-conn/lib/conn-scheduler.js');
 if (fs.existsSync(connSchedulerPath)) {
   const data = fs.readFileSync(connSchedulerPath, 'utf8');
   const best = "            .z((peers) => typeof this.ssb.oasisPeerRank === 'function' ? peers.sort((a, b) => this.ssb.oasisPeerRank(b) - this.ssb.oasisPeerRank(a)) : peers)\n";
@@ -173,7 +173,7 @@ if (fs.existsSync(connSchedulerPath)) {
 }
 
 // === Patch ssb-conn (connection limits apply to the connections we open, never to the ones others open to us) ===
-const connHubPath = path.resolve(__dirname, '../src/server/node_modules/ssb-conn-hub/lib/index.js');
+const connHubPath = path.resolve(__dirname, '../server/node_modules/ssb-conn-hub/lib/index.js');
 if (fs.existsSync(connHubPath) && fs.existsSync(connSchedulerPath)) {
   const hub = fs.readFileSync(connHubPath, 'utf8');
   const sched = fs.readFileSync(connSchedulerPath, 'utf8');
@@ -194,8 +194,26 @@ if (fs.existsSync(connHubPath) && fs.existsSync(connSchedulerPath)) {
   log('ssb-conn inbound patch skipped: file not found');
 }
 
+const CONN_QUOTA = 10;
+const connQuotaFrom = [4, CONN_QUOTA].map((n) => `this.maintainConnections(${n}, isNotRoom, 'dbAndStaging', null, 2 * HOUR);`);
+const connQuotaTo = `this.maintainConnections(typeof this.ssb.oasisConnQuota === 'function' ? this.ssb.oasisConnQuota() : ${CONN_QUOTA}, isNotRoom, 'dbAndStaging', null, 2 * HOUR);`;
+if (fs.existsSync(connSchedulerPath)) {
+  const sched = fs.readFileSync(connSchedulerPath, 'utf8');
+  const from = connQuotaFrom.find((f) => sched.includes(f));
+  if (sched.includes(connQuotaTo)) {
+    log('ssb-conn already takes its outgoing connections from the node settings');
+  } else if (from) {
+    fs.writeFileSync(connSchedulerPath, sched.replace(from, connQuotaTo));
+    log('Patched ssb-conn to take its outgoing connections from the node settings');
+  } else {
+    log('ssb-conn quota patch skipped: unexpected conn-scheduler.js format');
+  }
+} else {
+  log('ssb-conn quota patch skipped: file not found');
+}
+
 // === Patch ssb-lan (broadcast address detection throws without a private IPv4) ===
-const ssbLanPath = path.resolve(__dirname, '../src/server/node_modules/ssb-lan/lib/index.js');
+const ssbLanPath = path.resolve(__dirname, '../server/node_modules/ssb-lan/lib/index.js');
 if (fs.existsSync(ssbLanPath)) {
   const data = fs.readFileSync(ssbLanPath, 'utf8');
   if (!data.includes("e.family === 'IPv4' && IP.isPrivate(addr)")) {
@@ -228,7 +246,7 @@ if (fs.existsSync(ssbLanPath)) {
 }
 
 // === Patch ssb-box (map leaks the index as libsodium's output format without native bindings) ===
-const ssbBoxPath = path.resolve(__dirname, '../src/server/node_modules/ssb-box/format.js');
+const ssbBoxPath = path.resolve(__dirname, '../server/node_modules/ssb-box/format.js');
 if (fs.existsSync(ssbBoxPath)) {
   const data = fs.readFileSync(ssbBoxPath, 'utf8');
   const target = '.map(sodium.crypto_sign_ed25519_pk_to_curve25519);';
@@ -241,7 +259,7 @@ if (fs.existsSync(ssbBoxPath)) {
 }
 
 // === Patch multiserver (voice frames are small and frequent: send them without Nagle's delay) ===
-const msNetPath = path.resolve(__dirname, '../src/server/node_modules/multiserver/plugins/net.js');
+const msNetPath = path.resolve(__dirname, '../server/node_modules/multiserver/plugins/net.js');
 if (fs.existsSync(msNetPath)) {
   let data = fs.readFileSync(msNetPath, 'utf8');
   if (data.includes('setNoDelay(true)')) {
@@ -274,7 +292,7 @@ if (fs.existsSync(msNetPath)) {
 }
 
 // === Patch hyperaxe (only strings and nodes become children; raw HTML only through a private symbol) ===
-const hyperaxePath = path.resolve(__dirname, '../src/server/node_modules/hyperaxe/factory.js');
+const hyperaxePath = path.resolve(__dirname, '../server/node_modules/hyperaxe/factory.js');
 if (fs.existsSync(hyperaxePath)) {
   let data = fs.readFileSync(hyperaxePath, 'utf8');
   if (data.includes('oasis.rawHtml')) {
@@ -322,7 +340,7 @@ function cleanProps (props) {
 }
 
 // === Patch html-element (standard attributes missing from its list are written instead of dropped) ===
-const htmlAttributesPath = path.resolve(__dirname, '../src/server/node_modules/html-element/html-attributes.js');
+const htmlAttributesPath = path.resolve(__dirname, '../server/node_modules/html-element/html-attributes.js');
 if (fs.existsSync(htmlAttributesPath)) {
   const data = fs.readFileSync(htmlAttributesPath, 'utf8');
   const anchor = 'function isStandardAttribute(attrName, tagName) {';
@@ -366,8 +384,8 @@ Object.keys(OASIS_EXTRA_ATTRIBUTES).forEach(function (name) {
 }
 
 // === Patch ssb-invite (local read of how many uses each invite has and how many are spent) ===
-const ssbInvitePath = path.resolve(__dirname, '../src/server/node_modules/ssb-invite/index.js');
-const ssbInviteManifestPath = path.resolve(__dirname, '../src/server/node_modules/ssb-invite/manifest.json');
+const ssbInvitePath = path.resolve(__dirname, '../server/node_modules/ssb-invite/index.js');
+const ssbInviteManifestPath = path.resolve(__dirname, '../server/node_modules/ssb-invite/manifest.json');
 if (fs.existsSync(ssbInvitePath) && fs.existsSync(ssbInviteManifestPath)) {
   const data = fs.readFileSync(ssbInvitePath, 'utf8');
   const anchor = "      }, 'string')\n    }\n  }\n}";
@@ -400,7 +418,7 @@ if (fs.existsSync(ssbInvitePath) && fs.existsSync(ssbInviteManifestPath)) {
 }
 
 // === Patch on-wakeup (a busy event loop is not a wake-up: only time the machine spent suspended counts) ===
-const onWakeupPath = path.resolve(__dirname, '../src/server/node_modules/on-wakeup/index.js');
+const onWakeupPath = path.resolve(__dirname, '../server/node_modules/on-wakeup/index.js');
 if (fs.existsSync(onWakeupPath)) {
   const data = fs.readFileSync(onWakeupPath, 'utf8');
   const tickFrom = `      var t = Date.now()
@@ -431,7 +449,7 @@ if (fs.existsSync(onWakeupPath)) {
 }
 
 // === Patch ssb-db2 (createHistoryStream returns a feed in arrival order, which is its sequence order, not by timestamp) ===
-const historyStreamPath = path.resolve(__dirname, '../src/server/node_modules/ssb-db2/compat/history-stream.js');
+const historyStreamPath = path.resolve(__dirname, '../server/node_modules/ssb-db2/compat/history-stream.js');
 if (fs.existsSync(historyStreamPath)) {
   const data = fs.readFileSync(historyStreamPath, 'utf8');
   const importFrom = "const { author, and, gte, where, batch, toPullStream } = require('../operators')";
@@ -451,7 +469,7 @@ if (fs.existsSync(historyStreamPath)) {
 }
 
 // === Patch ssb-invite-client (a pub that already follows us is not a failed invite: keep the pub and finish joining) ===
-const inviteClientPath = path.resolve(__dirname, '../src/server/node_modules/ssb-invite-client/lib/index.js');
+const inviteClientPath = path.resolve(__dirname, '../server/node_modules/ssb-invite-client/lib/index.js');
 if (fs.existsSync(inviteClientPath)) {
   const data = fs.readFileSync(inviteClientPath, 'utf8');
   const useFrom = `            const [e2] = await run(rpc.invite.use)({ feed: this.ssb.id });

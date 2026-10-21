@@ -1,13 +1,16 @@
-const { div, h2, p, section, button, form, a, img, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument } = require('./main_views');
+const { template, i18n, userLink, renderCardTop, renderShareButton, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderCommentsSummary, commentsOpenHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText, renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const opinionCategories = require('../backend/opinion_categories');
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
+
+const opinionFilterLabel = (mode) =>
+  String(i18n[mode + 'Button'] || i18n['vote' + mode.charAt(0).toUpperCase() + mode.slice(1)] || mode).toUpperCase();
 
 const detailHref = (type, key) => {
   switch (type) {
@@ -399,28 +402,28 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
       const voteEntries = Object.entries(c.opinions || {});
       const total = voteEntries.reduce((sum, [, v]) => sum + v, 0);
       const voted = c.opinions_inhabitants?.includes(config.keys.id);
-      const created = moment(item.value.timestamp).format("YYYY/MM/DD HH:mm");
       const allCats = opinionCategories;
 
       const isOwn = item.value.author && String(item.value.author) === String(config.keys.id);
+      const commentTotal = params.commentCounts instanceof Map ? (params.commentCounts.get(key) || 0) : 0;
+      const shareTitle = c.title || c.question || c.concept || c.name || c.contentWarning || '';
       return div(
         { class: 'trending-card opinions-card' + (isOwn ? ' own-content' : '') },
-        div({ class: 'card-header activity-card-header' },
-          span({ class: 'pm-exposition-chip pm-exposition-whole' },
+        renderCardTop(key, detailHref(c.type, key), {
+          date: item.value.timestamp,
+          chips: [span({ class: 'pm-exposition-chip pm-exposition-whole' },
             span({ class: 'pm-exposition-text' }, String(c.type === 'post' ? (i18n.typePost || 'BLOG') : (c.type || '')).toUpperCase())
-          ),
-          renderContentActions(key, detailHref(c.type, key), {
-            spread: spreadMap.get(key) || null,
-            author: item.value.author,
-            reportTitle: c.title || c.question || c.concept || c.name || c.contentWarning || '',
-            ...(CONTENT_TORRENTABLE.has(c.type) && typeof c.url === 'string' && c.url.startsWith('&')
-              ? { torrentFrom: { blobId: c.url, name: c.title || c.fileName || '' } }
-              : {}),
-            ...(CONTENT_FAV_KIND[c.type]
-              ? { favKind: CONTENT_FAV_KIND[c.type], isFavorite: params.favIndex instanceof Map ? params.favIndex.get(String(key)) === CONTENT_FAV_KIND[c.type] : false, returnTo: `/opinions?filter=${encodeURIComponent(filter)}` }
-              : {})
-          })
-        ),
+          )],
+          spread: spreadMap.get(key) || null,
+          author: item.value.author,
+          reportTitle: shareTitle,
+          ...(CONTENT_TORRENTABLE.has(c.type) && typeof c.url === 'string' && c.url.startsWith('&')
+            ? { torrentFrom: { blobId: c.url, name: c.title || c.fileName || '' } }
+            : {}),
+          ...(CONTENT_FAV_KIND[c.type]
+            ? { favKind: CONTENT_FAV_KIND[c.type], isFavorite: params.favIndex instanceof Map ? params.favIndex.get(String(key)) === CONTENT_FAV_KIND[c.type] : false, returnTo: `/opinions?filter=${encodeURIComponent(filter)}` }
+            : {})
+        }),
         div(
           { class: 'card-section opinions-card-body' },
           contentHtml
@@ -428,7 +431,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
         renderVotesSummary(c.opinions),
         renderCardMetaRow(
           details({ class: 'opinions-voting-collapse' },
-            summary({ class: 'opinions-summary' },
+            summary({ class: Object.values(c.opinions || {}).some(n => Number(n) > 0) ? 'opinions-summary engage-on' : 'opinions-summary' },
             span({ class: 'opinions-summary-icon' }, 'ꔍ'),
             span({ class: 'opinions-summary-count' }, `(${Object.values(c.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)})`)),
             div({ class: 'voting-buttons' },
@@ -443,10 +446,8 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
               })
             )
           ),
-          p({ class: 'card-footer' },
-            span({ class: 'date-link' }, `${created}`),
-            userLink(item.value.author)
-          )
+          renderCommentsSummary(commentsOpenHref(detailHref(c.type, key), commentTotal), commentTotal),
+          renderShareButton(key, detailHref(c.type, key), shareTitle)
         )
       );
     })
@@ -466,7 +467,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           baseFilters.map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
-              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, opinionFilterLabel(mode))
             )
           )
         ),
@@ -474,7 +475,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           opinionCategories.positive.slice(0, 5).filter(mode => presentCats.has(mode)).map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
-              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, opinionFilterLabel(mode))
             )
           )
         ),
@@ -482,7 +483,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           opinionCategories.positive.slice(5, 10).filter(mode => presentCats.has(mode)).map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
-              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, opinionFilterLabel(mode))
             )
           )
         ),
@@ -490,7 +491,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           opinionCategories.positive.slice(10, 15).filter(mode => presentCats.has(mode)).map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
-              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, opinionFilterLabel(mode))
             )
           )
         )
@@ -499,7 +500,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           opinionCategories.constructive.slice(0, 5).filter(mode => presentCats.has(mode)).map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
-              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, opinionFilterLabel(mode))
             )
           )
         ),
@@ -507,7 +508,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           opinionCategories.constructive.slice(5, 11).filter(mode => presentCats.has(mode)).map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
-              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, opinionFilterLabel(mode))
             )
           )
         ),
@@ -515,7 +516,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           opinionCategories.moderation.slice(0, 5).filter(mode => presentCats.has(mode)).map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
-              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, opinionFilterLabel(mode))
             )
           )
         ),
@@ -523,7 +524,7 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
           opinionCategories.moderation.slice(5, 10).filter(mode => presentCats.has(mode)).map(mode =>
             form({ method: 'GET', action: '/opinions' },
               input({ type: 'hidden', name: 'filter', value: mode }),
-              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, String(i18n[mode + 'Button'] || mode).toUpperCase())
+              button({ type: 'submit', class: filter === mode ? 'filter-btn active' : 'filter-btn' }, opinionFilterLabel(mode))
             )
           )
         )

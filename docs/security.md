@@ -36,6 +36,7 @@ Your identity is a key pair stored on your computer. Whoever holds the secret ke
 - Everything you publish is signed by you and replicated by anyone who follows you, directly or through others. Assume it is permanent.
 - Private messages hide their content and recipients, but not the fact that you published something at that moment.
 - Content and files shared inside a private tribe are encrypted for its members. Opening something to Oasis or clearnet publishes a plain copy of it.
+- The delivery details you give when buying in Market or Shops are encrypted for you and the seller only.
 - A node in public mode shows your content to the open web. Keep your own node private unless you mean to run a PUB.
 
 ## Staying in control of what you see

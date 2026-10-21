@@ -38,7 +38,7 @@ async function step(name, fn) {
   console.log('Oasis seeder — generating dummy content...\n');
   await open();
 
-  const tribeCrypto    = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'tribes');
+  const cryptoModel    = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'tribes');
   const chatCrypto     = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'chats');
   const padCrypto      = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'pads');
   const roomCrypto     = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'rooms');
@@ -49,42 +49,42 @@ async function step(name, fn) {
 
   const models = {
     feed: require(path.join(__dirname, '..', 'src', 'models', 'feed_model'))({ cooler: sCooler }),
-    audios: require(path.join(__dirname, '..', 'src', 'models', 'audios_model'))({ cooler: sCooler, tribeCrypto }),
-    videos: require(path.join(__dirname, '..', 'src', 'models', 'videos_model'))({ cooler: sCooler, tribeCrypto }),
-    images: require(path.join(__dirname, '..', 'src', 'models', 'images_model'))({ cooler: sCooler, tribeCrypto }),
-    documents: require(path.join(__dirname, '..', 'src', 'models', 'documents_model'))({ cooler: sCooler, tribeCrypto }),
-    bookmarks: require(path.join(__dirname, '..', 'src', 'models', 'bookmarking_model'))({ cooler: sCooler, tribeCrypto }),
+    audios: require(path.join(__dirname, '..', 'src', 'models', 'audios_model'))({ cooler: sCooler, cryptoModel }),
+    videos: require(path.join(__dirname, '..', 'src', 'models', 'videos_model'))({ cooler: sCooler, cryptoModel }),
+    images: require(path.join(__dirname, '..', 'src', 'models', 'images_model'))({ cooler: sCooler, cryptoModel }),
+    documents: require(path.join(__dirname, '..', 'src', 'models', 'documents_model'))({ cooler: sCooler, cryptoModel }),
+    bookmarks: require(path.join(__dirname, '..', 'src', 'models', 'bookmarking_model'))({ cooler: sCooler, cryptoModel }),
     forum: require(path.join(__dirname, '..', 'src', 'models', 'forum_model'))({ cooler: sCooler }),
-    transfers: require(path.join(__dirname, '..', 'src', 'models', 'transfers_model'))({ cooler: sCooler, tribeCrypto }),
-    votes: require(path.join(__dirname, '..', 'src', 'models', 'votes_model'))({ cooler: sCooler, tribeCrypto }),
+    transfers: require(path.join(__dirname, '..', 'src', 'models', 'transfers_model'))({ cooler: sCooler, cryptoModel }),
+    votes: require(path.join(__dirname, '..', 'src', 'models', 'votes_model'))({ cooler: sCooler, cryptoModel }),
     events: require(path.join(__dirname, '..', 'src', 'models', 'events_model'))({ cooler: sCooler }),
-    tasks: require(path.join(__dirname, '..', 'src', 'models', 'tasks_model'))({ cooler: sCooler, tribeCrypto }),
-    market: require(path.join(__dirname, '..', 'src', 'models', 'market_model'))({ cooler: sCooler, tribeCrypto }),
-    jobs: require(path.join(__dirname, '..', 'src', 'models', 'jobs_model'))({ cooler: sCooler, tribeCrypto }),
-    projects: require(path.join(__dirname, '..', 'src', 'models', 'projects_model'))({ cooler: sCooler, tribeCrypto }),
+    tasks: require(path.join(__dirname, '..', 'src', 'models', 'tasks_model'))({ cooler: sCooler, cryptoModel }),
+    market: require(path.join(__dirname, '..', 'src', 'models', 'market_model'))({ cooler: sCooler, cryptoModel }),
+    jobs: require(path.join(__dirname, '..', 'src', 'models', 'jobs_model'))({ cooler: sCooler, cryptoModel }),
+    projects: require(path.join(__dirname, '..', 'src', 'models', 'projects_model'))({ cooler: sCooler, cryptoModel }),
     industry: require(path.join(__dirname, '..', 'src', 'models', 'industry_model'))({ cooler: sCooler }),
     cv: require(path.join(__dirname, '..', 'src', 'models', 'cv_model'))({ cooler: sCooler }),
-    reports: require(path.join(__dirname, '..', 'src', 'models', 'reports_model'))({ cooler: sCooler, tribeCrypto }),
-    shops: require(path.join(__dirname, '..', 'src', 'models', 'shops_model'))({ cooler: sCooler, tribeCrypto }),
-    pixelia: require(path.join(__dirname, '..', 'src', 'models', 'pixelia_model'))({ cooler: sCooler, tribeCrypto }),
-    torrents: require(path.join(__dirname, '..', 'src', 'models', 'torrents_model'))({ cooler: sCooler, tribeCrypto }),
-    files: require(path.join(__dirname, '..', 'src', 'models', 'files_model'))({ cooler: sCooler, tribeCrypto }),
-    polls: require(path.join(__dirname, '..', 'src', 'models', 'polls_model'))({ cooler: sCooler, tribeCrypto }),
+    reports: require(path.join(__dirname, '..', 'src', 'models', 'reports_model'))({ cooler: sCooler, cryptoModel }),
+    shops: require(path.join(__dirname, '..', 'src', 'models', 'shops_model'))({ cooler: sCooler, cryptoModel }),
+    pixelia: require(path.join(__dirname, '..', 'src', 'models', 'pixelia_model'))({ cooler: sCooler, cryptoModel }),
+    torrents: require(path.join(__dirname, '..', 'src', 'models', 'torrents_model'))({ cooler: sCooler, cryptoModel }),
+    files: require(path.join(__dirname, '..', 'src', 'models', 'files_model'))({ cooler: sCooler, cryptoModel }),
+    polls: require(path.join(__dirname, '..', 'src', 'models', 'polls_model'))({ cooler: sCooler, cryptoModel }),
     blogs: require(path.join(__dirname, '..', 'src', 'models', 'blog_model'))({ cooler: sCooler }),
-    housing: require(path.join(__dirname, '..', 'src', 'models', 'housing_model'))({ cooler: sCooler, tribeCrypto }),
+    housing: require(path.join(__dirname, '..', 'src', 'models', 'housing_model'))({ cooler: sCooler, cryptoModel }),
     logs: require(path.join(__dirname, '..', 'src', 'models', 'logs_model'))({ cooler: sCooler }),
     parliament: null,
     tribes: null
   };
-  const tribesModel = require(path.join(__dirname, '..', 'src', 'models', 'tribes_model'))({ cooler: sCooler, tribeCrypto });
+  const tribesModel = require(path.join(__dirname, '..', 'src', 'models', 'tribes_model'))({ cooler: sCooler, cryptoModel });
   models.tribes = tribesModel;
-  models.tribesContent = require(path.join(__dirname, '..', 'src', 'models', 'tribes_content_model'))({ cooler: sCooler, tribeCrypto, tribesModel });
-  models.pads = require(path.join(__dirname, '..', 'src', 'models', 'pads_model'))({ cooler: sCooler, cipherModel: { encryptECB: x => x, decryptECB: x => x }, tribeCrypto, padCrypto, tribesModel });
-  models.chats = require(path.join(__dirname, '..', 'src', 'models', 'chats_model'))({ cooler: sCooler, tribeCrypto, chatCrypto, tribesModel });
-  models.rooms = require(path.join(__dirname, '..', 'src', 'models', 'rooms_model'))({ cooler: sCooler, tribeCrypto, roomCrypto, tribesModel });
-  models.calendars = require(path.join(__dirname, '..', 'src', 'models', 'calendars_model'))({ cooler: sCooler, tribeCrypto, calendarCrypto, tribesModel });
-  models.maps = require(path.join(__dirname, '..', 'src', 'models', 'maps_model'))({ cooler: sCooler, tribeCrypto, mapCrypto, tribesModel });
-  models.wiki = require(path.join(__dirname, '..', 'src', 'models', 'wiki_model'))({ cooler: sCooler, tribeCrypto, tribesModel });
+  models.tribesContent = require(path.join(__dirname, '..', 'src', 'models', 'tribes_content_model'))({ cooler: sCooler, cryptoModel, tribesModel });
+  models.pads = require(path.join(__dirname, '..', 'src', 'models', 'pads_model'))({ cooler: sCooler, cipherModel: { encryptECB: x => x, decryptECB: x => x }, cryptoModel, padCrypto, tribesModel });
+  models.chats = require(path.join(__dirname, '..', 'src', 'models', 'chats_model'))({ cooler: sCooler, cryptoModel, chatCrypto, tribesModel });
+  models.rooms = require(path.join(__dirname, '..', 'src', 'models', 'rooms_model'))({ cooler: sCooler, cryptoModel, roomCrypto, tribesModel });
+  models.calendars = require(path.join(__dirname, '..', 'src', 'models', 'calendars_model'))({ cooler: sCooler, cryptoModel, calendarCrypto, tribesModel });
+  models.maps = require(path.join(__dirname, '..', 'src', 'models', 'maps_model'))({ cooler: sCooler, cryptoModel, mapCrypto, tribesModel });
+  models.wiki = require(path.join(__dirname, '..', 'src', 'models', 'wiki_model'))({ cooler: sCooler, cryptoModel, tribesModel });
   models.emergencies = require(path.join(__dirname, '..', 'src', 'models', 'emergencies_model'))({ cooler: sCooler });
   models.subscriptions = require(path.join(__dirname, '..', 'src', 'models', 'subscriptions_model'))({ cooler: sCooler });
   models.mailing = require(path.join(__dirname, '..', 'src', 'models', 'mailing_model'))({ cooler: sCooler, subscriptionsModel: models.subscriptions });
@@ -92,8 +92,8 @@ async function step(name, fn) {
   models.podcasts = require(path.join(__dirname, '..', 'src', 'models', 'podcasts_model'))({ cooler: sCooler });
   models.campaigns = require(path.join(__dirname, '..', 'src', 'models', 'campaigns_model'))({ cooler: sCooler });
   models.parliament = require(path.join(__dirname, '..', 'src', 'models', 'parliament_model'))({ cooler: sCooler, services: { votes: models.votes, tribes: tribesModel } });
-  models.larp = require(path.join(__dirname, '..', 'src', 'models', 'larp_model'))({ cooler: sCooler, tribesModel, tribeCrypto });
-  models.courts = require(path.join(__dirname, '..', 'src', 'models', 'courts_model'))({ cooler: sCooler, services: { parliament: models.parliament }, tribeCrypto });
+  models.larp = require(path.join(__dirname, '..', 'src', 'models', 'larp_model'))({ cooler: sCooler, tribesModel, cryptoModel });
+  models.courts = require(path.join(__dirname, '..', 'src', 'models', 'courts_model'))({ cooler: sCooler, services: { parliament: models.parliament }, cryptoModel });
 
   console.log('SEED: feed');
   for (let i = 0; i < 3; i++) {

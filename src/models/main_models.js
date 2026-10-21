@@ -384,7 +384,7 @@ models.about = {
         );
       });
       const now = Date.now();
-      for (const [id, p] of out) if (p.name) nameCache.set(id, p.name, now);
+      for (const [id, p] of out) { if (p.name) nameCache.set(id, p.name, now); if (p.image) nameCache.setImage(id, p.image); }
       return out;
     })();
     if (store) store.aboutProfiles = pending;
@@ -433,6 +433,7 @@ models.about = {
         return nullImage;
       }
       if (typeof raw.link === "string") {
+        nameCache.setImage(feedId, raw.link);
         return raw.link;
       }
       return raw;

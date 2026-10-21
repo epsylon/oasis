@@ -20,12 +20,6 @@ module.exports = ({ cooler }) => {
     return ssb;
   };
 
-  const hasBlob = async (ssbClient, url) => {
-    return new Promise(resolve => {
-      ssbClient.blobs.has(url, (err, has) => resolve(!err && has));
-    });
-  };
-
   const types = [
     'bookmark', 'votes', 'poll', 'feed', 'post',
     'image', 'audio', 'video', 'document', 'torrent', 'file', 'transfer',
@@ -101,19 +95,7 @@ module.exports = ({ cooler }) => {
       if (c.encryptedPayload) return false;
       return String(c.visibility || 'PUBLIC').toUpperCase() !== 'INVITE';
     });
-    const blobTypes = ['document', 'image', 'audio', 'video'];
-
-    let items = await Promise.all(
-      rawItems.map(async m => {
-        const c = m.value?.content;
-        if (blobTypes.includes(c.type) && c.url) {
-          const valid = await hasBlob(ssbClient, c.url);
-          if (!valid) return null;
-        }
-        return m;
-      })
-    );
-    items = items.filter(Boolean);
+    let items = rawItems.slice();
 
     const signatureOf = (m) => {
       const c = m.value?.content || {};

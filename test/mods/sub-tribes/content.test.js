@@ -68,10 +68,10 @@ describe('sub-tribes: content publishing', (t) => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const p = await A.use('tribes').createTribe('P', '', null, '', [], true, 'strict', null, 'OPEN', '');
     const s = await A.use('tribes').createTribe('S', '', null, '', [], true, 'strict', p.key, 'OPEN', '');
-    const pkey = A.tribeCrypto.getKey(p.key);
-    const skey = A.tribeCrypto.getKey(s.key);
+    const pkey = A.cryptoModel.getKey(p.key);
+    const skey = A.cryptoModel.getKey(s.key);
     notOk(pkey === skey, 'parent and sub have different keys');
-    notOk(A.tribeCrypto.fingerprint(pkey) === A.tribeCrypto.fingerprint(skey));
+    notOk(A.cryptoModel.fingerprint(pkey) === A.cryptoModel.fingerprint(skey));
   });
 
   t('parent member with both keys (added to sub manually) can see both', async () => {

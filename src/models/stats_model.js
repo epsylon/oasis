@@ -44,7 +44,7 @@ const HIDDEN_ENVELOPE_TYPES = new Set([
   'tribe-invite-tombstone'
 ]);
 
-module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
+module.exports = ({ cooler, cryptoModel, tribesModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -389,13 +389,13 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       versionsOf[t] = [];
     }
 
-    const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+    const fpIdx = cryptoModel ? cryptoModel.buildFingerprintIndex() : null;
     const accessibleTribeIds = await buildAccessibleTribeIds();
     for (const m of allMsgs) {
       const k = m.key;
       let c = m.value.content;
-      if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
-        const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+      if (cryptoModel && cryptoModel.isSealedMsg(c)) {
+        const r = fpIdx ? cryptoModel.unwrapMsg(c, fpIdx) : null;
         if (!r || !r.body) continue;
         const inner = r.body;
         if (inner.k === 'tribe') {

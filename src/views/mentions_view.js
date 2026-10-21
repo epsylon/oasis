@@ -1,7 +1,6 @@
 const { div, h2, p, section, button, form, input, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderContentActions, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged } = require("./main_views");
+const { template, i18n, renderCardTop, renderShareButton, renderCardMetaRow, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged } = require("./main_views");
 const { getViewDetailsAction, commentHref, commentLabel } = require("./activity_view");
-const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -12,7 +11,7 @@ const excerpt = (text, max = 320) => {
   return s.length > max ? s.slice(0, max) + "…" : s;
 };
 
-const typeLabel = (type) => (type === 'comment' ? i18n.comment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)]) || String(type || '').toUpperCase();
+const typeLabel = (type) => (type === 'comment' ? i18n.typeComment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)]) || String(type || '').toUpperCase();
 
 const renderMentionCard = (item, readKeys, params = {}) => {
   const href = item.type === 'comment'
@@ -21,38 +20,34 @@ const renderMentionCard = (item, readKeys, params = {}) => {
   const isOwn = String(item.author) === String(userId);
   const read = readKeys.has(String(item.key));
   return div({ class: "trending-card mention-card" + (isOwn ? " own-content" : "") },
-    div({ class: "card-header activity-card-header" },
-      div({ class: 'card-chips-row' },
+    renderCardTop(item.id, href, {
+      date: item.createdAt,
+      chips: [div({ class: 'card-chips-row' },
         span({ class: 'pm-exposition-chip pm-exposition-whole' },
           span({ class: 'pm-exposition-text' }, item.comment ? String(commentLabel(item.comment)).toUpperCase() : typeLabel(item.type))
         ),
         read ? null : span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip))
-      ),
-      renderContentActions(item.id, href, {
-        author: item.author,
-        reportTitle: item.title || item.text,
-        spread: CONTENT_SPREADABLE.has(item.type) ? ((params.spreadMap && params.spreadMap.get(item.id)) || null) : undefined,
-        ...(item.type === 'torrent' || item.type === 'file' ? { spreadTitle: i18n.seedAction } : {}),
-        ...(CONTENT_TORRENTABLE.has(item.type) && item.content && typeof item.content.url === 'string' && item.content.url.startsWith('&')
-          ? { torrentFrom: { blobId: item.content.url, name: item.content.title || item.content.fileName || '' } }
-          : {})
-      })
-    ),
+      )],
+      author: item.author,
+      reportTitle: item.title || item.text,
+      spread: CONTENT_SPREADABLE.has(item.type) ? ((params.spreadMap && params.spreadMap.get(item.id)) || null) : undefined,
+      ...(item.type === 'torrent' || item.type === 'file' ? { spreadTitle: i18n.seedAction } : {}),
+      ...(CONTENT_TORRENTABLE.has(item.type) && item.content && typeof item.content.url === 'string' && item.content.url.startsWith('&')
+        ? { torrentFrom: { blobId: item.content.url, name: item.content.title || item.content.fileName || '' } }
+        : {})
+    }),
     div({ class: "card-section mention-card-body" },
       item.title
         ? div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, item.title))
         : null,
       item.text ? p({ class: "mention-text" }, ...renderStyledText(excerpt(item.text))) : null,
-      p({ class: "card-footer" },
-        span({ class: "date-link" }, `${moment(item.createdAt).format("YYYY/MM/DD HH:mm")}`),
-        userLink(item.author)
-      ),
       div({ class: "pm-actions mention-actions" },
         form({ method: "POST", action: `/mentions/${read ? 'unread' : 'read'}/${encodeURIComponent(item.key)}`, class: "pm-action-form" },
           button({ type: "submit", class: "pm-btn read-btn" }, String(read ? i18n.inboxMarkUnread : i18n.inboxMarkRead).toUpperCase())
         )
       )
-    )
+    ),
+    renderCardMetaRow(renderShareButton(item.id, href, item.title || item.text))
   );
 };
 

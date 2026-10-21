@@ -146,7 +146,7 @@ const modulesView = () => {
         ),
         div(
           { class: "save-button-container" },
-          button({ type: "submit", class: "submit-button" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.saveSettings)
         )
       )
     )

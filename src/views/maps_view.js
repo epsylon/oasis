@@ -5,11 +5,12 @@ const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/r
 
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
 const { searchPlaces, nearestPlace } = require("../maps/map_data");
+const mapIsOpen = (m) => !!m && !m.tribeId && !m.encrypted && !m.contentEncrypted && String(m.mapType || '').toUpperCase() === 'OPEN';
 
 const userId = config.keys.id;
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -416,12 +417,9 @@ const renderMapCard = exports.renderMapCard = (mapObj, filter, params = {}) => {
   const isOwn = mapObj.author && String(mapObj.author) === String(userId);
   const href = origin ? origin.href : `/maps/${encodeURIComponent(mapObj.key)}?filter=${encodeURIComponent(filter)}`;
   return div({ class: "tribe-card" + (isOwn ? " own-content" : "") },
-    div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(mapObj.key, href, origin
-        ? { author: mapObj.author, reportTitle: mapObj.title }
-        : { spread: params.spreadMap && params.spreadMap.get(mapObj.key) || null, author: mapObj.author, favKind: 'maps', isFavorite: mapObj.isFavorite, reportTitle: mapObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('map', mapObj.key) : undefined })
-    ),
+    renderCardTop(mapObj.key, href, origin
+      ? { author: mapObj.author, date: mapObj.createdAt, chips, reportTitle: mapObj.title }
+      : { date: mapObj.createdAt, chips, spread: params.spreadMap && params.spreadMap.get(mapObj.key) || null, author: mapObj.author, favKind: 'maps', isFavorite: mapObj.isFavorite, reportTitle: mapObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('map', mapObj.key) : undefined }),
     div({ class: "tribe-card-image-wrapper map-card-thumb" },
       a({ href }, renderMap(thumbMarkers, null, 0, { thumb: true, singleZoom: 5 }))
     ),
@@ -429,12 +427,12 @@ const renderMapCard = exports.renderMapCard = (mapObj, filter, params = {}) => {
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, a({ href }, mapObj.title || i18n.mapAllSectionTitle))
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       p({ class: "job-meta-line" }, `📍 ${mapObj.lat.toFixed(4)}, ${mapObj.lng.toFixed(4)}`),
       safeText(mapObj.description) ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(mapObj.description))) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.mapMarkersTitle || "Markers"}: ${markerCount}`)
-      )
+      ),
+      null
     )
   );
 };
@@ -523,28 +521,32 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
   }) : null;
 
   const mapSide = div({ class: "tribe-side map-detail-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, {
-        author: mapObj.author,
-        favKind: 'maps',
-        isFavorite: mapObj.isFavorite,
-        spread: params.spreads || null,
-        returnTo,
-        reportTitle: mapObj.title,
-        deleteAction: String(mapObj.author) === String(userId) ? contentDeleteAction('map', mapObj.key) : undefined
-      })
-    ),
+    renderCardTop(mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, { arrow: false,
+      date: mapObj.createdAt,
+      chips: [
+        renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase()),
+        renderEncryptedChip(i18n),
+        renderLifespanChip(mapObj.lifetime, i18n),
+        canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? mapClearnetHref(mapObj) : null) : null
+      ],
+      bylineExtra: [
+        renderEditedChip(mapObj.key, mapObj.rootId),
+        mapObj.updatedAt && mapObj.updatedAt !== mapObj.createdAt
+          ? span({ class: "votations-comment-date" }, `${i18n.mapUpdatedAt}: ${moment(mapObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
+          : null
+      ],
+      author: mapObj.author,
+      favKind: 'maps',
+      isFavorite: mapObj.isFavorite,
+      spread: params.spreads || null,
+      returnTo,
+      reportTitle: mapObj.title,
+      deleteAction: String(mapObj.author) === String(userId) ? contentDeleteAction('map', mapObj.key) : undefined
+    }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, mapObj.title || i18n.mapAllSectionTitle),
-      renderEditedChip(mapObj.key, mapObj.rootId)
+      h2({ class: "tribe-card-title" }, mapObj.title || i18n.mapAllSectionTitle)
     ),
-    div({ class: "card-chips-row" },
-      renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase()),
-      renderEncryptedChip(i18n),
-      renderLifespanChip(mapObj.lifetime, i18n),
-      canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? mapClearnetHref(mapObj) : null) : null,
-      canClearnet && String(mapObj.author) === String(userId) ? renderClearnetSwitch("maps", mapObj.rootId || mapObj.key, isClearnet) : null
-    ),
+    canClearnet && String(mapObj.author) === String(userId) ? renderClearnetSwitch("maps", mapObj.rootId || mapObj.key, isClearnet) : null,
     safeText(mapObj.description) ? p({ class: "tribe-side-description" }, ...renderStyledText(safeText(mapObj.description))) : null,
     table({ class: "tribe-info-table jobs-info-table" },
       tr(
@@ -554,13 +556,6 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       tr(
         td({ class: "tribe-info-label" }, i18n.mapLngLabel),
         td({ class: "tribe-info-value", colspan: "3" }, mapObj.lng.toFixed(6))
-      ),
-      tr(
-        td({ class: "tribe-info-label" }, i18n.createdAtLabel || "Created at"),
-        td({ class: "tribe-info-value", colspan: "3" }, moment(mapObj.createdAt).format("YYYY/MM/DD HH:mm"))
-      ),
-      tr(
-        td({ class: "tribe-info-value", colspan: "4" }, userLink(mapObj.author))
       )
     ),
     renderTags(mapObj.tags),
@@ -609,13 +604,8 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
     }));
 
   const mapMain = div({ class: "tribe-main map-detail-main" },
+    renderDetailShare(mapObj.rootId || mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, mapObj.title),
     renderMarkersList(mapObj.markers, mapObj, { focus, view, viewHref, returnTo: pageReturnTo }),
-    p({ class: "card-footer" },
-      span({ class: "date-link" }, `${moment(mapObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
-      userLink(mapObj.author),
-      mapObj.updatedAt && mapObj.updatedAt !== mapObj.createdAt
-        ? span({ class: "votations-comment-date" }, ` · ${i18n.mapUpdatedAt}: ${moment(mapObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
-        : null),
     renderMarkerForm(mapObj, returnTo, { ...params, filter }, tribeMembers, { mkLat, mkLng, view, focus }),
     renderEngagement(mapObj.rootId || mapObj.key,
       params.opinions ? renderOpinionsVoting('/maps/opinions', mapObj.rootId || mapObj.key, params.opinions.opinions, `/maps/${encodeURIComponent(mapObj.rootId || mapObj.key)}`, params.opinions.opinions_inhabitants) : null,

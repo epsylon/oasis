@@ -220,3 +220,37 @@ describe('market: versions republished by other inhabitants', (t) => {
     eq(list[0].seller, A.keypair.id);
   });
 });
+
+describe('market: encrypted delivery orders', (t) => {
+  const listed = async (A) => {
+    A.setActor();
+    return A.use('market').createItem('for_sale', 'Bike', 'd', null, 10, [], 'USED', inDays(30), true, 2, '');
+  };
+
+  t('the seller reads the delivery details, the buyer sees their own, nobody else sees anything', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const item = await listed(A);
+    B.setActor();
+    await B.use('market').createOrder(item.key, { deliveryAddress: 'SECRET ADDR 1', contact: 'b@example.com', notes: 'ring twice' });
+    A.setActor();
+    const forSeller = await A.use('market').listOrders(item.key);
+    eq(forSeller.length, 1);
+    eq(forSeller[0].deliveryAddress, 'SECRET ADDR 1');
+    eq(forSeller[0].contact, 'b@example.com');
+    eq(forSeller[0].buyer, B.keypair.id);
+    B.setActor();
+    eq((await B.use('market').listOrders(item.key)).length, 1, 'the buyer sees their own order');
+    C.setActor();
+    eq((await C.use('market').listOrders(item.key)).length, 0, 'a third party sees nothing');
+    const plain = net.log.filter(m => JSON.stringify(m.value.content).includes('SECRET ADDR 1'));
+    eq(plain.length, 0, 'the delivery details never travel in clear');
+  });
+
+  t('the seller cannot order their own item', async () => {
+    const net = makeNetwork(); const A = makePeer(net);
+    const item = await listed(A);
+    let threw = false;
+    try { await A.use('market').createOrder(item.key, { deliveryAddress: 'X' }); } catch (_) { threw = true; }
+    ok(threw);
+  });
+});

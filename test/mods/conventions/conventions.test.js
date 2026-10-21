@@ -43,7 +43,7 @@ describe('conventions: one implementation per shared piece', (t) => {
     const offenders = [];
     for (const f of viewFiles()) {
       for (const chunk of renderers(read(f))) {
-        const inHeader = /renderContentActions\([^\n]*spread:/.test(chunk);
+        const inHeader = /render(?:ContentActions|CardTop)\([\s\S]{0,1200}?spread:/.test(chunk);
         const inBody = /renderSpreadButton\(/.test(chunk);
         if (inHeader && inBody) offenders.push(`${f}: ${chunk.split('\n')[0].slice(0, 60)}`);
       }
@@ -55,7 +55,7 @@ describe('conventions: one implementation per shared piece', (t) => {
     const offenders = [];
     for (const f of viewFiles()) {
       const src = read(f);
-      const headerSpread = /renderContentActions\([\s\S]{0,400}?spread:/.test(src);
+      const headerSpread = /render(?:ContentActions|CardTop)\([\s\S]{0,1200}?spread:/.test(src);
       const bodySpread = /class: ["']card-spread-(?:centered|left)["']/.test(src);
       if (headerSpread && bodySpread) offenders.push(f);
     }
@@ -132,7 +132,7 @@ describe('conventions: every detail view offers the content actions', (t) => {
       if (PRIVATE_VIEWS.has(f)) continue;
       for (const chunk of renderers(read(f))) {
         if (!DETAIL_RE.test(chunk)) continue;
-        if (chunk.includes('renderContentActions')) continue;
+        if (chunk.includes('renderContentActions') || chunk.includes('renderCardTop')) continue;
         offenders.push(`${f}: ${chunk.split('\n')[0].slice(0, 60)}`);
       }
     }

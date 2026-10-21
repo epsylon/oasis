@@ -172,7 +172,7 @@ function getGoverningPeriodId(now = new Date()) {
   return `${getGoverningHouseKey(now)}:${now.getFullYear()}-${month}`;
 }
 
-module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
+module.exports = ({ cooler, tribesModel, cryptoModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
   const startedAt = Date.now();
@@ -202,6 +202,11 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     if (!candidates.length) return null;
     candidates.sort((a, b) => (new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()) || String(a.id || '').localeCompare(String(b.id || '')));
     return candidates[0];
+  }
+
+  async function houseTribeReady(houseKey) {
+    if (await findMyHouseTribe(houseKey).catch(() => null)) return true;
+    return houseKey === 'academia' && !!(await findAnyHouseTribe(houseKey).catch(() => null));
   }
 
   async function findAnyHouseTribe(houseKey) {
@@ -307,8 +312,8 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     if (houseKey !== 'academia') {
       await publishHouseAnchorTombstone(houseKey, rootId).catch(() => {});
     }
-    if (tribeCrypto && typeof tribeCrypto.dropKey === 'function') {
-      try { tribeCrypto.dropKey(rootId); } catch (_) {}
+    if (cryptoModel && typeof cryptoModel.dropKey === 'function') {
+      try { cryptoModel.dropKey(rootId); } catch (_) {}
     }
   }
 
@@ -387,7 +392,10 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
       return myCanonical.tribe;
     }
 
-    if (anchor) return null;
+    if (anchor) {
+      await redeemPendingAutoInvites().catch(() => {});
+      return await findMyHouseTribe(houseKey);
+    }
 
     const existingAny = await findAnyHouseTribe(houseKey).catch(() => null);
     if (existingAny) {
@@ -437,8 +445,8 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
         if (houseKey !== 'academia') {
           await publishHouseAnchorTombstone(houseKey, t.rootId).catch(() => {});
         }
-        if (tribeCrypto && typeof tribeCrypto.dropKey === 'function') {
-          try { tribeCrypto.dropKey(t.rootId); } catch (_) {}
+        if (cryptoModel && typeof cryptoModel.dropKey === 'function') {
+          try { cryptoModel.dropKey(t.rootId); } catch (_) {}
         }
       }
     }
@@ -954,6 +962,7 @@ module.exports = ({ cooler, tribesModel, tribeCrypto }) => {
     createHouseInvite,
     redeemHouseInvite,
     findMyHouseTribe,
+    houseTribeReady,
     ensureHouseTribe,
     leaveMyHouseTribe,
     issueAutoInvitesForMyHouse,

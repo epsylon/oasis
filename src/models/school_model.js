@@ -386,7 +386,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
     if (!schoolCrypto) return null
     let key = schoolCrypto.getKey(rootId)
     if (key) return key
-    key = schoolCrypto.generateTribeKey()
+    key = schoolCrypto.generateKey()
     schoolCrypto.setKey(rootId, key, 1)
     await publishKeyGrant(ssbClient, rootId, key, [ssbClient.id])
     return key
@@ -441,7 +441,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       let toPublish = content
       let courseKey = null
       if (content.visibility === "INVITE" && schoolCrypto) {
-        courseKey = schoolCrypto.generateTribeKey()
+        courseKey = schoolCrypto.generateKey()
         toPublish = schoolCrypto.encryptContent(content, [courseKey], true)
       }
       const published = await new Promise((res, rej) => ssbClient.publish(toPublish, (e, m) => e ? rej(e) : res(m)))

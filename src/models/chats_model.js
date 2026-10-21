@@ -21,7 +21,7 @@ const REACTION_EMOJIS = ["up", "heart", "laugh", "down"]
 
 const DEFAULT_MESSAGES_PER_HOUR = 60
 
-module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
+module.exports = ({ cooler, cryptoModel, chatCrypto, tribesModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
@@ -35,9 +35,9 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     }
   })()
 
-  const ownCrypto = chatCrypto || tribeCrypto
-  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null
-  const hashCode = (code, salt) => tribeCrypto ? tribeCrypto.hashInviteCode(code, salt) : null
+  const ownCrypto = chatCrypto || cryptoModel
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (cryptoModel && cryptoModel.getKey(rid)) || null
+  const hashCode = (code, salt) => cryptoModel ? cryptoModel.hashInviteCode(code, salt) : null
   const inviteMatches = (inv, token) => {
     if (!token) return false
     if (typeof inv === "string") return inv === token
@@ -51,21 +51,21 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
   const lookupKeys = (rid) => {
     const a = (ownCrypto && ownCrypto.getKeys(rid)) || []
     if (a.length) return a
-    return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
+    return (cryptoModel && cryptoModel.getKeys(rid)) || []
   }
-  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (cryptoModel && cryptoModel.getGen(rid)) || 0)
 
   const rotateChatKey = async (rootId, remainingMembers) => {
-    if (!ownCrypto || !tribeCrypto || !rootId) return
+    if (!ownCrypto || !cryptoModel || !rootId) return
     const existing = lookupKey(rootId)
     if (!existing) return
-    const newKey = ownCrypto.generateTribeKey()
+    const newKey = ownCrypto.generateKey()
     const newGen = ownCrypto.addNewKey(rootId, newKey)
     const ssbClient = await openSsb()
     const ssbKeys = require("../server/node_modules/ssb-keys")
     const memberKeys = {}
     for (const m of new Set([ssbClient.id, ...(Array.isArray(remainingMembers) ? remainingMembers : [])])) {
-      try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
+      try { memberKeys[m] = cryptoModel.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
     }
     if (Object.keys(memberKeys).length) {
       await new Promise((resolve) => {
@@ -104,10 +104,10 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
   }
 
   const getTribeKeysFor = async (tribeId) => {
-    if (!tribeCrypto || !tribesModel || !tribeId) return []
+    if (!cryptoModel || !tribesModel || !tribeId) return []
     try {
       const rootId = await tribesModel.getRootId(tribeId)
-      return tribeCrypto.getKeys(rootId) || []
+      return cryptoModel.getKeys(rootId) || []
     } catch (_) { return [] }
   }
 
@@ -258,25 +258,25 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
   }
 
   const resolveKeyChainSets = (chatRootId) => {
-    if (!tribeCrypto) return []
+    if (!cryptoModel) return []
     const keys = lookupKeys(chatRootId)
     return keys.map(k => [k])
   }
 
   const tryDecryptPublicInviteKey = (invites) => {
-    if (!tribeCrypto || !Array.isArray(invites)) return null
+    if (!cryptoModel || !Array.isArray(invites)) return null
     for (const inv of invites) {
       if (!inv || typeof inv !== "object" || inv.public !== true) continue
       if (typeof inv.code !== "string") continue
       if (typeof inv.ek === "string") {
         try {
-          const k = tribeCrypto.decryptFromInvite(inv.ek, inv.code, inv.salt)
+          const k = cryptoModel.decryptFromInvite(inv.ek, inv.code, inv.salt)
           if (k) return k
         } catch (_) {}
       }
       if (typeof inv.ekChain === "string") {
         try {
-          const chain = tribeCrypto.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt)
+          const chain = cryptoModel.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt)
           if (Array.isArray(chain) && chain.length && chain[0].key) return chain[0].key
         } catch (_) {}
       }
@@ -287,14 +287,14 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
   const decryptChatContent = (rawC, rootId) => {
     let c = rawC
     let undecryptable = false
-    if (tribeCrypto && c.encryptedPayload) {
+    if (cryptoModel && c.encryptedPayload) {
       const keyChainSets = resolveKeyChainSets(rootId)
-      c = tribeCrypto.decryptContent(c, keyChainSets)
+      c = cryptoModel.decryptContent(c, keyChainSets)
       undecryptable = !!c._undecryptable
       if (undecryptable) {
         const pubKey = tryDecryptPublicInviteKey(rawC.invites)
         if (pubKey) {
-          const retry = tribeCrypto.decryptContent(rawC, [[pubKey]])
+          const retry = cryptoModel.decryptContent(rawC, [[pubKey]])
           if (retry && !retry._undecryptable) {
             c = retry
             undecryptable = false
@@ -369,13 +369,13 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     let text = c.text || ""
     let image = c.image || null
     let mimeType = typeof c.mimeType === "string" ? c.mimeType : null
-    if (tribeCrypto && c.encryptedText) {
+    if (cryptoModel && c.encryptedText) {
       const candidateKeys = [...tribeKeys, ...lookupKeys(chatRootId)]
       for (const keyHex of candidateKeys) {
         try {
-          text = tribeCrypto.decryptWithKey(c.encryptedText, keyHex)
-          if (c.encryptedImage) image = tribeCrypto.decryptWithKey(c.encryptedImage, keyHex)
-          if (c.encryptedMime) mimeType = tribeCrypto.decryptWithKey(c.encryptedMime, keyHex)
+          text = cryptoModel.decryptWithKey(c.encryptedText, keyHex)
+          if (c.encryptedImage) image = cryptoModel.decryptWithKey(c.encryptedImage, keyHex)
+          if (c.encryptedMime) mimeType = cryptoModel.decryptWithKey(c.encryptedMime, keyHex)
           break
         } catch (_) {}
       }
@@ -400,7 +400,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     })
 
   const ensureMemberKeys = async (ssbClient, messages, chats) => {
-    if (!tribeCrypto || !ownCrypto) return
+    if (!cryptoModel || !ownCrypto) return
     const leavesByRoot = new Map()
     for (const m of messages) {
       const c = m.value && m.value.content
@@ -421,7 +421,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       const key = lookupKey(rootId)
       const memberKeys = {}
       for (const m of plan.missing) {
-        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
+        try { memberKeys[m] = cryptoModel.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
       }
       if (!Object.keys(memberKeys).length) continue
       await new Promise((resolve) => {
@@ -440,11 +440,11 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     })
 
   const decryptTribeChats = async (idx) => {
-    if (!tribeCrypto || !tribesModel || typeof tribeCrypto.decryptFromTribe !== "function") return idx
+    if (!cryptoModel || !tribesModel || typeof cryptoModel.decryptFromGroup !== "function") return idx
     for (const [k, n] of idx.nodes) {
       const c = n.c || {}
       if (!c.encryptedPayload || !c.tribeId) continue
-      const dec = await tribeCrypto.decryptFromTribe(c, tribesModel).catch(() => null)
+      const dec = await cryptoModel.decryptFromGroup(c, tribesModel).catch(() => null)
       if (dec && !dec._undecryptable) idx.nodes.set(k, { ...n, c: dec })
     }
     return idx
@@ -466,7 +466,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
     type: "chat",
 
     async encryptionKeyFor(chatRootId, tribeId = null) {
-      if (!tribeCrypto) return null
+      if (!cryptoModel) return null
       if (tribeId) {
         const k = await getTribeFirstKeyFor(tribeId)
         if (k) return k
@@ -517,7 +517,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         ...(extra && typeof extra === "object" && typeof extra.courseId === "string" && extra.courseId ? { courseId: extra.courseId } : {})
       }
 
-      if (!tribeCrypto) {
+      if (!cryptoModel) {
         return new Promise((resolve, reject) => {
           ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
         })
@@ -528,11 +528,11 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
           const ancestryIds = await tribesModel.getAncestryChain(tribeId)
           const chain = []
           for (const rid of ancestryIds || []) {
-            const k = tribeCrypto.getKey(rid)
+            const k = cryptoModel.getKey(rid)
             if (!k) { chain.length = 0; break }
             chain.push(k)
           }
-          if (chain.length) content = tribeCrypto.encryptContent(content, chain, true)
+          if (chain.length) content = cryptoModel.encryptContent(content, chain, true)
         } catch (_) {}
         return new Promise((resolve, reject) => {
           ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
@@ -545,15 +545,15 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         })
       }
 
-      const chatKey = ownCrypto.generateTribeKey()
-      content = tribeCrypto.encryptContent(content, [chatKey], true)
+      const chatKey = ownCrypto.generateKey()
+      content = cryptoModel.encryptContent(content, [chatKey], true)
       const result = await new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, msg) => err ? reject(err) : resolve(msg))
       })
       ownCrypto.setKey(result.key, chatKey, 1)
       try {
         const ssbKeys = require("../server/node_modules/ssb-keys")
-        const boxedKey = tribeCrypto.boxKeyForMember(chatKey, userId, ssbKeys)
+        const boxedKey = cryptoModel.boxKeyForMember(chatKey, userId, ssbKeys)
         await new Promise((resolve) => {
           ssbClient.publish({ type: "tribe-keys", tribeId: result.key, generation: 1, memberKeys: { [userId]: boxedKey } }, () => resolve())
         })
@@ -600,21 +600,21 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
         ...(chat.tribeId ? { tribeId: chat.tribeId } : {})
       }
 
-      if (tribeCrypto) {
+      if (cryptoModel) {
         if (chat.tribeId) {
           try {
             const ancestryIds = await tribesModel.getAncestryChain(chat.tribeId)
             const chain = []
             for (const rid of ancestryIds || []) {
-              const k = tribeCrypto.getKey(rid)
+              const k = cryptoModel.getKey(rid)
               if (!k) { chain.length = 0; break }
               chain.push(k)
             }
-            if (chain.length) updated = tribeCrypto.encryptContent(updated, chain, true)
+            if (chain.length) updated = cryptoModel.encryptContent(updated, chain, true)
           } catch (_) {}
         } else {
           const chatKey = lookupKey(rootId)
-          if (chatKey) updated = tribeCrypto.encryptContent(updated, [chatKey], true)
+          if (chatKey) updated = cryptoModel.encryptContent(updated, [chatKey], true)
         }
       }
 
@@ -747,16 +747,16 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       let invite = code
       const pubFlag = opts.public ? { public: true } : {}
 
-      if (tribeCrypto) {
-        const inviteSalt = tribeCrypto.generateInviteSalt()
-        const ekChain = tribeCrypto.encryptChainForInvite([chat.rootId], code, inviteSalt)
+      if (cryptoModel) {
+        const inviteSalt = cryptoModel.generateInviteSalt()
+        const ekChain = cryptoModel.encryptChainForInvite([chat.rootId], code, inviteSalt)
         const ident = opts.public ? { code, ...pubFlag } : { ch: hashCode(code, inviteSalt) }
         if (ekChain) {
           invite = { ...ident, ekChain, salt: inviteSalt, gen: lookupGen(chat.rootId) }
         } else {
           const chatKey = lookupKey(chat.rootId)
           if (chatKey) {
-            const ek = tribeCrypto.encryptForInvite(chatKey, code, inviteSalt)
+            const ek = cryptoModel.encryptForInvite(chatKey, code, inviteSalt)
             invite = { ...ident, ek, salt: inviteSalt, gen: lookupGen(chat.rootId) }
           } else {
             invite = { ...ident, salt: inviteSalt }
@@ -823,13 +823,13 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
 
       let chatKey = null
       let chain = null
-      if (tribeCrypto && typeof matchedInvite === "object") {
+      if (cryptoModel && typeof matchedInvite === "object") {
         if (matchedInvite.ekChain) {
-          chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code, matchedInvite.salt, 3)
+          chain = cryptoModel.decryptChainFromInvite(matchedInvite.ekChain, code, matchedInvite.salt, 3)
           if (Array.isArray(chain) && chain.length) chatKey = chain[0].key
           else chain = null
         } else if (matchedInvite.ek) {
-          chatKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt)
+          chatKey = cryptoModel.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt)
         }
       }
 
@@ -843,9 +843,9 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       if (chain) {
         for (const entry of chain) {
           if (Array.isArray(entry.keys) && entry.keys.length) {
-            tribeCrypto.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length)
+            cryptoModel.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length)
           } else if (entry.key) {
-            tribeCrypto.setKey(entry.rootId, entry.key, entry.gen || 1)
+            cryptoModel.setKey(entry.rootId, entry.key, entry.gen || 1)
           }
         }
       } else if (chatKey) {
@@ -854,13 +854,13 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
 
       await publishMemberToggle(ssbClient, matchedChat.rootId, userId, true, isPublic ? undefined : token)
 
-      if (tribeCrypto && chatKey) {
+      if (cryptoModel && chatKey) {
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys")
           const memberKeys = {}
-          try { memberKeys[userId] = tribeCrypto.boxKeyForMember(chatKey, userId, ssbKeys) } catch (_) {}
+          try { memberKeys[userId] = cryptoModel.boxKeyForMember(chatKey, userId, ssbKeys) } catch (_) {}
           if (matchedChat.author && matchedChat.author !== userId) {
-            try { memberKeys[matchedChat.author] = tribeCrypto.boxKeyForMember(chatKey, matchedChat.author, ssbKeys) } catch (_) {}
+            try { memberKeys[matchedChat.author] = cryptoModel.boxKeyForMember(chatKey, matchedChat.author, ssbKeys) } catch (_) {}
           }
           if (Object.keys(memberKeys).length) {
             await new Promise((resolve) => {
@@ -881,7 +881,7 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       if (chat.status === "CLOSED") throw new Error("Chat is closed")
       if (chat.members.includes(userId)) return chat.key
 
-      if (tribeCrypto && Array.isArray(chat.invites)) {
+      if (cryptoModel && Array.isArray(chat.invites)) {
         const pub = chat.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code && (inv.ek || inv.ekChain))
         if (pub) return await this.joinByInvite(pub.code)
       }
@@ -960,17 +960,17 @@ module.exports = ({ cooler, tribeCrypto, chatCrypto, tribesModel }) => {
       }
 
       const chatIsEncrypted = !!(chat.tribeId) || !!lookupKey(chat.rootId)
-      if (chatIsEncrypted && tribeCrypto) {
+      if (chatIsEncrypted && cryptoModel) {
         let encKey = null
         if (chat.tribeId) encKey = await getTribeFirstKeyFor(chat.tribeId)
         if (!encKey) encKey = lookupKey(chat.rootId)
         if (!encKey) throw new Error(`Missing chat key for ${chat.rootId} — cannot send message`)
-        content.encryptedText = tribeCrypto.encryptWithKey(safeText(text), encKey)
+        content.encryptedText = cryptoModel.encryptWithKey(safeText(text), encKey)
         if (content.image) {
-          content.encryptedImage = tribeCrypto.encryptWithKey(String(content.image), encKey)
+          content.encryptedImage = cryptoModel.encryptWithKey(String(content.image), encKey)
           delete content.image
           if (content.mimeType) {
-            content.encryptedMime = tribeCrypto.encryptWithKey(String(content.mimeType), encKey)
+            content.encryptedMime = cryptoModel.encryptWithKey(String(content.mimeType), encKey)
             delete content.mimeType
           }
         }

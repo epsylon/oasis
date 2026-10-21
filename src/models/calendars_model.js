@@ -51,31 +51,31 @@ const assertCalendarDates = ({ deadline, date, until }) => {
   if (un !== null && dl !== null && un > dl) throw new Error("The recurrence cannot end after the deadline")
 }
 
-module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel }) => {
+module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
-  const ownCrypto = calendarCrypto || tribeCrypto
-  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null
+  const ownCrypto = calendarCrypto || cryptoModel
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (cryptoModel && cryptoModel.getKey(rid)) || null
   const lookupKeys = (rid) => {
     const a = (ownCrypto && ownCrypto.getKeys(rid)) || []
     if (a.length) return a
-    return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
+    return (cryptoModel && cryptoModel.getKeys(rid)) || []
   }
-  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (cryptoModel && cryptoModel.getGen(rid)) || 0)
   const keyProofFor = (keyHex, id) => { try { return crypto.createHmac("sha256", Buffer.from(keyHex, "hex")).update(String(id), "utf8").digest("hex") } catch (_) { return null } }
 
   const rotateCalendarKey = async (rootId, remainingMembers) => {
-    if (!ownCrypto || !tribeCrypto || !rootId) return
+    if (!ownCrypto || !cryptoModel || !rootId) return
     const existing = lookupKey(rootId)
     if (!existing) return
-    const newKey = ownCrypto.generateTribeKey()
+    const newKey = ownCrypto.generateKey()
     const newGen = ownCrypto.addNewKey(rootId, newKey)
     const ssbClient = await openSsb()
     const ssbKeys = require("../server/node_modules/ssb-keys")
     const memberKeys = {}
     for (const m of new Set([ssbClient.id, ...(Array.isArray(remainingMembers) ? remainingMembers : [])])) {
-      try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
+      try { memberKeys[m] = cryptoModel.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
     }
     if (Object.keys(memberKeys).length) {
       await new Promise((resolve) => {
@@ -115,7 +115,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
   const readAll = async (ssbClient) => unwrapForIndex(await readTyped(ssbClient, CALENDAR_TYPES, { limit: logLimit, withWindow: true }))
 
   const ensureMemberKeys = async (ssbClient, messages, cals) => {
-    if (!tribeCrypto || !ownCrypto) return
+    if (!cryptoModel || !ownCrypto) return
     const leavesByRoot = new Map()
     for (const m of messages) {
       const c = m.value && m.value.content
@@ -138,7 +138,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const key = lookupKey(rootId)
       const memberKeys = {}
       for (const m of plan.missing) {
-        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
+        try { memberKeys[m] = cryptoModel.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
       }
       if (!Object.keys(memberKeys).length) continue
       await new Promise((resolve) => {
@@ -147,50 +147,50 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
     }
   }
 
-  const tribeHelpers = tribeCrypto ? tribeCrypto.createHelpers(tribesModel) : null
+  const tribeHelpers = cryptoModel ? cryptoModel.createHelpers(tribesModel) : null
   const unwrapForIndex = (msgs) => tribeHelpers ? tribeHelpers.unwrapMessagesForKind(msgs, CALENDAR_TYPES) : msgs
-  const encryptIfTribe = tribeHelpers ? tribeHelpers.encryptIfTribe : async (c) => c
-  const decryptIfTribe = tribeHelpers ? tribeHelpers.decryptIfTribe : async (c) => c
+  const encryptIfGroup = tribeHelpers ? tribeHelpers.encryptIfGroup : async (c) => c
+  const decryptIfGroup = tribeHelpers ? tribeHelpers.decryptIfGroup : async (c) => c
   const assertReadable = tribeHelpers ? tribeHelpers.assertReadable : () => {}
 
   const encryptStandalone = (content, rootId) => {
-    if (!tribeCrypto || !rootId) return content
+    if (!cryptoModel || !rootId) return content
     const key = lookupKey(rootId)
     if (!key) return content
-    return tribeCrypto.encryptContent(content, [key], true)
+    return cryptoModel.encryptContent(content, [key], true)
   }
 
   const decryptScoped = async (content, rootId) => {
     if (!content) return content
-    if (content.tribeId || (tribeCrypto && tribeCrypto.isTribeMsg(content))) return await decryptIfTribe(content)
+    if (content.tribeId || (cryptoModel && cryptoModel.isSealedMsg(content))) return await decryptIfGroup(content)
     return decryptCalendarRoot(content, rootId)
   }
 
   const decryptCalendarRoot = (content, rootId) => {
     if (!content || !content.encryptedPayload) return content
-    if (!tribeCrypto) return content
+    if (!cryptoModel) return content
     const keys = lookupKeys(rootId)
     if (!keys || !keys.length) return { ...content, _undecryptable: true }
-    return tribeCrypto.decryptContent(content, keys.map(k => [k]))
+    return cryptoModel.decryptContent(content, keys.map(k => [k]))
   }
 
   const tryDecryptPublicInviteKey = (invites) => {
-    if (!tribeCrypto || !Array.isArray(invites)) return null
+    if (!cryptoModel || !Array.isArray(invites)) return null
     for (const inv of invites) {
       if (!inv || typeof inv !== "object" || inv.public !== true) continue
       if (typeof inv.code !== "string") continue
       if (typeof inv.ek === "string") {
-        try { const k = tribeCrypto.decryptFromInvite(inv.ek, inv.code, inv.salt); if (k) return k } catch (_) {}
+        try { const k = cryptoModel.decryptFromInvite(inv.ek, inv.code, inv.salt); if (k) return k } catch (_) {}
       }
       if (typeof inv.ekChain === "string") {
-        try { const chain = tribeCrypto.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt); if (Array.isArray(chain) && chain.length && chain[0].key) return chain[0].key } catch (_) {}
+        try { const chain = cryptoModel.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt); if (Array.isArray(chain) && chain.length && chain[0].key) return chain[0].key } catch (_) {}
       }
     }
     return null
   }
 
   const decryptIndexNodes = async (idx) => {
-    if (!tribeCrypto) return
+    if (!cryptoModel) return
     for (const [k, n] of idx.nodes.entries()) {
       if (!n.c || !n.c.encryptedPayload) continue
       let root = k
@@ -198,7 +198,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       let dec = null
       if (n.c.tribeId && tribesModel) {
         try {
-          const r = await tribeCrypto.decryptFromTribe(n.c, tribesModel)
+          const r = await cryptoModel.decryptFromGroup(n.c, tribesModel)
           if (r && !r._undecryptable) dec = r
         } catch (_) {}
       }
@@ -209,7 +209,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       if (!dec) {
         const pubKey = tryDecryptPublicInviteKey(n.c.invites)
         if (pubKey) {
-          try { const r = tribeCrypto.decryptContent(n.c, [[pubKey]]); if (r && !r._undecryptable) dec = r } catch (_) {}
+          try { const r = cryptoModel.decryptContent(n.c, [[pubKey]]); if (r && !r._undecryptable) dec = r } catch (_) {}
         }
       }
       if (dec) {
@@ -438,10 +438,10 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       let calKey = null
       let content = plainContent
       if (tribeId) {
-        content = await encryptIfTribe(plainContent)
-      } else if (tribeCrypto) {
-        calKey = ownCrypto.generateTribeKey()
-        content = tribeCrypto.encryptContent(plainContent, [calKey], true)
+        content = await encryptIfGroup(plainContent)
+      } else if (cryptoModel) {
+        calKey = ownCrypto.generateKey()
+        content = cryptoModel.encryptContent(plainContent, [calKey], true)
       }
 
       const calMsg = await new Promise((resolve, reject) => {
@@ -450,11 +450,11 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
 
       const calendarId = calMsg.key
 
-      if (calKey && tribeCrypto) {
+      if (calKey && cryptoModel) {
         ownCrypto.setKey(calendarId, calKey, 1)
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys")
-          const boxedKey = tribeCrypto.boxKeyForMember(calKey, userId, ssbKeys)
+          const boxedKey = cryptoModel.boxKeyForMember(calKey, userId, ssbKeys)
           await new Promise((resolve) => {
             ssbClient.publish({ type: "tribe-keys", tribeId: calendarId, generation: 1, memberKeys: { [userId]: boxedKey } }, () => resolve())
           })
@@ -462,8 +462,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         if (validStatus === "OPEN") {
           try {
             const pubCode = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex")
-            const inviteSalt = tribeCrypto.generateInviteSalt()
-            const ek = tribeCrypto.encryptForInvite(calKey, pubCode, inviteSalt)
+            const inviteSalt = cryptoModel.generateInviteSalt()
+            const ek = cryptoModel.encryptForInvite(calKey, pubCode, inviteSalt)
             const tipId = await this.resolveCurrentId(calendarId)
             const item = await new Promise((resolve, reject) => ssbClient.get(tipId, (e, it) => e ? reject(e) : resolve(it)))
             const dec = decryptCalendarRoot(item.content, calendarId)
@@ -501,8 +501,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         ...(hasAnyInterval(intervalWeekly, intervalMonthly, intervalYearly) && (intervalDeadline || deadline) ? { intervalDeadline: intervalDeadline || deadline } : {}),
         ...(tribeId ? { tribeId } : {})
       }
-      if (tribeId) dateContent = await encryptIfTribe(dateContent)
-      else if (calKey) dateContent = tribeCrypto.encryptContent(dateContent, [calKey], true)
+      if (tribeId) dateContent = await encryptIfGroup(dateContent)
+      else if (calKey) dateContent = cryptoModel.encryptContent(dateContent, [calKey], true)
       const dateMsg = await new Promise((resolve, reject) => {
         ssbClient.publish(dateContent, (err, msg) => err ? reject(err) : resolve(msg))
       })
@@ -517,8 +517,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
           createdAt: new Date().toISOString(),
           ...(tribeId ? { tribeId } : {})
         }
-        if (tribeId) noteContent = await encryptIfTribe(noteContent)
-        else if (calKey) noteContent = tribeCrypto.encryptContent(noteContent, [calKey], true)
+        if (tribeId) noteContent = await encryptIfGroup(noteContent)
+        else if (calKey) noteContent = cryptoModel.encryptContent(noteContent, [calKey], true)
         await new Promise((resolve, reject) => {
           ssbClient.publish(noteContent, (err, msg) => err ? reject(err) : resolve(msg))
         })
@@ -561,7 +561,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         updated.invites = updated.invites.filter(inv => !(inv && typeof inv === "object" && inv.public === true))
         try { await rotateCalendarKey(rootId, (updated.participants || []).filter(p => p !== userId)) } catch (_) {}
       }
-      if (updated.tribeId) updated = await encryptIfTribe(updated)
+      if (updated.tribeId) updated = await encryptIfGroup(updated)
       else updated = encryptStandalone(updated, rootId)
       const result = await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
@@ -591,7 +591,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       if (!cal) throw new Error("Calendar not found")
       const participants = Array.isArray(cal.participants) ? cal.participants : []
       if (participants.includes(userId)) return
-      if (tribeCrypto && Array.isArray(cal.invites)) {
+      if (cryptoModel && Array.isArray(cal.invites)) {
         const pub = cal.invites.find(inv => typeof inv === "object" && inv.public === true && inv.code && (inv.ek || inv.ekChain))
         if (pub) return await this.joinByInvite(pub.code)
       }
@@ -693,7 +693,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         ...(ruleDeadline ? { intervalDeadline: ruleDeadline } : {}),
         ...(cal.tribeId ? { tribeId: cal.tribeId } : {})
       }
-      if (cal.tribeId) dateContent = await encryptIfTribe(dateContent)
+      if (cal.tribeId) dateContent = await encryptIfGroup(dateContent)
       else dateContent = encryptStandalone(dateContent, rootId)
       const msg = await new Promise((resolve, reject) => {
         ssbClient.publish(dateContent, (err, m) => err ? reject(err) : resolve(m))
@@ -728,15 +728,15 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         if (c.calendarId !== rootId) continue
         if (!members.has(v.author)) continue
         let dec = c
-        if (c.encryptedPayload && tribeCrypto) {
+        if (c.encryptedPayload && cryptoModel) {
           if (c.tribeId && tribesModel) {
-            const r = await tribeCrypto.decryptFromTribe(c, tribesModel)
+            const r = await cryptoModel.decryptFromGroup(c, tribesModel)
             dec = r && !r._undecryptable ? r : c
             if (r && r._undecryptable) continue
           } else {
             const keys = [...(lookupKeys(c.calendarId) || []), ...(pubKey ? [pubKey] : [])]
             if (!keys.length) continue
-            const r = tribeCrypto.decryptContent(c, keys.map(k => [k]))
+            const r = cryptoModel.decryptContent(c, keys.map(k => [k]))
             if (!r || r._undecryptable) continue
             dec = r
           }
@@ -789,8 +789,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         if (!c || c.type !== "calendarDate") continue
         if (tombstoned.has(m.key)) break
         let dec = c
-        if (c.encryptedPayload && tribeCrypto && tribesModel) {
-          const r = await tribeCrypto.decryptFromTribe(c, tribesModel)
+        if (c.encryptedPayload && cryptoModel && tribesModel) {
+          const r = await cryptoModel.decryptFromGroup(c, tribesModel)
           if (r && !r._undecryptable) dec = r
         }
         dateAuthor = dec.author || (m.value || {}).author
@@ -828,7 +828,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         createdAt: new Date().toISOString(),
         ...(cal.tribeId ? { tribeId: cal.tribeId } : {})
       }
-      if (cal.tribeId) noteContent = await encryptIfTribe(noteContent)
+      if (cal.tribeId) noteContent = await encryptIfGroup(noteContent)
       else noteContent = encryptStandalone(noteContent, rootId)
       return new Promise((resolve, reject) => {
         ssbClient.publish(noteContent, (err, msg) => err ? reject(err) : resolve(msg))
@@ -871,12 +871,12 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         let dec = c
         if (c.encryptedPayload) {
           let r = await decryptScoped(c, rootId)
-          if ((!r || r._undecryptable) && !c.tribeId && tribeCrypto) {
+          if ((!r || r._undecryptable) && !c.tribeId && cryptoModel) {
             if (pubKey === undefined) {
               const cal = await this.getCalendarById(rootId).catch(() => null)
               pubKey = cal ? tryDecryptPublicInviteKey(cal.invites) : null
             }
-            if (pubKey) r = tribeCrypto.decryptContent(c, [[pubKey]])
+            if (pubKey) r = cryptoModel.decryptContent(c, [[pubKey]])
           }
           if (r && !r._undecryptable) dec = r
           else continue
@@ -924,8 +924,8 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const dated = messages.filter(m => !tombstoned.has(m.key) && ((m.value || {}).content || {}).type === "calendarDate")
       const decoded = await Promise.all(dated.map(async (m) => {
         const c = m.value.content
-        if (!(c.encryptedPayload && tribeCrypto && tribesModel)) return c
-        const r = await tribeCrypto.decryptFromTribe(c, tribesModel)
+        if (!(c.encryptedPayload && cryptoModel && tribesModel)) return c
+        const r = await cryptoModel.decryptFromGroup(c, tribesModel)
         return !r || r._undecryptable ? null : r
       }))
       for (let i = 0; i < dated.length; i++) {
@@ -1013,12 +1013,12 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
       const code = crypto.randomBytes(INVITE_CODE_BYTES).toString("hex")
       let invite = code
       const calKey = !cal.tribeId ? lookupKey(cal.rootId) : null
-      if (tribeCrypto && calKey) {
-        const inviteSalt = tribeCrypto.generateInviteSalt()
-        const ek = tribeCrypto.encryptForInvite(calKey, code, inviteSalt)
+      if (cryptoModel && calKey) {
+        const inviteSalt = cryptoModel.generateInviteSalt()
+        const ek = cryptoModel.encryptForInvite(calKey, code, inviteSalt)
         invite = opts.public
           ? { code, ek, salt: inviteSalt, gen: lookupGen(cal.rootId), public: true }
-          : { ch: tribeCrypto.hashInviteCode(code, inviteSalt), ek, salt: inviteSalt, gen: lookupGen(cal.rootId) }
+          : { ch: cryptoModel.hashInviteCode(code, inviteSalt), ek, salt: inviteSalt, gen: lookupGen(cal.rootId) }
       }
       if (opts.public && typeof invite !== "object") invite = { code, public: true }
       const tipId = await this.resolveCurrentId(calendarId)
@@ -1041,7 +1041,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         updatedAt: new Date().toISOString(),
         replaces: tipId
       }
-      if (updated.tribeId) updated = await encryptIfTribe(updated)
+      if (updated.tribeId) updated = await encryptIfGroup(updated)
       else updated = encryptStandalone(updated, cal.rootId)
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
@@ -1087,7 +1087,7 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         updatedAt: new Date().toISOString(),
         replaces: tipId
       }
-      if (updated.tribeId) updated = await encryptIfTribe(updated)
+      if (updated.tribeId) updated = await encryptIfGroup(updated)
       else updated = encryptStandalone(updated, cal.rootId)
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
@@ -1105,15 +1105,15 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         const invs = Array.isArray(cal.invites) ? cal.invites : []
         for (const inv of invs) {
           if (typeof inv === "string" && inv === code) { matched = cal; matchedInvite = inv; break }
-          if (typeof inv === "object" && inv && (inv.code === code || (inv.ch && tribeCrypto && inv.ch === tribeCrypto.hashInviteCode(code, inv.salt)))) { matched = cal; matchedInvite = inv; break }
+          if (typeof inv === "object" && inv && (inv.code === code || (inv.ch && cryptoModel && inv.ch === cryptoModel.hashInviteCode(code, inv.salt)))) { matched = cal; matchedInvite = inv; break }
         }
         if (matched) break
       }
       if (!matched) throw new Error("Invalid or expired invite code")
       if (matched.participants.includes(userId)) throw new Error("Already a participant")
-      if (typeof matchedInvite === "object" && matchedInvite.ch && tribeCrypto && matchedInvite.ek) {
+      if (typeof matchedInvite === "object" && matchedInvite.ch && cryptoModel && matchedInvite.ek) {
         let probeKey = null
-        try { probeKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt) } catch (_) {}
+        try { probeKey = cryptoModel.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt) } catch (_) {}
         const messages = await readAll(await openSsb())
         const spent = messages.some(m => {
           const c = m.value && m.value.content
@@ -1122,21 +1122,21 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         if (spent) throw new Error("Invite already used")
       }
       let calKey = null
-      if (tribeCrypto && typeof matchedInvite === "object") {
+      if (cryptoModel && typeof matchedInvite === "object") {
         if (matchedInvite.ekChain) {
-          const chain = tribeCrypto.decryptChainFromInvite(matchedInvite.ekChain, code, matchedInvite.salt, 3)
+          const chain = cryptoModel.decryptChainFromInvite(matchedInvite.ekChain, code, matchedInvite.salt, 3)
           if (Array.isArray(chain) && chain.length) {
             for (const entry of chain) {
               if (Array.isArray(entry.keys) && entry.keys.length) {
-                tribeCrypto.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length)
+                cryptoModel.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length)
               } else if (entry.key) {
-                tribeCrypto.setKey(entry.rootId, entry.key, entry.gen || 1)
+                cryptoModel.setKey(entry.rootId, entry.key, entry.gen || 1)
               }
             }
             calKey = chain[0].key
           }
         } else if (matchedInvite.ek) {
-          calKey = tribeCrypto.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt)
+          calKey = cryptoModel.decryptFromInvite(matchedInvite.ek, code, matchedInvite.salt)
           ownCrypto.setKey(matched.rootId, calKey, matchedInvite.gen || 1)
         }
       }
@@ -1166,18 +1166,18 @@ module.exports = ({ cooler, pmModel, tribeCrypto, calendarCrypto, tribesModel })
         updatedAt: new Date().toISOString(),
         replaces: tipId
       }
-      if (updated.tribeId) updated = await encryptIfTribe(updated)
+      if (updated.tribeId) updated = await encryptIfGroup(updated)
       else updated = encryptStandalone(updated, matched.rootId)
       await new Promise((resolve, reject) => ssbClient.publish(updated, (e, res) => e ? reject(e) : resolve(res)))
       const tombstone = { type: "tombstone", target: tipId, deletedAt: new Date().toISOString(), author: userId }
       await new Promise((resolve, reject) => ssbClient.publish(tombstone, e => e ? reject(e) : resolve()))
-      if (tribeCrypto && calKey) {
+      if (cryptoModel && calKey) {
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys")
           const memberKeys = {}
-          try { memberKeys[userId] = tribeCrypto.boxKeyForMember(calKey, userId, ssbKeys) } catch (_) {}
+          try { memberKeys[userId] = cryptoModel.boxKeyForMember(calKey, userId, ssbKeys) } catch (_) {}
           if (matched.author && matched.author !== userId) {
-            try { memberKeys[matched.author] = tribeCrypto.boxKeyForMember(calKey, matched.author, ssbKeys) } catch (_) {}
+            try { memberKeys[matched.author] = cryptoModel.boxKeyForMember(calKey, matched.author, ssbKeys) } catch (_) {}
           }
           if (Object.keys(memberKeys).length) {
             await new Promise((resolve) => {

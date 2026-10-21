@@ -98,6 +98,11 @@ div {
   border: 1px solid #333;
 }
 
+:where(:is(div, li):has(> .card-top):not(.tribe-side)) div {
+  background-color: transparent;
+  border: 0;
+}
+
 div .header-content {
   width: 100%;
 }
@@ -320,6 +325,7 @@ a.user-link:focus, button.user-link:focus {
 .btn-spread-on:hover, .content-actions .btn-pin-on:hover { background: #ffb733 !important; color: #000000 !important; }
 .btn-singleview.btn-content { background: #ffa300 !important; color: #1e1f23 !important; border: 1px solid #ffa300 !important; }
 .btn-singleview.btn-content:hover { background: #FFD700 !important; color: #1e1f23 !important; border-color: #FFD700 !important; }
+.card-menu-items { background: #1e1f23 !important; border-color: #333333 !important; }
 .btn-back { background: #21232b !important; color: #ffa300 !important; }
 .btn-back:hover { background: #292b36 !important; color: #FFD700 !important; }
 .block-info-table td, .pm-info-table td { border-color: #444 !important; }

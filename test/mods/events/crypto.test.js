@@ -139,16 +139,16 @@ describe('events: open invitations', (t) => {
     const planted = require('crypto').randomBytes(32).toString('hex');
     S.setActor();
     const ssbS = await S.cooler.open();
-    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: r.key, generation: 9, memberKeys: { [B.keypair.id]: S.tribeCrypto.boxKeyForMember(planted, B.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: r.key, generation: 9, memberKeys: { [B.keypair.id]: S.cryptoModel.boxKeyForMember(planted, B.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
     B.setActor();
     await B.use('events').ingestKeys();
-    notOk(require('../../../src/models/crypto')(B.configDir, 'events').getKeys(r.key).includes(planted), 'the planted key is not stored');
+    notOk(require('../../../src/models/crypto_model')(B.configDir).scope('events').getKeys(r.key).includes(planted), 'the planted key is not stored');
   });
 
   t('when an attendee leaves, the organizer changes the key and only those who stay receive it', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
     const pause = () => new Promise(r => setTimeout(r, 5));
-    const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'events');
+    const keysOf = (P) => require('../../../src/models/crypto_model')(P.configDir).scope('events');
     A.setActor();
     const r = await A.use('events').createEvent('Rotating', 'd', '2030-12-01T20:00:00Z', 'home', 0, '', [], [], 'private', '');
     const codeB = (await A.use('events').generateInvite(r.key)).code;

@@ -1,25 +1,28 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement , renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote } = require("./main_views")
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderEncryptedChip } = require("./clearnet_view")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel, renderMapEmbedWithZoom } = require("./maps_view")
+const { renderMapEmbedWithZoom } = require("./maps_view")
 
-const renderMediaBlob = (value, fallbackSrc = null, attrs = {}) => {
+const renderMediaBlob = (value, fallbackSrc = null, attrs = {}, zoom = true) => {
   if (!value) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
   const s = String(value).trim()
   if (!s) return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
-  if (s.startsWith('&')) return renderZoomableImage(`/blob/${encodeURIComponent(s)}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
+  const picture = (src) => zoom
+    ? renderZoomableImage(src, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
+    : img({ loading: 'lazy', src, class: attrs.class || 'post-image', alt: attrs.alt || '' })
+  if (s.startsWith('&')) return picture(`/blob/${encodeURIComponent(s)}`)
   const mVideo = s.match(/\[video:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mVideo) return video({ controls: true, class: attrs.class || 'post-video', src: `/blob/${encodeURIComponent(mVideo[1])}`, preload: 'metadata' })
   const mAudio = s.match(/\[audio:[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
   if (mAudio) return audio({ controls: true, class: attrs.class || 'post-audio', src: `/blob/${encodeURIComponent(mAudio[1])}` })
   const mImg = s.match(/!\[[^\]]*\]\(\s*(&[^)\s]+\.sha256)\s*\)/)
-  if (mImg) return renderZoomableImage(`/blob/${encodeURIComponent(mImg[1])}`, { imgClass: attrs.class || 'post-image', alt: attrs.alt || '' })
+  if (mImg) return picture(`/blob/${encodeURIComponent(mImg[1])}`)
   return fallbackSrc ? img({ src: fallbackSrc, ...attrs }) : null
 }
 
@@ -475,23 +478,12 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
             filtered.length > 0
               ? paged(filtered).map((item) => {
                   const isOwner = String(item.seller) === String(userId)
+                  const itemHref = `/market/${encodeURIComponent(item.id)}`
 
                   return div({ class: "tribe-card market-tribe-card" },
-                    div({ class: "tribe-card-image-wrapper" },
-                      a({ href: `/market/${encodeURIComponent(item.id)}` },
-                        renderMediaBlob(item.image, '/assets/images/default-market.png', { class: 'tribe-card-hero-image' })
-                      )
-                    ),
-                    div({ class: "card-header activity-card-header" },
-                      span(),
-                      renderContentActions(item.id, `/market/${encodeURIComponent(item.id)}`, { spread: (params.spreadMap && params.spreadMap.get(item.id)) || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, deleteAction: isOwner ? contentDeleteAction('market', item.id) : undefined })
-                    ),
-                    div({ class: "tribe-card-body" },
-                      div({ class: "shop-title-row" },
-                        h2({ class: "tribe-card-title" }, a({ href: `/market/${encodeURIComponent(item.id)}` }, item.title))
-                      ),
-                      renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
-                      div({ class: "card-chips-row" },
+                    renderCardTop(item.id, itemHref, {
+                      date: item.createdAt,
+                      chips: [
                         String(item.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
                         renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
                         item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
@@ -499,8 +491,21 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                         item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
                         renderLifespanChip(item.lifetime, i18n),
                         item.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref("market", item.title, item.id)) : null
+                      ],
+                      spread: (params.spreadMap && params.spreadMap.get(item.id)) || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, deleteAction: isOwner ? contentDeleteAction('market', item.id) : undefined
+                    }),
+                    div({ class: "tribe-card-image-wrapper" },
+                      a({ href: itemHref },
+                        renderMediaBlob(item.image, '/assets/images/default-market.png', { class: 'tribe-card-hero-image' }, false)
+                      )
+                    ),
+                    div({ class: "tribe-card-body" },
+                      div({ class: "shop-title-row" },
+                        h2({ class: "tribe-card-title" }, a({ href: itemHref }, item.title))
                       ),
-                      div({ class: "price-chip" }, `${item.price} ECO`)
+                      renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
+                      div({ class: "price-chip" }, `${item.price} ECO`),
+                      null
                     )
                   )
                 })
@@ -573,7 +578,6 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
             td({ class: "tribe-info-label" }, labelText),
             td({ class: "tribe-info-value" }, valueNode)
           ))
-        pushRow(i18n.marketItemSeller, userLink(item.seller))
         if (item.shopId && item.shopTitle) pushRow(i18n.marketShopLabel || "Shop", a({ href: `/shops/${encodeURIComponent(item.shopId)}`, class: "user-link" }, item.shopTitle))
         if (item.deadline) pushRow(i18n.marketItemAvailable, moment(item.deadline).format("YYYY/MM/DD HH:mm"))
 
@@ -597,20 +601,17 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         const marketActions = String(item.seller) === String(userId) ? renderMarketOwnerActions(item, `/market/${encodeURIComponent(item.id)}`) : []
 
         const itemSide = div({ class: "tribe-side" },
-          div({ class: "card-header activity-card-header" },
-            renderContentActions(item.id, `/market/${encodeURIComponent(item.id)}`, { spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo: `/market/${encodeURIComponent(item.id)}`, deleteAction: String(item.seller) === String(userId) ? contentDeleteAction('market', item.id) : undefined })
-          ),
+          renderCardTop(item.id, `/market/${encodeURIComponent(item.id)}`, { arrow: false, date: item.createdAt, chips, bylineExtra: [renderEditedChip(item.id, item.rootId)], spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo: `/market/${encodeURIComponent(item.id)}`, deleteAction: String(item.seller) === String(userId) ? contentDeleteAction('market', item.id) : undefined }),
           div({ class: "shop-title-row" },
-            h2({ class: "tribe-card-title" }, item.title),
-            renderEditedChip(item.id, item.rootId)
+            h2({ class: "tribe-card-title" }, item.title)
           ),
           renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
-          chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
           String(item.seller) === String(userId) ? renderClearnetSwitch("market", item.rootId || item.id, isClearnet) : null,
           renderMediaBlob(item.image, "/assets/images/default-market.png"),
-          div({ class: "price-chip" }, `${item.price} ECO`),
+    renderDetailShare(item.id, `/market/${encodeURIComponent(item.id)}`, item.title),
           renderStockBar(item.stock, maxStock),
-          table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+          renderCountdownField(item),
+          infoRows.length ? table({ class: "tribe-info-table jobs-info-table" }, ...infoRows) : null,
           tagsNode,
           visibilityRow,
           marketActions.length ? div({ class: "tribe-side-actions" }, ...marketActions) : null
@@ -623,8 +624,8 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
                 p({ class: "tribe-side-description" }, ...renderStyledText(item.description))
               )
             : null,
-          renderCountdownField(item),
           item.mapUrl ? div({ class: "job-section" }, renderMapEmbedWithZoom(params.mapData, item.mapUrl, `/market/${encodeURIComponent(item.id)}`, params.zoom)) : null,
+          showBuy ? null : div({ class: "price-chip" }, `${item.price} ECO`),
           item.item_type === "auction"
             ? div(
                 { class: "auction-info job-section" },
@@ -651,20 +652,46 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
             : null,
           showBuy
             ? div(
-                { class: "market-item actions" },
+                { class: "job-section buy-box" },
                 form(
                   { method: "POST", action: `/market/buy/${encodeURIComponent(item.id)}`, class: "market-buy-form" },
                   input({ type: "hidden", name: "returnTo", value: "/inbox?filter=sent" }),
+                  div({ class: "title-with-chip" }, label(i18n.shopBuyDeliveryAddress), renderEncryptedChip(i18n)),
+                  textarea({ maxlength: "5000", name: "deliveryAddress", rows: 3, placeholder: i18n.shopBuyDeliveryAddressPlaceholder, ...(item.includesShipping ? { required: true } : {}) }),
+                  br(),
+                  label(i18n.shopBuyContact),
+                  br(),
+                  input({ type: "text", name: "contact", placeholder: i18n.shopBuyContactPlaceholder }),
+                  br(),
+                  label(i18n.shopBuyNotes),
+                  br(),
+                  textarea({ maxlength: "5000", name: "notes", rows: 2, placeholder: i18n.shopBuyNotesPlaceholder }),
+                  br(),
+                  div({ class: "price-chip" }, `${item.price} ECO`),
+                  br(),
+                  br(),
                   button({ class: "buy-btn", type: "submit" }, i18n.marketActionsBuy)
                 )
+              )
+            : null,
+          Array.isArray(params.orders) && params.orders.length
+            ? div({ class: "job-section" },
+                h2({ class: "job-section-title" }, i18n.shopOrdersTitle),
+                ...params.orders.map(o => div({ class: "shop-order-card card-section" },
+                  div({ class: "card-chips-row" }, renderEncryptedChip(i18n)),
+                  div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopOrderBuyer}:`), userLink(o.buyer)),
+                  o.deliveryAddress ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyDeliveryAddress}:`), span({ class: "card-value" }, String(o.deliveryAddress))) : null,
+                  o.contact ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyContact}:`), span({ class: "card-value" }, String(o.contact))) : null,
+                  o.notes ? div({ class: "card-field" }, span({ class: "card-label" }, `${i18n.shopBuyNotes}:`), span({ class: "card-value" }, String(o.notes))) : null,
+                  p({ class: "card-footer" }, span({ class: "date-link" }, moment(o.ts).format("YYYY/MM/DD HH:mm")))
+                ))
               )
             : null,
           renderEngagement(item.id,
             String(item.seller) !== String(userId) && item.purchasedByViewer
               ? renderOpinionsVoting("/market/opinions", item.id, item.opinions, returnTo, item.opinions_inhabitants)
               : null,
-            renderMarketCommentsSection(item.id, returnTo, comments)
-          )
+            renderMarketCommentsSection(item.id, returnTo, comments))
         )
 
         return div({ class: "tribe-details" }, itemSide, itemMain)

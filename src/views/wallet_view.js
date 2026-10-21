@@ -2,6 +2,8 @@ const { form, button, div, h2, p, section, input, span, table, thead, tbody, tr,
 const moment = require("../server/node_modules/moment");
 const { template, i18n, userLink, renderWalletChip, renderStateChip, paged } = require('./main_views');
 
+const ECOIN_SOURCE_URL = 'https://github.com/epsylon/ecoin';
+
 const TX_CATEGORY_CHIPS = {
     receive: ["mutuals", "\u2B07"],
     send: ["whole", "\u2B06"],
@@ -213,7 +215,11 @@ exports.walletErrorView = async (error) => {
     const header = div({ class: 'tags-header module-header-line' }, h2(i18n.walletTitle), p(i18n.walletDescription), renderWalletChip());
     const w = (require('../configs/config-manager.js').getConfig() || {}).wallet || {};
     if (![w.url, w.user, w.pass].every(v => String(v || '').trim())) {
-        return template(i18n.walletTitle, section(header, div({ class: "wallet-error" }, h2(i18n.walletStatus), p(i18n.walletNotConfigured, ' ', a({ href: '/settings#wallet' }, i18n.walletConfiguration)))));
+        return template(i18n.walletTitle, section(header, div({ class: "wallet-error" }, h2(i18n.walletStatus), p(i18n.walletNotConfigured),
+            div({ class: "wallet-error-actions" },
+                a({ href: ECOIN_SOURCE_URL, class: "update-download-link", target: "_blank", rel: "noopener noreferrer" }, i18n.walletDownloadEcoin),
+                a({ href: '/settings#wallet', class: "update-download-link" }, i18n.walletConfiguration)
+            ))));
     }
     return template(
         i18n.walletTitle,

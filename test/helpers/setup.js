@@ -26,7 +26,7 @@ const fresh = () => {
   return dir;
 };
 
-const tribeCryptoFactory = require('../../src/models/crypto');
+const cryptoModelFactory = require('../../src/models/crypto_model');
 const realConfig = require('../../src/server/ssb_config');
 
 const FACTORIES = {
@@ -107,16 +107,16 @@ function makePeer(network, keypair) {
   const node = makeNode(network, kp);
   const cooler = makeCooler(node);
   const configDir = fresh();
-  const tribeCrypto = tribeCryptoFactory(configDir, 'tribes');
-  const chatCrypto = tribeCryptoFactory(configDir, 'chats');
-  const padCrypto = tribeCryptoFactory(configDir, 'pads');
-  const roomCrypto = tribeCryptoFactory(configDir, 'rooms');
-  const mapCrypto = tribeCryptoFactory(configDir, 'maps');
-  const calendarCrypto = tribeCryptoFactory(configDir, 'calendars');
-  const eventCrypto = tribeCryptoFactory(configDir, 'events');
-  const forumCrypto = tribeCryptoFactory(configDir, 'forum');
-  const schoolCrypto = tribeCryptoFactory(configDir, 'school');
-  const baseDeps = { cooler, isPublic: false, tribeCrypto };
+  const cryptoModel = cryptoModelFactory(configDir);
+  const chatCrypto = cryptoModel.scope('chats');
+  const padCrypto = cryptoModel.scope('pads');
+  const roomCrypto = cryptoModel.scope('rooms');
+  const mapCrypto = cryptoModel.scope('maps');
+  const calendarCrypto = cryptoModel.scope('calendars');
+  const eventCrypto = cryptoModel.scope('events');
+  const forumCrypto = cryptoModel.scope('forum');
+  const schoolCrypto = cryptoModel.scope('school');
+  const baseDeps = { cooler, isPublic: false, cryptoModel };
   const models = {};
   const requireOnce = (name) => {
     if (models[name]) return models[name];
@@ -137,7 +137,7 @@ function makePeer(network, keypair) {
     } else if (name === 'calendars') {
       deps = { ...baseDeps, calendarCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'housing') {
-      deps = { ...baseDeps, tribeCrypto };
+      deps = { ...baseDeps, cryptoModel };
     } else if (name === 'school') {
       deps = { ...baseDeps, transfersModel: requireOnce('transfers'), schoolCrypto, chatsModel: requireOnce('chats') };
     } else if (name === 'agenda') {
@@ -155,7 +155,7 @@ function makePeer(network, keypair) {
     } else if (name === 'events') {
       deps = { ...baseDeps, eventCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'forum') {
-      deps = { cooler, isPublic: false, tribeCrypto, forumCrypto };
+      deps = { cooler, isPublic: false, cryptoModel, forumCrypto };
     } else if (name === 'search') {
       deps = { ...baseDeps, padsModel: requireOnce('pads'), tribesModel: requireOnce('tribes') };
     } else if (name === 'tags') {
@@ -215,7 +215,7 @@ function makePeer(network, keypair) {
     keypair: kp,
     node,
     cooler,
-    tribeCrypto,
+    cryptoModel,
     configDir,
     use(name) { return requireOnce(name); },
     setActor() { realConfig.keys = kp; }

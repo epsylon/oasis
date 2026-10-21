@@ -16,7 +16,7 @@ const normalizeTags = (raw) => {
 }
 const voteSum = (opinions = {}) => Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)
 
-module.exports = ({ cooler, tribeCrypto }) => {
+module.exports = ({ cooler, cryptoModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
@@ -106,8 +106,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
   const decryptBuyers = (val, key) => {
     if (Array.isArray(val)) return val
-    if (typeof val === 'string' && tribeCrypto && key) {
-      try { return JSON.parse(tribeCrypto.decryptWithKey(val, key)) } catch {}
+    if (typeof val === 'string' && cryptoModel && key) {
+      try { return JSON.parse(cryptoModel.decryptWithKey(val, key)) } catch {}
     }
     return []
   }
@@ -116,25 +116,25 @@ module.exports = ({ cooler, tribeCrypto }) => {
   const productShopId = (c) => (c && (c.shopId || c.tribeId)) || ""
 
   const keysForRoot = (rootId) => {
-    if (!tribeCrypto || !rootId) return []
-    const ks = (tribeCrypto.getKeys && tribeCrypto.getKeys(rootId)) || []
+    if (!cryptoModel || !rootId) return []
+    const ks = (cryptoModel.getKeys && cryptoModel.getKeys(rootId)) || []
     if (ks.length) return ks
-    const k = tribeCrypto.getKey ? tribeCrypto.getKey(rootId) : null
+    const k = cryptoModel.getKey ? cryptoModel.getKey(rootId) : null
     return k ? [k] : []
   }
 
   const decryptShopContent = (c, keyRootId) => {
     if (!isEncrypted(c)) return c
-    if (!tribeCrypto) return { ...c, _undecryptable: true }
+    if (!cryptoModel) return { ...c, _undecryptable: true }
     const keys = keysForRoot(keyRootId)
     if (!keys.length) return { ...c, _undecryptable: true }
-    return tribeCrypto.decryptContent(c, keys.map(k => [k]))
+    return cryptoModel.decryptContent(c, keys.map(k => [k]))
   }
 
   const encryptForShop = (plainContent, shopRootId) => {
     const keys = keysForRoot(shopRootId)
     if (!keys.length) throw new Error("Missing shop key")
-    return tribeCrypto.encryptContent(plainContent, [keys[0]], true)
+    return cryptoModel.encryptContent(plainContent, [keys[0]], true)
   }
 
   const buildIndex = (messages) => {
@@ -243,7 +243,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     const undecryptable = !!c._undecryptable
     const agg = idx ? idx.aggregateFor(rootId, c) : { opinions: c.opinions || {}, opinions_inhabitants: safeArr(c.opinions_inhabitants) }
     const sellerStock = Number(c.stock) || 0
-    const sellerBuyers = encrypted ? safeArr(c.buyers) : decryptBuyers(c.buyers, tribeCrypto ? tribeCrypto.getKey(rootId) : null)
+    const sellerBuyers = encrypted ? safeArr(c.buyers) : decryptBuyers(c.buyers, cryptoModel ? cryptoModel.getKey(rootId) : null)
     const buyers = Array.from(new Set(sellerBuyers.concat(idx ? idx.purchaseAuthorsFor(rootId) : [])))
     return {
       key: node.key,
@@ -324,14 +324,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
         opinions_inhabitants: []
       }
 
-      const wantsEncryption = vis === "CLOSED" && !!tribeCrypto
+      const wantsEncryption = vis === "CLOSED" && !!cryptoModel
       return new Promise((resolve, reject) => {
         if (wantsEncryption) {
-          const shopKey = tribeCrypto.generateTribeKey()
-          const encrypted = tribeCrypto.encryptContent(content, [shopKey], true)
+          const shopKey = cryptoModel.generateKey()
+          const encrypted = cryptoModel.encryptContent(content, [shopKey], true)
           ssbClient.publish(encrypted, (err, msg) => {
             if (err) return reject(err)
-            if (msg && msg.key) tribeCrypto.setKey(msg.key, shopKey, 1)
+            if (msg && msg.key) cryptoModel.setKey(msg.key, shopKey, 1)
             resolve(msg)
           })
         } else {
@@ -500,14 +500,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
       return new Promise((resolve, reject) => {
         if (e2e) {
           let enc
-          try { enc = tribeCrypto.encryptContent(content, [shopKeys[0]], true) } catch (e) { return reject(e) }
+          try { enc = cryptoModel.encryptContent(content, [shopKeys[0]], true) } catch (e) { return reject(e) }
           ssbClient.publish(enc, (err, msg) => err ? reject(err) : resolve(msg))
         } else {
           ssbClient.publish(content, (err, msg) => {
             if (err) return reject(err)
-            if (msg && msg.key && tribeCrypto) {
-              const key = tribeCrypto.generateTribeKey()
-              tribeCrypto.setKey(msg.key, key, 1)
+            if (msg && msg.key && cryptoModel) {
+              const key = cryptoModel.generateKey()
+              cryptoModel.setKey(msg.key, key, 1)
             }
             resolve(msg)
           })
@@ -846,7 +846,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async generateInvite(shopId) {
-      if (!tribeCrypto) throw new Error("Shop crypto unavailable")
+      if (!cryptoModel) throw new Error("Shop crypto unavailable")
       const rootId = await this.resolveRootId(shopId)
       const ssbClient = await openSsb()
       const userId = ssbClient.id
@@ -857,10 +857,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const keys = keysForRoot(rootId)
       if (!keys.length) throw new Error("Missing shop key")
       const code = require("crypto").randomBytes(16).toString("hex")
-      const salt = tribeCrypto.generateInviteSalt()
-      const ek = tribeCrypto.encryptForInvite(keys[0], code, salt)
+      const salt = cryptoModel.generateInviteSalt()
+      const ek = cryptoModel.encryptForInvite(keys[0], code, salt)
       await new Promise((resolve, reject) =>
-        ssbClient.publish({ type: "shop-invite", target: rootId, ek, salt, codeHash: tribeCrypto.hashInviteCode(code, salt) }, (e) => e ? reject(e) : resolve())
+        ssbClient.publish({ type: "shop-invite", target: rootId, ek, salt, codeHash: cryptoModel.hashInviteCode(code, salt) }, (e) => e ? reject(e) : resolve())
       )
       return { code, shopId: rootId }
     },
@@ -891,7 +891,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async generateOpenInvite(shopId) {
-      if (!tribeCrypto) throw new Error("Shop crypto unavailable")
+      if (!cryptoModel) throw new Error("Shop crypto unavailable")
       const rootId = await this.resolveRootId(shopId)
       const ssbClient = await openSsb()
       const userId = ssbClient.id
@@ -903,10 +903,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const keys = keysForRoot(rootId)
       if (!keys.length) throw new Error("Missing shop key")
       const code = require("crypto").randomBytes(16).toString("hex")
-      const salt = tribeCrypto.generateInviteSalt()
-      const ek = tribeCrypto.encryptForInvite(keys[0], code, salt)
+      const salt = cryptoModel.generateInviteSalt()
+      const ek = cryptoModel.encryptForInvite(keys[0], code, salt)
       const invitePub = await new Promise((resolve, reject) =>
-        ssbClient.publish({ type: "shop-invite", target: rootId, ek, salt, codeHash: tribeCrypto.hashInviteCode(code, salt), multi: 1 }, (e, r) => e ? reject(e) : resolve(r))
+        ssbClient.publish({ type: "shop-invite", target: rootId, ek, salt, codeHash: cryptoModel.hashInviteCode(code, salt), multi: 1 }, (e, r) => e ? reject(e) : resolve(r))
       )
       await new Promise((resolve, reject) =>
         ssbClient.publish({ type: "shop-open-invite", v: 1, target: rootId, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() }, (e) => e ? reject(e) : resolve())
@@ -931,7 +931,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async joinByCode(code) {
-      if (!tribeCrypto) throw new Error("Shop crypto unavailable")
+      if (!cryptoModel) throw new Error("Shop crypto unavailable")
       const ssbClient = await openSsb()
       const messages = await readAll(ssbClient)
       const invTomb = new Set()
@@ -945,14 +945,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
         if (!c || c.type !== "shop-invite") continue
         if (invTomb.has(m.key)) continue
         try {
-          if (tribeCrypto.hashInviteCode(code, c.salt) === c.codeHash) { matched = c; break }
+          if (cryptoModel.hashInviteCode(code, c.salt) === c.codeHash) { matched = c; break }
         } catch (_) {}
       }
       if (!matched) throw new Error("Invalid or expired invite code")
-      const shopKey = tribeCrypto.decryptFromInvite(matched.ek, code, matched.salt)
+      const shopKey = cryptoModel.decryptFromInvite(matched.ek, code, matched.salt)
       if (!shopKey) throw new Error("Could not decrypt invite")
-      if (tribeCrypto.addNewKey) tribeCrypto.addNewKey(matched.target, shopKey)
-      else tribeCrypto.setKey(matched.target, shopKey, 1)
+      if (cryptoModel.addNewKey) cryptoModel.addNewKey(matched.target, shopKey)
+      else cryptoModel.setKey(matched.target, shopKey, 1)
       return { ok: true, shopId: matched.target }
     },
 
@@ -969,7 +969,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const curShop = isEncrypted(shopRaw) ? decryptShopContent(shopRaw, rootId) : shopRaw
       if (curShop._undecryptable) throw new Error("Cannot decrypt shop")
 
-      const wantEncrypted = tgt === "CLOSED" && !!tribeCrypto
+      const wantEncrypted = tgt === "CLOSED" && !!cryptoModel
 
       const messages = await readAll(ssbClient)
       const idx = buildIndex(messages)
@@ -983,9 +983,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       }
 
       if (wantEncrypted) {
-        const newKey = tribeCrypto.generateTribeKey()
-        if (tribeCrypto.addNewKey) tribeCrypto.addNewKey(rootId, newKey)
-        else tribeCrypto.setKey(rootId, newKey, 1)
+        const newKey = cryptoModel.generateKey()
+        if (cryptoModel.addNewKey) cryptoModel.addNewKey(rootId, newKey)
+        else cryptoModel.setKey(rootId, newKey, 1)
       }
 
       const publish = (c) => new Promise((res, rej) => ssbClient.publish(c, (e, m) => e ? rej(e) : res(m)))

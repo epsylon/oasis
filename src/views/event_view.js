@@ -1,12 +1,12 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
-const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view");
+const { renderMapEmbed } = require("./maps_view");
 const { renderReachChip, renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 
 const userId = config.keys.id;
@@ -140,22 +140,21 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo, opts =
   const dateText = e.date ? moment(e.date).format("YYYY/MM/DD HH:mm") : "";
 
   const isOwn = e.organizer && String(e.organizer) === String(userId);
-  const headerActions = opts.headerActions !== undefined
-    ? opts.headerActions
-    : origin ? null : renderContentActions(e.id, `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`, { spread: spreadInfo || null, author: e.organizer || e.author, favKind: 'events', isFavorite: e.isFavorite, reportTitle: e.title, deleteAction: isOwn ? contentDeleteAction('event', e.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` });
+  const byline = { author: e.organizer || e.author, date: e.createdAt, chips: chips.length ? [div({ class: "card-chips-row" }, ...chips)] : [] };
+  const detailHref = `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`;
+  const cardTop = opts.headerActions !== undefined
+    ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), opts.headerActions)
+    : origin
+      ? renderCardTop(e.id, href, { ...byline, spread: spreadInfo || null, reportTitle: e.title })
+      : renderCardTop(e.id, detailHref, { ...byline, spread: spreadInfo || null, favKind: 'events', isFavorite: e.isFavorite, reportTitle: e.title, deleteAction: isOwn ? contentDeleteAction('event', e.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` });
   return div({ class: "trending-card event-card" + (isOwn ? " own-content" : "") },
-    headerActions ? div(
-      { class: "card-header activity-card-header" },
-      span(),
-      headerActions
-    ) : null,
+    cardTop,
     div({ class: "card-section event-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
           href ? a({ href }, e.title || i18n.eventsTitle) : (e.title || i18n.eventsTitle)
         )
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       e.location && String(e.location).trim()
         ? div({ class: "card-field card-field-mb" },
             span({ class: "card-label" }, `${String(i18n.eventLocation).toUpperCase()}: `),
@@ -169,7 +168,8 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo, opts =
       origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
       ),
-      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : [])
+      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : []),
+      null
     )
   );
 };
@@ -458,7 +458,6 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     renderPrivacyChip(isPrivate, i18n),
     renderEventStatusChip(event.status),
     isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('events', event.title, event.id) : null),
-    isOrganizer && canClearnet ? renderClearnetSwitch('events', event.rootId || event.id, isClearnet) : null,
     isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
     renderLifespanChip(event.lifetime, i18n),
     renderEcoTax(event.msgSize, event.id),
@@ -513,16 +512,14 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     : null;
 
   const eventSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(event.id, returnToSelf, { spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` })
-    ),
+    renderCardTop(event.id, returnToSelf, { arrow: false, date: event.createdAt, chips, bylineExtra: [renderEditedChip(event.id, event.rootId)], spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, event.title),
-      renderEditedChip(event.id, event.rootId)
+      h2({ class: "tribe-card-title" }, event.title)
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    renderDetailShare(event.id, returnToSelf, event.title),
+    isOrganizer && canClearnet ? renderClearnetSwitch('events', event.rootId || event.id, isClearnet) : null,
     renderPhotoGallery(event, 'event'),
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(event.createdAt, event.organizer)),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     event.recurring && Array.isArray(event.occurrences) && event.occurrences.length > 1
       ? details({ class: "event-occurrences" },
           summary({ class: "chat-thread-summary" }, `${i18n.eventUpcomingDates} (${event.occurrences.length})`),

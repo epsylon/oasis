@@ -1,6 +1,6 @@
-const { div, h2, p, section, button, form, img, input, textarea, a, br, h1, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, input, a, span } = require("../server/node_modules/hyperaxe");
 const { safeExternalHref } = require("../backend/renderStyledText");
-const { template, i18n, userLink, renderContentActions, renderModuleStats, renderStateChip, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged } = require('./main_views');
+const { template, i18n, userLink, renderCardTop, renderModuleStats, renderStateChip, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged } = require('./main_views');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
@@ -151,27 +151,24 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
   const href = getViewDetailsAction(item);
   const title = item.title || item.name || item.concept || '';
   return div({ class: 'trending-card agenda-card' + (isOwn ? ' own-content' : '') },
-    div({ class: 'card-header activity-card-header' },
-      span({ class: 'pm-exposition-chip pm-exposition-whole' },
-        span({ class: 'pm-exposition-text' }, String(item.type || '').toUpperCase())
-      ),
-      renderContentActions(item.id, href, {
-        author,
-        reportTitle: title,
-        spread: CONTENT_SPREADABLE.has(item.type) ? ((spreadMap && spreadMap.get(item.id)) || null) : undefined,
-        ...(favKind ? { favKind, isFavorite: item.isFavorite === true || (!!favIndex && [item.rootId, item.id].some(id => id && favIndex.get(String(id)) === favKind)) } : {}),
-        returnTo: `/agenda?filter=${encodeURIComponent(filter || 'all')}`,
-        deleteAction: isOwn ? agendaDeleteAction(item) : undefined
-      })
-    ),
+    renderCardTop(item.id, href, {
+      date: item.createdAt,
+      chips: [
+        span({ class: 'pm-exposition-chip pm-exposition-whole' },
+          span({ class: 'pm-exposition-text' }, String(item.type || '').toUpperCase())
+        ),
+        chips.filter(Boolean).length ? div({ class: 'card-chips-row' }, ...chips.filter(Boolean)) : null
+      ],
+      author,
+      reportTitle: title,
+      spread: CONTENT_SPREADABLE.has(item.type) ? ((spreadMap && spreadMap.get(item.id)) || null) : undefined,
+      ...(favKind ? { favKind, isFavorite: item.isFavorite === true || (!!favIndex && [item.rootId, item.id].some(id => id && favIndex.get(String(id)) === favKind)) } : {}),
+      returnTo: `/agenda?filter=${encodeURIComponent(filter || 'all')}`,
+      deleteAction: isOwn ? agendaDeleteAction(item) : undefined
+    }),
     div({ class: 'card-section agenda-card-body' },
       div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, a({ href }, title))),
-      chips.filter(Boolean).length ? div({ class: 'card-chips-row' }, ...chips.filter(Boolean)) : null,
       ...body.filter(Boolean),
-      p({ class: 'card-footer' },
-        span({ class: 'date-link' }, `${item.createdAt ? moment(item.createdAt).format('YYYY/MM/DD HH:mm') : ''}`),
-        author ? userLink(author) : ''
-      ),
       div({ class: 'agenda-card-actions' }, actionButton, ...extraActions)
     )
   );

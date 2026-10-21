@@ -1,7 +1,7 @@
-const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, img, video } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderSpreadEditWarning, renderContentActions, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows, renderEditedChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderCardByline, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -131,19 +131,14 @@ const renderTaskItem = exports.renderTaskItem = (task, filter, spreadInfo, opts 
   const isPrivate = String(task.isPublic || "").toUpperCase() === "PRIVATE";
   const isAuthor = String(task.author) === String(userId);
   const origin = task.tribeOrigin || null;
-  const href = opts.href !== undefined ? opts.href : (origin ? origin.href : `/tasks/${encodeURIComponent(task.id)}`);
+  const detailHref = `/tasks/${encodeURIComponent(task.id)}`;
+  const href = opts.href !== undefined ? opts.href : (origin ? origin.href : detailHref);
 
   const cover = origin ? null : imagesOf(task)[0]
   const heroNode = cover
     ? div({ class: "tribe-card-image-wrapper" },
-        a({ href: `/tasks/${encodeURIComponent(task.id)}` },
+        a({ href: detailHref },
           renderTaskMediaBlob(cover, { class: "tribe-card-hero-image" })
-        ),
-        div({ class: "tribe-visit-btn-wrapper" },
-          form({ method: "GET", action: `/tasks/${encodeURIComponent(task.id)}` },
-            input({ type: "hidden", name: "filter", value: currentFilter }),
-            button({ type: "submit", class: "filter-btn" }, i18n.viewTask || "View Task")
-          )
         )
       )
     : null;
@@ -157,12 +152,15 @@ const renderTaskItem = exports.renderTaskItem = (task, filter, spreadInfo, opts 
     ...(Array.isArray(opts.extraChips) ? opts.extraChips : [])
   ].filter(Boolean);
 
-  const headerActions = opts.headerActions !== undefined
-    ? opts.headerActions
-    : origin ? null : renderContentActions(task.id, `/tasks/${encodeURIComponent(task.id)}`, { spread: spreadInfo || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, returnTo: `/tasks?filter=${encodeURIComponent(currentFilter)}`, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined });
+  const topOpts = { author: task.author, date: task.createdAt, chips };
+  const cardTop = opts.headerActions !== undefined
+    ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(topOpts), opts.headerActions)
+    : origin
+      ? renderCardTop(task.id, origin.href, { ...topOpts, spread: spreadInfo || null, reportTitle: task.title })
+      : renderCardTop(task.id, detailHref, { ...topOpts, spread: spreadInfo || null, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, returnTo: `/tasks?filter=${encodeURIComponent(currentFilter)}`, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined });
 
   return div({ class: "tribe-card task-card" + (isAuthor ? " own-content" : "") },
-    headerActions ? div({ class: "card-header activity-card-header" }, span(), headerActions) : null,
+    cardTop,
     heroNode,
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
@@ -170,11 +168,11 @@ const renderTaskItem = exports.renderTaskItem = (task, filter, spreadInfo, opts 
           href ? a({ href }, task.title || i18n.tasksTitle) : (task.title || i18n.tasksTitle)
         )
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
       ),
-      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : [])
+      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : []),
+      null
     )
   );
 };
@@ -413,16 +411,13 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
   if (task.location && String(task.location).trim()) pushRow(i18n.taskLocationLabel, task.location);
 
   const taskSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(task.id, `/tasks/${encodeURIComponent(task.id)}`, { spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined })
-    ),
+    renderCardTop(task.id, `/tasks/${encodeURIComponent(task.id)}`, { arrow: false, date: task.createdAt, chips, bylineExtra: [renderEditedChip(task.id, task.rootId)], spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, task.title),
-      renderEditedChip(task.id, task.rootId)
+      h2({ class: "tribe-card-title" }, task.title)
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    renderDetailShare(task.id, `/tasks/${encodeURIComponent(task.id)}`, task.title),
     renderPhotoGallery(task, 'task'),
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(task.createdAt, task.author)),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     assignNode ? div({ class: "tribe-side-actions housing-status-row task-assign-row" }, ...assignNode) : null,
     isAuthor ? renderTaskStatusRow(task, returnToSelf) : null,
     tagsNode,

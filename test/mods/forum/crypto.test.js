@@ -26,14 +26,14 @@ describe('forum: crypto', (t) => {
     const A = makePeer(net); const S = makePeer(net);
     A.setActor();
     const r = await A.use('forum').createForum('GENERAL', 'Kept', 'private text', true);
-    const forumKeys = () => require('../../../src/models/crypto')(A.configDir, 'forum');
+    const forumKeys = () => require('../../../src/models/crypto_model')(A.configDir).scope('forum');
     const original = forumKeys().getKey(r.key);
     ok(original, 'the creator holds the forum key');
     const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
     const planted = require('crypto').randomBytes(32).toString('hex');
     S.setActor();
     const ssbS = await S.cooler.open();
-    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: r.key, generation: 9, memberKeys: { [A.keypair.id]: S.tribeCrypto.boxKeyForMember(planted, A.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: r.key, generation: 9, memberKeys: { [A.keypair.id]: S.cryptoModel.boxKeyForMember(planted, A.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
     A.setActor();
     await A.use('forum').ingestKeys();
     eq(forumKeys().getKey(r.key), original, 'the creator keeps sealing with the real key');

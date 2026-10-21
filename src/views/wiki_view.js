@@ -1,9 +1,8 @@
-const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, renderCardMetaRow, renderOpinionsVoting, paged, renderEngagement } = require("./main_views");
+const { div, h2, h3, p, section, button, form, a, span, br, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect, renderTribeOriginChip } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { renderCommentsSection } = require("./comments_view");
-const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
@@ -90,18 +89,16 @@ const renderTags = (tags) => (Array.isArray(tags) && tags.length)
 const renderPageCard = (page, params = {}) => {
   const origin = page.tribeOrigin || null;
   const href = origin ? origin.href : pageHref(page.tribeId ? page.id : page.slug, page.tribeId);
+  const chips = [...(origin ? [renderTribeOriginChip(origin)] : pageChips(page)), !origin && page.clearnet === true ? reachChip(page) : null, renderLicenseChip(page.license)];
   return div({ class: "tribe-card wiki-card" },
-    div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(page.id, href, origin
-        ? { author: page.author, reportTitle: page.title }
-        : { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: (params.spreadMap && params.spreadMap.get(page.id)) || null, deleteAction: !page.tribeId && String(page.author) === String(userId) ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined })
-    ),
+    renderCardTop(page.id, href, origin
+      ? { date: page.createdAt, chips, author: page.author, reportTitle: page.title }
+      : { date: page.createdAt, chips, author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: (params.spreadMap && params.spreadMap.get(page.id)) || null, deleteAction: !page.tribeId && String(page.author) === String(userId) ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined }),
     div({ class: "tribe-card-body" },
       page.image ? a({ href }, img({ loading: 'lazy', class: "wiki-card-cover", src: `/blob/${encodeURIComponent(page.image)}`, alt: page.title || "" })) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href }, page.title || "—"))),
-      div({ class: "card-chips-row" }, ...(origin ? [renderTribeOriginChip(origin)] : pageChips(page)), !origin && page.clearnet === true ? reachChip(page) : null, renderLicenseChip(page.license)),
-      origin && params.withBody && page.body ? renderWikiBody(page.body) : null
+      origin && params.withBody && page.body ? renderWikiBody(page.body) : null,
+      null
     )
   );
 };
@@ -303,9 +300,7 @@ exports.wikiPageView = async (page, params = {}) => {
   const subscriptionNodes = params.subscription
     ? renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base, inline: true, compact: true })
     : null;
-  const barChips = [reachChip(page), statusChip(page)].filter(Boolean);
   const actions = div({ class: "tribe-side-actions wiki-actions-top" },
-    span({ class: "wiki-actions-left" }, ...barChips),
     page.isOwner && !tribeId && !page.encrypted ? renderClearnetSwitch("wiki", page.rootId || page.id, !!page.clearnet) : null,
     ...(subscriptionNodes && subscriptionNodes.length ? subscriptionNodes : []),
     page.canEdit && !version
@@ -338,21 +333,18 @@ exports.wikiPageView = async (page, params = {}) => {
     section(renderHeader(params.tribe || null), renderFilters("all", "", { ...params, emptyMod: census.length === 0 }, census)),
     section(
       div({ class: "trending-card wiki-page" },
-        div({ class: "card-header activity-card-header" },
-          span(),
-          renderContentActions(page.id, base, { author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: params.spread || null, deleteAction: page.isOwner && !tribeId ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined })
-        ),
+        renderCardTop(page.id, base, { arrow: false,
+          date: page.createdAt,
+          chips: [reachChip(page), statusChip(page), renderLicenseChip(page.license), ...pageChips(page, params, { withStatus: false })],
+          author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: params.spread || null, deleteAction: page.isOwner && !tribeId ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined
+        }),
         div({ class: "card-section" },
           actions,
-          div({ class: "shop-title-row" }, h2({ class: "wiki-page-title" }, shownTitle), renderLicenseChip(page.license)),
-          (() => { const rest = pageChips(page, params, { withStatus: false }); return rest.length ? div({ class: "card-chips-row" }, ...rest) : null; })(),
+          div({ class: "shop-title-row" }, h2({ class: "wiki-page-title" }, shownTitle)),
           version ? p({ class: "wiki-version-notice" }, `${i18n.wikiViewingVersion} (${moment(version.createdAt).format("YYYY/MM/DD HH:mm")}) — `, a({ href: base }, i18n.wikiBackToPage)) : null,
           diffBlock || renderWikiBody(shownBody, { missing: page.missingLinks, tribeId }),
           renderTags(page.tags),
-          renderCardMetaRow(p({ class: "card-footer" },
-            span({ class: "date-link" }, `${moment(page.createdAt).format("YYYY/MM/DD HH:mm")}`),
-            userLink(page.author)
-          ))
+          renderDetailShare(page.id, base, page.title)
         ),
       ),
       div({ class: "card-section wiki-backlinks" },

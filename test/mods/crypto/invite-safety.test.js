@@ -10,13 +10,13 @@ const fresh = () => {
   return dir;
 };
 
-const makeCrypto = () => require('../../../src/models/crypto')(fresh(), 'tribes');
+const makeCrypto = () => require('../../../src/models/crypto_model')(fresh());
 
 describe('invites: they are verified before being handed out', (t) => {
   t('a generated invite always opens with its own code', () => {
     const c = makeCrypto();
     const root = '%tribe.sha256';
-    c.setKeys(root, [c.generateTribeKey()], 1);
+    c.setKeys(root, [c.generateKey()], 1);
     const code = crypto.randomBytes(16).toString('hex');
     const salt = c.generateInviteSalt();
 
@@ -30,7 +30,7 @@ describe('invites: they are verified before being handed out', (t) => {
   t('a wrong code still opens nothing', () => {
     const c = makeCrypto();
     const root = '%tribe.sha256';
-    c.setKeys(root, [c.generateTribeKey()], 1);
+    c.setKeys(root, [c.generateKey()], 1);
     const salt = c.generateInviteSalt();
     const payload = c.encryptChainForInvite([root], 'the-real-code', salt);
     notOk(c.decryptChainFromInvite(payload, 'another-code', salt), 'a different code fails');
@@ -40,7 +40,7 @@ describe('invites: they are verified before being handed out', (t) => {
   t('asking for several attempts does not turn a wrong code into a right one', () => {
     const c = makeCrypto();
     const root = '%tribe.sha256';
-    c.setKeys(root, [c.generateTribeKey()], 1);
+    c.setKeys(root, [c.generateKey()], 1);
     const salt = c.generateInviteSalt();
     const payload = c.encryptChainForInvite([root], 'the-real-code', salt);
     notOk(c.decryptChainFromInvite(payload, 'another-code', salt, 3), 'three attempts, still refused');

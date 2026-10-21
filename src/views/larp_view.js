@@ -43,7 +43,7 @@ const renderHouseNav = (houses, currentKey) => div({ class: 'larp-house-nav' },
   }, h.name))
 );
 
-const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cyclesUntilRuling, canTakeTest = false }) => {
+const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cyclesUntilRuling, canTakeTest = false, tribeReady = false }) => {
   const { renderEncryptedChip } = require('./clearnet_view');
   const isInHouse = viewerHouseKey === house.key;
   const isInLarp = viewerHouseKey !== null && viewerHouseKey !== undefined;
@@ -81,7 +81,7 @@ const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cycl
       isAcademia && isInHouse && canTakeTest
         ? a({ href: '/larp/test', class: 'filter-btn larp-start-journey' }, i18n.larpStartJourney)
         : null,
-      isInHouse
+      isInHouse && tribeReady
         ? a({ href: `/larp/tribe/${encodeURIComponent(house.key)}`, class: 'filter-btn' }, i18n.larpVisitTribe || 'Visit Tribe')
         : null,
       canInvite
@@ -301,7 +301,7 @@ const renderHousesGrid = (houses, myHouseKey, governingKey) => {
   );
 };
 
-exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, governingHouse, governingMembers, governingPosts, canPost, q }) => {
+exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, governingHouse, governingMembers, governingPosts, canPost, tribeReady, q }) => {
   const title = i18n.larpTitle || 'L.A.R.P.';
   const description = i18n.larpDescription || 'A live action role-playing layer for collaborative experimentation.';
   const myHouse = houses.find(h => h.key === myHouseKey) || null;
@@ -326,7 +326,7 @@ exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, gover
         : mode === 'rules'
           ? renderRules()
           : [
-              renderHousePanel(governingHouse, governingMembers, governingPosts, { canPost, viewerHouseKey: myHouseKey, cyclesUntilRuling: 0 }),
+              renderHousePanel(governingHouse, governingMembers, governingPosts, { canPost, viewerHouseKey: myHouseKey, cyclesUntilRuling: 0, tribeReady }),
               renderPostsBlock(governingPosts, governingHouse, canPost)
             ]
     )
@@ -344,7 +344,7 @@ const computeCyclesUntilRuling = (house, governingKey, now = new Date()) => {
   return 0;
 };
 
-exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, houses, posts, canPost, testStatus, inviteCode, questions }) => {
+exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, houses, posts, canPost, testStatus, inviteCode, questions, tribeReady }) => {
   const myHouse = houses.find(h => h.key === myHouseKey) || null;
   const governingHouse = houses.find(h => h.key === governingKey) || null;
   const isAcademia = house.key === 'academia';
@@ -369,6 +369,7 @@ exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, hous
         canPost,
         viewerHouseKey: myHouseKey,
         cyclesUntilRuling: cycles,
+        tribeReady,
         canTakeTest: isAcademia && viewerInAcademia && !!(testStatus && testStatus.allowed)
       }),
       inviteCode

@@ -38,7 +38,7 @@ const matchSearch = (job, q) => {
   return hay.includes(qq)
 }
 
-module.exports = ({ cooler, tribeCrypto }) => {
+module.exports = ({ cooler, cryptoModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
@@ -106,7 +106,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   }
 
   const buildJobObject = (node, rootId, subscribers) => {
-    const visibleSubs = (tribeCrypto && tribeCrypto.getKey(rootId)) || ssb?.id === (node.author || node.c?.author) ? subscribers : [];
+    const visibleSubs = (cryptoModel && cryptoModel.getKey(rootId)) || ssb?.id === (node.author || node.c?.author) ? subscribers : [];
     const c = node.c || {}
     let blobId = c.image || null
     if (blobId && /\(([^)]+)\)/.test(String(blobId))) blobId = String(blobId).match(/\(([^)]+)\)/)[1]
@@ -207,9 +207,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
       return new Promise((res, rej) => ssbClient.publish(content, (e, m) => {
         if (e) return rej(e)
-        if (m && m.key && tribeCrypto) {
-          const key = tribeCrypto.generateTribeKey()
-          tribeCrypto.setKey(m.key, key, 1)
+        if (m && m.key && cryptoModel) {
+          const key = cryptoModel.generateKey()
+          cryptoModel.setKey(m.key, key, 1)
         }
         res(m)
       }))

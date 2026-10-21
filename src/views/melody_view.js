@@ -1,8 +1,7 @@
 "use strict";
 
 const { div, h2, p, section, audio, source, span, a, form, input, button, br, textarea, label } = require("../server/node_modules/hyperaxe");
-const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderEcoTax, renderContentActions, paged } = require("./main_views");
+const { template, i18n, userLink, renderCardTop, renderEngagement, paged } = require("./main_views");
 
 const renderSequenceList = (sequence, availableIds = null) => {
   if (!sequence || sequence.length === 0) {
@@ -98,17 +97,12 @@ const renderBcsList = (bcsAudios) => {
   }
   return div({ class: "melody-bcs-list" },
     bcsAudios.map(item => div({ class: "melody-bcs-card" },
-      div({ class: "card-header activity-card-header" },
-        span(),
-        renderContentActions(item.key, `/audios/${encodeURIComponent(item.key)}`, { author: item.author, favKind: 'audios', isFavorite: item.isFavorite, torrentFrom: { blobId: item.url, name: item.title }, reportTitle: item.title })
-      ),
-      div({ class: "melody-bcs-head" },
-        item.title ? h2({ class: "melody-bcs-title" }, item.title) : null,
-        div({ class: "melody-bcs-meta" },
-          userLink(item.author),
-          span({ class: "melody-bcs-date" }, moment(item.createdAt).format("YYYY/MM/DD HH:mm"))
-        )
-      ),
+      renderCardTop(item.key, `/audios/${encodeURIComponent(item.key)}`, { date: item.createdAt, author: item.author, favKind: 'audios', isFavorite: item.isFavorite, torrentFrom: { blobId: item.url, name: item.title }, reportTitle: item.title }),
+      item.title
+        ? div({ class: "melody-bcs-head" },
+            h2({ class: "melody-bcs-title" }, item.title)
+          )
+        : null,
       item.url
         ? div({ class: "audio-container melody-bcs-player" },
             audio({ controls: true, preload: "metadata", src: `/blob/${encodeURIComponent(item.url)}` }),
@@ -121,7 +115,8 @@ const renderBcsList = (bcsAudios) => {
               button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
             )
           ),
-      item.description ? p({ class: "melody-bcs-desc" }, item.description) : null
+      item.description ? p({ class: "melody-bcs-desc" }, item.description) : null,
+      null
     ))
   );
 };

@@ -89,7 +89,7 @@ const HIDDEN_ENVELOPE_TYPES = new Set([
   'courts-key'
 ]);
 
-module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, larpModel }) => {
+module.exports = ({ cooler, cryptoModel, tribesModel, padsModel, industryModel, larpModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb };
 
@@ -121,26 +121,25 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
   };
 
   const tryDecryptPublicInviteKey = (invites) => {
-    if (!tribeCrypto || !Array.isArray(invites)) return null;
+    if (!cryptoModel || !Array.isArray(invites)) return null;
     for (const inv of invites) {
       if (!inv || typeof inv !== 'object' || inv.public !== true) continue;
       if (typeof inv.code !== 'string') continue;
       if (typeof inv.ek === 'string') {
         try {
-          const k = tribeCrypto.decryptFromInvite(inv.ek, inv.code, inv.salt);
+          const k = cryptoModel.decryptFromInvite(inv.ek, inv.code, inv.salt);
           if (k) return k;
         } catch (_) {}
       }
       if (typeof inv.ekChain === 'string') {
         try {
-          const chain = tribeCrypto.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt);
+          const chain = cryptoModel.decryptChainFromInvite(inv.ekChain, inv.code, inv.salt);
           if (Array.isArray(chain) && chain.length && chain[0].key) return chain[0].key;
         } catch (_) {}
       }
     }
     return null;
   };
-  const hasBlob = async (ssbClient, url) => new Promise(resolve => ssbClient.blobs.has(url, (err, has) => resolve(!err && has)));
   const getMsg = async (ssbClient, key) => new Promise(resolve => ssbClient.get(key, (err, msg) => resolve(err ? null : msg)));
   const normNL = (s) => String(s || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const stripHtml = (s) => normNL(s)
@@ -302,7 +301,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
           for (const choice of v.choices) entry.counts[choice] = (entry.counts[choice] || 0) + 1;
         }
       }
-      const fpIdx = tribeCrypto ? tribeCrypto.buildFingerprintIndex() : null;
+      const fpIdx = cryptoModel ? cryptoModel.buildFingerprintIndex() : null;
       const accessibleTribeIds = await buildAccessibleTribeIds();
       let larpWall = null;
       if (larpModel && results.some(m => m && m.value && m.value.content && m.value.content.type === 'larpHousePost')) {
@@ -330,8 +329,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
         if (c.type === 'larpHousePost' && !larpPostVisible(v.author, String(c.house || '').toLowerCase())) continue;
         if (typeof c.type === 'string' && /e2ee/i.test(c.type)) continue;
         if (c.type === 'contact') continue;
-        if (tribeCrypto && tribeCrypto.isTribeMsg(c)) {
-          const r = fpIdx ? tribeCrypto.unwrapMsg(c, fpIdx) : null;
+        if (cryptoModel && cryptoModel.isSealedMsg(c)) {
+          const r = fpIdx ? cryptoModel.unwrapMsg(c, fpIdx) : null;
           if (!r || !r.body) continue;
           const inner = r.body;
           if (inner.k !== 'tribe' || inner.op !== 'create') continue;
@@ -341,11 +340,11 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
         }
         if (!c.type) continue;
         if (c.type === 'tombstone') continue;
-        if (c.encryptedPayload && tribeCrypto && !c.tribeId) {
+        if (c.encryptedPayload && cryptoModel && !c.tribeId) {
           const pubKey = tryDecryptPublicInviteKey(c.invites);
           if (pubKey) {
             try {
-              const dec = tribeCrypto.decryptContent(c, [[pubKey]]);
+              const dec = cryptoModel.decryptContent(c, [[pubKey]]);
               if (dec && !dec._undecryptable) c = dec;
             } catch (_) {}
           }
@@ -618,6 +617,15 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
         feedOpinionsByRoot.get(r).push({ author: v.author, category: String(c.category || '') });
       }
 
+      const reportConfirmsByRoot = new Map();
+      for (const msg of results) {
+        const c = msg && msg.value && msg.value.content;
+        if (!c || c.type !== 'reportConfirm' || typeof c.target !== 'string') continue;
+        const r = rootOf(c.target);
+        if (!reportConfirmsByRoot.has(r)) reportConfirmsByRoot.set(r, new Set());
+        reportConfirmsByRoot.get(r).add(msg.value.author);
+      }
+
       const forgedFeedAggByRoot = new Map();
       for (const [child, fc] of forgedFeedContent.entries()) {
         let cur = child;
@@ -632,8 +640,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
       }
 
       const latest = [];
-      const docUrls = [...new Set([...idToAction.values()].filter(a => a.type === 'document').map(a => (a.content || {}).url))];
-      const docBlobOk = new Map(await Promise.all(docUrls.map(async url => [url, await hasBlob(ssbClient, url)])));
       for (const a of idToAction.values()) {
         if (tombstoned.has(a.id)) continue;
         if (a.type === 'tribe' && parentOf.has(a.id)) continue;
@@ -644,7 +650,6 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
         if (c.key && tombstoned.has(c.key)) continue;
         if (c.branch && tombstoned.has(c.branch)) continue;
         if (c.target && tombstoned.has(c.target)) continue;
-        if (a.type === 'document' && !docBlobOk.get(c.url)) continue;
         if (a.type === 'forum' && c.root) {
           const rootId = typeof c.root === 'string' ? c.root : (c.root?.key || c.root?.id || '');
           const rootAction = idToAction.get(rootId);
@@ -695,6 +700,9 @@ module.exports = ({ cooler, tribeCrypto, tribesModel, padsModel, industryModel, 
             if (op.category) opinions[op.category] = (Number(opinions[op.category]) || 0) + 1;
           }
           content = { ...content, opinions, opinions_inhabitants: voters };
+        }
+        if (a.type === 'report' && reportConfirmsByRoot.has(actionRoot)) {
+          content = { ...content, confirmations: [...new Set([...(Array.isArray(content.confirmations) ? content.confirmations : []), ...reportConfirmsByRoot.get(actionRoot)])] };
         }
         latest.push({ ...a, content, ...extra, tipId: idToTipId.get(a.id) || a.id, rootId: actionRoot !== a.id ? actionRoot : null });
       }

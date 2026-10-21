@@ -68,7 +68,7 @@ const normalizePolicy = (v) => {
   return EDIT_POLICIES.includes(s) ? s : 'open';
 };
 
-module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
+module.exports = ({ cooler, cryptoModel = null, tribesModel = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -78,9 +78,9 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
   };
 
   const tribeKeyFor = async (tribeId) => {
-    if (!tribeCrypto || !tribeId) return null;
+    if (!cryptoModel || !tribeId) return null;
     const rootId = await tribeRootId(tribeId);
-    return tribeCrypto.getKey(rootId) || null;
+    return cryptoModel.getKey(rootId) || null;
   };
 
   const storeBody = async (ssbClient, body, tribeId) => {
@@ -90,7 +90,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
     if (tribeId) {
       const key = await tribeKeyFor(tribeId);
       if (!key) throw new Error('Missing tribe key — cannot publish encrypted wiki page');
-      payload = JSON.stringify(tribeCrypto.encryptContent({ body: text }, [key], true));
+      payload = JSON.stringify(cryptoModel.encryptContent({ body: text }, [key], true));
     }
     const ref = await addBlob(ssbClient, Buffer.from(payload, 'utf8'));
     bodyCache.set(ref, text);
@@ -106,7 +106,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
     if (c.tribeId) {
       try {
         const key = await tribeKeyFor(c.tribeId);
-        const r = tribeCrypto.decryptContent(JSON.parse(text), key ? [[key]] : []);
+        const r = cryptoModel.decryptContent(JSON.parse(text), key ? [[key]] : []);
         text = r && !r._undecryptable && typeof r.body === 'string' ? r.body : '';
       } catch (_) { text = ''; }
     }
@@ -116,15 +116,15 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
 
   const readEntries = async (ssbClient) => {
     const msgs = await readTyped(ssbClient, [WIKI_TYPE, 'tombstone', ENVELOPE_TYPE], { limit: logLimit });
-    const fpIdx = tribeCrypto && typeof tribeCrypto.buildFingerprintIndex === 'function' ? tribeCrypto.buildFingerprintIndex() : null;
+    const fpIdx = cryptoModel && typeof cryptoModel.buildFingerprintIndex === 'function' ? cryptoModel.buildFingerprintIndex() : null;
     const out = [];
     for (const m of msgs) {
       const v = m && m.value;
       const c = v && v.content;
       if (!c || typeof c !== 'object') continue;
       if (c.type === WIKI_TYPE || c.type === 'tombstone') { out.push(m); continue; }
-      if (!fpIdx || !tribeCrypto.isTribeMsg(c)) continue;
-      const r = tribeCrypto.unwrapMsg(c, fpIdx);
+      if (!fpIdx || !cryptoModel.isSealedMsg(c)) continue;
+      const r = cryptoModel.unwrapMsg(c, fpIdx);
       if (!r || !r.body || typeof r.body !== 'object') continue;
       const body = r.body;
       if (body.k === WIKI_TYPE) {
@@ -298,7 +298,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
     if (content.tribeId) {
       const key = await tribeKeyFor(content.tribeId);
       if (!key) throw new Error('Missing tribe key — cannot publish encrypted wiki page');
-      msg = tribeCrypto.wrapMsg({ k: WIKI_TYPE, ...content }, key);
+      msg = cryptoModel.wrapMsg({ k: WIKI_TYPE, ...content }, key);
     }
     return new Promise((resolve, reject) => ssbClient.publish(msg, (err, res) => err ? reject(err) : resolve(res)));
   };
@@ -407,7 +407,7 @@ module.exports = ({ cooler, tribeCrypto = null, tribesModel = null }) => {
       if (page.tribeId) {
         const key = await tribeKeyFor(page.tribeId);
         if (!key) throw new Error('Missing tribe key — cannot delete encrypted wiki page');
-        msg = tribeCrypto.wrapMsg({ k: 'tombstone', target: page.id, deletedAt, author: ssbClient.id }, key);
+        msg = cryptoModel.wrapMsg({ k: 'tombstone', target: page.id, deletedAt, author: ssbClient.id }, key);
       }
       return new Promise((resolve, reject) => ssbClient.publish(msg, (err, res) => err ? reject(err) : resolve(res)));
     },

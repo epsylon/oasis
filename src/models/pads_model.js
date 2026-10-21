@@ -19,18 +19,18 @@ const INVITE_SALT = "SolarNET.HuB-pads"
 const INVITE_BYTES = 16
 const MEMBER_COLORS = ["#e74c3c","#3498db","#2ecc71","#f39c12","#9b59b6","#1abc9c","#e67e22","#e91e63","#00bcd4","#8bc34a"]
 
-module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) => {
+module.exports = ({ cooler, cipherModel, cryptoModel, padCrypto, tribesModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
-  const ownCrypto = padCrypto || tribeCrypto
-  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null
+  const ownCrypto = padCrypto || cryptoModel
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (cryptoModel && cryptoModel.getKey(rid)) || null
   const lookupKeys = (rid) => {
     const a = (ownCrypto && ownCrypto.getKeys(rid)) || []
     if (a.length) return a
-    return (tribeCrypto && tribeCrypto.getKeys(rid)) || []
+    return (cryptoModel && cryptoModel.getKeys(rid)) || []
   }
-  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0)
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (cryptoModel && cryptoModel.getGen(rid)) || 0)
 
   let keyringPath = null
   let migratedToTribeCrypto = false
@@ -60,7 +60,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     if (ownCrypto) return lookupKey(rootId)
     try { return JSON.parse(fs.readFileSync(getLegacyKeyringPath(), "utf8"))[rootId] || null } catch (_) { return null }
   }
-  const hashCode = (code, salt) => (ownCrypto && typeof ownCrypto.hashInviteCode === "function") ? ownCrypto.hashInviteCode(code, salt) : (tribeCrypto ? tribeCrypto.hashInviteCode(code, salt) : null)
+  const hashCode = (code, salt) => (ownCrypto && typeof ownCrypto.hashInviteCode === "function") ? ownCrypto.hashInviteCode(code, salt) : (cryptoModel ? cryptoModel.hashInviteCode(code, salt) : null)
   const inviteMatches = (inv, token) => {
     if (!token) return false
     if (typeof inv === "string") return inv === token
@@ -71,7 +71,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
   }
   const inviteToken = (inv) => (inv && typeof inv === "object" && typeof inv.ch === "string") ? inv.ch : (typeof inv === "string" ? inv : (inv && inv.code) || "")
   const keyProofFor = (keyHex, id) => { try { return crypto.createHmac("sha256", Buffer.from(keyHex, "hex")).update(String(id), "utf8").digest("hex") } catch (_) { return null } }
-  const padKeys = (rootId) => (ownCrypto && typeof ownCrypto.getKeys === "function" ? ownCrypto.getKeys(rootId) : []).concat(tribeCrypto && typeof tribeCrypto.getKeys === "function" ? tribeCrypto.getKeys(rootId) : [])
+  const padKeys = (rootId) => (ownCrypto && typeof ownCrypto.getKeys === "function" ? ownCrypto.getKeys(rootId) : []).concat(cryptoModel && typeof cryptoModel.getKeys === "function" ? cryptoModel.getKeys(rootId) : [])
   const setPadKey = (rootId, keyHex) => {
     migrateLegacyKeyring()
     if (ownCrypto) { ownCrypto.setKey(rootId, keyHex, 1); return }
@@ -113,10 +113,10 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
   }
 
   const getTribeKeysFor = async (tribeId) => {
-    if (!tribeCrypto || !tribesModel || !tribeId) return []
+    if (!cryptoModel || !tribesModel || !tribeId) return []
     try {
       const rootId = await tribesModel.getRootId(tribeId)
-      const keys = tribeCrypto.getKeys(rootId) || []
+      const keys = cryptoModel.getKeys(rootId) || []
       return keys
     } catch (_) { return [] }
   }
@@ -137,7 +137,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
   }
 
   const ensureMemberKeys = async (ssbClient, messages, items) => {
-    if (!tribeCrypto || !ownCrypto) return
+    if (!cryptoModel || !ownCrypto) return
     const leavesByRoot = new Map()
     for (const m of messages) {
       const c = m.value && m.value.content
@@ -161,7 +161,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       const key = lookupKey(rootId)
       const memberKeys = {}
       for (const m of plan.missing) {
-        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
+        try { memberKeys[m] = cryptoModel.boxKeyForMember(key, m, ssbKeys) } catch (_) {}
       }
       if (!Object.keys(memberKeys).length) continue
       await new Promise((resolve) => {
@@ -199,7 +199,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
   const generateInviteSalt = () => crypto.randomBytes(16).toString("hex")
 
   const rotatePadKey = async (rootId, remainingMembers) => {
-    if (!ownCrypto || !tribeCrypto || !rootId) return
+    if (!ownCrypto || !cryptoModel || !rootId) return
     const existing = getPadKey(rootId)
     if (!existing) return
     const newKey = crypto.randomBytes(32).toString("hex")
@@ -208,7 +208,7 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
     const ssbKeys = require("../server/node_modules/ssb-keys")
     const memberKeys = {}
     for (const m of new Set([ssbClient.id, ...(Array.isArray(remainingMembers) ? remainingMembers : [])])) {
-      try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
+      try { memberKeys[m] = cryptoModel.boxKeyForMember(newKey, m, ssbKeys) } catch (_) {}
     }
     if (Object.keys(memberKeys).length) {
       await new Promise((resolve) => {
@@ -537,10 +537,10 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
           if (err) return reject(err)
           if (!usesTribeKey) {
             setPadKey(msg.key, keyHex)
-            if (tribeCrypto) {
+            if (cryptoModel) {
               try {
                 const ssbKeys = require("../server/node_modules/ssb-keys")
-                const boxedKey = tribeCrypto.boxKeyForMember(keyHex, userId, ssbKeys)
+                const boxedKey = cryptoModel.boxKeyForMember(keyHex, userId, ssbKeys)
                 ssbClient.publish({ type: "tribe-keys", tribeId: msg.key, generation: 1, memberKeys: { [userId]: boxedKey } }, () => resolve(msg))
                 return
               } catch (_) {}
@@ -808,13 +808,13 @@ module.exports = ({ cooler, cipherModel, tribeCrypto, padCrypto, tribesModel }) 
       }
       if (padKey) setPadKey(resolvedRootId, padKey)
       await this.addMemberToPad(matchedPad.rootId, userId, isPublic ? "" : token)
-      if (tribeCrypto && padKey && resolvedRootId) {
+      if (cryptoModel && padKey && resolvedRootId) {
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys")
           const memberKeys = {}
-          try { memberKeys[userId] = tribeCrypto.boxKeyForMember(padKey, userId, ssbKeys) } catch (_) {}
+          try { memberKeys[userId] = cryptoModel.boxKeyForMember(padKey, userId, ssbKeys) } catch (_) {}
           if (matchedPad.author && matchedPad.author !== userId) {
-            try { memberKeys[matchedPad.author] = tribeCrypto.boxKeyForMember(padKey, matchedPad.author, ssbKeys) } catch (_) {}
+            try { memberKeys[matchedPad.author] = cryptoModel.boxKeyForMember(padKey, matchedPad.author, ssbKeys) } catch (_) {}
           }
           if (Object.keys(memberKeys).length) {
             await new Promise((resolve) => {

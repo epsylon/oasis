@@ -108,7 +108,7 @@ describe('calendars: who may hand out the key', (t) => {
     title, status: 'CLOSED', deadline: DEADLINE, tags: [],
     firstDate: FIRST_DATE, firstDateLabel: '', firstNote: '', tribeId: null
   });
-  const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'calendars');
+  const keysOf = (P) => require('../../../src/models/crypto_model')(P.configDir).scope('calendars');
   const pause = () => new Promise(r => setTimeout(r, 5));
 
   t('a key planted by a stranger is ignored', async () => {
@@ -119,7 +119,7 @@ describe('calendars: who may hand out the key', (t) => {
     const planted = require('crypto').randomBytes(32).toString('hex');
     S.setActor();
     const ssbS = await S.cooler.open();
-    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: r.key, generation: 9, memberKeys: { [B.keypair.id]: S.tribeCrypto.boxKeyForMember(planted, B.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
+    await new Promise((res, rej) => ssbS.publish({ type: 'tribe-keys', tribeId: r.key, generation: 9, memberKeys: { [B.keypair.id]: S.cryptoModel.boxKeyForMember(planted, B.keypair.id, ssbKeys) } }, (e) => e ? rej(e) : res()));
     B.setActor();
     await B.use('calendars').ingestKeys();
     ok(!keysOf(B).getKeys(r.key).includes(planted), 'the planted key is not stored');

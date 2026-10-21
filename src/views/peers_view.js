@@ -268,7 +268,7 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
   const tab = tabs.includes(filter) ? filter : 'status';
   const tabLabel = { status: i18n.status || 'Status', connections: i18n.peerConnectionsTitle || 'Connections', lan: i18n.peersTabLan, health: i18n.peersTabHealth };
   const statusToolbar = peersToolbar('status', onlineCount + discoveredCount + unknownCount, [
-    { label: i18n.online, count: onlineCount },
+    { label: i18n.onlinePlural || i18n.online, count: onlineCount },
     { label: i18n.discovered, count: discoveredCount },
     { label: i18n.unknown, count: unknownCount }
   ]);

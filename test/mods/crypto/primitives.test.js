@@ -10,26 +10,26 @@ const fresh = () => {
   return dir;
 };
 
-const tribeCryptoFactory = require('../../../src/models/crypto');
+const cryptoModelFactory = require('../../../src/models/crypto_model');
 
 describe('crypto: keyring', (t) => {
-  t('generateTribeKey returns 64 hex chars (32 bytes)', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const k = tc.generateTribeKey();
+  t('generateKey returns 64 hex chars (32 bytes)', () => {
+    const tc = cryptoModelFactory(fresh());
+    const k = tc.generateKey();
     eq(k.length, 64);
     ok(/^[0-9a-f]+$/.test(k));
   });
 
   t('setKey persists and getKey reads back', () => {
     const dir = fresh();
-    const tc = tribeCryptoFactory(dir);
+    const tc = cryptoModelFactory(dir);
     tc.setKey('%test.sha256', 'a'.repeat(64), 1);
     eq(tc.getKey('%test.sha256'), 'a'.repeat(64));
     eq(tc.getGen('%test.sha256'), 1);
   });
 
   t('addNewKey for multi-gen', () => {
-    const tc = tribeCryptoFactory(fresh());
+    const tc = cryptoModelFactory(fresh());
     const k1 = '1'.repeat(64), k2 = '2'.repeat(64);
     tc.setKey('%x.sha256', k1, 1);
     eq(tc.addNewKey('%x.sha256', k2), 2);
@@ -37,7 +37,7 @@ describe('crypto: keyring', (t) => {
   });
 
   t('mergeKeys deduplicates and puts the newer keys it learns first', () => {
-    const tc = tribeCryptoFactory(fresh());
+    const tc = cryptoModelFactory(fresh());
     const a = 'a'.repeat(64), b = 'b'.repeat(64), c = 'c'.repeat(64);
     tc.setKey('%x.sha256', a, 1);
     tc.mergeKeys('%x.sha256', [c, b, a], 3);
@@ -47,7 +47,7 @@ describe('crypto: keyring', (t) => {
   });
 
   t('keys that are not 64 hex characters are refused', () => {
-    const tc = tribeCryptoFactory(fresh());
+    const tc = cryptoModelFactory(fresh());
     tc.setKey('%x.sha256', 'k1', 1);
     eq(tc.getKey('%x.sha256'), null);
     tc.mergeKeys('%x.sha256', ['<script>', 'z'.repeat(64)], 2);
@@ -56,7 +56,7 @@ describe('crypto: keyring', (t) => {
 
   t('keyring file is mode 0600', () => {
     const dir = fresh();
-    const tc = tribeCryptoFactory(dir);
+    const tc = cryptoModelFactory(dir);
     tc.setKey('%x.sha256', 'f'.repeat(64), 1);
     const stat = fs.statSync(path.join(dir, 'keys', 'tribes-keys.json'));
     eq(stat.mode & 0o777, 0o600);
@@ -64,8 +64,8 @@ describe('crypto: keyring', (t) => {
 
   t('namespaces produce separate keyring files', () => {
     const dir = fresh();
-    const tribes = tribeCryptoFactory(dir, 'tribes');
-    const chats = tribeCryptoFactory(dir, 'chats');
+    const tribes = cryptoModelFactory(dir);
+    const chats = tribes.scope('chats');
     tribes.setKey('%t1.sha256', 'a'.repeat(64), 1);
     chats.setKey('%c1.sha256', 'b'.repeat(64), 1);
     ok(fs.existsSync(path.join(dir, 'keys', 'tribes-keys.json')));
@@ -80,7 +80,7 @@ describe('crypto: keyring', (t) => {
     const dir = fresh();
     const legacyPath = path.join(dir, 'tribe-keys.json');
     fs.writeFileSync(legacyPath, JSON.stringify({ '%legacy.sha256': { keys: ['ff'.repeat(32)], gen: 1 } }), { mode: 0o600 });
-    const tc = tribeCryptoFactory(dir, 'tribes');
+    const tc = cryptoModelFactory(dir);
     notOk(fs.existsSync(legacyPath), 'legacy file removed');
     ok(fs.existsSync(path.join(dir, 'keys', 'tribes-keys.json')), 'new file present');
     eq(tc.getKey('%legacy.sha256'), 'ff'.repeat(32), 'data preserved');
@@ -88,8 +88,9 @@ describe('crypto: keyring', (t) => {
 
   t('per-module keyrings: tribes, chats, pads, maps, calendars produce 5 files', () => {
     const dir = fresh();
+    const model = cryptoModelFactory(dir);
     for (const ns of ['tribes', 'chats', 'pads', 'maps', 'calendars']) {
-      const inst = tribeCryptoFactory(dir, ns);
+      const inst = model.scope(ns);
       inst.setKey(`%${ns}.sha256`, require('crypto').createHash('sha256').update(ns).digest('hex'), 1);
     }
     for (const ns of ['tribes', 'chats', 'pads', 'maps', 'calendars']) {
@@ -100,7 +101,7 @@ describe('crypto: keyring', (t) => {
 
 describe('crypto: fingerprint', (t) => {
   t('deterministic, 32 hex', () => {
-    const tc = tribeCryptoFactory(fresh());
+    const tc = cryptoModelFactory(fresh());
     const k = '1234567890abcdef'.repeat(4);
     const fp = tc.fingerprint(k);
     eq(fp.length, 32);
@@ -108,12 +109,12 @@ describe('crypto: fingerprint', (t) => {
   });
 
   t('different keys produce different fingerprints', () => {
-    const tc = tribeCryptoFactory(fresh());
-    notOk(tc.fingerprint(tc.generateTribeKey()) === tc.fingerprint(tc.generateTribeKey()));
+    const tc = cryptoModelFactory(fresh());
+    notOk(tc.fingerprint(tc.generateKey()) === tc.fingerprint(tc.generateKey()));
   });
 
   t('buildFingerprintIndex maps fp to all keys (multi-gen)', () => {
-    const tc = tribeCryptoFactory(fresh());
+    const tc = cryptoModelFactory(fresh());
     tc.setKey('%a.sha256', 'a'.repeat(64), 1);
     tc.addNewKey('%a.sha256', 'b'.repeat(64));
     const idx = tc.buildFingerprintIndex();
@@ -128,8 +129,8 @@ describe('crypto: fingerprint', (t) => {
 
 describe('crypto: wrap/unwrap', (t) => {
   t('roundtrip preserves body', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const k = tc.generateTribeKey();
+    const tc = cryptoModelFactory(fresh());
+    const k = tc.generateKey();
     tc.setKey('%root.sha256', k, 1);
     const body = { k: 'tribe', op: 'create', title: 'x' };
     const env = tc.wrapMsg(body, k);
@@ -142,14 +143,14 @@ describe('crypto: wrap/unwrap', (t) => {
   });
 
   t('unwrap with empty fpIdx returns null', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const env = tc.wrapMsg({ k: 'tribe' }, tc.generateTribeKey());
+    const tc = cryptoModelFactory(fresh());
+    const env = tc.wrapMsg({ k: 'tribe' }, tc.generateKey());
     eq(tc.unwrapMsg(env, new Map()), null);
   });
 
   t('tampering envelope.fp invalidates ciphertext (AAD)', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const k = tc.generateTribeKey();
+    const tc = cryptoModelFactory(fresh());
+    const k = tc.generateKey();
     tc.setKey('%root.sha256', k, 1);
     const env = tc.wrapMsg({ k: 'tribe' }, k);
     env.fp = 'f'.repeat(32);
@@ -159,8 +160,8 @@ describe('crypto: wrap/unwrap', (t) => {
 
 describe('crypto: invites', (t) => {
   t('encrypt/decrypt invite chain roundtrip', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const k = tc.generateTribeKey();
+    const tc = cryptoModelFactory(fresh());
+    const k = tc.generateKey();
     tc.setKey('%root.sha256', k, 1);
     const code = 'mycode';
     const salt = tc.generateInviteSalt();
@@ -171,8 +172,8 @@ describe('crypto: invites', (t) => {
   });
 
   t('decrypt with wrong code returns null', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const k = tc.generateTribeKey();
+    const tc = cryptoModelFactory(fresh());
+    const k = tc.generateKey();
     tc.setKey('%root.sha256', k, 1);
     const salt = tc.generateInviteSalt();
     const ek = tc.encryptChainForInvite(['%root.sha256'], 'right', salt);
@@ -180,7 +181,7 @@ describe('crypto: invites', (t) => {
   });
 
   t('inviteMatchesCode via codeHash', () => {
-    const tc = tribeCryptoFactory(fresh());
+    const tc = cryptoModelFactory(fresh());
     const code = 'abc123';
     const salt = tc.generateInviteSalt();
     const inv = { codeHash: tc.hashInviteCode(code, salt), salt };
@@ -191,15 +192,15 @@ describe('crypto: invites', (t) => {
 
 describe('crypto: AES-GCM primitives', (t) => {
   t('roundtrip with AAD', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const k = tc.generateTribeKey();
+    const tc = cryptoModelFactory(fresh());
+    const k = tc.generateKey();
     const aad = Buffer.from('test-aad');
     eq(tc.decryptWithKey(tc.encryptWithKey('hello', k, aad), k, aad), 'hello');
   });
 
   t('decrypt with wrong AAD throws', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const k = tc.generateTribeKey();
+    const tc = cryptoModelFactory(fresh());
+    const k = tc.generateKey();
     const enc = tc.encryptWithKey('x', k, Buffer.from('a'));
     let threw = false;
     try { tc.decryptWithKey(enc, k, Buffer.from('b')); } catch (_) { threw = true; }
@@ -209,8 +210,8 @@ describe('crypto: AES-GCM primitives', (t) => {
 
 describe('crypto: legacy encryptContent (audit fix)', (t) => {
   t('no no-AAD fallback - tampered envelope rejected', () => {
-    const tc = tribeCryptoFactory(fresh());
-    const k = tc.generateTribeKey();
+    const tc = cryptoModelFactory(fresh());
+    const k = tc.generateKey();
     const content = { type: 'chat', tribeId: '%t.sha256', title: 'x', author: '@a', createdAt: 'now' };
     const enc = tc.encryptContent(content, [k], true);
     const tampered = { ...enc, tribeId: '%other.sha256' };

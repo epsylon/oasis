@@ -104,7 +104,7 @@ if [ "$slot" -gt 0 ]; then
         ""|gui|-*)
             case " $* " in
                 *" --port="*) ;;
-                *) set -- "$@" "--port=$((3000 + slot))" ;;
+                *) [ -n "${OASIS_PORT:-}" ] || set -- "$@" "--port=$((3000 + slot))" ;;
             esac
             ;;
     esac

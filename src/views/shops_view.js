@@ -1,10 +1,10 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadButton, renderOpinionsVoting, renderEngagement, renderInviteQrCard , renderSpreadEditWarning, renderContentActions, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { renderMapLocationUrl, renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
+const { renderMapEmbed } = require("./maps_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderRichText: cnRichText, renderKindTag: cnKindTag } = require("./clearnet_view")
 
@@ -72,20 +72,12 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params)
   const isAuthor = String(shop.author) === String(userId)
 
+  const shopHref = `/shops/${encodeURIComponent(shop.key)}`
+
   return div({ class: "tribe-card" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(shop.key, `/shops/${encodeURIComponent(shop.key)}`, { spread: params.spreadMap && params.spreadMap.get(shop.key) || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined })
-    ),
-    div({ class: "tribe-card-image-wrapper" },
-      a({ href: `/shops/${encodeURIComponent(shop.key)}` },
-        renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-card-hero-image' })
-      )
-    ),
-    div({ class: "tribe-card-body" },
-      div({ class: "shop-title-row" },
-        h2({ class: "tribe-card-title" }, a({ href: `/shops/${encodeURIComponent(shop.key)}` }, shop.title || i18n.shopUntitled))
-      ),
-      div({ class: "card-chips-row" },
+    renderCardTop(shop.key, shopHref, {
+      date: shop.createdAt,
+      chips: [
         shop.visibility === "CLOSED"
           ? renderStateChip("closed", "✗", i18n.shopClosed)
           : renderStateChip("mutuals", "✓", i18n.shopOpen),
@@ -94,10 +86,22 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
         shop.subscriptionIn === true
           ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
           : (shop.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
+      ],
+      spread: params.spreadMap && params.spreadMap.get(shop.key) || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined
+    }),
+    div({ class: "tribe-card-image-wrapper" },
+      a({ href: shopHref },
+        renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-card-hero-image' })
+      )
+    ),
+    div({ class: "tribe-card-body" },
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" }, a({ href: shopHref }, shop.title || i18n.shopUntitled))
       ),
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
-      )
+      ),
+      null
     )
   )
 }
@@ -109,9 +113,7 @@ const renderProductCard = (product, shopId, returnTo, params = {}) => {
   const productUrl = `/shops/product/${encodeURIComponent(product.key)}?shopId=${encodeURIComponent(shopId)}`
 
   return div({ class: "shop-product-card" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { spread: params.spreadMap && params.spreadMap.get(product.key) || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, reportTitle: product.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined })
-    ),
+    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { date: product.createdAt, spread: params.spreadMap && params.spreadMap.get(product.key) || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, reportTitle: product.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
     product.image ? div({ class: "shop-product-media" }, a({ href: productUrl }, renderMediaBlob(product.image))) : null,
     div({ class: "shop-product-body" },
       product.shopTitle ? p(a({ href: `/shops/${encodeURIComponent(shopId)}`, class: "user-link" }, product.shopTitle)) : null,
@@ -132,7 +134,8 @@ const renderProductCard = (product, shopId, returnTo, params = {}) => {
           actions.push(a({ href: productUrl, class: "buy-btn" }, i18n.marketActionsBuy || i18n.shopBuy));
         }
         return actions.length ? div({ class: "shop-product-actions" }, ...actions) : null;
-      })()
+      })(),
+      null
     )
   )
 }
@@ -289,33 +292,31 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
   products = safeArr(products)
 
   const shopSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(shop.key, `/shops/${encodeURIComponent(shop.key)}`, { spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined })
-    ),
+    renderCardTop(shop.key, `/shops/${encodeURIComponent(shop.key)}`, { arrow: false,
+      date: shop.createdAt,
+      chips: [
+        shop.visibility === "CLOSED"
+          ? renderStateChip("closed", "✗", i18n.shopClosed)
+          : renderStateChip("mutuals", "✓", i18n.shopOpen),
+        shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
+        renderLifespanChip(shop.lifetime, i18n),
+        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('shops', shop.title, shop.key) : null),
+        shop.subscription
+          ? ((isAuthor || shop.subscription.subscribed === true)
+              ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+              : renderStateChip("closed", "✉", i18n.subscriptionOff))
+          : null
+      ],
+      spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined
+    }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, shop.title || i18n.shopUntitled)
     ),
-    div({ class: "card-chips-row" },
-      shop.visibility === "CLOSED"
-        ? renderStateChip("closed", "✗", i18n.shopClosed)
-        : renderStateChip("mutuals", "✓", i18n.shopOpen),
-      shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
-      renderLifespanChip(shop.lifetime, i18n),
-      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('shops', shop.title, shop.key) : null),
-      isAuthor && canClearnet ? renderClearnetSwitch('shops', shop.rootId || shop.key, isClearnet) : null,
-      shop.subscription
-        ? ((isAuthor || shop.subscription.subscribed === true)
-            ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
-            : renderStateChip("closed", "✉", i18n.subscriptionOff))
-        : null
-    ),
+    isAuthor && canClearnet ? renderClearnetSwitch('shops', shop.rootId || shop.key, isClearnet) : null,
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
+    renderDetailShare(shop.key, `/shops/${encodeURIComponent(shop.key)}`, shop.title),
     shop.description ? p({ class: "tribe-side-description" }, ...renderStyledText(shop.description)) : null,
     table({ class: "tribe-info-table" },
-      tr(
-        td({ class: "tribe-info-label" }, i18n.shopCreatedAt || "CREATED"),
-        td({ class: "tribe-info-value", colspan: "3" }, moment(shop.createdAt).format("YYYY/MM/DD HH:mm"))
-      ),
       shop.location ? tr(
         td({ class: "tribe-info-label" }, i18n.shopLocation),
         td({ class: "tribe-info-value", colspan: "3" }, ...renderStyledText(shop.location))
@@ -327,10 +328,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       shop.url ? tr(
         td({ class: "tribe-info-label" }, i18n.shopUrl),
         td({ class: "tribe-info-value", colspan: "3" }, ...renderStyledText(shop.url))
-      ) : null,
-      tr(
-        td({ class: "tribe-info-value", colspan: "4" }, userLink(shop.author))
-      )
+      ) : null
     ),
     renderMapEmbed(params.mapData, shop.mapUrl),
     div({ class: "tribe-card-members" },
@@ -399,7 +397,8 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       : null,
     safeArr(shop.tags).length
       ? div({ class: "tribe-side-tags" }, safeArr(shop.tags).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
-      : null
+      : null,
+    null
   )
 
   const shopMain = div({ class: "tribe-main" },
@@ -434,31 +433,19 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
   const stock = Number(product.stock) || 0
 
   const productSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined })
-    ),
+    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { arrow: false, date: product.createdAt, bylineExtra: [renderEditedChip(product.key, product.rootId)], spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled),
-      renderEditedChip(product.key, product.rootId)
+      h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled)
     ),
     renderStarRating(product.opinions, safeArr(product.opinions_inhabitants).length),
     product.image ? renderMediaBlob(product.image, null, { class: "tribe-detail-image" }) : null,
-    div({ class: "price-chip" }, `${Number(product.price || 0).toFixed(6)} ECO`),
+    renderDetailShare(product.key, `/shops/product/${encodeURIComponent(product.key)}`, product.title),
     div({ class: "confirmations-block stock-block" },
       div({ class: "card-field" },
         span({ class: "card-label" }, `${i18n.shopProductStock}: `),
         span({ class: "card-value" }, stock > 0 ? String(stock) : i18n.shopOutOfStock)
       ),
       progress({ class: "confirmations-progress stock-progress", value: Math.min(stock, 100), max: 100 })
-    ),
-    table({ class: "tribe-info-table jobs-info-table" },
-      tr(
-        td({ class: "tribe-info-label" }, i18n.shopCreatedAt || "CREATED"),
-        td({ class: "tribe-info-value", colspan: "3" }, moment(product.createdAt).format("YYYY/MM/DD HH:mm"))
-      ),
-      tr(
-        td({ class: "tribe-info-value", colspan: "4" }, userLink(product.author))
-      )
     ),
     div({ class: "tribe-side-actions" },
       form({ method: "GET", action: `/shops/${encodeURIComponent(product.shopId)}` },
@@ -476,6 +463,8 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
       : null
   )
 
+  const canBuy = !isAuthor && stock > 0
+  const priceChip = div({ class: "price-chip" }, `${Number(product.price || 0).toFixed(6)} ECO`)
   const productMain = div({ class: "tribe-main" },
     product.description
       ? div({ class: "job-section" },
@@ -483,13 +472,12 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
           p({ class: "tribe-side-description" }, ...renderStyledText(product.description))
         )
       : null,
-    !isAuthor && stock > 0
-      ? div({ class: "job-section" },
+    canBuy ? null : priceChip,
+    canBuy
+      ? div({ class: "job-section buy-box" },
           form({ method: "POST", action: `/shops/product/buy/${encodeURIComponent(product.key)}`, class: "shop-buy-form" },
             input({ type: "hidden", name: "returnTo", value: returnTo }),
-            p({ class: "shop-buy-form-note" }, i18n.shopBuyEncryptedNote || "Your delivery details are sent encrypted only to the shop owner."),
-            label(i18n.shopBuyDeliveryAddress || "Delivery address"),
-            br(),
+            div({ class: "title-with-chip" }, label(i18n.shopBuyDeliveryAddress || "Delivery address"), renderEncryptedChip(i18n)),
             textarea({ maxlength: "5000", name: "deliveryAddress", required: true, rows: 3, placeholder: i18n.shopBuyDeliveryAddressPlaceholder || "" }),
             br(),
             br(),
@@ -502,6 +490,8 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
             br(),
             textarea({ maxlength: "5000", name: "notes", rows: 2, placeholder: i18n.shopBuyNotesPlaceholder || "" }),
             br(),
+            priceChip,
+            br(),
             br(),
             button({ type: "submit", class: "buy-btn" }, i18n.marketActionsBuy || i18n.shopBuy)
           )
@@ -511,8 +501,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
       !isAuthor && params.canRate
         ? renderOpinionsVoting('/shops/product/opinions', product.key, product.opinions, returnTo, product.opinions_inhabitants)
         : null,
-      renderCommentsSection(product.key, returnTo, comments)
-    )
+      renderCommentsSection(product.key, returnTo, comments))
   )
 
   return template(

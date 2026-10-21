@@ -1,6 +1,6 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { getConfig } = require('../configs/config-manager.js');
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -171,25 +171,22 @@ const generateTransferCard = (transfer, filter, params = {}) => {
 
   const isOwn = transfer.from && String(transfer.from) === String(userId)
   const canDelete = isOwn && String(transfer.status || "").toUpperCase() === "UNCONFIRMED" && !isExpired && confirmedCount < required
+  const transferHref = `/transfers/${encodeURIComponent(transfer.id)}`
   return div({ class: "trending-card transfer-card" + (isOwn ? " own-content" : "") },
-    div(
-      { class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, { spread: params.spreadMap && params.spreadMap.get(transfer.id) || null, author: transfer.from, favKind: 'transfers', isFavorite: transfer.isFavorite, reportTitle: transfer.concept, returnTo, deleteAction: canDelete ? contentDeleteAction('transfer', transfer.id) : undefined })
-    ),
+    renderCardTop(transfer.id, transferHref, { date: transfer.createdAt, chips, spread: params.spreadMap && params.spreadMap.get(transfer.id) || null, author: transfer.from, favKind: 'transfers', isFavorite: transfer.isFavorite, reportTitle: transfer.concept, returnTo, deleteAction: canDelete ? contentDeleteAction('transfer', transfer.id) : undefined }),
     div({ class: "card-section transfer-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
-          a({ href: `/transfers/${encodeURIComponent(transfer.id)}` }, transferTitle(transfer))
+          a({ href: transferHref }, transferTitle(transfer))
         )
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       !isUbi && dl && dl.isValid()
         ? p({ class: "time-chip" }, dl.format("YYYY/MM/DD HH:mm"))
         : null,
       cat !== "TRUST"
         ? div({ class: "tribe-card-members" }, span({ class: "price-chip" }, fmtAmountWithUnit(transfer)))
-        : null
+        : null,
+      null
     )
   )
 }
@@ -497,24 +494,30 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
   if (!isUbi) pushRow(i18n.transfersDeadline, dl && dl.isValid() ? dl.format("YYYY/MM/DD HH:mm") : "")
   pushRow(i18n.transfersStatus, i18n[statusKey(transfer.status)] || String(transfer.status || ""))
 
+  const updatedAt = transfer.updatedAt ? moment(transfer.updatedAt) : null
+  const showUpdated = updatedAt && updatedAt.isValid() && updatedAt.valueOf() !== new Date(transfer.createdAt).getTime()
+
   const transferSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, {
-        spread: params.spreads || null,
-        author: transfer.from,
-        favKind: 'transfers',
-        isFavorite: transfer.isFavorite,
-        returnTo,
-        reportTitle: transfer.concept,
-        deleteAction: canDelete ? contentDeleteAction('transfer', transfer.id) : undefined
-      })
-    ),
+    renderCardTop(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, { arrow: false,
+      date: transfer.createdAt,
+      chips,
+      bylineExtra: [
+        renderEditedChip(transfer.id, transfer.rootId),
+        showUpdated ? span({ class: "card-byline-time" }, `${i18n.jobsUpdatedAt}: ${updatedAt.format("YYYY/MM/DD HH:mm")}`) : null
+      ],
+      spread: params.spreads || null,
+      author: transfer.from,
+      favKind: 'transfers',
+      isFavorite: transfer.isFavorite,
+      returnTo,
+      reportTitle: transfer.concept,
+      deleteAction: canDelete ? contentDeleteAction('transfer', transfer.id) : undefined
+    }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, transferTitle(transfer)),
-      renderEditedChip(transfer.id, transfer.rootId)
+      h2({ class: "tribe-card-title" }, transferTitle(transfer))
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    table({ class: "tribe-info-table" }, ...renderCreatedRows(transfer.createdAt, transfer.from, transfer.updatedAt)),
+    renderDetailShare(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, transfer.concept),
+    table({ class: "tribe-info-table" }, ...infoRows),
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.transfersConfirmations}: ${confirmedCount}/${required}`)
@@ -549,8 +552,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
         action: `/transfers/${encodeURIComponent(transfer.id)}/comments`,
         comments: params.comments || [],
         returnTo
-      })
-    )
+      }))
   )
 
   return template(

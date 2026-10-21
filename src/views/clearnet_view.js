@@ -367,6 +367,7 @@ const getCurrentPalette = () => {
 
 const buildBaseCss = (p) => `
 .cn-pdf-frame{display:block;width:100%;max-width:100%;height:80vh;min-height:520px;border:0;margin:0 0 1rem 0;background:transparent}
+.pending-media{display:flex;align-items:center;justify-content:center;min-height:120px;max-width:480px;padding:16px;border:1px dashed #8a8a8a;border-radius:10px;background:rgba(128,128,128,0.15);color:#a0a0a0;text-align:center;box-sizing:border-box;margin:8px 0}
 :root{
   --bg:${p.bg}; --bg-elev:${p.bgElev}; --bg-sub:${p.bgSub};
   --fg:${p.fg}; --fg-soft:${p.fgSoft}; --fg-dim:${p.fgDim};

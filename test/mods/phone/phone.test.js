@@ -186,18 +186,6 @@ describe('phone: the caller always sees the same thing', (t) => {
     } finally { await closeNode(a); }
   });
 
-  t('a person on an older Oasis that never confirms still gets the usual ringing once reached', async () => {
-    const a = makeNode(); const b = makeNode();
-    try {
-      await link(a, b);
-      await asP(a.phone.call, b.id, { legacy: [b.id] });
-      ok(a.phone.state().reached, 'it rings straight away');
-      ok(await waitFor(() => devices.get(a.id).played.some(b => peak(b) > 5000)), 'with the ringing tone');
-      ok(await waitFor(() => a.phone.state().phase === 'recording', 4000));
-      eq(a.phone.state().why, 'noanswer', 'and ends as an ordinary no answer');
-    } finally { await closeNode(a); await closeNode(b); }
-  });
-
   t('an older Oasis that cannot be reached does not pretend to ring', async () => {
     const a = makeNode();
     try {

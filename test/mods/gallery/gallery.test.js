@@ -80,7 +80,7 @@ describe('gallery: modules that store a gallery', (t) => {
   t('a report exposes its first photo as the legacy image field', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const reports = A.use('reports');
-    const created = await reports.createReport('gallery report', 'desc', 'BUGS', null, [], 'low', {},
+    const created = await reports.createReport('gallery report', 'desc', 'BUGS', null, [], 'low',
       { images: [blob(1), blob(2)], video: blob(3) });
     const report = await reports.getReportById(created.key);
     eq(report.images.length, 2, 'two photos stored');

@@ -68,47 +68,47 @@ const matchSearch = (item, q) => {
   return hay.includes(qq)
 }
 
-module.exports = ({ cooler, tribeCrypto }) => {
+module.exports = ({ cooler, cryptoModel }) => {
   let ssb
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb }
 
   const isEncrypted = (c) => !!(c && c.encryptedPayload)
 
   const keysForRoot = (rootId) => {
-    if (!tribeCrypto || !rootId) return []
-    const ks = (tribeCrypto.getKeys && tribeCrypto.getKeys(rootId)) || []
+    if (!cryptoModel || !rootId) return []
+    const ks = (cryptoModel.getKeys && cryptoModel.getKeys(rootId)) || []
     if (ks.length) return ks
-    const k = tribeCrypto.getKey ? tribeCrypto.getKey(rootId) : null
+    const k = cryptoModel.getKey ? cryptoModel.getKey(rootId) : null
     return k ? [k] : []
   }
 
   const decryptHousing = (c, rootId) => {
     if (!isEncrypted(c)) return c
-    if (!tribeCrypto) return { ...c, _undecryptable: true }
+    if (!cryptoModel) return { ...c, _undecryptable: true }
     const keys = keysForRoot(rootId)
     if (!keys.length) return { ...c, _undecryptable: true }
-    return tribeCrypto.decryptContent(c, keys.map(k => [k]))
+    return cryptoModel.decryptContent(c, keys.map(k => [k]))
   }
 
   const publishHousing = (ssbClient, content, rootId) => new Promise((resolve, reject) => {
     const hidden = String(content.visibility || "PUBLIC").toUpperCase() === "HIDDEN"
-    if (!hidden || !tribeCrypto) {
+    if (!hidden || !cryptoModel) {
       ssbClient.publish(content, (err, msg) => {
         if (err) return reject(err)
-        if (msg && msg.key && tribeCrypto && !rootId) {
-          try { tribeCrypto.setKey(msg.key, tribeCrypto.generateTribeKey(), 1) } catch (_) {}
+        if (msg && msg.key && cryptoModel && !rootId) {
+          try { cryptoModel.setKey(msg.key, cryptoModel.generateKey(), 1) } catch (_) {}
         }
         resolve(msg)
       })
       return
     }
     let key = rootId ? (keysForRoot(rootId)[0] || null) : null
-    if (!key) key = tribeCrypto.generateTribeKey()
+    if (!key) key = cryptoModel.generateKey()
     let envelope
-    try { envelope = tribeCrypto.encryptContent(content, [key], true) } catch (err) { return reject(err) }
+    try { envelope = cryptoModel.encryptContent(content, [key], true) } catch (err) { return reject(err) }
     ssbClient.publish(envelope, (err, msg) => {
       if (err) return reject(err)
-      try { tribeCrypto.setKey(rootId || (msg && msg.key), key, 1) } catch (_) {}
+      try { cryptoModel.setKey(rootId || (msg && msg.key), key, 1) } catch (_) {}
       resolve(msg)
     })
   })

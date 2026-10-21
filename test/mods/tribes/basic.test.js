@@ -78,26 +78,26 @@ describe('tribes: invite + join', (t) => {
     C.setActor(); await C.use('tribes').joinByInvite(codeC);
     A.setActor(); await tmA.ensureTribeKeyDistribution(r.key);
     const rootId = await tmA.getRootId(r.key);
-    const genBefore = A.tribeCrypto.getGen(rootId);
+    const genBefore = A.cryptoModel.getGen(rootId);
     B.setActor(); await B.use('tribes').processIncomingKeys();
-    const keyB = B.tribeCrypto.getKey(rootId);
+    const keyB = B.cryptoModel.getKey(rootId);
     await B.use('tribes').leaveTribe(r.key);
-    eq(B.tribeCrypto.getKey(rootId), keyB, 'leaving does not mint a key the leaver would know');
+    eq(B.cryptoModel.getKey(rootId), keyB, 'leaving does not mint a key the leaver would know');
     A.setActor();
     await tmA.forceSync();
     await tmA.ensureTribeKeyDistribution(r.key);
-    ok(A.tribeCrypto.getGen(rootId) > genBefore, 'the creator renews the key once it sees someone left');
-    const fresh = A.tribeCrypto.getKey(rootId);
+    ok(A.cryptoModel.getGen(rootId) > genBefore, 'the creator renews the key once it sees someone left');
+    const fresh = A.cryptoModel.getKey(rootId);
     ok(fresh && fresh !== keyB, 'with a key the leaver never had');
     C.setActor(); await C.use('tribes').processIncomingKeys();
-    eq(C.tribeCrypto.getKey(rootId), fresh, 'the members who stay receive it');
+    eq(C.cryptoModel.getKey(rootId), fresh, 'the members who stay receive it');
     B.setActor(); await B.use('tribes').processIncomingKeys();
-    ok(!B.tribeCrypto.getKeys(rootId).includes(fresh), 'the one who left does not');
+    ok(!B.cryptoModel.getKeys(rootId).includes(fresh), 'the one who left does not');
     A.setActor();
-    const genAfter = A.tribeCrypto.getGen(rootId);
+    const genAfter = A.cryptoModel.getGen(rootId);
     await tmA.forceSync();
     await tmA.ensureTribeKeyDistribution(r.key);
-    eq(A.tribeCrypto.getGen(rootId), genAfter, 'and it is renewed only once');
+    eq(A.cryptoModel.getGen(rootId), genAfter, 'and it is renewed only once');
   });
 
   t('what a member posts after leaving no longer shows to the tribe; what they posted before does', async () => {
@@ -429,8 +429,8 @@ describe('tribes: content versions republished by other members', (t) => {
     A.setActor();
     return { net, A, B, C, tribeId: r.key };
   };
-  const body = (P, net, key) => P.tribeCrypto.unwrapMsg(net.log.find(m => m.key === key).value.content, P.tribeCrypto.buildFingerprintIndex()).body;
-  const repost = (P, tribeId, b) => new Promise((res, rej) => P.node.publish(P.tribeCrypto.wrapMsg(b, P.tribeCrypto.getKey(tribeId)), (e, m) => e ? rej(e) : res(m)));
+  const body = (P, net, key) => P.cryptoModel.unwrapMsg(net.log.find(m => m.key === key).value.content, P.cryptoModel.buildFingerprintIndex()).body;
+  const repost = (P, tribeId, b) => new Promise((res, rej) => P.node.publish(P.cryptoModel.wrapMsg(b, P.cryptoModel.getKey(tribeId)), (e, m) => e ? rej(e) : res(m)));
 
   t('a chain crossing other members stays one item with the latest content of its author', async () => {
     const { net, A, B, C, tribeId } = await setup();
@@ -482,8 +482,8 @@ describe('tribes: deleting content reached through a foreign version', (t) => {
     A.setActor();
     const created = await A.use('tribesContent').create(r.key, 'event', { title: 'Meetup', description: 'd', date: '2099-01-01' });
     const env = net.log.find(m => m.key === created.key).value.content;
-    const body = B.tribeCrypto.unwrapMsg(env, B.tribeCrypto.buildFingerprintIndex()).body;
-    const b = await new Promise((res, rej) => B.node.publish(B.tribeCrypto.wrapMsg({ ...body, replaces: created.key }, B.tribeCrypto.getKey(r.key)), (e, m) => e ? rej(e) : res(m)));
+    const body = B.cryptoModel.unwrapMsg(env, B.cryptoModel.buildFingerprintIndex()).body;
+    const b = await new Promise((res, rej) => B.node.publish(B.cryptoModel.wrapMsg({ ...body, replaces: created.key }, B.cryptoModel.getKey(r.key)), (e, m) => e ? rej(e) : res(m)));
     await A.use('tribesContent').deleteById(b.key);
     eq((await A.use('tribesContent').listByTribe(r.key, 'event')).filter(i => i.title === 'Meetup').length, 0);
   });
@@ -599,9 +599,9 @@ describe('tribes: open invitations', (t) => {
     const tribe = await A.use('tribes').createTribe('Bodega', 'd', null, '', [], true, 'strict', null, 'OPEN', '');
     const root = await A.use('tribes').getRootId(tribe.key);
     const code = 'a'.repeat(32);
-    const salt = A.tribeCrypto.generateInviteSalt();
+    const salt = A.cryptoModel.generateInviteSalt();
     const ssbA = await A.cooler.open();
-    const inv = await new Promise((res, rej) => ssbA.publish({ type: 'tribe-invite-msg', v: 1, multi: 1, ch: A.tribeCrypto.hashInviteCode(code, salt), s: salt, ek: A.tribeCrypto.encryptChainForInvite([root], code, salt) }, (e, r) => e ? rej(e) : res(r)));
+    const inv = await new Promise((res, rej) => ssbA.publish({ type: 'tribe-invite-msg', v: 1, multi: 1, ch: A.cryptoModel.hashInviteCode(code, salt), s: salt, ek: A.cryptoModel.encryptChainForInvite([root], code, salt) }, (e, r) => e ? rej(e) : res(r)));
     await new Promise((res, rej) => ssbA.publish({ type: 'tribe-open-invite', v: 1, rootId: root, code, inviteKey: inv.key, by: A.keypair.id, createdAt: new Date().toISOString() }, (e) => e ? rej(e) : res()));
     eq(await A.use('tribes').getOpenInvite(tribe.key), null, 'it is not offered');
     B.setActor();

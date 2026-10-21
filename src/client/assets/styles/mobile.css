@@ -672,8 +672,7 @@ a.filter-btn,
 .main-column .edit-btn,
 .main-column .join-btn,
 .main-column .leave-btn,
-.main-column .buy-btn,
-.main-column .submit-button {
+.main-column .buy-btn {
   max-width: 100% !important;
   box-sizing: border-box !important;
   overflow-wrap: anywhere !important;
@@ -682,8 +681,7 @@ a.filter-btn,
 .main-column .btn,
 .main-column .create-button,
 .main-column .update-btn,
-.main-column .delete-btn,
-.main-column .submit-button {
+.main-column .delete-btn {
   white-space: normal !important;
 }
 .main-column form {

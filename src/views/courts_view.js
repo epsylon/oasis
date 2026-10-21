@@ -1,6 +1,6 @@
-const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
+const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, img } = require('../server/node_modules/hyperaxe');
 const moment = require('../server/node_modules/moment');
-const { template, i18n, userLink, renderStateChip, renderModuleStatsBy, paged } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderModuleStatsBy, paged, renderCardTop, renderEngagement } = require('./main_views');
 const { renderStyledText, safeExternalHref } = require('../backend/renderStyledText');
 
 const CourtsE2EChip = () => renderStateChip('encrypted', '🔒', i18n.encryptedChipLabel || 'E2E');
@@ -44,6 +44,9 @@ const PRESET_KEYS = {
 const presetLabel = (t) => i18n[PRESET_KEYS[t]] || t;
 const caseTitle = (title) => CASE_TITLE_PRESETS.reduce((acc, t) => acc.split(t).join(presetLabel(t)), String(title || ''));
 const statusLabel = (status) => String(i18n[`courtsStatus${String(status || '').toUpperCase()}`] || status || '').toUpperCase();
+const caseHref = (c) => `/courts/cases/${encodeURIComponent(c.id)}`;
+const caseTop = (c, chips = [CourtsE2EChip()]) => renderCardTop(null, caseHref(c), { author: c.accuser, date: c.createdAt || c.openedAt, chips });
+const caseShare = (c) => renderEngagement(c.id, null, null, { href: caseHref(c), title: caseTitle(c.title) });
 
 const FILTERS = [
   { value: 'cases', key: 'courtsFilterCases' },
@@ -463,38 +466,32 @@ const CaseCard = (c) => {
     (c.isAccuser || c.isRespondent);
   return div(
     { class: 'card' },
+    caseTop(c),
+    h2(caseTitle(c.title)),
     div(
-      { class: 'card-header' },
-      div(
-        { class: 'card-header__meta' },
-        h2(caseTitle(c.title)),
-        div({ class: 'card-chips-row' }, CourtsE2EChip()),
-        div(
-          { class: 'card-field' },
-          span({ class: 'card-label' }, i18n.courtsCaseMethod + ': '),
-          span({ class: 'card-value' }, methodLabel(c.method))
-        ),
-        div(
-          { class: 'card-field' },
-          span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
-          span({ class: 'card-value' }, statusLabel(c.status))
-        ),
-        c.answerBy
-          ? div(
-              { class: 'card-field' },
-              span({ class: 'card-label' }, i18n.courtsThAnswerBy + ': '),
-              span({ class: 'card-value' }, fmt(c.answerBy))
-            )
-          : null,
-        c.evidenceBy
-          ? div(
-              { class: 'card-field' },
-              span({ class: 'card-label' }, i18n.courtsThEvidenceBy + ': '),
-              span({ class: 'card-value' }, fmt(c.evidenceBy))
-            )
-          : null
-      )
+      { class: 'card-field' },
+      span({ class: 'card-label' }, i18n.courtsCaseMethod + ': '),
+      span({ class: 'card-value' }, methodLabel(c.method))
     ),
+    div(
+      { class: 'card-field' },
+      span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
+      span({ class: 'card-value' }, statusLabel(c.status))
+    ),
+    c.answerBy
+      ? div(
+          { class: 'card-field' },
+          span({ class: 'card-label' }, i18n.courtsThAnswerBy + ': '),
+          span({ class: 'card-value' }, fmt(c.answerBy))
+        )
+      : null,
+    c.evidenceBy
+      ? div(
+          { class: 'card-field' },
+          span({ class: 'card-label' }, i18n.courtsThEvidenceBy + ': '),
+          span({ class: 'card-value' }, fmt(c.evidenceBy))
+        )
+      : null,
     div(
       { class: 'table-wrap mt-2' },
       applyEl(table, { class: 'table table--centered' }, [
@@ -681,13 +678,12 @@ const MyCaseCard = (c) => {
 
   return div(
     { class: 'card' },
-    br(),
+    caseTop(c),
     div(
       { class: 'card-field' },
       span({ class: 'card-label' }, i18n.courtsThCase + ': '),
       span({ class: 'card-value' }, caseTitle(c.title))
     ),
-    div({ class: 'card-chips-row' }, CourtsE2EChip()),
     div(
       { class: 'card-field' },
       span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
@@ -942,7 +938,7 @@ const HistoryList = (rows = []) => {
     const canShowDescription = hh.mine || hh.publicDetails;
     return div(
       { class: 'card' },
-      br(),
+      caseTop(hh, []),
       hh.method
         ? div(
             { class: 'card-field' },
@@ -963,14 +959,7 @@ const HistoryList = (rows = []) => {
         span({ class: 'card-value' }, String(hh.status || ''))
       ),
       h2(caseTitle(hh.title)),
-      canShowDescription ? RichTextBlock(hh.description || '') : null,
-      form(
-        {
-          method: 'GET',
-          action: `/courts/cases/${encodeURIComponent(hh.id)}`
-        },
-        button({ type: 'submit', class: 'create-button' }, i18n.courtsViewDetails)
-      )
+      canShowDescription ? RichTextBlock(hh.description || '') : null
     );
   });
   return div({ class: 'cards' }, ...cards);
@@ -1070,46 +1059,32 @@ const CaseDetailsBlock = (c) => {
 
   return div(
     { class: 'card case-details-card' },
-    br(),
+    caseTop(c),
+    h2(caseTitle(c.title)),
+    c.method
+      ? div(
+          { class: 'card-field' },
+          span({ class: 'card-label' }, i18n.courtsCaseMethod + ': '),
+          span({ class: 'card-value' }, methodLabel(c.method))
+        )
+      : null,
     div(
-      { class: 'card-header' },
-      div(
-        { class: 'card-header__meta' },
-        h2(caseTitle(c.title)),
-        div({ class: 'card-chips-row' }, CourtsE2EChip()),
-        c.method
-          ? div(
-              { class: 'card-field' },
-              span({ class: 'card-label' }, i18n.courtsCaseMethod + ': '),
-              span({ class: 'card-value' }, methodLabel(c.method))
-            )
-          : null,
-        div(
-          { class: 'card-field' },
-          span({ class: 'card-label' }, i18n.courtsThJudge + ': '),
-          span({ class: 'card-value' }, judgeValue)
-        ),
-        div(
-          { class: 'card-field' },
-          span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
-          span({ class: 'card-value' }, statusLabel(c.status))
-        ),
-        c.createdAt
-          ? div(
-              { class: 'card-field' },
-              span({ class: 'card-label' }, i18n.courtsThCreatedAt + ': '),
-              span({ class: 'card-value' }, fmt(c.createdAt))
-            )
-          : null,
-        c.decidedAt
-          ? div(
-              { class: 'card-field' },
-              span({ class: 'card-label' }, i18n.courtsThDecisionBy + ': '),
-              span({ class: 'card-value' }, fmt(c.decidedAt))
-            )
-          : null
-      )
+      { class: 'card-field' },
+      span({ class: 'card-label' }, i18n.courtsThJudge + ': '),
+      span({ class: 'card-value' }, judgeValue)
     ),
+    div(
+      { class: 'card-field' },
+      span({ class: 'card-label' }, i18n.courtsThStatus + ': '),
+      span({ class: 'card-value' }, statusLabel(c.status))
+    ),
+    c.decidedAt
+      ? div(
+          { class: 'card-field' },
+          span({ class: 'card-label' }, i18n.courtsThDecisionBy + ': '),
+          span({ class: 'card-value' }, fmt(c.decidedAt))
+        )
+      : null,
     div(
       { class: 'table-wrap mt-2' },
       applyEl(table, { class: 'table table--centered' }, [
@@ -1284,7 +1259,8 @@ const CaseDetailsBlock = (c) => {
             )
           )
         )
-      : null
+      : null,
+    caseShare(c)
   );
 };
 

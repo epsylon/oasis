@@ -27,7 +27,7 @@ const snapshotOf = (item, replies = []) => {
   return out;
 };
 
-module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
+module.exports = ({ cooler, cryptoModel, tribesModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -38,15 +38,15 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
 
   const fingerprintsForRoot = (rootId) => {
     const fps = new Set();
-    for (const k of tribeCrypto.getKeys(rootId)) fps.add(tribeCrypto.fingerprint(k));
+    for (const k of cryptoModel.getKeys(rootId)) fps.add(cryptoModel.fingerprint(k));
     return fps;
   };
 
   const wrapAndPublishContent = async (rootId, body) => {
     const client = await openSsb();
-    const key = tribeCrypto.getKey(rootId);
+    const key = cryptoModel.getKey(rootId);
     if (!key) throw new Error('Missing tribe key for ' + rootId);
-    const envelope = tribeCrypto.wrapMsg(body, key);
+    const envelope = cryptoModel.wrapMsg(body, key);
     return new Promise((resolve, reject) =>
       client.publish(envelope, (err, r) => err ? reject(err) : resolve(r))
     );
@@ -59,7 +59,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
   };
 
   const decodeContentMsgs = async (msgs, opts) => {
-    const fpIdx = tribeCrypto.buildFingerprintIndex();
+    const fpIdx = cryptoModel.buildFingerprintIndex();
     const targetRootId = opts && opts.rootId ? opts.rootId : null;
     const wantType = opts && opts.contentType ? opts.contentType : null;
     const allowedFps = targetRootId ? fingerprintsForRoot(targetRootId) : null;
@@ -72,10 +72,10 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     for (const m of msgs) {
       const c = m.value && m.value.content;
       if (!c) continue;
-      if (!tribeCrypto.isTribeMsg(c)) continue;
+      if (!cryptoModel.isSealedMsg(c)) continue;
       if (allowedFps && !allowedFps.has(c.fp)) continue;
 
-      const r = tribeCrypto.unwrapMsg(c, fpIdx);
+      const r = cryptoModel.unwrapMsg(c, fpIdx);
       if (!r || !r.body) continue;
       const b = r.body;
 

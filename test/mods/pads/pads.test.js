@@ -208,7 +208,7 @@ describe('pads: changing the key when someone leaves', (t) => {
   t('the owner changes the key and only those who stay receive it', async () => {
     const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
     const pause = () => new Promise(r => setTimeout(r, 5));
-    const keysOf = (P) => require('../../../src/models/crypto')(P.configDir, 'pads');
+    const keysOf = (P) => require('../../../src/models/crypto_model')(P.configDir).scope('pads');
     A.setActor();
     const r = await A.use('pads').createPad('Rotating', 'INVITE-ONLY', '2030-12-31', [], null);
     const codeB = await A.use('pads').generateInvite(r.key);

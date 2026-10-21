@@ -1,5 +1,5 @@
-const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, table, tr, td, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon } = require("./main_views")
+const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare } = require("./main_views")
 const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
@@ -87,16 +87,20 @@ const renderRoomItem = (room, params = {}) => {
   const occ = inside && Number.isFinite(Number(params.live.count)) ? { count: Number(params.live.count), max: params.live.max } : occOf(params, room)
   const canJoin = !room.isClosed && !inside && (room.type === "OPEN" || room.tribeId || String(room.author) === String(userId) || safeArr(room.members).includes(userId))
   return li({ class: "mailing-archive-item room-item" },
-    div({ class: "emergency-update-head mailing-archive-head" },
-      div({ class: "mailing-archive-meta" },
-        a({ href: roomHref(room), class: "user-link" }, room.title || "—"),
-        span({ class: "card-label activity-update-counts mailing-counts" }, `👥: ${safeArr(room.members).length}`),
+    renderCardTop(room.rootId, roomHref(room), {
+      date: room.createdAt,
+      chips: [
         ...roomChips(room, occ, inside),
         room.clearnet === true && clearnetEligible(room) ? renderReachChip(true, i18n, roomClearnetHref(room)) : null,
         inside ? renderStateChip("whole", "ꘒ", String(i18n.roomYouAreIn).toUpperCase()) : null
-      ),
-      renderContentActions(room.rootId, roomHref(room), { spread: (params.spreadMap && params.spreadMap.get(room.rootId)) || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, reportTitle: room.title, deleteAction: String(room.author) === String(userId) ? contentDeleteAction("room", room.rootId) : undefined })
-    )
+      ],
+      spread: (params.spreadMap && params.spreadMap.get(room.rootId)) || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, reportTitle: room.title, deleteAction: String(room.author) === String(userId) ? contentDeleteAction("room", room.rootId) : undefined
+    }),
+    div({ class: "mailing-archive-meta" },
+      a({ href: roomHref(room), class: "user-link" }, room.title || "—"),
+      span({ class: "card-label activity-update-counts mailing-counts" }, `👥: ${safeArr(room.members).length}`)
+    ),
+    null
   )
 }
 
@@ -374,24 +378,19 @@ exports.singleRoomView = async (room, params = {}) => {
     : []
 
   const side = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(room.rootId, roomHref(room), { spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title, deleteAction: isAuthor ? contentDeleteAction("room", room.rootId) : undefined })
-    ),
+    renderCardTop(room.rootId, roomHref(room), { arrow: false,
+      date: room.createdAt,
+      chips: [
+        ...roomChips(room, live ? { count: live.count, max: live.max } : occ, !!live),
+        canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? roomClearnetHref(room) : null) : null
+      ],
+      spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title, deleteAction: isAuthor ? contentDeleteAction("room", room.rootId) : undefined
+    }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, restricted ? i18n.roomStatusInviteOnly : (room.title || "—"))),
-    div({ class: "card-chips-row" },
-      ...roomChips(room, live ? { count: live.count, max: live.max } : occ, !!live),
-      canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? roomClearnetHref(room) : null) : null,
-      isAuthor && canClearnet ? renderClearnetSwitch("rooms", room.rootId, isClearnet) : null
-    ),
+    isAuthor && canClearnet ? div({ class: "card-chips-row" }, renderClearnetSwitch("rooms", room.rootId, isClearnet)) : null,
     restricted ? null : renderCover(room, "tribe-detail-image"),
+    renderDetailShare(room.rootId, roomHref(room), room.title),
     restricted || !room.description ? null : p({ class: "tribe-side-description" }, ...renderStyledText(room.description)),
-    table({ class: "tribe-info-table jobs-info-table" },
-      tr(
-        td({ class: "tribe-info-label" }, i18n.createdAtLabel || "Created at"),
-        td({ class: "tribe-info-value", colspan: "3" }, moment(room.createdAt).format("YYYY/MM/DD HH:mm"))
-      ),
-      restricted ? null : tr(td({ class: "tribe-info-value", colspan: "4" }, userLink(room.author)))
-    ),
     live || restricted
       ? div({ class: "tribe-card-members" },
           span({ class: "tribe-members-count" }, `${i18n.roomParticipants}: ${safeArr(room.members).length}`)
@@ -421,7 +420,8 @@ exports.singleRoomView = async (room, params = {}) => {
     restricted || !safeArr(room.tags).length
       ? null
       : div({ class: "card-tags" }, ...room.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`))),
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null
+    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
+    null
   )
 
   const main = div({ class: "tribe-main" },

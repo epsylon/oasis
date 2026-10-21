@@ -1,8 +1,8 @@
-const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td, progress, strong } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged , formatSize, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -290,11 +290,26 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
   for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(fileObj.tags);
+  const href = `/files/${encodeURIComponent(fileObj.key)}`;
+  const createdTs = fileObj.createdAt ? new Date(fileObj.createdAt).getTime() : NaN;
+  const updatedTs = fileObj.updatedAt ? new Date(fileObj.updatedAt).getTime() : NaN;
+  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
-  const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(fileObj.key, `/files/${encodeURIComponent(fileObj.key)}`, {
-      spreadTitle: i18n.seedAction,
+  const fileSide = div({ class: "tribe-side" },
+    renderCardTop(fileObj.key, href, { arrow: false,
       author: fileObj.author,
+      date: fileObj.createdAt,
+      chips: [
+        fileObj.tribeId && fileObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
+        clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('files', fileObj.title, fileObj.key) : null) : null,
+        fileObj.tribeId ? null : renderLicenseChip(fileObj.license),
+        ...chips
+      ],
+      bylineExtra: [
+        renderEditedChip(fileObj.key, fileObj.rootId),
+        showUpdated ? span({ class: "votations-comment-date" }, `${i18n.fileUpdatedAt}: ${moment(fileObj.updatedAt).format("YYYY/MM/DD HH:mm")}`) : null
+      ],
+      spreadTitle: i18n.seedAction,
       deleteAction: String(fileObj.author) === String(userId) ? contentDeleteAction("file", fileObj.key) : null,
       favKind: 'files',
       ...(fileObj.url && fileObj.url.startsWith("&") ? { torrentFrom: { blobId: fileObj.url, name: fileObj.fileName || fileObj.title } } : {}),
@@ -302,19 +317,12 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
       spread: params.spreads || null,
       returnTo,
       reportTitle: fileObj.title
-    })
-  );
-
-  const fileSide = div({ class: "tribe-side" },
+    }),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      fileObj.tribeId && fileObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
-      clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('files', fileObj.title, fileObj.key) : null) : null,
-      fileObj.tribeId ? null : renderLicenseChip(fileObj.license),
-      clearnetAllowed && isAuthor ? renderClearnetSwitch('files', fileObj.rootId || fileObj.key, isClearnet) : null,
-      renderEditedChip(fileObj.key, fileObj.rootId)
+      clearnetAllowed && isAuthor ? renderClearnetSwitch('files', fileObj.rootId || fileObj.key, isClearnet) : null
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    renderDetailShare(fileObj.key, href, fileObj.title),
     safeText(fileObj.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(fileObj.description))
       : null,
@@ -323,7 +331,6 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
   );
 
   const fileMain = div({ class: "tribe-main" },
-    detailActions,
     fileObj.url && fileObj.url.startsWith("&")
       ? div({ class: "torrent-download" },
           div({ class: "torrent-oasis torrent-detail-section" },
@@ -363,27 +370,9 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
             )
           )
         : p(i18n.fileNoFile),
-    (() => {
-      const createdTs = fileObj.createdAt ? new Date(fileObj.createdAt).getTime() : NaN;
-      const updatedTs = fileObj.updatedAt ? new Date(fileObj.updatedAt).getTime() : NaN;
-      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-      return p(
-        { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(fileObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
-        userLink(fileObj.author),
-        showUpdated
-          ? span(
-              { class: "votations-comment-date" },
-              ` | ${i18n.fileUpdatedAt}: ${moment(fileObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
-            )
-          : null
-      );
-    })(),
-    fileObj.tribeId ? null : renderEngagement(fileObj.key,
-      renderOpinionsVoting('/files/opinions', fileObj.key, fileObj.opinions, returnTo, fileObj.opinions_inhabitants),
-      renderFileCommentsSection(fileObj.key, comments, returnTo)
-    )
+    renderEngagement(fileObj.key,
+      fileObj.tribeId ? null : renderOpinionsVoting('/files/opinions', fileObj.key, fileObj.opinions, returnTo, fileObj.opinions_inhabitants),
+      fileObj.tribeId ? null : renderFileCommentsSection(fileObj.key, comments, returnTo))
   );
 
   return template(

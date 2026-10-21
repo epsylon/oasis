@@ -108,12 +108,6 @@ module.exports = ({ cooler }) => {
     };
   };
 
-  const hasBlob = (ssbClient, blobId) =>
-    new Promise((resolve) => {
-      if (!blobId) return resolve(false);
-      ssbClient.blobs.has(blobId, (err, has) => resolve(!err && !!has));
-    });
-
   const favoritesSetForDocuments = async () => {
     try {
       return await contentFavorites.getFavoriteSet("documents");
@@ -278,10 +272,7 @@ module.exports = ({ cooler }) => {
         out = out.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
       }
 
-      const checked = await Promise.all(out.map(async (d) => ((await hasBlob(ssbClient, d.url)) ? d : null)));
-      return checked
-        .filter(Boolean)
-        .map((d) => ({ ...d, isFavorite: favorites.has(d.rootId || d.key) }));
+      return out.map((d) => ({ ...d, isFavorite: favorites.has(d.rootId || d.key) }));
     },
 
     async getDocumentById(id) {

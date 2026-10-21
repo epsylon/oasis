@@ -57,7 +57,7 @@ const hasBidder = (poll, userId) => {
   return false
 }
 
-module.exports = ({ cooler, tribeCrypto }) => {
+module.exports = ({ cooler, cryptoModel }) => {
   let ssb
   const openSsb = async () => {
     if (!ssb) ssb = await cooler.open()
@@ -196,9 +196,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
       return new Promise((resolve, reject) => {
         ssbClient.publish(itemContent, (err, res) => {
           if (err) return reject(err)
-          if (res && res.key && tribeCrypto) {
-            const key = tribeCrypto.generateTribeKey()
-            tribeCrypto.setKey(res.key, key, 1)
+          if (res && res.key && cryptoModel) {
+            const key = cryptoModel.generateKey()
+            cryptoModel.setKey(res.key, key, 1)
           }
           resolve(res)
         })
@@ -353,7 +353,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
           includesShipping: !!c.includesShipping,
           stock,
           deadline: c.deadline || null,
-          auctions_poll: (tribeCrypto && tribeCrypto.getKey(rootId)) ? poll : [],
+          auctions_poll: (cryptoModel && cryptoModel.getKey(rootId)) ? poll : [],
           mapUrl: c.mapUrl || "",
           shopProductId: c.shopProductId || "",
           shopId: c.shopId || "",
@@ -458,7 +458,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         includesShipping: !!c.includesShipping,
         stock,
         deadline: c.deadline,
-        auctions_poll: (tribeCrypto && tribeCrypto.getKey(rootId)) ? poll : [],
+        auctions_poll: (cryptoModel && cryptoModel.getKey(rootId)) ? poll : [],
         mapUrl: c.mapUrl || "",
         shopProductId: c.shopProductId || "",
         shopId: c.shopId || "",
@@ -503,6 +503,42 @@ module.exports = ({ cooler, tribeCrypto }) => {
         } catch (_) {}
       }
       return changed
+    },
+
+    async createOrder(itemId, details = {}) {
+      const ssbClient = await openSsb()
+      const me = ssbClient.id
+      const item = await this.getItemById(itemId)
+      if (!item) throw new Error("Item not found")
+      if (item.seller === me) throw new Error("You cannot buy your own item")
+      const content = {
+        type: "marketOrder",
+        itemId: item.rootId || item.id,
+        seller: item.seller,
+        title: String(item.title || ""),
+        price: String(item.price || ""),
+        deliveryAddress: String(details.deliveryAddress || ""),
+        contact: String(details.contact || ""),
+        notes: String(details.notes || ""),
+        createdAt: new Date().toISOString()
+      }
+      return new Promise((res, rej) => ssbClient.private.publish(content, [me, item.seller], (e, m) => e ? rej(e) : res(m)))
+    },
+
+    async listOrders(itemId) {
+      const ssbClient = await openSsb()
+      const me = ssbClient.id
+      const item = await this.getItemById(itemId)
+      if (!item) return []
+      const rootId = item.rootId || item.id
+      const msgs = await readTyped(ssbClient, ["marketOrder"], { limit: logLimit, withPrivate: true })
+      return msgs
+        .filter(m => {
+          const c = m && m.value && m.value.content
+          return m.value.private === true && c && c.type === "marketOrder" && c.itemId === rootId && c.seller === item.seller && (item.seller === me || m.value.author === me)
+        })
+        .map(m => ({ id: m.key, buyer: m.value.author, ts: m.value.timestamp || 0, deliveryAddress: m.value.content.deliveryAddress || "", contact: m.value.content.contact || "", notes: m.value.content.notes || "" }))
+        .sort((a, b) => b.ts - a.ts)
     },
 
     async getItemByShopProductId(shopProductId) {

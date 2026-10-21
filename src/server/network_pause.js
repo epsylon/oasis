@@ -1,5 +1,8 @@
 const fs = require('fs');
 const path = require('path');
+const { connectionsOf } = require('../configs/config-manager');
+
+const QUOTA_TTL_MS = 5000;
 
 const readOasisConfig = () => {
   try {
@@ -15,6 +18,12 @@ module.exports = {
   manifest: { pause: 'sync', resume: 'sync', paused: 'sync', lastErrors: 'sync' },
   init(server, config) {
     server.oasisNetworkPaused = readOasisConfig().networkPaused === true || process.env.OASIS_NETWORK_PAUSED === '1';
+    let quota = connectionsOf(readOasisConfig().connections);
+    let quotaAt = Date.now();
+    server.oasisConnQuota = () => {
+      if (Date.now() - quotaAt > QUOTA_TTL_MS) { quota = connectionsOf(readOasisConfig().connections); quotaAt = Date.now(); }
+      return quota;
+    };
     const refused = () => new Error('network paused');
 
     if (server.auth && typeof server.auth.hook === 'function') {
@@ -46,18 +55,26 @@ module.exports = {
       const m = String((ev && ev.address) || '').match(/~shs:([A-Za-z0-9+/=_-]{43,44})/);
       return canonicalKey((ev && ev.key) || (m ? m[1] : ''));
     };
-    const majorMinor = (v) => String(v || '').split('.').slice(0, 2).map(n => parseInt(n, 10) || 0);
-    const ownVersion = (() => { try { return String(require('./package.json').version || ''); } catch (_) { return ''; } })();
-    const upToDate = (v) => {
-      const [a1, b1] = majorMinor(v), [a2, b2] = majorMinor(ownVersion);
-      return a1 > a2 || (a1 === a2 && b1 >= b2);
+    const versionParts = (v) => String(v || '').split('.').slice(0, 3).map(n => parseInt(n, 10) || 0);
+    const compareVersions = (a, b) => {
+      const x = versionParts(a), y = versionParts(b);
+      for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i];
+      return 0;
     };
-    const rank = { versions: new Map(), graph: {} };
+    const ownVersion = (() => { try { return String(require('./package.json').version || ''); } catch (_) { return ''; } })();
+    const rank = { versions: new Map(), graph: {}, newest: ownVersion };
+    const versionTier = (v, total) => {
+      if (!v) return total > 0 ? 0 : 2;
+      if (compareVersions(v, rank.newest) >= 0) return 4;
+      const [a1, b1] = versionParts(v), [a2, b2] = versionParts(rank.newest);
+      return a1 === a2 && b1 === b2 ? 3 : 1;
+    };
     const refreshRank = () => {
       const pull = require('pull-stream');
       const latest = new Map();
       const done = () => {
         rank.versions = new Map([...latest].map(([k, m]) => [k, m.version]));
+        rank.newest = [...rank.versions.values()].reduce((n, v) => (compareVersions(v, n) > 0 ? v : n), ownVersion);
         try { server.friends.graph((err, g) => { if (!err && g) rank.graph = g; }); } catch (_) {}
       };
       try {
@@ -83,9 +100,8 @@ module.exports = {
         total++;
         if (mine[k] >= 0) shared++;
       }
-      const v = rank.versions.get(key);
-      const tier = v ? (upToDate(v) ? 2 : 0) : (total > 0 ? 0 : 1);
-      return tier * 1e9 + Math.min(shared, 99999) * 1e4 + Math.min(total, 9999);
+      const carriesMe = follows[server.id] >= 0 ? 1 : 0;
+      return carriesMe * 1e12 + versionTier(rank.versions.get(key), total) * 1e9 + Math.min(shared, 99999) * 1e4 + Math.min(total, 9999);
     };
     server.oasisPeerRank = peerRank;
     setImmediate(refreshRank);

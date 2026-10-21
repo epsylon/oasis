@@ -450,14 +450,6 @@ const reportSections = (report) => {
     out.push({ kind: 'text', text: report.description });
   }
 
-  const tpl = report.template && typeof report.template === 'object' ? report.template : {};
-  const tplEntries = Object.entries(tpl).filter(([, v]) => txt(v).trim());
-  if (tplEntries.length) {
-    out.push({ kind: 'blank' });
-    out.push({ kind: 'section', text: 'DETAILS' });
-    for (const [k, v] of tplEntries) out.push({ kind: 'kv', label: humanLabel(k), value: v });
-  }
-
   const confirmations = asList(report.confirmations);
   out.push({ kind: 'blank' });
   out.push({ kind: 'section', text: 'CONFIRMATIONS' });

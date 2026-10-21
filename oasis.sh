@@ -38,6 +38,7 @@ PUB admin commands (require the sbot to be running: ./oasis.sh server):
   join <invite>            Join another PUB with its invite code
   status                   Show peer / replication status
   gossip                   List known gossip peers
+  peers                    List the peers connected right now
 
 Works with the sbot stopped too (restart Oasis to apply):
   hops [N]                 Show or set how many hops this node replicates (0-6)
@@ -47,7 +48,7 @@ GUI options (forwarded to the backend):
                         The web interface has no login: anyone who can reach that address
                         acts as you (settings, wallet and backups stay local-only). Use another
                         address only on a network you trust, or with --public for a PUB.
-  --port=<n>            Port for the web UI (default: 3000).
+  --port=<n>            Port for the web UI (default: 3000, or OASIS_PORT).
   --allow-host=<host>   Extra hostname allowed when behind a reverse proxy. Local-only pages
                         then also need the admin link printed when Oasis starts.
   --public              Public-hosting mode: read-only, shows only opted-in content.
@@ -104,7 +105,7 @@ case "$MODE" in
     cd "$CURRENT_DIR/src/backend" || exit 1
     exec node backend.js --public --no-open --host=0.0.0.0 "$@"
     ;;
-  whoami|invite|invites|name|announce|follow|join|status|gossip|hops)
+  whoami|invite|invites|name|announce|follow|join|status|gossip|peers|hops)
     exec node "$CURRENT_DIR/scripts/oasis-pub.js" "$@"
     ;;
   test|tests)

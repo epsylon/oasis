@@ -146,6 +146,19 @@ describe('opinions: what can be opined and how it adds up', (t) => {
   const categories = require('../../../src/backend/opinion_categories');
   const publish = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
 
+  t('every card of opinable content lets you give your opinion and shows the count', () => {
+    const { requestScope } = require('../../../src/models/typed_log');
+    const { renderEngagement } = require('../../../src/views/main_views');
+    const id = '%' + 'o'.repeat(43) + '=.sha256';
+    const render = (href, extra = {}) => requestScope.run({ path: '/list', query: 'page=2', opinionTallies: new Map([[id, { opinions: { interesting: 2 }, opinions_inhabitants: ['@x'] }]]) }, () => { const node = renderEngagement(id, null, null, { href, title: 't', ...extra }); return node ? node.outerHTML : ''; });
+    const card = render(`/market/${encodeURIComponent(id)}`);
+    ok(card.includes(`/market/opinions/${encodeURIComponent(id)}/interesting`), 'votes go to the module of the content');
+    ok(card.includes('(2)'), 'with how many opinions it has');
+    ok(card.includes('value="/list?page=2"'), 'and you come back to the same list');
+    notOk(render(`/calendars/${encodeURIComponent(id)}`).includes('opinions-summary'), 'content without opinions offers none');
+    notOk(render(`/market/${encodeURIComponent(id)}`, { opinions: false }).includes('opinions-summary'), 'nor content that cannot be opined');
+  });
+
   t('every opinion weighs on karma in exactly one way', () => {
     const groups = ['positive', 'neutral', 'constructive', 'moderation'];
     for (const category of categories) {

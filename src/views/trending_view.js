@@ -1,7 +1,7 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, img, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary} = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, br, input, table, tr, th, td, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderContentActions, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument } = require('./main_views');
+const { template, i18n, renderCardTop, renderShareButton, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderCommentsSummary, commentsOpenHref, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
@@ -28,7 +28,6 @@ const voteLabelFor = (cat) =>
 
 const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new Map(), params = {}) => {
   const c = item.value.content;
-  const created = moment(item.value.timestamp).format("YYYY/MM/DD HH:mm");
 
   let contentHtml;
 
@@ -260,26 +259,26 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     ? `/${detailPaths[c.type]}/${encodeURIComponent(item.key)}`
     : `/thread/${encodeURIComponent(item.key)}`;
   const isOwn = item.value.author && String(item.value.author) === String(userId);
+  const commentTotal = params.commentCounts instanceof Map ? (params.commentCounts.get(item.key) || 0) : 0;
+  const shareTitle = c.title || c.question || c.concept || c.contentWarning || '';
 
   return div(
     { class: 'trending-card' + (isOwn ? ' own-content' : '') },
-    div(
-      { class: 'card-header activity-card-header' },
-      span({ class: 'pm-exposition-chip pm-exposition-whole' },
+    renderCardTop(item.key, detailHref, {
+      date: item.value.timestamp,
+      chips: [span({ class: 'pm-exposition-chip pm-exposition-whole' },
         span({ class: 'pm-exposition-text' }, String(typeLabel(c.type) || '').toUpperCase())
-      ),
-      renderContentActions(item.key, detailHref, {
-        spread: spreadMap.get(item.key) || null,
-        author: item.value.author,
-        reportTitle: c.title || c.question || c.concept || c.contentWarning || '',
-        ...(CONTENT_TORRENTABLE.has(c.type) && typeof c.url === 'string' && c.url.startsWith('&')
-          ? { torrentFrom: { blobId: c.url, name: c.title || c.fileName || '' } }
-          : {}),
-        ...(CONTENT_FAV_KIND[c.type]
-          ? { favKind: CONTENT_FAV_KIND[c.type], isFavorite: params.favIndex instanceof Map ? params.favIndex.get(String(item.key)) === CONTENT_FAV_KIND[c.type] : false, returnTo: params.returnTo }
-          : {})
-      })
-    ),
+      )],
+      spread: spreadMap.get(item.key) || null,
+      author: item.value.author,
+      reportTitle: shareTitle,
+      ...(CONTENT_TORRENTABLE.has(c.type) && typeof c.url === 'string' && c.url.startsWith('&')
+        ? { torrentFrom: { blobId: c.url, name: c.title || c.fileName || '' } }
+        : {}),
+      ...(CONTENT_FAV_KIND[c.type]
+        ? { favKind: CONTENT_FAV_KIND[c.type], isFavorite: params.favIndex instanceof Map ? params.favIndex.get(String(item.key)) === CONTENT_FAV_KIND[c.type] : false, returnTo: params.returnTo }
+        : {})
+    }),
     div(
       { class: 'card-section trending-card-body' },
       contentHtml
@@ -287,7 +286,7 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
     renderVotesSummary(c.opinions),
     renderCardMetaRow(
       details({ class: 'opinions-voting-collapse' },
-        summary({ class: 'opinions-summary' },
+        summary({ class: Object.values(c.opinions || {}).some(n => Number(n) > 0) ? 'opinions-summary engage-on' : 'opinions-summary' },
           span({ class: 'opinions-summary-icon' }, 'ꔍ'),
           span({ class: 'opinions-summary-count' }, `(${Object.values(c.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)})`)),
         div(
@@ -302,11 +301,8 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
           )
         )
       ),
-      p(
-        { class: 'card-footer' },
-        span({ class: 'date-link' }, `${created}`),
-        userLink(item.value.author)
-      )
+      renderCommentsSummary(commentsOpenHref(detailHref, commentTotal), commentTotal),
+      renderShareButton(item.key, detailHref, shareTitle)
     )
   );
 };
@@ -373,7 +369,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
         categories,
         seenDocumentTitles,
         spreadMap,
-        { favIndex: params.favIndex, returnTo: `/trending?filter=${encodeURIComponent(filter)}` }
+        { favIndex: params.favIndex, commentCounts: params.commentCounts, returnTo: `/trending?filter=${encodeURIComponent(filter)}` }
       )
     )
     .filter(Boolean);

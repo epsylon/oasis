@@ -8,37 +8,52 @@ const ROOT = path.join(__dirname, '..', '..', '..');
 const BOOT_MS = 180000;
 const REQUEST_MS = 30000;
 const LINKED_MAX = 1500;
+const FOLLOW_MS = 10000;
 const SKIP = /download=1|\/phone\/video|\/c\/rooms\/[^/]+\/[^/?]+|\/rooms\/recordings\/|\/export|\/backup|\/logout|\/qr|\/wallet|\/c\/rss|\/rss|\/blob\/|\/c\/blob\/|\/maptiles|\/assets\/|\/games\/[a-z0-9]+\/?$|\/game-assets|\/settings\/|\/welcome|\/inbox|\/peers|\/invites|\/multiverse|\/ai\b/;
 const port = () => 30000 + Math.floor(Math.random() * 20000);
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const unescape = (s) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 
+const bootApp = async (prepare = () => {}) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-http-'));
+  prepare(dir);
+  const web = port();
+  const base = `http://localhost:${web}`;
+  const env = { PATH: process.env.PATH, LANG: process.env.LANG || 'C.UTF-8', HOME: dir, TMPDIR: os.tmpdir(), ssb_path: dir, ssb_port: String(port()), OASIS_AI_PORT: String(port()), OASIS_NETWORK_PAUSED: '1', NODE_NO_WARNINGS: '1' };
+  const logFile = path.join(dir, 'app.log');
+  const logFd = fs.openSync(logFile, 'a');
+  const app = spawn(process.execPath, ['backend.js', `--port=${web}`, '--no-open'], { cwd: path.join(ROOT, 'src', 'backend'), env, detached: true, stdio: ['ignore', logFd, logFd] });
+  const appLog = () => { try { return fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).slice(-12).join(' | '); } catch (_) { return ''; } };
+  const fetchStatus = async (p, opts = {}) => {
+    try {
+      const r = await fetch(base + p, { redirect: 'manual', signal: AbortSignal.timeout(REQUEST_MS), ...opts });
+      if (opts.body !== undefined || opts.text === false) { await r.body?.cancel(); return { status: r.status, body: '' }; }
+      return { status: r.status, body: await r.text() };
+    } catch (e) { return { status: `${e.name}`, body: '' }; }
+  };
+  const post = (p, body, from) => fetchStatus(p, { method: 'POST', body, headers: { Origin: base, Referer: `${base}${from}` } });
+  const stop = async () => {
+    try { process.kill(-app.pid, 'SIGTERM'); } catch (_) {}
+    await sleep(1500);
+    try { process.kill(-app.pid, 'SIGKILL'); } catch (_) {}
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+  };
+  try {
+    const t0 = Date.now();
+    let up = false;
+    while (Date.now() - t0 < BOOT_MS) { if ((await fetchStatus('/modules')).status === 200) { up = true; break; } await sleep(1000); }
+    ok(up, `the app answers (its log: ${appLog()})`);
+    let skipped = 0;
+    while (Date.now() - t0 < BOOT_MS) { skipped = (await post('/welcome/dismiss', new URLSearchParams(), '/welcome')).status; if (skipped === 302) break; await sleep(1000); }
+    eq(skipped, 302, 'the welcome can be skipped once the node is ready');
+  } catch (e) { await stop(); throw e; }
+  return { base, fetchStatus, post, stop };
+};
+
 describe('http: the running app', (t) => {
   t('serves every module page, the pages they link and the pictures they show', async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-http-'));
-    const web = port();
-    const base = `http://localhost:${web}`;
-    const env = { PATH: process.env.PATH, LANG: process.env.LANG || 'C.UTF-8', HOME: dir, TMPDIR: os.tmpdir(), ssb_path: dir, ssb_port: String(port()), OASIS_AI_PORT: String(port()), OASIS_NETWORK_PAUSED: '1', NODE_NO_WARNINGS: '1' };
-    const logFile = path.join(dir, 'app.log');
-    const logFd = fs.openSync(logFile, 'a');
-    const app = spawn(process.execPath, ['backend.js', `--port=${web}`, '--no-open'], { cwd: path.join(ROOT, 'src', 'backend'), env, detached: true, stdio: ['ignore', logFd, logFd] });
-    const appLog = () => { try { return fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).slice(-12).join(' | '); } catch (_) { return ''; } };
-    const fetchStatus = async (p, opts = {}) => {
-      try {
-        const r = await fetch(base + p, { redirect: 'manual', signal: AbortSignal.timeout(REQUEST_MS), ...opts });
-        if (opts.body !== undefined || opts.text === false) { await r.body?.cancel(); return { status: r.status, body: '' }; }
-        return { status: r.status, body: await r.text() };
-      } catch (e) { return { status: `${e.name}`, body: '' }; }
-    };
+    const { fetchStatus, post, stop } = await bootApp();
     try {
-      const t0 = Date.now();
-      let up = false;
-      while (Date.now() - t0 < BOOT_MS) { if ((await fetchStatus('/modules')).status === 200) { up = true; break; } await sleep(1000); }
-      ok(up, `the app answers (its log: ${appLog()})`);
-      const post = (p, body, from) => fetchStatus(p, { method: 'POST', body, headers: { Origin: base, Referer: `${base}${from}` } });
-      let skipped = 0;
-      while (Date.now() - t0 < BOOT_MS) { skipped = (await post('/welcome/dismiss', new URLSearchParams(), '/welcome')).status; if (skipped === 302) break; await sleep(1000); }
-      eq(skipped, 302, 'the welcome can be skipped once the node is ready');
       const sharp = require('../../../src/server/node_modules/sharp');
       const jpeg = await sharp({ create: { width: 1600, height: 1000, channels: 3, background: { r: 200, g: 80, b: 40 } } }).jpeg().toBuffer();
       const form = new FormData();
@@ -84,10 +99,52 @@ describe('http: the running app', (t) => {
       const broken = [...results].filter(([, s]) => !(s === 200 || s === 301 || s === 302 || s === 303));
       eq(broken.length, 0, `broken: ${broken.slice(0, 15).map(([p, s]) => `${s} ${p}`).join(' | ')}`);
     } finally {
-      try { process.kill(-app.pid, 'SIGTERM'); } catch (_) {}
-      await sleep(1500);
-      try { process.kill(-app.pid, 'SIGKILL'); } catch (_) {}
-      try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) {}
+      await stop();
+    }
+  });
+});
+
+describe('http: PUBs', (t) => {
+  t('a PUB taken out of the federation comes back at once, by following it or importing it', async () => {
+    const keyOf = () => `@${require('crypto').randomBytes(32).toString('base64')}.ed25519`;
+    const followed = { host: '192.0.2.1', port: 8008, key: keyOf() };
+    const imported = { host: '192.0.2.2', port: 8008, key: keyOf() };
+    const { fetchStatus, post, stop } = await bootApp((dir) => fs.writeFileSync(path.join(dir, 'gossip.json'), JSON.stringify([followed, imported])));
+    try {
+      const unfederated = async () => Number(((await fetchStatus('/invites')).body.match(/Unfederated \((\d+)\)/) || [])[1]);
+      for (const pub of [followed, imported]) eq((await post('/settings/invite/unfollow', new URLSearchParams({ key: pub.key }), '/invites')).status, 302);
+      eq(await unfederated(), 2, 'both are listed as unfederated');
+      const t0 = Date.now();
+      eq((await post('/settings/invite/follow', new URLSearchParams({ key: followed.key, host: followed.host, port: String(followed.port) }), '/invites')).status, 302, 'following one answers');
+      ok(Date.now() - t0 < FOLLOW_MS, 'without waiting for a PUB that does not answer');
+      eq(await unfederated(), 1, 'the followed one is federated again');
+      const contacts = (await fetchStatus('/blockexplorer?filter=contact')).body;
+      const latest = unescape((contacts.match(/href="(\/blockexplorer\/block\/[^"?]+)/) || [])[1] || '');
+      const datagram = unescape((await fetchStatus(`${latest}?view=datagram`)).body).replace(/<[^>]+>/g, '').replace(/\s+/g, '');
+      ok(datagram.includes('CONTENT:contact,following,blocking'), 'and a follow message is published for it');
+      const line = `net:${imported.host}:${imported.port}~shs:${imported.key.slice(1, -8)}`;
+      eq((await post('/peers/import', new URLSearchParams({ peerList: line }), '/peers?filter=connections')).status, 302, 'importing the other answers');
+      eq(await unfederated(), 0, 'the imported one is federated again');
+      ok((await fetchStatus('/peers?filter=connections')).body.includes(imported.host), 'and shows up among the connections');
+    } finally {
+      await stop();
+    }
+  });
+});
+
+describe('http: settings', (t) => {
+  t('the simultaneous connections are saved within their limits', async () => {
+    const { CONNECTIONS_MIN, CONNECTIONS_MAX, CONNECTIONS_DEFAULT } = require('../../../src/configs/config-manager');
+    const { fetchStatus, post, stop } = await bootApp();
+    try {
+      const shown = async () => Number(((await fetchStatus('/settings')).body.match(/name="connections"[^>]*value="(\d+)"|value="(\d+)"[^>]*name="connections"/) || []).slice(1).find(Boolean));
+      eq(await shown(), CONNECTIONS_DEFAULT, 'the default when nothing is chosen');
+      for (const [asked, kept] of [[CONNECTIONS_MAX * 10, CONNECTIONS_MAX], [0, CONNECTIONS_MIN], [CONNECTIONS_MIN + 2, CONNECTIONS_MIN + 2]]) {
+        eq((await post('/settings/connections', new URLSearchParams({ connections: String(asked) }), '/settings')).status, 302);
+        eq(await shown(), kept, `${asked} is kept as ${kept}`);
+      }
+    } finally {
+      await stop();
     }
   });
 });

@@ -1,9 +1,9 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderContentActions, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
+const { MAX_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
 
 const userId = config.keys.id;
 
@@ -103,18 +103,15 @@ const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls") => {
     renderLifespanChip(poll.lifetime, i18n)
   ].filter(Boolean);
   return div({ class: "tribe-card poll-card" + (isOwn ? " own-content" : "") },
-    div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(poll.id, href, { spread: spreadInfo || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined })
-    ),
+    renderCardTop(poll.id, href, { date: poll.createdAt, chips, spread: spreadInfo || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, a({ href }, poll.question))
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.pollVoters}: ${poll.totalVoters}`)
-      )
+      ),
+      null
     )
   );
 };
@@ -277,12 +274,10 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
     : null;
 
   const pollSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(poll.id, href, { spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined })
-    ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question), renderEditedChip(poll.tipId, poll.rootId)),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(poll.createdAt, poll.author)),
+    renderCardTop(poll.id, href, { arrow: false, date: poll.createdAt, chips, bylineExtra: [renderEditedChip(poll.tipId, poll.rootId)], spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question)),
+    renderDetailShare(poll.id, href, poll.question),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.pollVoters}: ${poll.totalVoters}`)
@@ -312,10 +307,9 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
       : (poll.voters.length
           ? div({ class: "card-assigned-list" }, ...poll.voters.map(v => userLink(v)))
           : null),
-    poll.tribeId ? null : renderEngagement(poll.id,
-      renderOpinionsVoting('/polls/opinions', poll.id, poll.opinions, href, poll.opinions_inhabitants),
-      renderComments(poll, comments, basePath)
-    )
+    renderEngagement(poll.id,
+      poll.tribeId ? null : renderOpinionsVoting('/polls/opinions', poll.id, poll.opinions, href, poll.opinions_inhabitants),
+      poll.tribeId ? null : renderComments(poll, comments, basePath))
   );
 
   return template(

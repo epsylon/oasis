@@ -357,6 +357,8 @@ a.user-link:focus, button.user-link:focus {
 .btn-spread-on:hover, .content-actions .btn-pin-on:hover { background: #CE8CE9 !important; color: #2A0E42 !important; }
 .btn-singleview.btn-content { background: #B86ADE !important; color: #4B1A72 !important; border: 1px solid #B86ADE !important; }
 .btn-singleview.btn-content:hover { background: #FFD600 !important; color: #4B1A72 !important; border-color: #FFD600 !important; }
+.card-menu-items { background: #4B1A72 !important; border-color: #5A1A85 !important; }
+.card-byline a.user-link { color: #FFD600 !important; }
 .btn-back { background: #A34AD8 !important; color: #FFFFFF !important; }
 .btn-back:hover { background: #751E9F !important; color: #FFFFFF !important; }
 .block-info-table td, .pm-info-table td { border-color: #B86ADE !important; }

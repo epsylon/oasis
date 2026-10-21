@@ -58,14 +58,18 @@ describe('reports: get + normalization + edit', (t) => {
     eq(rep.category, 'BUGS');
   });
 
-  t('BUGS template fields are captured', async () => {
+  t('no text written in a report is lost, whatever fields it was written in', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
-    const r = await A.use('reports').createReport('Tpl', 'd', 'BUGS', null, [], 'low', {
-      stepsToReproduce: 'click', expectedBehavior: 'works', actualBehavior: 'breaks'
-    });
-    const rep = await A.use('reports').getReportById(r.key);
-    eq(rep.template.stepsToReproduce, 'click');
-    eq(rep.template.expectedBehavior, 'works');
+    const ssb = await A.cooler.open();
+    const msg = await new Promise((res, rej) => ssb.publish({
+      type: 'report', title: 'Old', description: 'intro', category: 'BUGS', severity: 'low', status: 'OPEN', tags: [],
+      template: { stepsToReproduce: 'click', actualBehavior: 'breaks' }, createdAt: new Date().toISOString(), author: A.keypair.id
+    }, (e, m) => e ? rej(e) : res(m)));
+    const rep = await A.use('reports').getReportById(msg.key);
+    for (const piece of ['intro', 'click', 'breaks']) ok(rep.description.includes(piece), piece);
+    await A.use('reports').updateReportById(msg.key, { status: 'UNDER_REVIEW' });
+    const after = await A.use('reports').getReportById(msg.key);
+    for (const piece of ['intro', 'click', 'breaks']) ok(after.description.includes(piece), `${piece} after a change`);
   });
 
   t('author edits title and severity', async () => {

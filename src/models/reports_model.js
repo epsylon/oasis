@@ -13,38 +13,11 @@ const ensureArray = (v) => Array.isArray(v) ? v.filter(Boolean) : [];
 
 const trimStr = (v) => String(v || '').trim();
 
-const normalizeTemplate = (category, tpl) => {
-  const cat = normU(category);
+const LEGACY_TEMPLATE_KEYS = ['problemStatement', 'userStory', 'acceptanceCriteria', 'stepsToReproduce', 'expectedBehavior', 'actualBehavior', 'environment', 'whatHappened', 'reportedUser', 'contentLocation', 'whyInappropriate', 'evidenceLinks'];
+
+const withLegacyText = (description, tpl) => {
   const t = tpl && typeof tpl === 'object' ? tpl : {};
-
-  const pick = (keys) => {
-    const out = {};
-    for (const k of keys) {
-      const val = trimStr(t[k]);
-      if (val) out[k] = val;
-    }
-    return out;
-  };
-
-  if (cat === 'BUGS') {
-    const out = pick(['stepsToReproduce', 'expectedBehavior', 'actualBehavior', 'environment', 'reproduceRate']);
-    if (out.reproduceRate) out.reproduceRate = normU(out.reproduceRate);
-    return out;
-  }
-
-  if (cat === 'FEATURES') {
-    return pick(['problemStatement', 'userStory', 'acceptanceCriteria']);
-  }
-
-  if (cat === 'ABUSE') {
-    return pick(['whatHappened', 'reportedUser', 'evidenceLinks']);
-  }
-
-  if (cat === 'CONTENT') {
-    return pick(['contentLocation', 'whyInappropriate', 'evidenceLinks']);
-  }
-
-  return {};
+  return [trimStr(description), ...LEGACY_TEMPLATE_KEYS.map(k => trimStr(t[k]))].filter(Boolean).join('\n\n');
 };
 
 module.exports = ({ cooler }) => {
@@ -127,7 +100,7 @@ module.exports = ({ cooler }) => {
   };
 
   const buildReport = (node, agg) => {
-    const c = node.c || {};
+    const { template, ...c } = node.c || {};
     const cat = normU(c.category);
     const opinions = agg ? agg.opinions : (c.opinions || {});
     const voters = agg ? agg.opinions_inhabitants : ensureArray(c.opinions_inhabitants);
@@ -135,6 +108,7 @@ module.exports = ({ cooler }) => {
     return {
       id: node.key,
       ...c,
+      description: withLegacyText(c.description, template),
       rootId: agg && agg.root ? agg.root : node.key,
       category: cat,
       status: normalizeStatus(c.status || 'OPEN'),
@@ -143,14 +117,13 @@ module.exports = ({ cooler }) => {
       severity: normalizeSeverity(c.severity) || 'low',
       confirmations,
       tags: ensureArray(c.tags),
-      template: normalizeTemplate(cat, c.template || {}),
       opinions,
       opinions_inhabitants: voters
     };
   };
 
   return {
-    async createReport(title, description, category, image, tagsRaw = [], severity = 'low', template = {}, media = {}) {
+    async createReport(title, description, category, image, tagsRaw = [], severity = 'low', media = {}) {
       const ssb = await openSsb();
       const userId = ssb.id;
 
@@ -177,7 +150,6 @@ module.exports = ({ cooler }) => {
         confirmations: [],
         severity: normalizeSeverity(severity) || 'low',
         status: 'OPEN',
-        template: normalizeTemplate(cat, template),
         opinions: {},
         opinions_inhabitants: []
       };
@@ -195,7 +167,8 @@ module.exports = ({ cooler }) => {
       const agg = idx.resolveGroup(root);
       if (!agg || agg.tombstoned) throw new Error('Report not found');
 
-      const report = { content: agg.contentNode.c };
+      const { template: legacyTemplate, ...previous } = agg.contentNode.c || {};
+      const report = { content: previous };
       const tipId = agg.contentTip;
 
       if (agg.contentNode.author !== userId) throw new Error('Not the author');
@@ -228,11 +201,9 @@ module.exports = ({ cooler }) => {
 
       const confirmations = ensureArray(agg.confirmations);
 
-      const baseTemplate = Object.prototype.hasOwnProperty.call(updatedContent, 'template')
-        ? updatedContent.template
-        : (report.content.template || {});
-
-      const nextTemplate = normalizeTemplate(nextCategory, baseTemplate);
+      const nextDescription = Object.prototype.hasOwnProperty.call(updatedContent, 'description')
+        ? trimStr(updatedContent.description)
+        : withLegacyText(report.content.description, legacyTemplate);
 
       const updated = {
         ...report.content,
@@ -249,7 +220,7 @@ module.exports = ({ cooler }) => {
         severity: nextSeverity,
         status: nextStatus,
         category: nextCategory,
-        template: nextTemplate,
+        description: nextDescription,
         updatedAt: new Date().toISOString(),
         author: report.content.author
       };

@@ -27,7 +27,7 @@ const getUserId = async () => {
 };
 exports.getUserId = getUserId;
 
-const { a, article, br, body, button, details, div, em, footer, form, h1, h2, h3, head, header, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, table, td, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe, object } = require("../server/node_modules/hyperaxe");
+const { a, article, br, body, button, details, div, em, form, h1, h2, h3, head, hr, html, img, input, label, li, link, main, meta, nav, option, p, pre, section, select, span, summary, table, td, textarea, title, tr, ul, strong, video: videoHyperaxe, audio: audioHyperaxe, object } = require("../server/node_modules/hyperaxe");
 
 const lodash = require("../server/node_modules/lodash");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
@@ -291,12 +291,14 @@ const clearnetHrefFor = (viewHref, blockId, title) => {
   return base ? `${base}/c/${seg}/${id}` : null;
 };
 let linkBoxSeq = 0;
-const renderLinkBox = (blockId, viewHref, title) => {
+const renderLinkBox = (blockId, viewHref, title, trigger = null) => {
   linkBoxSeq = (linkBoxSeq + 1) % 1000000;
   const id = `linkbox-${linkBoxSeq}-${String(blockId).replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;
   const clearnetHref = clearnetHrefFor(viewHref, blockId, title);
   return [
-    a({ href: `#${id}`, id: `${id}-src`, class: 'btn-singleview btn-link', title: i18n.copyLinkTitle }, renderIcon('link')),
+    trigger
+      ? a({ href: `#${id}`, id: `${id}-src`, class: trigger.class, title: i18n.copyLinkTitle }, ...trigger.content)
+      : a({ href: `#${id}`, id: `${id}-src`, class: 'btn-singleview btn-link', title: i18n.copyLinkTitle }, renderIcon('link')),
     span({ id, class: 'lightbox link-lightbox' },
       a({ href: `#${id}-src`, class: 'lightbox-close' }, '\u00d7'),
       span({ class: 'link-box' },
@@ -310,8 +312,8 @@ const renderLinkBox = (blockId, viewHref, title) => {
 const renderWalletChip = () => {
   try { if (getConfig().modules.walletMod !== 'on') return null; } catch (_) { return null; }
   const ready = sharedState.getWalletReady ? sharedState.getWalletReady() : false;
-  const chip = renderStateChip(ready ? 'mutuals' : 'closed', '❄', ready ? i18n.bankWalletReady : i18n.bankWalletNotConfigured);
-  return ready ? chip : a({ href: '/wallet', class: 'wallet-chip-link' }, chip);
+  const chip = renderStateChip(ready ? 'mutuals' : 'closed', '❄', 'ECOin');
+  return ready ? chip : a({ href: '/wallet', class: 'wallet-chip-link', title: i18n.bankWalletNotConfigured }, chip);
 };
 exports.renderWalletChip = renderWalletChip;
 
@@ -362,11 +364,15 @@ const renderIcon = (name) => span({ class: 'btn-icon', [RAW_HTML]: `<svg viewBox
 const renderHideIcon = () => renderIcon('hide');
 exports.renderIcon = renderIcon;
 exports.renderHideIcon = renderHideIcon;
+const AVATAR_SIZE = 64;
+const CARD_MENU_GLYPH = '\u22EF';
+const SHARE_GLYPH = '\u2197';
+const COMMENTS_GLYPH = '\u2711';
 const renderContentActions = (msgId, viewHref, opts = {}) => {
   const o = (opts && typeof opts === 'object') ? opts : {};
   const blockId = (typeof msgId === 'string' && msgId.startsWith('%')) ? msgId : null;
   const myId = (config.keys && config.keys.id) ? config.keys.id : '';
-  const linkBtn = blockId && viewHref ? renderLinkBox(blockId, viewHref, o.reportTitle) : null;
+  const linkBtn = blockId && viewHref && o.share !== false ? renderLinkBox(blockId, viewHref, o.reportTitle) : null;
 
   const pinBtn = o.favKind && blockId
     ? form({ method: 'POST', action: `/${o.favKind}/favorites/${o.isFavorite ? 'remove' : 'add'}/${encodeURIComponent(blockId)}`, class: 'content-action-form' },
@@ -389,9 +395,17 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     ? a({ href: `/blockexplorer/block/${encodeURIComponent(blockId)}`, class: 'btn-singleview', title: i18n.blockchainViewBlockexplorer }, renderIcon('block'))
     : null;
 
-  const herePath = (listScope() || {}).path;
-  const onItself = (() => { try { return !!herePath && decodeURIComponent(String(viewHref || '').split(/[?#]/)[0]) === decodeURIComponent(String(herePath)); } catch (_) { return false; } })();
-  const contentBtn = viewHref && !onItself
+  const scope = listScope() || {};
+  const herePath = scope.path;
+  const onItself = (() => {
+    try {
+      if (!herePath) return false;
+      const [path, query = ''] = String(viewHref || '').split('#')[0].split('?');
+      if (decodeURIComponent(path) !== decodeURIComponent(String(herePath))) return false;
+      return !query || query === String(scope.query || '');
+    } catch (_) { return false; }
+  })();
+  const contentBtn = viewHref && !onItself && o.arrow !== false
     ? a({ href: viewHref, class: 'btn-singleview btn-content', title: i18n.visitContent }, renderIcon('open'))
     : null;
 
@@ -434,10 +448,114 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
       )
     : null;
 
-  if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !callBtn && !deleteBtn && !donateBtn && !torrentBtn && !hideBtn) return null;
-  return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, callBtn, torrentBtn, linkBtn, chainBtn, contentBtn);
+  if (o.menu !== true) {
+    if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !callBtn && !deleteBtn && !donateBtn && !torrentBtn && !hideBtn) return null;
+    return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, callBtn, torrentBtn, linkBtn, chainBtn, contentBtn);
+  }
+  const menuItems = [deleteBtn, pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, callBtn, torrentBtn, linkBtn, chainBtn].flat().filter(Boolean);
+  if (!menuItems.length && !spreadBtn && !contentBtn) return null;
+  return div({ class: 'content-actions' },
+    spreadBtn,
+    menuItems.length
+      ? details({ class: 'card-menu' },
+          summary({ class: 'btn-singleview card-menu-toggle', title: i18n.cardMenuTitle }, CARD_MENU_GLYPH),
+          div({ class: 'card-menu-items' }, ...menuItems)
+        )
+      : null,
+    contentBtn
+  );
 };
 exports.renderContentActions = renderContentActions;
+
+const avatarSrc = (feedId) => {
+  const cached = config.public ? null : nameCache.image(feedId);
+  return cached ? `/image/${AVATAR_SIZE}/${encodeURIComponent(cached)}?fallback=avatar` : `/avatar/${encodeURIComponent(feedId)}`;
+};
+const renderCardByline = (opts = {}) => {
+  const author = opts.bylineAuthor || opts.author ? String(opts.bylineAuthor || opts.author) : '';
+  const when = opts.date ? moment(opts.date) : null;
+  const time = when && when.isValid() ? span({ class: 'card-byline-time', title: when.format('YYYY/MM/DD HH:mm') }, when.fromNow()) : null;
+  const extra = [].concat(opts.bylineExtra || [], opts.chips || []).filter(Boolean);
+  if (!author && !time && !extra.length) return span();
+  return div({ class: 'card-byline' },
+    author ? a({ href: `/author/${encodeURIComponent(author)}`, class: 'card-byline-avatar' }, img({ src: avatarSrc(author), alt: '' })) : null,
+    author ? userLink(author, opts.authorName) : null,
+    time,
+    ...extra
+  );
+};
+const renderCardTop = (msgId, viewHref, opts = {}) => {
+  const o = (opts && typeof opts === 'object') ? opts : {};
+  return div({ class: 'card-header activity-card-header card-top' },
+    renderCardByline(o),
+    renderContentActions(msgId, viewHref, { ...o, share: false, menu: true })
+  );
+};
+const COMMENTABLE_HREF_RE = /^\/(?:(?:audios|videos|images|documents|bookmarks|files|torrents|blogs|feed|wiki|events|tasks|votes|polls|projects|reports|emergencies|maps|transfers|jobs|housing|campaigns|logistics|market|podcasts)\/[^/?#]+|(?:shops\/product|industry\/blueprint|school\/course|podcasts\/episode)\/[^/?#]+)(?:[?#]|$)/;
+const commentCountFor = (ids) => {
+  const counts = (listScope() || {}).commentCounts;
+  if (!(counts instanceof Map)) return 0;
+  for (const id of [].concat(ids)) { const hit = id ? counts.get(String(id)) : null; if (hit) return hit.count; }
+  return 0;
+};
+const renderCommentsPill = (id, viewHref) => {
+  const href = String(viewHref || '');
+  if (!id || !COMMENTABLE_HREF_RE.test(href)) return null;
+  const scope = listScope() || {};
+  try { if (scope.path && decodeURIComponent(href.split(/[?#]/)[0]) === decodeURIComponent(String(scope.path))) return null; } catch (_) {}
+  const counts = scope.commentCounts instanceof Map ? scope.commentCounts : null;
+  const hit = counts ? counts.get(String(id)) : null;
+  const total = hit ? hit.count : 0;
+  return a({ href: commentsOpenHref(href.split('#')[0], total), class: total ? 'comments-summary engage-on comments-link' : 'comments-summary comments-link', title: i18n.commentsGoToLast || i18n.voteNewCommentLabel || 'Comments' },
+    span({ class: 'comments-summary-icon' }, COMMENTS_GLYPH),
+    counts ? span({ class: 'comments-summary-count' }, `(${total})`) : null
+  );
+};
+const OPINION_ROUTE_BASES = [
+  [/^\/(?:shops\/product|industry\/blueprint)\/[^/?#]+(?:[?#]|$)/, (m) => `${m[0].replace(/\/[^/?#]+(?:[?#].*)?$/, '')}/opinions`],
+  [/^\/(?:school\/course|podcasts\/episode)\/[^/?#]+(?:[?#]|$)/, (m) => (m[0].startsWith('/school') ? '/school/opinions' : '/podcasts/opinions')],
+  [/^\/(audios|videos|images|documents|bookmarks|files|torrents|blogs|feed|wiki|events|tasks|votes|polls|projects|reports|transfers|jobs|housing|campaigns|logistics|market|maps|industry|podcasts)\/[^/?#]+(?:[?#]|$)/, (m) => `/${m[1]}/opinions`]
+];
+const opinionsBaseFor = (href) => {
+  for (const [re, base] of OPINION_ROUTE_BASES) { const m = href.match(re); if (m) return base(m); }
+  return null;
+};
+const renderOpinionsPill = (ids, viewHref) => {
+  const href = String(viewHref || '').split('#')[0];
+  const list = [...new Set([].concat(ids).filter(Boolean).map(String))];
+  const base = list.length ? opinionsBaseFor(href) : null;
+  if (!base) return null;
+  const scope = listScope() || {};
+  try { if (scope.path && decodeURIComponent(href.split('?')[0]) === decodeURIComponent(String(scope.path))) return null; } catch (_) {}
+  const tallies = scope.opinionTallies instanceof Map ? scope.opinionTallies : null;
+  const merged = { opinions: {}, opinions_inhabitants: [] };
+  for (const id of list) {
+    const t = tallies ? tallies.get(id) : null;
+    if (!t) continue;
+    for (const [k, v] of Object.entries(t.opinions || {})) merged.opinions[k] = (merged.opinions[k] || 0) + (Number(v) || 0);
+    for (const who of t.opinions_inhabitants || []) if (!merged.opinions_inhabitants.includes(who)) merged.opinions_inhabitants.push(who);
+  }
+  const here = scope.path ? `${scope.path}${scope.query ? `?${scope.query}` : ''}` : null;
+  return renderOpinionsVoting(base, list[0], merged.opinions, here, merged.opinions_inhabitants);
+};
+const renderShareButton = (blockId, viewHref, title) => {
+  if (typeof blockId !== 'string' || !blockId.startsWith('%') || !viewHref) return null;
+  return span({ class: 'card-share' }, ...renderLinkBox(blockId, viewHref, title, {
+    class: 'share-summary-link',
+    content: [span({ class: 'share-summary-icon' }, SHARE_GLYPH), span({ class: 'share-summary-label' }, i18n.shareContent)]
+  }));
+};
+exports.renderCardByline = renderCardByline;
+exports.renderCardTop = renderCardTop;
+exports.renderShareButton = renderShareButton;
+const renderDetailShare = (blockId, viewHref, title) => {
+  const share = renderShareButton(blockId, viewHref, title);
+  return share ? div({ class: 'detail-share' }, share) : null;
+};
+exports.renderDetailShare = renderDetailShare;
+exports.renderCommentsPill = renderCommentsPill;
+exports.commentCountFor = commentCountFor;
+exports.renderOpinionsPill = renderOpinionsPill;
 const CONTENT_FAV_KIND = {
   image: 'images', audio: 'audios', video: 'videos', document: 'documents',
   bookmark: 'bookmarks', torrent: 'torrents', file: 'files', event: 'events', task: 'tasks',
@@ -828,8 +946,10 @@ exports.i18n = i18n;
 Object.defineProperty(exports, 'selectedLanguage', { get: () => selectedLanguage });
 
 const opinionCategoriesList = require('../backend/opinion_categories');
-const renderEngagement = (id, opinionsNode, commentsNode) => {
-  const parts = [opinionsNode, commentsNode].filter(Boolean);
+const renderEngagement = (id, opinionsNode, commentsNode, share = null) => {
+  const autoOpinions = !opinionsNode && share && share.opinions !== false ? renderOpinionsPill([id, share.rootId], share.href) : null;
+  const autoComments = !commentsNode && share && share.comments !== false ? renderCommentsPill(id, share.href) : null;
+  const parts = [opinionsNode || autoOpinions, commentsNode || autoComments, share ? renderShareButton(id, share.href, share.title) : null].filter(Boolean);
   if (!parts.length) return null;
   return div({ class: 'card-engage' }, ...parts);
 };
@@ -872,6 +992,15 @@ const renderCardMetaRow = (...nodes) => {
   return div({ class: 'card-meta-row' }, ...flat);
 };
 exports.renderCardMetaRow = renderCardMetaRow;
+const commentsOpenHref = (detailHref, total = 0) => `${detailHref}${detailHref.includes('?') ? '&' : '?'}comments=open${total ? '#comments-latest' : ''}`;
+const renderCommentsSummary = (href, total = 0) => href
+  ? a({ href, class: total ? 'comments-summary-link engage-on' : 'comments-summary-link', title: i18n.commentsGoToLast || i18n.voteNewCommentLabel || 'Comments' },
+      span({ class: 'comments-summary-icon' }, '✑'),
+      span({ class: 'comments-summary-count' }, `(${total})`)
+    )
+  : null;
+exports.commentsOpenHref = commentsOpenHref;
+exports.renderCommentsSummary = renderCommentsSummary;
 const SIZE_UNITS = ["B", "KB", "MB", "GB", "TB"];
 const formatSize = (bytes) => {
   let n = Number(bytes) || 0;
@@ -910,7 +1039,7 @@ const renderPdfViewer = (state, { title: docTitle = "", base = "/pdf", keep = {}
   const shell = (...children) => div({ id: "pdf-viewer", class: ["pdf-viewer-container", embed ? "pdf-embedded" : "", state.full ? "pdf-maximized" : ""].filter(Boolean).join(" ") }, ...children);
   if (state.error) {
     return shell(
-      div({ class: "pdf-canvas-wrap pdf-message-wrap" }, p({ class: "pdf-message" }, state.error === "unavailable" ? i18n.pdfUnavailable : i18n.pdfMissing)),
+      div({ class: "pdf-canvas-wrap pdf-message-wrap" }, p({ class: "pdf-message" }, i18n.contentNotAvailableYet)),
       state.error === "unavailable" ? div({ class: "pdf-controls" }, ctl(href({}), "↻", i18n.pdfRetry), download) : null
     );
   }
@@ -2668,16 +2797,12 @@ const postAside = ({ key, value }) => {
 const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
     const encoded = {
         key: encodeURIComponent(msg.key),
-        author: encodeURIComponent(msg.value?.author),
         parent: encodeURIComponent(msg.value?.content?.root),
     };
 
     const url = {
-        author: `/author/${encoded.author}`,
-        spreadForm: `/spread/${encoded.key}`,
         link: `/thread/${encoded.key}#${encoded.key}`,
         parent: `/thread/${encoded.parent}#${encoded.parent}`,
-        avatar: msg.value?.meta?.author?.avatar?.url || '/assets/images/default-avatar.png',
         json: `/json/${encoded.key}`,
         subtopic: `/subtopic/${encoded.key}`,
         comment: `/comment/${encoded.key}`,
@@ -2971,10 +3096,6 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
         return null;
     }
 
-    const validTimestamp = moment(iso, moment.ISO_8601);
-    const timeAgo = validTimestamp.fromNow();
-    const timeAbsolute = validTimestamp.toISOString().split(".")[0].replace("T", " ");
-
     const fallbackVoted = !!msg.value?.meta?.voted;
     const fallbackVoteCount = msg.value?.meta?.votes?.length || 0;
     const spreadInfoObj = (spreadInfo && typeof spreadInfo === 'object') ? spreadInfo : null;
@@ -2984,17 +3105,16 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
     const alreadySpread = spreadInfoObj && typeof spreadInfoObj.alreadySpread === 'boolean'
         ? spreadInfoObj.alreadySpread
         : fallbackVoted;
-    const spreadButtonClass = alreadySpread ? 'liked' : null;
 
-    const messageClasses = ["post"];
+    const messageClasses = ["post", "trending-card", "post-card"];
     const recps = [];
 
     const addRecps = (recpsInfo) => {
         recpsInfo.forEach((recp) => {
             recps.push(
                 a(
-                    { href: `/author/${encodeURIComponent(recp.feedId)}` },
-                    img({ class: "avatar", src: recp.avatarUrl, alt: "" })
+                    { href: `/author/${encodeURIComponent(recp.feedId)}`, class: "card-byline-avatar" },
+                    img({ src: recp.avatarUrl, alt: "" })
                 )
             );
         });
@@ -3007,6 +3127,10 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
 
     if (isThreadTarget) {
         messageClasses.push("thread-target");
+    }
+
+    if (authorIdForName && config.keys && String(authorIdForName) === String(config.keys.id)) {
+        messageClasses.push("own-content");
     }
 
     if (isBlocked) {
@@ -3026,48 +3150,36 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
         articleElement
     );
 
-    const fragment = section(
+    const postKind = msg.value?.meta?.postType;
+    const kindLabel = postKind === "comment" ? i18n.typeComment : postKind === "subtopic" ? i18n.subtopic : postKind === "post" ? i18n.typePost : null;
+    const cardTitle = (hasContentWarning && msg.value.content.contentWarning)
+        || (THREAD_ENTITY_TYPES.has(contentType) ? entityTitle(content) : "")
+        || (typeof rawText === "string" ? postSnippet(rawText) : "");
+
+    const fragment = div(
         {
             id: msg.key,
             class: messageClasses.join(" "),
         },
-        header(
-            div(
-                { class: "header-content" },
-                a(
-                    { href: url.author },
-                    img({ class: "avatar-profile", src: url.avatar, alt: "" })
-                ),
-                span(
-                    { class: "created-at" },
-                    userLink(authorIdForName, msg.value?.meta?.author?.name),
-                    ` | ${timeAbsolute} | ${i18n.sendTime} `,
-                    a({ href: url.link }, timeAgo)
-                ),
-                isPrivate ? "🔒" : null,
-                isPrivate ? recps : null
-            )
-        ),
+        renderCardTop(msg.key, url.link, {
+            author: authorIdForName,
+            authorName: msg.value?.meta?.author?.name,
+            date: iso,
+            chips: [div({ class: "card-chips-row" },
+                kindLabel ? span({ class: "pm-exposition-chip pm-exposition-whole" }, span({ class: "pm-exposition-text" }, String(kindLabel).toUpperCase())) : null,
+                isPrivate ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
+                ...(isPrivate ? recps : [])
+            )],
+            spread: { count: spreadCount, alreadySpread },
+            reportTitle: cardTitle
+        }),
         articleContent,
-        footer(
-            div(
-                form(
-                    { action: url.spreadForm, method: "post" },
-                    button(
-                        {
-                            type: "submit",
-                            class: spreadButtonClass,
-                            title: i18n.spreadContent,
-                        },
-                        `☉ ${spreadCount}`
-                    )
-                ),
-                a({ href: url.comment }, i18n.comment),
-                isPrivate || isRoot || isFork
-                    ? null
-                    : a({ href: url.subtopic }, nbsp, i18n.subtopic)
-            ),
-            br()
+        renderCardMetaRow(
+            a({ href: url.comment, class: "comments-summary-link" }, span({ class: "comments-summary-icon" }, "✑"), span(i18n.comment)),
+            isPrivate || isRoot || isFork
+                ? null
+                : a({ href: url.subtopic, class: "comments-summary-link" }, span(i18n.subtopic)),
+            renderShareButton(msg.key, url.link, cardTitle)
         )
     );
 
@@ -3990,7 +4102,6 @@ exports.commentView = async (
 const renderMessage = (msg) => {
   const content = lodash.get(msg, "value.content", {});
   const authorId = msg.value.author || "Anonymous";
-  const createdAt = moment(msg.value.timestamp).format("YYYY/MM/DD HH:mm");
   const mentionsText = content.text || '';
   const isTribe = content.type === 'tribe-content';
   const visitUrl = isTribe
@@ -4006,23 +4117,20 @@ const renderMessage = (msg) => {
   const typeLabel = isTribe ? 'TRIBE' : 'POST';
 
   return div({ class: 'card card-rpg mention-card' },
-    div({ class: 'card-header' },
-      h2({ class: 'card-label' }, `[${typeLabel}]`),
-      visitUrl
-        ? form({ method: 'GET', action: visitUrl, class: 'inline-form' },
-            button({ type: 'submit', class: 'filter-btn' }, i18n.viewDetails || 'View details')
-          )
-        : null
-    ),
+    renderCardTop(msg.key, visitUrl, {
+      author: authorId,
+      date: msg.value.timestamp,
+      chips: [div({ class: 'card-chips-row' },
+        span({ class: 'pm-exposition-chip pm-exposition-whole' }, span({ class: 'pm-exposition-text' }, typeLabel)),
+        badge
+      )],
+      reportTitle: mentionsText
+    }),
     div({ class: 'card-body' },
       div({ class: 'card-section' },
-        badge,
         p({ class: 'post-text' }, ...renderStyledText(mentionsText || '[No content]'))
-      )
-    ),
-    p({ class: 'card-footer' },
-      span({ class: 'date-link' }, `${createdAt}`),
-      userLink(authorId)
+      ),
+      renderEngagement(msg.key, null, null, { href: visitUrl, title: mentionsText })
     )
   );
 };
@@ -4054,7 +4162,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   const qMatch = (m) => {
     if (!qNorm) return true
     const c = m.value.content || {}
-    const ids = [c.from, m.value.author, ...(Array.isArray(c.to) ? c.to : [])].filter(Boolean)
+    const ids = [c.from, m.value.author, ...(Array.isArray(c.to) && !inboxBotOf(c) ? c.to : [])].filter(Boolean)
     return [c.subject, c.text, ...ids, ...ids.map(id => userLinkLabel(id))]
       .some(v => String(v || '').toLowerCase().includes(qNorm))
   }
@@ -4732,7 +4840,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             const text = content.text || ''
             const sentAt = new Date(content.sentAt || msg.timestamp)
             const fromResolved = author
-            const toLinks = Array.isArray(content.to) ? content.to.map(addr => linkAuthor(addr)) : []
+            const toLinks = isNotification(msg) ? [linkAuthor(config.keys.id)] : Array.isArray(content.to) ? content.to.map(addr => linkAuthor(addr)) : []
             const level = threadLevel(subjectRaw)
             const msgSize = msgSizeBytes(msg)
 

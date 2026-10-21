@@ -1,5 +1,5 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderStateChip, renderContentActions, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote } = require("./main_views");
+const { template, i18n, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -87,18 +87,15 @@ exports.logisticsChipFor = logisticsChipFor;
 
 const renderRouteCard = (route, params = {}) =>
   div({ class: `tribe-card logistics-card logistics-${route.kind.toLowerCase()}` },
-    div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(route.id, routeHref(route), { author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: (params.spreadMap && params.spreadMap.get(route.id)) || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null })
-    ),
+    renderCardTop(route.id, routeHref(route), { date: route.createdAt, chips: [kindChip(route), modeChip(route), statusChip(route), priceChip(route)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: (params.spreadMap && params.spreadMap.get(route.id)) || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
     div({ class: "tribe-card-body" },
       renderCover(route),
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: routeHref(route) }, route.title || "—"))),
-      div({ class: "card-chips-row" }, kindChip(route), modeChip(route), statusChip(route), priceChip(route)),
       routeLine(route),
       whenLine(route),
       capacityLine(route),
-      countersBlock(route)
+      countersBlock(route),
+      null
     )
   );
 
@@ -251,8 +248,8 @@ const bookingStatusForm = (route, b, status, cls, text) =>
 
 const renderBooking = (route, b) =>
   div({ class: "logistics-booking" },
+    renderCardTop(null, null, { author: b.booker, date: b.createdAt, chips: [bookingStatusChip(b), route.kind === "TRIP" ? renderStateChip("neutral", "💺", String(b.seats)) : null] }),
     div({ class: "emergency-update-head logistics-booking-head" },
-      div({ class: "card-chips-row" }, bookingStatusChip(b), route.kind === "TRIP" ? renderStateChip("neutral", "💺", String(b.seats)) : null),
       div({ class: "tribe-side-actions emergency-update-actions" },
         route.isOwner && b.status === "PENDING" ? bookingStatusForm(route, b, "CONFIRMED", "tribe-action-btn", i18n.logisticsConfirm) : null,
         route.isOwner && b.status === "PENDING" ? bookingStatusForm(route, b, "REJECTED", "delete-btn", i18n.logisticsReject) : null,
@@ -269,8 +266,7 @@ const renderBooking = (route, b) =>
           input({ type: "text", name: "receipt", maxlength: "200", placeholder: i18n.logisticsReceiptPlaceholder }),
           button({ type: "submit", class: "tribe-action-btn" }, String(i18n.logisticsDeliver).toUpperCase())
         )
-      : null,
-    p({ class: "card-footer" }, span({ class: "date-link" }, `${fmt(b.createdAt)}`), userLink(b.booker))
+      : null
   );
 
 const renderBookForm = (route) =>
@@ -289,9 +285,8 @@ const renderRatings = (route) =>
     h3(i18n.logisticsRatingsTitle),
     route.ratings.length
       ? div({ class: "logistics-ratings-list" }, ...route.ratings.map(r => div({ class: "logistics-rating" },
-          div({ class: "emergency-update-head logistics-rating-head" }, div({ class: "card-chips-row" }, renderStateChip("neutral", "", stars(r.score)))),
-          r.text ? p(r.text) : null,
-          p({ class: "card-footer" }, span({ class: "date-link" }, `${fmt(r.createdAt)}`), userLink(r.author))
+          renderCardTop(null, null, { author: r.author, date: r.createdAt, chips: [renderStateChip("neutral", "", stars(r.score))] }),
+          r.text ? p(r.text) : null
         )))
       : p(route.closed ? i18n.logisticsNoRatings : i18n.logisticsRatingsWhenClosed),
     route.canRate
@@ -317,16 +312,10 @@ exports.singleLogisticsView = async (route, params = {}) => {
     ? (route.seats ? [{ label: i18n.logisticsSeatsLabel, value: `${route.seatsLeft} / ${route.seats}` }] : [])
     : [route.size ? { label: i18n.logisticsSizeLabel, value: route.size } : null, route.weight ? { label: i18n.logisticsWeightLabel, value: route.weight } : null].filter(Boolean);
   const side = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(route.id, href, { author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null })
-    ),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title), renderEditedChip(route.tipId, route.rootId)),
-    div({ class: "card-chips-row" }, kindChip(route), modeChip(route), statusChip(route), priceChip(route)),
+    renderCardTop(route.id, href, { arrow: false, date: route.createdAt, chips: [kindChip(route), modeChip(route), statusChip(route), priceChip(route)], bylineExtra: [renderEditedChip(route.tipId, route.rootId)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title)),
+    renderDetailShare(route.id, href, route.title),
     table({ class: "tribe-info-table jobs-info-table" },
-      tr(
-        td({ class: "tribe-info-label" }, i18n.createdAtLabel || "Created at"),
-        td({ class: "tribe-info-value", colspan: "3" }, fmt(route.createdAt))
-      ),
       tr(
         td({ class: "tribe-info-label" }, i18n.logisticsDateLabel),
         td({ class: "tribe-info-value", colspan: "3" }, fmt(route.date))
@@ -348,10 +337,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
       ...capacity.map(c => tr(
         td({ class: "tribe-info-label" }, c.label),
         td({ class: "tribe-info-value", colspan: "3" }, c.value)
-      )),
-      tr(
-        td({ class: "tribe-info-value", colspan: "4" }, userLink(route.author))
-      )
+      ))
     ),
     countersBlock(route),
     renderMapEmbed(params.mapData, route.mapUrl),
@@ -388,8 +374,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
     renderRatings(route),
     renderEngagement(route.id,
       renderOpinionsVoting("/logistics/opinions", route.id, route.opinions, href, route.opinions_inhabitants),
-      renderCommentsSection({ action: `/logistics/${encodeURIComponent(route.id)}/comments`, comments: params.comments || [], returnTo: href })
-    )
+      renderCommentsSection({ action: `/logistics/${encodeURIComponent(route.id)}/comments`, comments: params.comments || [], returnTo: href }))
   );
   return template(
     route.title,

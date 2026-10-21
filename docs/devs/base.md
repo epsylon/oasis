@@ -16,7 +16,7 @@ Native modules in the core (`sodium-native`, `leveldown`, `sharp`) ship prebuilt
 
 ## Local adjustments
 
-Local adjustments to vendored packages are applied by `scripts/patch-node-modules.js`.
+Local adjustments to vendored packages are applied by `src/patches/patch-node-modules.js`.
 
 ## Regenerating the core
 
@@ -30,7 +30,7 @@ cd ../..
 rm -rf src/base/node_modules src/AI/node_modules
 node scripts/build-base.js --dry    # check the split
 node scripts/build-base.js --link   # writes src/base, src/AI/node_modules, both lockfiles, restores the link
-node scripts/patch-node-modules.js
+node src/patches/patch-node-modules.js
 ./oasis.sh test                     # the whole suite must pass
 ```
 

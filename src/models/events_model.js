@@ -16,28 +16,28 @@ const EVENT_TYPES = [
   'tribe-keys', 'tombstone'
 ];
 
-module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
+module.exports = ({ cooler, cryptoModel, eventCrypto, tribesModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
   const me = async () => (await openSsb()).id;
 
-  const ownCrypto = eventCrypto || tribeCrypto;
-  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null;
+  const ownCrypto = eventCrypto || cryptoModel;
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (cryptoModel && cryptoModel.getKey(rid)) || null;
 
-  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (tribeCrypto && tribeCrypto.getGen(rid)) || 0);
+  const lookupGen = (rid) => ((ownCrypto && ownCrypto.getGen(rid)) || (cryptoModel && cryptoModel.getGen(rid)) || 0);
 
   const readAll = async (ssbClient) =>
     readTyped(ssbClient, EVENT_TYPES, { limit: logLimit });
 
   const rotateEventKey = async (rid, attendees) => {
-    if (!ownCrypto || !tribeCrypto || !rid || !lookupKey(rid)) return;
+    if (!ownCrypto || !cryptoModel || !rid || !lookupKey(rid)) return;
     const ssbClient = await openSsb();
     const ssbKeys = require("../server/node_modules/ssb-keys");
-    const newKey = ownCrypto.generateTribeKey();
+    const newKey = ownCrypto.generateKey();
     const newGen = ownCrypto.addNewKey(rid, newKey);
     const memberKeys = {};
     for (const m of new Set([ssbClient.id, ...(Array.isArray(attendees) ? attendees : [])])) {
-      try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys); } catch (_) {}
+      try { memberKeys[m] = cryptoModel.boxKeyForMember(newKey, m, ssbKeys); } catch (_) {}
     }
     await new Promise((resolve) => {
       ssbClient.publish({ type: "tribe-keys", tribeId: rid, generation: newGen, memberKeys }, () => resolve());
@@ -45,7 +45,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
   };
 
   const ensureAttendeeKeys = async (ssbClient, messages, events) => {
-    if (!tribeCrypto || !ownCrypto) return;
+    if (!cryptoModel || !ownCrypto) return;
     const leavesByRoot = new Map();
     for (const m of messages) {
       const c = m.value && m.value.content;
@@ -63,7 +63,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       const key = lookupKey(ev.rid);
       const memberKeys = {};
       for (const m of plan.missing) {
-        try { memberKeys[m] = tribeCrypto.boxKeyForMember(key, m, ssbKeys); } catch (_) {}
+        try { memberKeys[m] = cryptoModel.boxKeyForMember(key, m, ssbKeys); } catch (_) {}
       }
       if (!Object.keys(memberKeys).length) continue;
       await new Promise((resolve) => {
@@ -100,10 +100,10 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
   const decryptEventContent = (rawContent, eventId) => {
     if (!rawContent) return null;
     if (!rawContent.encryptedPayload) return rawContent;
-    if (!ownCrypto || !tribeCrypto) return { ...rawContent, _undecryptable: true };
+    if (!ownCrypto || !cryptoModel) return { ...rawContent, _undecryptable: true };
     const keys = (ownCrypto.getKeys && ownCrypto.getKeys(eventId)) || [];
     if (!keys.length) return { ...rawContent, _undecryptable: true };
-    const dec = tribeCrypto.decryptContent(rawContent, keys.map(k => [k]));
+    const dec = cryptoModel.decryptContent(rawContent, keys.map(k => [k]));
     if (!dec || dec._undecryptable) return { ...rawContent, _undecryptable: true };
     return { ...dec, _decrypted: true };
   };
@@ -256,12 +256,12 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
         opinions_inhabitants: []
       };
 
-      const shouldEncrypt = visibility === 'private' && ownCrypto && tribeCrypto;
+      const shouldEncrypt = visibility === 'private' && ownCrypto && cryptoModel;
       let eventKey = null;
       let content = plainContent;
       if (shouldEncrypt) {
-        eventKey = ownCrypto.generateTribeKey();
-        content = tribeCrypto.encryptContent(plainContent, [eventKey], true);
+        eventKey = ownCrypto.generateKey();
+        content = cryptoModel.encryptContent(plainContent, [eventKey], true);
       }
 
       const result = await new Promise((resolve, reject) => {
@@ -274,7 +274,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
           const ssbKeys = require("../server/node_modules/ssb-keys");
           const memberKeys = {};
           for (const m of attendeeList) {
-            try { memberKeys[m] = tribeCrypto.boxKeyForMember(eventKey, m, ssbKeys); } catch (_) {}
+            try { memberKeys[m] = cryptoModel.boxKeyForMember(eventKey, m, ssbKeys); } catch (_) {}
           }
           if (Object.keys(memberKeys).length) {
             await new Promise((resolve) => {
@@ -287,7 +287,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     },
 
     async generateInvite(eventId) {
-      if (!ownCrypto || !tribeCrypto) throw new Error("Event crypto unavailable");
+      if (!ownCrypto || !cryptoModel) throw new Error("Event crypto unavailable");
       const ssbClient = await openSsb();
       const userId = await me();
       const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, m) => err || !m || !m.content ? rej(new Error("Error retrieving event")) : res(m)));
@@ -299,11 +299,11 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       const key = lookupKey(rid);
       if (!key) throw new Error("Missing event key — cannot generate invite");
       const code = crypto.randomBytes(16).toString('hex');
-      const inviteSalt = tribeCrypto.generateInviteSalt();
-      const ek = tribeCrypto.encryptForInvite(key, code, inviteSalt);
+      const inviteSalt = cryptoModel.generateInviteSalt();
+      const ek = cryptoModel.encryptForInvite(key, code, inviteSalt);
       const inviteRef = { code, ek, salt: inviteSalt, gen: 1, rootId: rid };
       await new Promise((resolve, reject) => {
-        ssbClient.publish({ type: 'event-invite', target: rid, ek, salt: inviteSalt, codeHash: tribeCrypto.hashInviteCode(code, inviteSalt) }, (err) => err ? reject(err) : resolve());
+        ssbClient.publish({ type: 'event-invite', target: rid, ek, salt: inviteSalt, codeHash: cryptoModel.hashInviteCode(code, inviteSalt) }, (err) => err ? reject(err) : resolve());
       });
       return { code, eventId: rid };
     },
@@ -339,7 +339,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     },
 
     async generateOpenInvite(eventId) {
-      if (!ownCrypto || !tribeCrypto) throw new Error("Event crypto unavailable");
+      if (!ownCrypto || !cryptoModel) throw new Error("Event crypto unavailable");
       const ssbClient = await openSsb();
       const userId = await me();
       const ev = await new Promise((res, rej) => ssbClient.get(eventId, (err, m) => err || !m || !m.content ? rej(new Error("Error retrieving event")) : res(m)));
@@ -352,10 +352,10 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       const key = lookupKey(rid);
       if (!key) throw new Error("Missing event key — cannot generate invite");
       const code = crypto.randomBytes(16).toString('hex');
-      const inviteSalt = tribeCrypto.generateInviteSalt();
-      const ek = tribeCrypto.encryptForInvite(key, code, inviteSalt);
+      const inviteSalt = cryptoModel.generateInviteSalt();
+      const ek = cryptoModel.encryptForInvite(key, code, inviteSalt);
       const invitePub = await new Promise((resolve, reject) => {
-        ssbClient.publish({ type: 'event-invite', target: rid, ek, salt: inviteSalt, codeHash: tribeCrypto.hashInviteCode(code, inviteSalt), multi: 1 }, (err, r) => err ? reject(err) : resolve(r));
+        ssbClient.publish({ type: 'event-invite', target: rid, ek, salt: inviteSalt, codeHash: cryptoModel.hashInviteCode(code, inviteSalt), multi: 1 }, (err, r) => err ? reject(err) : resolve(r));
       });
       await new Promise((resolve, reject) => {
         ssbClient.publish({ type: 'event-open-invite', v: 1, target: rid, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() }, (err) => err ? reject(err) : resolve());
@@ -391,7 +391,7 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
     },
 
     async joinByInvite(code) {
-      if (!ownCrypto || !tribeCrypto) throw new Error("Event crypto unavailable");
+      if (!ownCrypto || !cryptoModel) throw new Error("Event crypto unavailable");
       const ssbClient = await openSsb();
       const userId = await me();
       const messages = await readAll(ssbClient);
@@ -406,12 +406,12 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
         if (!c || c.type !== 'event-invite') continue;
         if (invTomb.has(m.key)) continue;
         try {
-          const hash = tribeCrypto.hashInviteCode(code, c.salt);
+          const hash = cryptoModel.hashInviteCode(code, c.salt);
           if (hash === c.codeHash) { matched = c; break; }
         } catch (_) {}
       }
       if (!matched) throw new Error("Invalid or expired invite code");
-      const eventKey = tribeCrypto.decryptFromInvite(matched.ek, code, matched.salt);
+      const eventKey = cryptoModel.decryptFromInvite(matched.ek, code, matched.salt);
       if (!eventKey) throw new Error("Could not decrypt invite");
       ownCrypto.addNewKey(matched.target, eventKey);
       await this.toggleAttendee(matched.target);
@@ -444,13 +444,13 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
         ssbClient.publish({ type: 'eventAttend', target: rid, on, createdAt: new Date().toISOString() }, (err2, res2) => err2 ? reject(err2) : resolve(res2));
       });
 
-      if (isPrivate && !isLeaving && ownCrypto && tribeCrypto) {
+      if (isPrivate && !isLeaving && ownCrypto && cryptoModel) {
         try {
           const key = lookupKey(rid);
           if (key) {
             const ssbKeys = require("../server/node_modules/ssb-keys");
             const memberKeys = {};
-            try { memberKeys[userId] = tribeCrypto.boxKeyForMember(key, userId, ssbKeys); } catch (_) {}
+            try { memberKeys[userId] = cryptoModel.boxKeyForMember(key, userId, ssbKeys); } catch (_) {}
             if (memberKeys[userId]) {
               await new Promise((resolve) => {
                 ssbClient.publish({ type: "tribe-keys", tribeId: rid, generation: 1, memberKeys }, () => resolve());
@@ -579,26 +579,26 @@ module.exports = ({ cooler, tribeCrypto, eventCrypto, tribesModel }) => {
       const wasPrivate = normalizePrivacy(c.isPublic) === 'private';
       const isPrivate = updated.isPublic === 'private';
       let newKey = null;
-      if (isPrivate && ownCrypto && tribeCrypto) {
+      if (isPrivate && ownCrypto && cryptoModel) {
         let key = lookupKey(rid);
         if (!key) {
-          newKey = ownCrypto.generateTribeKey();
+          newKey = ownCrypto.generateKey();
           ownCrypto.setKey(rid, newKey, 1);
           key = newKey;
         }
-        updated = tribeCrypto.encryptContent(updated, [key], true);
+        updated = cryptoModel.encryptContent(updated, [key], true);
       }
 
       const result = await new Promise((resolve, reject) => {
         ssbClient.publish(updated, (err2, res2) => err2 ? reject(err2) : resolve(res2));
       });
 
-      if (newKey && tribeCrypto) {
+      if (newKey && cryptoModel) {
         try {
           const ssbKeys = require("../server/node_modules/ssb-keys");
           const memberKeys = {};
           for (const m of (Array.isArray(c.attendees) ? c.attendees : [userId])) {
-            try { memberKeys[m] = tribeCrypto.boxKeyForMember(newKey, m, ssbKeys); } catch (_) {}
+            try { memberKeys[m] = cryptoModel.boxKeyForMember(newKey, m, ssbKeys); } catch (_) {}
           }
           if (Object.keys(memberKeys).length) {
             await new Promise((resolve) => {

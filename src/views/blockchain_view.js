@@ -15,7 +15,7 @@ const FILTER_LABELS = {
   map: i18n.typeMap, shop: i18n.typeShop, shopProduct: i18n.typeShopProduct || 'Shop Product',
   pad: i18n.typePad || 'PAD', room: i18n.typeRoom || 'ROOM', roomMember: i18n.typeRoomMember || 'ROOM PARTICIPANT', wikiPage: i18n.typeWiki || 'WIKI', emergency: i18n.typeEmergency || 'EMERGENCY', emergencyConfirm: i18n.typeEmergencyConfirm || 'EMERGENCY CONFIRM', emergencyUpdate: i18n.typeEmergencyUpdate || 'EMERGENCY UPDATE', mailingList: i18n.typeMailingList || 'MAILING LIST', logisticsRoute: i18n.typeLogisticsRoute || 'ROUTE', logisticsRating: i18n.typeLogisticsRating || 'ROUTE RATING', podcast: i18n.typePodcast || 'PODCAST', podcastEpisode: i18n.typePodcastEpisode || 'EPISODE', podcastOpinion: i18n.typePodcastOpinion || 'EPISODE OPINION', podcastPlay: i18n.typePodcastPlay || 'EPISODE PLAY', campaign: i18n.typeCampaign || 'CAMPAIGN', campaignSignature: i18n.typeCampaignSignature || 'SIGNATURE', campaignUpdate: i18n.typeCampaignUpdate || 'CAMPAIGN UPDATE', chat: i18n.typeChat || 'CHAT', gameScore: i18n.typeGameScore || 'GAME SCORE',
   calendar: i18n.typeCalendar || 'CALENDAR', torrent: i18n.typeTorrent, file: i18n.typeFile,
-  school: i18n.typeSchool || 'SCHOOL', comment: i18n.comment || 'Comment'
+  school: i18n.typeSchool || 'SCHOOL', comment: i18n.typeComment
 };
 
 const blockKind = (block) => block && block.type === 'post' && block.content && typeof block.content.root === 'string' ? 'comment' : block && block.type;

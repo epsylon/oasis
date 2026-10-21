@@ -177,6 +177,46 @@ describe('peers: which pubs come first', (t) => {
     ok(order.indexOf(old) > order.indexOf(stranger) && order.indexOf(silent) > order.indexOf(stranger), 'outdated pubs, and those that never announce a version, go last');
     ok(server.oasisPeerRank([null, { key: old }]) > server.oasisPeerRank([null, { key: silent }]), 'among outdated ones, the one sharing more of what you follow first');
   });
+
+  const rankWith = async ({ me, graph, versions }) => {
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    const msg = (author, version) => ({ value: { author, timestamp: Date.now(), content: { type: 'oasisVersion', version } } });
+    const server = {
+      id: me, peers: {},
+      messagesByType: () => pull.values(Object.entries(versions).map(([k, v]) => msg(k, v))),
+      friends: { graph: (cb) => cb(null, graph) },
+      conn: { hub: () => ({ listen: () => pull.empty() }), dbPeers: () => [] }
+    };
+    require('../../../src/server/network_pause').init(server);
+    await new Promise(r => setTimeout(r, 100));
+    return (key) => server.oasisPeerRank([null, { key }]);
+  };
+
+  t('a pub that replicates you comes before any other, whatever its version', async () => {
+    const own = require('../../../src/server/package.json').version;
+    const [maj, min] = own.split('.').map(Number);
+    const me = id('M'), home = id('H'), best = id('B');
+    const friendsOf = (...ids) => Object.fromEntries(ids.map(k => [k, 1]));
+    const rank = await rankWith({
+      me,
+      graph: { [me]: friendsOf(id('a'), id('b')), [home]: friendsOf(me), [best]: friendsOf(id('a'), id('b')) },
+      versions: { [home]: `${maj}.${Math.max(0, min - 1)}.0`, [best]: own }
+    });
+    ok(rank(home) > rank(best), 'the pub that carries your posts is chosen before an up-to-date pub sharing what you follow');
+  });
+
+  t('versions are measured against the newest one in the network, not against your own', async () => {
+    const own = require('../../../src/server/package.json').version;
+    const [maj, min, patch] = own.split('.').map(Number);
+    const me = id('M'), newer = id('N'), same = id('S');
+    const friendsOf = (...ids) => Object.fromEntries(ids.map(k => [k, 1]));
+    const rank = await rankWith({
+      me,
+      graph: { [me]: friendsOf(id('a'), id('b'), id('c')), [newer]: friendsOf(id('x')), [same]: friendsOf(id('a'), id('b'), id('c')) },
+      versions: { [newer]: `${maj}.${min}.${patch + 1}`, [same]: own }
+    });
+    ok(rank(newer) > rank(same), 'a pub on a newer release than yours comes first, even sharing less of what you follow');
+  });
 });
 
 describe('peers: pausing the network', (t) => {
@@ -439,5 +479,34 @@ describe('peers: joining a pub that already follows you', (t) => {
     const r = await accept(ssb);
     ok(r.err, 'the error reaches the caller');
     eq(calls.remembered.length, 0, 'and the pub is not kept');
+  });
+});
+
+describe('peers: simultaneous connections', (t) => {
+  t('a node keeps between the minimum and the maximum of peers connected, the default when nothing is chosen', () => {
+    const { connectionsOf, CONNECTIONS_MIN, CONNECTIONS_MAX, CONNECTIONS_DEFAULT } = require('../../../src/configs/config-manager');
+    eq(connectionsOf(undefined), CONNECTIONS_DEFAULT);
+    eq(connectionsOf('nothing'), CONNECTIONS_DEFAULT);
+    eq(connectionsOf(1), CONNECTIONS_MIN);
+    eq(connectionsOf(CONNECTIONS_MAX * 10), CONNECTIONS_MAX);
+    eq(connectionsOf(String(CONNECTIONS_MIN + 1)), CONNECTIONS_MIN + 1);
+  });
+
+  t('the connection scheduler takes that number from the node settings', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-conn-'));
+    fs.mkdirSync(path.join(dir, 'oasis'));
+    fs.writeFileSync(path.join(dir, 'oasis', 'oasis-config.json'), JSON.stringify({ connections: 12 }));
+    const previous = process.env.OASIS_STATE_DIR;
+    process.env.OASIS_STATE_DIR = dir;
+    try {
+      const server = {};
+      require('../../../src/server/network_pause').init(server, {});
+      eq(server.oasisConnQuota(), 12, 'the node exposes the number chosen in its settings');
+    } finally {
+      if (previous === undefined) delete process.env.OASIS_STATE_DIR; else process.env.OASIS_STATE_DIR = previous;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    const scheduler = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'src', 'server', 'node_modules', 'ssb-conn', 'lib', 'conn-scheduler.js'), 'utf8');
+    ok(scheduler.includes('this.ssb.oasisConnQuota()'), 'and the scheduler asks the node for it');
   });
 });

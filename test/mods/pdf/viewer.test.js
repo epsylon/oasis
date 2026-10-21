@@ -56,9 +56,9 @@ describe('pdf: the viewer pages', (t) => {
 
   t('when it cannot show the PDF it says so', () => {
     const unavailable = mv.renderPdfViewer({ src: state.src, error: 'unavailable' }, { title: 'Doc' }).outerHTML;
-    ok(unavailable.includes(mv.i18n.pdfUnavailable), 'not arrived yet');
+    ok(unavailable.includes(mv.i18n.contentNotAvailableYet), 'not arrived yet');
     const missing = mv.renderPdfViewer({ src: '', error: 'missing' }, { title: 'Doc' }).outerHTML;
-    ok(missing.includes(mv.i18n.pdfMissing), 'not available');
+    ok(missing.includes(mv.i18n.contentNotAvailableYet), 'not available');
     notOk(missing.includes('download=1'), 'with nothing to download');
   });
 

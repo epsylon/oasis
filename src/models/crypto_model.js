@@ -30,12 +30,14 @@ const ENVELOPE_VERSION = 1;
 const KEY_DISTRIB_TYPE = 'tribe-keys-distrib';
 const KEY_DISTRIB_BATCH = 7;
 
-module.exports = (configPath, namespace = 'tribes') => {
+const SHARED_SCOPE = 'tribes';
+
+const createScope = (configPath, namespace) => {
   const keysDir = require('../configs/state-manager').keysDir(configPath);
   try { fs.mkdirSync(keysDir, { recursive: true, mode: 0o700 }); } catch (_) {}
   const keyringPath = path.join(keysDir, `${namespace}-keys.json`);
 
-  if (namespace === 'tribes') {
+  if (namespace === SHARED_SCOPE) {
     const legacyPath = path.join(configPath, 'tribe-keys.json');
     try {
       if (fs.existsSync(legacyPath) && !fs.existsSync(keyringPath)) {
@@ -65,7 +67,7 @@ module.exports = (configPath, namespace = 'tribes') => {
     try { fs.chmodSync(keyringPath, 0o600); } catch (_) {}
   };
 
-  const generateTribeKey = () => crypto.randomBytes(32).toString('hex');
+  const generateKey = () => crypto.randomBytes(32).toString('hex');
   const HEX_KEY = /^[0-9a-f]{64}$/i;
   const validKey = (k) => typeof k === 'string' && HEX_KEY.test(k);
 
@@ -198,7 +200,7 @@ module.exports = (configPath, namespace = 'tribes') => {
     return Buffer.concat([decipher.update(ct), decipher.final()]).toString('utf8');
   };
 
-  const isTribeMsg = (c) =>
+  const isSealedMsg = (c) =>
     !!c && c.type === ENVELOPE_TYPE && c.v === ENVELOPE_VERSION && typeof c.fp === 'string' && typeof c.p === 'string';
 
   const wrapMsg = (body, kHex) => {
@@ -210,7 +212,7 @@ module.exports = (configPath, namespace = 'tribes') => {
   };
 
   const unwrapMsg = (envelope, fpIdx) => {
-    if (!isTribeMsg(envelope)) return null;
+    if (!isSealedMsg(envelope)) return null;
     const aad = buildAad(envelope.fp);
     const tryKey = (rootId, keyHex) => {
       try {
@@ -495,15 +497,15 @@ module.exports = (configPath, namespace = 'tribes') => {
     return buildKeyChainSets(ancestryIds);
   };
 
-  const encryptForTribe = async (content, tribeId, tribesModel) => {
+  const encryptForGroup = async (content, tribeId, tribesModel) => {
     const chain = await resolveKeyChain(tribeId, tribesModel);
-    if (!chain) throw new Error('Missing tribe key chain — cannot encrypt content for this tribe');
+    if (!chain) throw new Error('Missing key chain — cannot encrypt this content');
     return encryptContent(content, chain, true);
   };
 
-  const decryptFromTribe = async (content, tribesModel) => {
+  const decryptFromGroup = async (content, tribesModel) => {
     if (!content) return content;
-    if (isTribeMsg(content)) {
+    if (isSealedMsg(content)) {
       const fpIdx = buildFingerprintIndex();
       const r = unwrapMsg(content, fpIdx);
       if (!r) return { ...content, _undecryptable: true };
@@ -539,17 +541,17 @@ module.exports = (configPath, namespace = 'tribes') => {
   };
 
   const createHelpers = (tribesModel) => ({
-    async encryptIfTribe(content) {
+    async encryptIfGroup(content) {
       if (!content || !content.tribeId || !tribesModel) return content;
       const rootId = await tribesModel.getRootId(content.tribeId);
       const key = getKey(rootId);
-      if (!key) throw new Error(`Missing tribe key for ${rootId} — cannot publish encrypted content`);
+      if (!key) throw new Error(`Missing key for ${rootId} — cannot publish encrypted content`);
       const body = { k: content.type, ...content };
       return wrapMsg(body, key);
     },
-    async decryptIfTribe(content) {
+    async decryptIfGroup(content) {
       if (!content || !tribesModel) return content;
-      if (isTribeMsg(content)) {
+      if (isSealedMsg(content)) {
         const fpIdx = buildFingerprintIndex();
         const r = unwrapMsg(content, fpIdx);
         if (!r) return { ...content, _undecryptable: true };
@@ -560,17 +562,17 @@ module.exports = (configPath, namespace = 'tribes') => {
         return flat;
       }
       if (!content.encryptedPayload) return content;
-      return await decryptFromTribe(content, tribesModel);
+      return await decryptFromGroup(content, tribesModel);
     },
     assertReadable(decrypted, what) {
-      if (decrypted && decrypted._undecryptable) throw new Error(`${what} is tribe-encrypted and cannot be decrypted with available keys`);
+      if (decrypted && decrypted._undecryptable) throw new Error(`${what} is encrypted and cannot be decrypted with available keys`);
     },
     async decryptIndexNodes(idx) {
       if (!tribesModel) return;
       for (const [k, n] of idx.nodes.entries()) {
         if (!n.c) continue;
-        if (!n.c.encryptedPayload && !isTribeMsg(n.c)) continue;
-        const dec = await decryptFromTribe(n.c, tribesModel);
+        if (!n.c.encryptedPayload && !isSealedMsg(n.c)) continue;
+        const dec = await decryptFromGroup(n.c, tribesModel);
         if (dec && !dec._undecryptable) {
           idx.nodes.set(k, { ...n, c: { ...dec, _decrypted: true } });
         } else {
@@ -586,7 +588,7 @@ module.exports = (configPath, namespace = 'tribes') => {
       for (const m of messages) {
         const c = m && m.value && m.value.content;
         if (!c) continue;
-        if (!isTribeMsg(c)) { out.push(m); continue; }
+        if (!isSealedMsg(c)) { out.push(m); continue; }
         const r = unwrapMsg(c, fpIdx);
         if (!r || !r.body) continue;
         const inner = r.body;
@@ -606,7 +608,7 @@ module.exports = (configPath, namespace = 'tribes') => {
       if (!tribeId || !tribesModel) return { type: 'tombstone', target, deletedAt, author };
       const rootId = await tribesModel.getRootId(tribeId);
       const key = getKey(rootId);
-      if (!key) throw new Error(`Missing tribe key for ${rootId} — cannot publish encrypted tombstone`);
+      if (!key) throw new Error(`Missing key for ${rootId} — cannot publish encrypted tombstone`);
       return wrapMsg({ k: 'tombstone', target, deletedAt, author }, key);
     }
   });
@@ -617,10 +619,10 @@ module.exports = (configPath, namespace = 'tribes') => {
     SENSITIVE_FIELDS, ENVELOPE_PRESERVE,
     ENVELOPE_TYPE, ENVELOPE_VERSION, KEY_DISTRIB_TYPE, KEY_DISTRIB_BATCH,
     loadKeyring, saveKeyring,
-    generateTribeKey, getKey, getKeys, getGen, getAllRootIds,
+    generateKey, getKey, getKeys, getGen, getAllRootIds,
     setKey, setKeys, mergeKeys, addNewKey, dropKey, keyPlan,
     fingerprint, buildFingerprintIndex,
-    isTribeMsg, wrapMsg, unwrapMsg,
+    isSealedMsg, wrapMsg, unwrapMsg,
     encryptWithKey, decryptWithKey,
     generateInviteSalt, hashInviteCode, deriveInviteKey,
     encryptForInvite, decryptFromInvite,
@@ -630,7 +632,16 @@ module.exports = (configPath, namespace = 'tribes') => {
     canonicalAad, encryptChain, decryptChain,
     encryptContent, decryptContent,
     buildKeyChainSets, resolveKeyChain, resolveKeyChainSets,
-    encryptForTribe, decryptFromTribe,
+    encryptForGroup, decryptFromGroup,
     createHelpers
   };
+};
+
+module.exports = (configPath) => {
+  const scopes = new Map();
+  const scope = (namespace = SHARED_SCOPE) => {
+    if (!scopes.has(namespace)) scopes.set(namespace, createScope(configPath, namespace));
+    return scopes.get(namespace);
+  };
+  return { ...scope(SHARED_SCOPE), scope };
 };

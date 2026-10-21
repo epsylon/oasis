@@ -4,7 +4,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderCardTop, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -207,34 +207,45 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
     ...paged(visibleForums).map(f => {
       if (f.tribeOrigin) {
         return li({ class: 'mailing-archive-item' },
-          div({ class: 'emergency-update-head mailing-archive-head' },
-            div({ class: 'mailing-archive-meta' },
-              a({ href: f.tribeOrigin.href, class: 'user-link' }, f.title || '—'),
+          renderCardTop(f.key, f.tribeOrigin.href, {
+            spread: (spreadMap && spreadMap.get(f.key)) || null,
+            reportTitle: f.title,
+            author: f.author,
+            date: f.createdAt,
+            chips: [
               ALL_CATS.includes(f.category)
                 ? a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(f.category)}` }, `[${catLabel(f.category)}]`)
                 : (f.category ? span({ class: 'forum-category' }, `[${tribeCatLabel(f.category)}]`) : null),
-              span({ class: 'card-label activity-update-counts mailing-counts' }, `👥: ${f.participants?.length || 1} · 💬 ${Math.max(0, (f.messagesCount || 1) - 1)}`),
               renderLifespanChip(f.lifetime, i18n),
               renderTribeOriginChip(f.tribeOrigin)
-            )
-          )
+            ]
+          }),
+          div({ class: 'mailing-archive-meta' },
+            a({ href: f.tribeOrigin.href, class: 'user-link' }, f.title || '—'),
+            span({ class: 'card-label activity-update-counts mailing-counts' }, `👥: ${f.participants?.length || 1} · 💬 ${Math.max(0, (f.messagesCount || 1) - 1)}`)
+          ),
+          null
         );
       }
       return li({ class: 'mailing-archive-item' },
-        div({ class: 'emergency-update-head mailing-archive-head' },
-          div({ class: 'mailing-archive-meta' },
-            a({ href: forumHref(f), class: 'user-link' }, f.title || '—'),
+        renderCardTop(f.key, forumHref(f), {
+          date: f.createdAt,
+          chips: [
             a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(f.category)}` }, `[${catLabel(f.category)}]`),
-            forumCounts(f),
             f.isPrivate ? renderPrivacyChip(true, i18n) : null,
             f.isPrivate ? renderForumEncryptedChip(i18n) : null,
             renderLifespanChip(f.lifetime, i18n),
             f.subscriptionIn === true
               ? renderStateChip('mutuals', '✉', i18n.subscriptionOn)
               : (f.subscriptionIn === false ? renderStateChip('closed', '✉', i18n.subscriptionOff) : null)
-          ),
-          renderContentActions(f.key, forumHref(f), { spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title, deleteAction: f.author === userId ? `/forum/delete/${encodeURIComponent(f.key)}` : null })
-        )
+          ],
+          spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title, deleteAction: f.author === userId ? `/forum/delete/${encodeURIComponent(f.key)}` : null
+        }),
+        div({ class: 'mailing-archive-meta' },
+          a({ href: forumHref(f), class: 'user-link' }, f.title || '—'),
+          forumCounts(f)
+        ),
+        null
       );
     })
   );

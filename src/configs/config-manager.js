@@ -25,6 +25,13 @@ const writeStateFile = (file, data) => {
 };
 let configCache = { at: 0, cfg: null };
 const CONFIG_TTL_MS = 2000;
+const CONNECTIONS_MIN = 5;
+const CONNECTIONS_MAX = 30;
+const CONNECTIONS_DEFAULT = 10;
+const connectionsOf = (value) => {
+  const n = Math.round(Number(value));
+  return value === undefined || value === null || value === '' || !Number.isFinite(n) ? CONNECTIONS_DEFAULT : Math.min(CONNECTIONS_MAX, Math.max(CONNECTIONS_MIN, n));
+};
 const writeConfigFile = (data) => { configCache = { at: 0, cfg: null }; return writeStateFile(configFilePath, data); };
 const readJsonFile = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_) { return null; } };
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -154,6 +161,7 @@ const readConfig = () => {
   const configData = fs.readFileSync(configFilePath);
   const cfg = JSON.parse(configData);
   if (!['whole', 'mutuals', 'only-lan', 'local'].includes(cfg.wish)) cfg.wish = 'whole';
+  cfg.connections = connectionsOf(cfg.connections);
   if (!['whole', 'mutuals', 'following'].includes(cfg.pmVisibility)) cfg.pmVisibility = 'whole';
   if (!['whole', 'mutuals', 'following'].includes(cfg.mentionsVisibility)) cfg.mentionsVisibility = 'whole';
   if (!cfg.phone || typeof cfg.phone !== 'object') cfg.phone = {};
@@ -191,4 +199,8 @@ module.exports = {
   saveServerConfig,
   readInviteCodes,
   defaultInvite,
+  CONNECTIONS_MIN,
+  CONNECTIONS_MAX,
+  CONNECTIONS_DEFAULT,
+  connectionsOf,
 };

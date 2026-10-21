@@ -38,7 +38,7 @@ const parseBlobId = (blobMarkdown) => {
 const voteSum = (opinions = {}) =>
   Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
 
-module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
+module.exports = ({ cooler, cryptoModel, tribesModel }) => {
   let ssb;
 
   const openSsb = async () => {
@@ -46,9 +46,9 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
     return ssb;
   };
 
-  const tribeHelpers = tribeCrypto ? tribeCrypto.createHelpers(tribesModel) : null;
-  const encryptIfTribe = tribeHelpers ? tribeHelpers.encryptIfTribe : async (c) => c;
-  const decryptIfTribe = tribeHelpers ? tribeHelpers.decryptIfTribe : async (c) => c;
+  const tribeHelpers = cryptoModel ? cryptoModel.createHelpers(tribesModel) : null;
+  const encryptIfGroup = tribeHelpers ? tribeHelpers.encryptIfGroup : async (c) => c;
+  const decryptIfGroup = tribeHelpers ? tribeHelpers.decryptIfGroup : async (c) => c;
   const assertReadable = tribeHelpers ? tribeHelpers.assertReadable : () => {};
   const decryptIndexNodes = tribeHelpers ? tribeHelpers.decryptIndexNodes : async () => {};
   const unwrapForIndex = (msgs) => tribeHelpers ? tribeHelpers.unwrapMessagesForKind(msgs, 'file') : msgs;
@@ -202,7 +202,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         ...fileExtra(extra)
       };
 
-      content = await encryptIfTribe(content);
+      content = await encryptIfGroup(content);
 
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)));
@@ -239,7 +239,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const oldMsg = await getMsg(ssbClient, tipId);
 
       if (!oldMsg) throw new Error("File not found");
-      const oldDec = await decryptIfTribe(oldMsg.content);
+      const oldDec = await decryptIfGroup(oldMsg.content);
       if (!oldDec || oldDec.type !== "file") throw new Error("File not found");
       assertReadable(oldDec, "File");
       if (oldMsg.author !== userId) throw new Error("Not the author");
@@ -267,7 +267,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
         updatedAt: now
       };
 
-      updated = await encryptIfTribe(updated);
+      updated = await encryptIfGroup(updated);
 
       const result = await new Promise((resolve, reject) => {
         ssbClient.publish(updated, (err, res) => (err ? reject(err) : resolve(res)));
@@ -284,7 +284,7 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const msg = await getMsg(ssbClient, tipId);
 
       if (!msg) throw new Error("File not found");
-      const dec = await decryptIfTribe(msg.content);
+      const dec = await decryptIfGroup(msg.content);
       if (!dec || dec.type !== "file") throw new Error("File not found");
       if (msg.author !== userId) throw new Error("Not the author");
 
@@ -363,8 +363,8 @@ module.exports = ({ cooler, tribeCrypto, tribesModel }) => {
       const msg = await getMsg(ssbClient, tip);
       if (!msg) throw new Error("File not found");
       let c = msg.content;
-      if (tribeCrypto && (c?.encryptedPayload || tribeCrypto.isTribeMsg(c)) && tribesModel) {
-        const dec = await tribeCrypto.decryptFromTribe(c, tribesModel);
+      if (cryptoModel && (c?.encryptedPayload || cryptoModel.isSealedMsg(c)) && tribesModel) {
+        const dec = await cryptoModel.decryptFromGroup(c, tribesModel);
         c = dec && !dec._undecryptable ? { ...dec, _decrypted: true } : { ...c, _decrypted: false };
       }
       if (!c || c.type !== "file") throw new Error("File not found");

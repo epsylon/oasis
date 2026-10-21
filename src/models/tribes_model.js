@@ -12,7 +12,7 @@ const VALID_INVITE_MODES = ['strict', 'open'];
 
 const STRUCTURAL_FIELDS = ['title', 'description', 'image', 'location', 'tags', 'isAnonymous', 'inviteMode', 'status', 'parentTribeId', 'mapUrl'];
 
-module.exports = ({ cooler, tribeCrypto }) => {
+module.exports = ({ cooler, cryptoModel }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -70,7 +70,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const v = m && m.value;
       if (!v) continue;
       const c = v.content;
-      const dec = (c && typeof c === 'object') ? (v.private === true && tribeCrypto.isKeyDistribContent(c) ? c : null) : tribeCrypto.tryUnboxKeyDistrib(c, config.keys, ssbKeys);
+      const dec = (c && typeof c === 'object') ? (v.private === true && cryptoModel.isKeyDistribContent(c) ? c : null) : cryptoModel.tryUnboxKeyDistrib(c, config.keys, ssbKeys);
       if (dec) out.push({ m, dec });
     }
     return { msgs, distribs: out };
@@ -79,7 +79,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
   const buildTribeIndex = async () => {
     subscribeInvalidation().catch(() => {});
     if (tribeIndex && Date.now() - tribeIndexTs < 5000) return tribeIndex;
-    const fpIdx = tribeCrypto.buildFingerprintIndex();
+    const fpIdx = cryptoModel.buildFingerprintIndex();
     const msgs = await streamLog();
 
     const tribeMsgs = new Map();
@@ -102,8 +102,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
       }
 
       let body = null;
-      if (tribeCrypto.isTribeMsg(c)) {
-        const r = tribeCrypto.unwrapMsg(c, fpIdx);
+      if (cryptoModel.isSealedMsg(c)) {
+        const r = cryptoModel.unwrapMsg(c, fpIdx);
         if (!r || !r.body || !r.body.k) continue;
         if (r.body.k === 'open-invite' || r.body.k === 'open-invite-tombstone') {
           sealedInvites.push({ key: m.key, author, body: r.body, keyRoot: r.rootId, ts });
@@ -280,7 +280,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
             const c = m && m.value && m.value.content;
             if (!c) return;
             if (typeof c === 'string' && c.endsWith('.box')) { tribeIndex = null; return; }
-            if (tribeCrypto.isTribeMsg(c)) { tribeIndex = null; return; }
+            if (cryptoModel.isSealedMsg(c)) { tribeIndex = null; return; }
             if (c.type === 'tribe-invite-msg' || c.type === 'tribe-invite-tombstone') tribeIndex = null;
           }, () => { started = false; })
         );
@@ -314,9 +314,9 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
   const wrapAndPublish = async (rootId, body) => {
     const client = await openSsb();
-    const key = tribeCrypto.getKey(rootId);
+    const key = cryptoModel.getKey(rootId);
     if (!key) throw new Error('Missing tribe key for ' + rootId);
-    const envelope = tribeCrypto.wrapMsg(body, key);
+    const envelope = cryptoModel.wrapMsg(body, key);
     const result = await new Promise((resolve, reject) =>
       client.publish(envelope, (err, r) => err ? reject(err) : resolve(r))
     );
@@ -389,18 +389,18 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (typeof c.ch !== 'string' || typeof c.s !== 'string' || typeof c.ek !== 'string') continue;
       const multi = c.multi === 1 || c.multi === true;
       if (!multi && inviteTombstonedBy.has(m.key)) continue;
-      if (tribeCrypto.hashInviteCode(code, c.s) !== c.ch) continue;
-      const chain = tribeCrypto.decryptChainFromInvite(c.ek, code, c.s, 3);
+      if (cryptoModel.hashInviteCode(code, c.s) !== c.ch) continue;
+      const chain = cryptoModel.decryptChainFromInvite(c.ek, code, c.s, 3);
       if (Array.isArray(chain) && chain.length) {
         matched = { msgKey: m.key, codeHash: c.ch, chain, multi, inviteAuthor: v.author };
         break;
       }
     }
     if (!matched) return null;
-    const fresh = matched.chain.filter(entry => entry && Array.isArray(entry.keys) && entry.keys.length && !tribeCrypto.getKeys(entry.rootId).length);
-    for (const entry of fresh) tribeCrypto.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
+    const fresh = matched.chain.filter(entry => entry && Array.isArray(entry.keys) && entry.keys.length && !cryptoModel.getKeys(entry.rootId).length);
+    for (const entry of fresh) cryptoModel.setKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
     tribeIndex = null;
-    const undo = () => { for (const entry of fresh) tribeCrypto.dropKey(entry.rootId); tribeIndex = null; };
+    const undo = () => { for (const entry of fresh) cryptoModel.dropKey(entry.rootId); tribeIndex = null; };
     const rootId = matched.chain[0].rootId;
     const idx = await buildTribeIndex().catch(() => null);
     const entry = idx && idx.tribes.get(idx.tipByRoot.get(rootId) || rootId);
@@ -428,7 +428,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         : String(tagsRaw || '').split(',').map(t => t.trim()).filter(Boolean);
 
       const isPrivate = Boolean(isAnonymous);
-      const newKey = tribeCrypto.generateTribeKey();
+      const newKey = cryptoModel.generateKey();
       const now = new Date().toISOString();
       const baseFields = {
         title,
@@ -449,14 +449,14 @@ module.exports = ({ cooler, tribeCrypto }) => {
       };
       let envelope;
       if (isPrivate) {
-        envelope = tribeCrypto.wrapMsg({ k: 'tribe', op: 'create', rootId: null, replaces: null, ...baseFields }, newKey);
+        envelope = cryptoModel.wrapMsg({ k: 'tribe', op: 'create', rootId: null, replaces: null, ...baseFields }, newKey);
       } else {
         envelope = { type: 'tribe', op: 'create', ...baseFields };
       }
       const result = await new Promise((resolve, reject) =>
         client.publish(envelope, (err, r) => err ? reject(err) : resolve(r))
       );
-      tribeCrypto.setKey(result.key, newKey, 1);
+      cryptoModel.setKey(result.key, newKey, 1);
       tribeIndex = null;
       subscribeInvalidation().catch(() => {});
       return result;
@@ -710,10 +710,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const code = crypto.randomBytes(INVITE_CODE_BYTES).toString('hex');
       const targetRoot = await this.getRootId(tribeId);
       if (!targetRoot) throw new Error('Cannot resolve tribe root');
-      const salt = tribeCrypto.generateInviteSalt();
-      const ekChain = tribeCrypto.encryptChainForInvite([targetRoot], code, salt);
+      const salt = cryptoModel.generateInviteSalt();
+      const ekChain = cryptoModel.encryptChainForInvite([targetRoot], code, salt);
       if (!ekChain) throw new Error('Cannot encrypt invite chain — missing keys');
-      const codeHash = tribeCrypto.hashInviteCode(code, salt);
+      const codeHash = cryptoModel.hashInviteCode(code, salt);
       const inviteMsg = {
         type: 'tribe-invite-msg',
         v: 1,
@@ -727,7 +727,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const inviteRef = {
         codeHash,
         salt,
-        gen: tribeCrypto.getGen(targetRoot),
+        gen: cryptoModel.getGen(targetRoot),
         msgKey: invitePub.key
       };
       const invites = Array.isArray(tribe.invites) ? [...tribe.invites, inviteRef] : [inviteRef];
@@ -770,10 +770,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const code = crypto.randomBytes(INVITE_CODE_BYTES).toString('hex');
       const targetRoot = await this.getRootId(tribeId);
       if (!targetRoot) throw new Error('Cannot resolve tribe root');
-      const salt = tribeCrypto.generateInviteSalt();
-      const ekChain = tribeCrypto.encryptChainForInvite([targetRoot], code, salt);
+      const salt = cryptoModel.generateInviteSalt();
+      const ekChain = cryptoModel.encryptChainForInvite([targetRoot], code, salt);
       if (!ekChain) throw new Error('Cannot encrypt invite chain — missing keys');
-      const codeHash = tribeCrypto.hashInviteCode(code, salt);
+      const codeHash = cryptoModel.hashInviteCode(code, salt);
       const invitePub = await new Promise((resolve, reject) =>
         client.publish({ type: 'tribe-invite-msg', v: 1, multi: 1, ch: codeHash, s: salt, ek: ekChain }, (err, r) => err ? reject(err) : resolve(r))
       );
@@ -843,8 +843,8 @@ module.exports = ({ cooler, tribeCrypto }) => {
       }
       for (const entry of matched.chain) {
         if (!entry || !Array.isArray(entry.keys) || !entry.keys.length) continue;
-        if (fresh.includes(entry)) { if (!lineage.has(entry.rootId)) tribeCrypto.dropKey(entry.rootId); continue; }
-        if (lineage.has(entry.rootId)) tribeCrypto.mergeKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
+        if (fresh.includes(entry)) { if (!lineage.has(entry.rootId)) cryptoModel.dropKey(entry.rootId); continue; }
+        if (lineage.has(entry.rootId)) cryptoModel.mergeKeys(entry.rootId, entry.keys, entry.gen || entry.keys.length);
       }
       tribeIndex = null;
       const members = [...tribe.members, userId];
@@ -894,12 +894,12 @@ module.exports = ({ cooler, tribeCrypto }) => {
       if (!Array.isArray(toMembers) || !toMembers.length) return;
       const client = await openSsb();
       const rootId = await this.getRootId(tribeId);
-      const keys = tribeCrypto.getKeys(rootId);
-      const gen = tribeCrypto.getGen(rootId);
+      const keys = cryptoModel.getKeys(rootId);
+      const gen = cryptoModel.getGen(rootId);
       if (!keys.length) return;
-      const payload = tribeCrypto.buildKeyDistribPayload(rootId, keys, gen);
+      const payload = cryptoModel.buildKeyDistribPayload(rootId, keys, gen);
       const others = [...new Set(toMembers)].filter(m => m && m !== client.id);
-      const batch = tribeCrypto.KEY_DISTRIB_BATCH - 1;
+      const batch = cryptoModel.KEY_DISTRIB_BATCH - 1;
       let i = 0;
       do {
         const recps = [client.id, ...others.slice(i, i + batch)];
@@ -912,10 +912,10 @@ module.exports = ({ cooler, tribeCrypto }) => {
 
     async rotateTribeKey(tribeId, remainingMembers) {
       const rootId = await this.getRootId(tribeId);
-      const oldKey = tribeCrypto.getKey(rootId);
+      const oldKey = cryptoModel.getKey(rootId);
       if (!oldKey) return;
-      const newKey = tribeCrypto.generateTribeKey();
-      tribeCrypto.addNewKey(rootId, newKey);
+      const newKey = cryptoModel.generateKey();
+      cryptoModel.addNewKey(rootId, newKey);
       if (Array.isArray(remainingMembers) && remainingMembers.length > 0) {
         await this.distributeTribeKey(tribeId, remainingMembers).catch(() => {});
       }
@@ -928,11 +928,11 @@ module.exports = ({ cooler, tribeCrypto }) => {
       try { tribe = await this.getTribeById(tribeId); } catch (_) { return; }
       if (!tribe || tribe.author !== userId) return;
       const rootId = await this.getRootId(tribeId);
-      if (!tribeCrypto.getKey(rootId)) return;
+      if (!cryptoModel.getKey(rootId)) return;
       const others = (tribe.members || []).filter(m => m !== userId);
       const { distribs } = await readKeyDistribs();
       const distributed = new Set();
-      const currentGen = tribeCrypto.getGen(rootId);
+      const currentGen = cryptoModel.getGen(rootId);
       const holdersOfCurrent = new Set();
       for (const { m, dec } of distribs) {
         if (m.value.author !== userId) continue;
@@ -968,7 +968,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
         entries.sort((a, b) => b.generation - a.generation);
         const top = entries[0];
         if (top && Array.isArray(top.keys) && top.keys.length) {
-          tribeCrypto.mergeKeys(rootId, top.keys, top.generation);
+          cryptoModel.mergeKeys(rootId, top.keys, top.generation);
         }
       }
     },
@@ -978,7 +978,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       const me = client.id;
       let tribe;
       try { tribe = await this.getTribeById(tribeId); } catch (_) { return; }
-      const fpIdx = tribeCrypto.buildFingerprintIndex();
+      const fpIdx = cryptoModel.buildFingerprintIndex();
       const rootId = await this.getRootId(tribeId).catch(() => tribeId);
       const tribeChainIds = await this.getChainIds(tribeId).catch(() => [tribeId]);
       const tribeRootSet = new Set([rootId]);
@@ -1006,15 +1006,15 @@ module.exports = ({ cooler, tribeCrypto }) => {
           if (myInviteMsgKeys.has(c.target)) discovered.add(v.author);
           continue;
         }
-        const dec = tribeCrypto.tryUnboxKeyDistrib(c, config.keys, ssbKeys);
+        const dec = cryptoModel.tryUnboxKeyDistrib(c, config.keys, ssbKeys);
         if (dec && tribeRootSet.has(dec.rootId)) {
           const recps = Array.isArray(dec.recps) ? dec.recps : [];
           for (const r of recps) discovered.add(r);
           if (v.author) discovered.add(v.author);
           continue;
         }
-        if (tribeCrypto.isTribeMsg(c)) {
-          const r = tribeCrypto.unwrapMsg(c, fpIdx);
+        if (cryptoModel.isSealedMsg(c)) {
+          const r = cryptoModel.unwrapMsg(c, fpIdx);
           if (!r || !r.body) continue;
           if (r.body.k !== 'tribe') continue;
           if (!tribeChainSet.has(m.key) && !tribeChainSet.has(r.body.replaces || '') && r.rootId !== rootId) continue;
@@ -1072,7 +1072,7 @@ module.exports = ({ cooler, tribeCrypto }) => {
       while (idx.child.has(tipId)) tipId = idx.child.get(tipId);
       let tribe;
       try { tribe = await this.getTribeById(tribeId); } catch (_) { tribe = null; }
-      const isPrivate = tribe ? !!tribe.isAnonymous : !!tribeCrypto.getKey(rootId);
+      const isPrivate = tribe ? !!tribe.isAnonymous : !!cryptoModel.getKey(rootId);
       let result;
       if (isPrivate) {
         result = await wrapAndPublish(rootId, { k: 'tombstone', rootId, target: tipId, author: userId, deletedAt: new Date().toISOString() });
@@ -1087,13 +1087,13 @@ module.exports = ({ cooler, tribeCrypto }) => {
     },
 
     async pruneOrphanKeys() {
-      if (!tribeCrypto || typeof tribeCrypto.getAllRootIds !== 'function') return 0;
+      if (!cryptoModel || typeof cryptoModel.getAllRootIds !== 'function') return 0;
       const idx = await buildTribeIndex();
-      const all = tribeCrypto.getAllRootIds();
+      const all = cryptoModel.getAllRootIds();
       let removed = 0;
       for (const rid of all) {
         if (idx.effectivelyTombstoned.has(rid)) {
-          try { tribeCrypto.dropKey(rid); removed++; } catch (_) {}
+          try { cryptoModel.dropKey(rid); removed++; } catch (_) {}
         }
       }
       return removed;

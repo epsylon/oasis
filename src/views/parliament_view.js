@@ -1,15 +1,17 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, paged, renderEngagement } = require('./main_views');
+const { template, i18n, userLink, paged, renderEngagement, renderCardTop } = require('./main_views');
 const { renderStyledText } = require('../backend/renderStyledText');
 const { renderCommentsSection } = require('./comments_view');
 
-const commentsBlock = (comments, item, returnTo) => {
+const commentsBlock = (comments, item, returnTo, title) => {
   const root = item && item.rootId;
-  if (!root || !(comments instanceof Map)) return null;
-  return renderEngagement(root, null, renderCommentsSection({ action: `/parliament/comments/${encodeURIComponent(root)}`, comments: comments.get(root) || [], returnTo }));
+  const commentsNode = root && comments instanceof Map ? renderCommentsSection({ action: `/parliament/comments/${encodeURIComponent(root)}`, comments: comments.get(root) || [], returnTo }) : null;
+  return renderEngagement(root || (item && item.id), null, commentsNode, { href: returnTo, title });
 };
+
+const parliamentTop = (item, href, date) => renderCardTop(null, href, { author: item.proposer, date: date || item.createdAt });
 
 const { seatPositions } = require('../models/parliament_model').hemicycle;
 
@@ -484,17 +486,7 @@ const ProposalsList = (proposals, comments = null) => {
       : (i18n.parliamentProposalOnTrackNo || 'BELOW THRESHOLD');
     return div(
       { class: 'card' },
-      br(),
-      div(
-        { class: 'card-field' },
-        span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '),
-        span({ class: 'card-value' }, fmt(pItem.createdAt))
-      ),
-      div(
-        { class: 'card-field' },
-        span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '),
-        span({ class: 'card-value' }, userLink(pItem.proposer))
-      ),
+      parliamentTop(pItem, '/parliament?filter=proposals'),
       div(
         { class: 'card-field' },
         span({ class: 'card-label' }, i18n.parliamentGovMethod.toUpperCase() + ': '),
@@ -546,7 +538,7 @@ const ProposalsList = (proposals, comments = null) => {
             button({ type: 'submit', class: 'buy-btn' }, i18n.parliamentVoteAction)
           )
         : null,
-      commentsBlock(comments, pItem, '/parliament?filter=proposals')
+      commentsBlock(comments, pItem, '/parliament?filter=proposals', pItem.title || '')
     );
   });
   return div(
@@ -561,13 +553,12 @@ const FutureLawsList = (rows) => {
   const cards = rows.map(pItem =>
     div(
       { class: 'card' },
-      br(),
+      parliamentTop(pItem, '/parliament?filter=proposals'),
       div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentGovMethod.toUpperCase() + ': '), span({ class: 'card-value' }, pItem.method)),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '), span({ class: 'card-value' }, fmt(pItem.createdAt))),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, userLink(pItem.proposer))),
       h2(pItem.title || ''),
       p(...renderStyledText(pItem.description || '')),
-      ...campaignBlock(pItem)
+      ...campaignBlock(pItem),
+      commentsBlock(null, pItem, '/parliament?filter=proposals', pItem.title || '')
     )
   );
   return div(
@@ -615,20 +606,7 @@ const RevocationsList = (revocations) => {
       : (i18n.parliamentProposalOnTrackNo || 'BELOW THRESHOLD');
     return div(
       { class: 'card' },
-      br(),
-      div(
-        { class: 'card-field' },
-        span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '),
-        span({ class: 'card-value' }, fmt(pItem.createdAt))
-      ),
-      div(
-        { class: 'card-field' },
-        span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '),
-        span(
-          { class: 'card-value' },
-          userLink(pItem.proposer)
-        )
-      ),
+      parliamentTop(pItem, '/parliament?filter=revocations'),
       div(
         { class: 'card-field' },
         span({ class: 'card-label' }, i18n.parliamentGovMethod + ': '),
@@ -679,7 +657,8 @@ const RevocationsList = (revocations) => {
             { method: 'GET', action: `/votes/${encodeURIComponent(pItem.voteId)}` },
             button({ type: 'submit', class: 'buy-btn' }, i18n.parliamentVoteAction)
           )
-        : null
+        : null,
+      commentsBlock(null, pItem, '/parliament?filter=revocations', pItem.title || pItem.lawTitle || '')
     );
   });
   return div(
@@ -694,12 +673,11 @@ const FutureRevocationsList = (rows) => {
   const cards = rows.map(pItem =>
     div(
       { class: 'card' },
-      br(),
+      parliamentTop(pItem, '/parliament?filter=revocations'),
       pItem.method ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentGovMethod.toUpperCase() + ': '), span({ class: 'card-value' }, pItem.method)) : null,
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentThProposalDate.toUpperCase() + ': '), span({ class: 'card-value' }, fmt(pItem.createdAt))),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, userLink(pItem.proposer))),
       h2(pItem.title || pItem.lawTitle || ''),
-      p(pItem.reasons || '')
+      p(pItem.reasons || ''),
+      commentsBlock(null, pItem, '/parliament?filter=revocations', pItem.title || pItem.lawTitle || '')
     )
   );
   return div(
@@ -748,15 +726,13 @@ const LawsList = (laws, comments = null) => {
     const showMetricsFlag = showVoteMetrics(l.method);
     return div(
       { class: 'card' },
-      br(),
+      parliamentTop(l, '/parliament?filter=laws', l.enactedAt),
       div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod + ': ').toUpperCase()), span({ class: 'card-value' }, l.method)),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawEnacted + ': ').toUpperCase()), span({ class: 'card-value' }, fmt(l.enactedAt))),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.parliamentLawProposer.toUpperCase() + ': '), span({ class: 'card-value' }, userLink(l.proposer))),
       h2(l.question || ''),
       p(l.description || ''),
       showMetricsFlag ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesNeeded + ': ').toUpperCase()), span({ class: 'card-value' }, String(needed))) : null,
       showMetricsFlag ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesSlashTotal + ': ').toUpperCase()), span({ class: 'card-value' }, `${yes}/${total}`)) : null,
-      commentsBlock(comments, l, '/parliament?filter=laws')
+      commentsBlock(comments, l, '/parliament?filter=laws', l.question || '')
     );
   });
   return div(

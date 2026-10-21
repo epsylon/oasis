@@ -26,6 +26,7 @@ const usage = () => {
   console.error('  join <invite>                   Join another PUB with its invite code');
   console.error('  status                          Show peer / replication status');
   console.error('  gossip                          List known gossip peers');
+  console.error('  peers                           List the peers connected right now');
   console.error('');
   console.error('Works with the sbot stopped too:');
   console.error('  hops [N]                        Show or set how many hops this node replicates (0-6)');
@@ -139,6 +140,13 @@ ssbClient(ssbConfig.keys, { remote, caps: ssbConfig.caps }).then(async (ssb) => 
       case 'gossip': {
         const r = await call(ssb.conn.dbPeers.bind(ssb.conn));
         console.log(JSON.stringify(r, null, 2));
+        break;
+      }
+      case 'peers': {
+        const pull = require(path.join(__dirname, '..', 'src', 'server', 'node_modules', 'pull-stream'));
+        const list = await new Promise((res, rej) => pull(ssb.conn.peers(), pull.take(1), pull.collect((e, r) => e ? rej(e) : res(r[0] || []))));
+        const rows = list.filter(([, d]) => d && d.key && d.state === 'connected').map(([addr, d]) => `${d.key}  ${String(addr).split('~')[0]}`);
+        console.log(rows.length ? `\n${rows.join('\n')}\n\nConnected: ${rows.length}\n` : `\nConnected: 0\n`);
         break;
       }
       default:

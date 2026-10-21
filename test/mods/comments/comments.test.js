@@ -62,6 +62,24 @@ describe('comments: how lists show them', (t) => {
   const commentAction = (key, root, rootType, author = '@x') =>
     ({ id: key, type: 'post', author, ts: Date.now(), content: { type: 'post', text: 'the pdf is broken', root }, comment: { rootId: root, rootType } });
 
+  t('every card of commentable content counts its comments and opens them', () => {
+    const { requestScope } = require('../../../src/models/typed_log');
+    const { renderEngagement } = require('../../../src/views/main_views');
+    const render = (href) => requestScope.run({ path: '/list', query: '', commentCounts: new Map([[id('k'), { count: 3 }]]) }, () => { const node = renderEngagement(id('k'), null, null, { href, title: 't' }); return node ? node.outerHTML : ''; });
+    const card = render(`/market/${encodeURIComponent(id('k'))}`);
+    ok(card.includes('(3)'), 'shows how many comments it has');
+    ok(card.includes('?comments=open#comments-latest'), 'and opens them at the last one');
+    notOk(render(`/calendars/${encodeURIComponent(id('k'))}`).includes('comments-summary'), 'content without comments shows no counter');
+  });
+
+  t('activity cards count comments even where the page did not count them, like the profile', async () => {
+    const { requestScope } = require('../../../src/models/typed_log');
+    const { activityView } = require('../../../src/views/activity_view');
+    const blog = { id: id('b'), type: 'post', author: '@x', ts: Date.now(), content: { type: 'post', text: 'a blog' } };
+    const html = await requestScope.run({ path: '/profile', query: '', commentCounts: new Map([[id('b'), { count: 4 }]]) }, async () => String(await activityView([blog], 'all', '@me')));
+    ok(html.includes('(4)'), 'the card shows the comments it has');
+  });
+
   t('activity labels a comment by what it comments and opens it there', async () => {
     const { activityView } = require('../../../src/views/activity_view');
     const html = String(await activityView([commentAction(id('c'), id('d'), 'document')], 'all', '@me'));

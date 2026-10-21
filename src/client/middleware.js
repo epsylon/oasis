@@ -54,15 +54,17 @@ module.exports = ({ host, port, middleware, allowHost }) => {
 
   const { isClearnetPath, isTrustedRequest, buildCsp } = require(path.join(__dirname, "..", "backend", "request_guards"));
   const isValidRequest = (request) => isTrustedRequest(request, validHosts);
+  const EMBED_PATHS = ["/pdf/embed"];
+  const CLEARNET_EMBED_PATHS = ["/c/pdf/embed"];
   const pageFrames = (ctx, isClearnet) => {
     if (ctx.method !== "GET") return {};
     const host = String(ctx.host || '');
-    const viewer = /^[A-Za-z0-9.-]+(:\d+)?$/.test(host) ? `${host}${isClearnet ? '/c/pdf/embed' : '/pdf/embed'}` : "'self'";
+    const embeds = /^[A-Za-z0-9.-]+(:\d+)?$/.test(host) ? (isClearnet ? CLEARNET_EMBED_PATHS : EMBED_PATHS).map(p => `${host}${p}`).join(' ') : "'self'";
     const game = /^\/games\/[a-z0-9]+\/?$/.test(ctx.path);
     return {
-      objects: viewer,
-      frames: game ? "'self'" : viewer,
-      framed: ctx.path === "/pdf/embed" || ctx.path === "/c/pdf/embed"
+      objects: embeds,
+      frames: game ? "'self'" : embeds,
+      framed: EMBED_PATHS.includes(ctx.path) || CLEARNET_EMBED_PATHS.includes(ctx.path)
     };
   };
 

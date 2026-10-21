@@ -1,6 +1,6 @@
-const { div, h2, p, section, button, form, a, textarea, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderSpreadButton, renderContentActions, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderCreatedRows, renderEditedChip, renderMediaLockNote } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderTribeOriginChip } = require("./clearnet_view");
@@ -105,28 +105,28 @@ const renderVoteListItem = exports.renderVoteListItem = (v, voteOptionsDefault, 
   const returnTo = `/votes?filter=${encodeURIComponent(activeFilter || "all")}`;
   const totalOpinions = Object.values(v.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
   const isOwn = isVoteAuthor(v);
-  const headerActions = opts.headerActions !== undefined
-    ? opts.headerActions
-    : origin ? null : renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`, { spread: spreadInfo || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, returnTo, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined });
+  const topOpts = { author: v.createdBy, date: v.createdAt, chips };
+  const cardTop = opts.headerActions !== undefined
+    ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(topOpts), opts.headerActions)
+    : origin
+      ? renderCardTop(v.id, origin.href, { ...topOpts, spread: spreadInfo || null, reportTitle: v.question })
+      : renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { ...topOpts, spread: spreadInfo || null, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, returnTo, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined });
 
   return div({ class: "trending-card vote-card" + (isOwn ? " own-content" : "") },
-    headerActions ? div({ class: "card-header activity-card-header" },
-      span(),
-      headerActions
-    ) : null,
+    cardTop,
     div({ class: "card-section vote-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" },
           href ? a({ href }, v.question || i18n.votationsTitle) : (v.question || i18n.votationsTitle)
         )
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       v.deadline ? p({ class: "time-chip" }, moment(v.deadline).format("YYYY/MM/DD HH:mm")) : null,
       origin ? null : div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
       ),
       origin ? null : div({ class: `job-meta-line vote-outcome vote-outcome-${outcome.variant}` }, `${i18n.voteResults || "Results"}: ${outcome.text}`),
-      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : [])
+      ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : []),
+      null
     )
   );
 };
@@ -194,15 +194,12 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
   pushRow(i18n.voteStatus, statusLabel(v.status));
 
   const voteSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(v.id, `/votes/${encodeURIComponent(v.id)}`, { spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined })
-    ),
+    renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { arrow: false, date: v.createdAt, chips, bylineExtra: [renderEditedChip(v.id, v.rootId)], spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, v.question),
-      renderEditedChip(v.id, v.rootId)
+      h2({ class: "tribe-card-title" }, v.question)
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows, ...renderCreatedRows(v.createdAt, v.createdBy)),
+    renderDetailShare(v.id, `/votes/${encodeURIComponent(v.id)}`, v.question),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     tagsNode,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)

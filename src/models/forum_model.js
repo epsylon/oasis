@@ -6,15 +6,15 @@ const { readTyped, requestScope, memoIndex } = require('./typed_log');
 const longText = require('../backend/long_text');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
-module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
+module.exports = ({ cooler, cryptoModel, forumCrypto }) => {
   let ssb, userId;
-  const ownCrypto = forumCrypto || tribeCrypto;
-  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (tribeCrypto && tribeCrypto.getKey(rid)) || null;
+  const ownCrypto = forumCrypto || cryptoModel;
+  const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (cryptoModel && cryptoModel.getKey(rid)) || null;
 
   const decryptForumContent = (rawContent, rootId) => {
     if (!rawContent) return rawContent;
     if (!rawContent.encryptedPayload) return rawContent;
-    if (!ownCrypto || !tribeCrypto) return { ...rawContent, _undecryptable: true };
+    if (!ownCrypto || !cryptoModel) return { ...rawContent, _undecryptable: true };
     let keys = (rootId && ownCrypto.getKeys && ownCrypto.getKeys(rootId)) || [];
     if (!keys.length && typeof ownCrypto.getAllRootIds === 'function') {
       const seen = new Set();
@@ -24,7 +24,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       }
     }
     if (!keys.length) return { ...rawContent, _undecryptable: true };
-    const dec = tribeCrypto.decryptContent(rawContent, keys.map(k => [k]));
+    const dec = cryptoModel.decryptContent(rawContent, keys.map(k => [k]));
     if (!dec || dec._undecryptable) return { ...rawContent, _undecryptable: true };
     return { ...dec, _decrypted: true };
   };
@@ -289,8 +289,8 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
         isPrivate: isPrivateFlag
       };
       let forumKey = null;
-      if (isPrivateFlag && ownCrypto && tribeCrypto) forumKey = ownCrypto.generateTribeKey();
-      const seal = (c) => forumKey ? tribeCrypto.encryptContent(c, [forumKey], true) : c;
+      if (isPrivateFlag && ownCrypto && cryptoModel) forumKey = ownCrypto.generateKey();
+      const seal = (c) => forumKey ? cryptoModel.encryptContent(c, [forumKey], true) : c;
       const publish = (c) => new Promise((resolve, reject) =>
         ssbClient.publish(seal(c), (err, res) => err ? reject(err) : resolve(res))
       );
@@ -300,7 +300,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
         ownCrypto.setKey(result.key, forumKey, 1);
         try {
           const ssbKeys = require('../server/node_modules/ssb-keys');
-          const memberKeys = { [userId]: tribeCrypto.boxKeyForMember(forumKey, userId, ssbKeys) };
+          const memberKeys = { [userId]: cryptoModel.boxKeyForMember(forumKey, userId, ssbKeys) };
           await new Promise((resolve) => {
             ssbClient.publish({ type: 'tribe-keys', tribeId: result.key, generation: 1, memberKeys }, () => resolve());
           });
@@ -328,11 +328,11 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       };
       if (parentId) content.branch = parentId;
       let key = null;
-      if (isPrivate && ownCrypto && tribeCrypto) {
+      if (isPrivate && ownCrypto && cryptoModel) {
         key = lookupKey(forumId);
         if (!key) throw new Error('Missing forum key — cannot reply to encrypted forum');
       }
-      const seal = (c) => key ? tribeCrypto.encryptContent(c, [key], true) : c;
+      const seal = (c) => key ? cryptoModel.encryptContent(c, [key], true) : c;
       const publish = (c) => new Promise((resolve, reject) =>
         ssbClient.publish(seal(c), (err, res) => err ? reject(err) : resolve(res))
       );
@@ -341,7 +341,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     },
 
     generateInvite: async (forumId) => {
-      if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
+      if (!ownCrypto || !cryptoModel) throw new Error('Forum crypto unavailable');
       const ssbClient = await openSsb();
       const rawRoot = await new Promise((res, rej) => ssbClient.get(forumId, (e, m) => e ? rej(e) : res(m)));
       if (!rawRoot || !rawRoot.content) throw new Error('Forum not found');
@@ -353,10 +353,10 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const key = lookupKey(forumId);
       if (!key) throw new Error('Missing forum key');
       const code = crypto.randomBytes(16).toString('hex');
-      const inviteSalt = tribeCrypto.generateInviteSalt();
-      const ek = tribeCrypto.encryptForInvite(key, code, inviteSalt);
+      const inviteSalt = cryptoModel.generateInviteSalt();
+      const ek = cryptoModel.encryptForInvite(key, code, inviteSalt);
       await new Promise((resolve, reject) => {
-        ssbClient.publish({ type: 'forum-invite', target: forumId, ek, salt: inviteSalt, codeHash: tribeCrypto.hashInviteCode(code, inviteSalt) }, (err) => err ? reject(err) : resolve());
+        ssbClient.publish({ type: 'forum-invite', target: forumId, ek, salt: inviteSalt, codeHash: cryptoModel.hashInviteCode(code, inviteSalt) }, (err) => err ? reject(err) : resolve());
       });
       return { code, forumId };
     },
@@ -367,7 +367,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     },
 
     generateOpenInvite: async (forumId) => {
-      if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
+      if (!ownCrypto || !cryptoModel) throw new Error('Forum crypto unavailable');
       const ssbClient = await openSsb();
       const rawRoot = await new Promise((res, rej) => ssbClient.get(forumId, (e, m) => e ? rej(e) : res(m)));
       if (!rawRoot || !rawRoot.content) throw new Error('Forum not found');
@@ -380,10 +380,10 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
       const key = lookupKey(forumId);
       if (!key) throw new Error('Missing forum key');
       const code = crypto.randomBytes(16).toString('hex');
-      const inviteSalt = tribeCrypto.generateInviteSalt();
-      const ek = tribeCrypto.encryptForInvite(key, code, inviteSalt);
+      const inviteSalt = cryptoModel.generateInviteSalt();
+      const ek = cryptoModel.encryptForInvite(key, code, inviteSalt);
       const invitePub = await new Promise((resolve, reject) => {
-        ssbClient.publish({ type: 'forum-invite', target: forumId, ek, salt: inviteSalt, codeHash: tribeCrypto.hashInviteCode(code, inviteSalt), multi: 1 }, (err, r) => err ? reject(err) : resolve(r));
+        ssbClient.publish({ type: 'forum-invite', target: forumId, ek, salt: inviteSalt, codeHash: cryptoModel.hashInviteCode(code, inviteSalt), multi: 1 }, (err, r) => err ? reject(err) : resolve(r));
       });
       await new Promise((resolve, reject) => {
         ssbClient.publish({ type: 'forum-open-invite', v: 1, target: forumId, code, inviteKey: invitePub.key, by: userId, createdAt: new Date().toISOString() }, (err) => err ? reject(err) : resolve());
@@ -406,7 +406,7 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
     },
 
     joinByInvite: async (code) => {
-      if (!ownCrypto || !tribeCrypto) throw new Error('Forum crypto unavailable');
+      if (!ownCrypto || !cryptoModel) throw new Error('Forum crypto unavailable');
       const ssbClient = await openSsb();
       const messages = await readForumLog();
       const authorOf = authorsByKey(messages);
@@ -418,12 +418,12 @@ module.exports = ({ cooler, tribeCrypto, forumCrypto }) => {
         if (invTomb.has(m.key)) continue;
         if (!authorOf.get(c.target) || authorOf.get(c.target) !== m.value.author) continue;
         try {
-          const hash = tribeCrypto.hashInviteCode(code, c.salt);
+          const hash = cryptoModel.hashInviteCode(code, c.salt);
           if (hash === c.codeHash) { matched = c; break; }
         } catch (_) {}
       }
       if (!matched) throw new Error('Invalid or expired invite code');
-      const forumKey = tribeCrypto.decryptFromInvite(matched.ek, code, matched.salt);
+      const forumKey = cryptoModel.decryptFromInvite(matched.ek, code, matched.salt);
       if (!forumKey) throw new Error('Could not decrypt invite');
       ownCrypto.addNewKey(matched.target, forumKey);
       return { ok: true, forumId: matched.target };

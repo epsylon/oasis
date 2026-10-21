@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderContentActions, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
@@ -88,18 +88,20 @@ const renderCourseCard = (course, filter, params = {}) => {
   const url = `/school/course/${encodeURIComponent(course.id)}`
   const isOwn = String(course.author) === String(userId)
   return div({ class: "tribe-card" },
-    div({ class: "card-header activity-card-header" },
-      span(),
-      renderContentActions(course.id, url, {
-        spread: (params.spreadMap && params.spreadMap.get(course.id)) || null,
-        author: course.author,
-        favKind: 'school',
-        isFavorite: course.isFavorite,
-        reportTitle: course.title,
-        returnTo: buildReturnTo(filter, params),
-        deleteAction: isOwn ? contentDeleteAction('schoolCourse', course.id) : undefined
-      })
-    ),
+    renderCardTop(course.id, url, {
+      date: course.createdAt,
+      chips: [renderCourseChips(course, params.subscriptions && (String(course.author) === String(userId) || safeArr(course.students).includes(userId)) ? { in: params.subscriptions.mine.has(course.rootId || course.id) || String(course.author) === String(userId) } : null)],
+      spread: (params.spreadMap && params.spreadMap.get(course.id)) || null,
+      author: course.author,
+      favKind: 'school',
+      isFavorite: course.isFavorite,
+      reportTitle: course.title,
+      returnTo: buildReturnTo(filter, params),
+      deleteAction: isOwn ? contentDeleteAction('schoolCourse', course.id) : undefined
+    }),
+    course.startDate ? div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.schoolStartDate}: ${moment(course.startDate).format("YYYY/MM/DD HH:mm")}`)
+    ) : null,
     div({ class: "tribe-card-image-wrapper" },
       a({ href: url },
         renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-card-hero-image' })
@@ -108,14 +110,11 @@ const renderCourseCard = (course, filter, params = {}) => {
     div({ class: "tribe-card-body" },
       h2({ class: "tribe-card-title" }, a({ href: url }, course.title)),
       renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
-      renderCourseChips(course, params.subscriptions && (String(course.author) === String(userId) || safeArr(course.students).includes(userId)) ? { in: params.subscriptions.mine.has(course.rootId || course.id) || String(course.author) === String(userId) } : null),
       course.description ? p({ class: "tribe-card-description" }, ...renderStyledText(course.description)) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.schoolStudents}: ${course.students.length}`)
       ),
-      course.startDate ? div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.schoolStartDate}: ${moment(course.startDate).format("YYYY/MM/DD HH:mm")}`)
-      ) : null
+      null
     )
   )
 }
@@ -397,43 +396,45 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
   const nextLesson = isStudent ? lessons.find(l => !l.locked && !l.completed) : null
 
   const courseSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(course.id, returnTo, { spread: params.spreads || null, author: course.author, favKind: 'school', isFavorite: course.isFavorite, returnTo, reportTitle: course.title, deleteAction: isTeacher ? contentDeleteAction('schoolCourse', course.id) : undefined })
-    ),
+    renderCardTop(course.id, returnTo, { arrow: false,
+      date: course.createdAt,
+      chips: [
+        course.visibility === "INVITE" ? renderStateChip("whole", "\uD83D\uDD11", i18n.chatStatusInviteOnly) : null,
+        course.status === "CLOSED"
+          ? renderStateChip("closed", "✗", i18n.schoolClosed)
+          : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
+        renderPriceChip(course),
+        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('school', course.title, course.id) : null),
+        courseApproved ? renderStateChip("mutuals", "🎓", i18n.schoolApproved) : null,
+        params.subscription && (isTeacher || isStudent)
+          ? ((isTeacher || params.subscription.subscribed === true)
+              ? renderStateChip("mutuals", "\u2709", i18n.subscriptionOn)
+              : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
+          : null
+      ],
+      bylineExtra: [renderEditedChip(course.id, course.rootId)],
+      spread: params.spreads || null,
+      author: course.author,
+      favKind: 'school',
+      isFavorite: course.isFavorite,
+      returnTo,
+      reportTitle: course.title,
+      deleteAction: isTeacher ? contentDeleteAction('schoolCourse', course.id) : undefined
+    }),
     h2({ class: "tribe-card-title" }, course.title),
     renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
-    div({ class: "card-chips-row" },
-      course.visibility === "INVITE" ? renderStateChip("whole", "\uD83D\uDD11", i18n.chatStatusInviteOnly) : null,
-      course.status === "CLOSED"
-        ? renderStateChip("closed", "✗", i18n.schoolClosed)
-        : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
-      renderPriceChip(course),
-      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('school', course.title, course.id) : null),
-      isTeacher && canClearnet ? renderClearnetSwitch('school', course.rootId || course.id, isClearnet) : null,
-      courseApproved ? renderStateChip("mutuals", "🎓", i18n.schoolApproved) : null,
-      params.subscription && (isTeacher || isStudent)
-        ? ((isTeacher || params.subscription.subscribed === true)
-            ? renderStateChip("mutuals", "\u2709", i18n.subscriptionOn)
-            : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
-        : null,
-      renderEditedChip(course.id, course.rootId)
-    ),
+    isTeacher && canClearnet ? renderClearnetSwitch('school', course.rootId || course.id, isClearnet) : null,
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
+    renderDetailShare(course.id, returnTo, course.title),
     course.description ? p({ class: "tribe-side-description" }, ...renderStyledText(course.description)) : null,
-    table({ class: "tribe-info-table" },
-      tr(
-        td({ class: "tribe-info-label" }, i18n.schoolCreatedAt),
-        td({ class: "tribe-info-value", colspan: "3" }, moment(course.createdAt).format("YYYY/MM/DD HH:mm"))
-      ),
-      course.startDate ? tr(
-        td({ class: "tribe-info-label" }, i18n.schoolStartDate),
-        td({ class: "tribe-info-value", colspan: "3" }, moment(course.startDate).format("YYYY/MM/DD HH:mm"))
-      ) : null,
-      tr(
-        td({ class: "tribe-info-label" }, i18n.schoolTeacher),
-        td({ class: "tribe-info-value", colspan: "3" }, userLink(course.author))
-      )
-    ),
+    course.startDate
+      ? table({ class: "tribe-info-table" },
+          tr(
+            td({ class: "tribe-info-label" }, i18n.schoolStartDate),
+            td({ class: "tribe-info-value", colspan: "3" }, moment(course.startDate).format("YYYY/MM/DD HH:mm"))
+          )
+        )
+      : null,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.schoolStudents}: ${course.students.length}`)
     ),
@@ -743,8 +744,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
             isStudent && !isTeacher
               ? renderOpinionsVoting('/school/opinions', course.id, course.opinions, returnTo, course.opinions_inhabitants)
               : null,
-            null
-          ),
+            null),
           Array.isArray(params.comments)
             ? renderCommentsSection({ action: `/school/course/${encodeURIComponent(course.rootId || course.id)}/comments`, comments: params.comments, returnTo: `/school/course/${encodeURIComponent(course.rootId || course.id)}` })
             : null
@@ -838,31 +838,29 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
   const lessonUrl = `/school/lesson/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}`
 
   const lessonSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(lesson.id, lessonUrl, {
-        author: lesson.author || course.author,
-        reportTitle: lesson.title || course.title,
-        returnTo: courseUrl,
-        deleteAction: String(lesson.author || course.author) === String(userId) ? `/school/lesson/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` : undefined
-      })
-    ),
+    renderCardTop(lesson.id, lessonUrl, { arrow: false,
+      date: lesson.createdAt,
+      chips: [renderCourseChips(course)],
+      author: lesson.author || course.author,
+      reportTitle: lesson.title || course.title,
+      returnTo: courseUrl,
+      deleteAction: String(lesson.author || course.author) === String(userId) ? `/school/lesson/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` : undefined
+    }),
     h2({ class: "tribe-card-title" }, a({ href: courseUrl }, course.title)),
-    renderCourseChips(course),
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    table({ class: "tribe-info-table" },
-      lesson.unit ? tr(
-        td({ class: "tribe-info-label" }, i18n.schoolLessonUnit),
-        td({ class: "tribe-info-value", colspan: "3" }, lesson.unit)
-      ) : null,
-      lesson.sessionDate ? tr(
-        td({ class: "tribe-info-label" }, i18n.schoolSessionDate),
-        td({ class: "tribe-info-value", colspan: "3" }, moment(lesson.sessionDate).format("YYYY/MM/DD HH:mm"))
-      ) : null,
-      tr(
-        td({ class: "tribe-info-label" }, i18n.schoolTeacher),
-        td({ class: "tribe-info-value", colspan: "3" }, userLink(course.author))
-      )
-    ),
+    renderDetailShare(lesson.id, lessonUrl, lesson.title || course.title),
+    lesson.unit || lesson.sessionDate
+      ? table({ class: "tribe-info-table" },
+          lesson.unit ? tr(
+            td({ class: "tribe-info-label" }, i18n.schoolLessonUnit),
+            td({ class: "tribe-info-value", colspan: "3" }, lesson.unit)
+          ) : null,
+          lesson.sessionDate ? tr(
+            td({ class: "tribe-info-label" }, i18n.schoolSessionDate),
+            td({ class: "tribe-info-value", colspan: "3" }, moment(lesson.sessionDate).format("YYYY/MM/DD HH:mm"))
+          ) : null
+        )
+      : null,
     isStudent
       ? div({ class: "tribe-side-actions" },
           form({ method: "POST", action: `/school/lesson/complete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` },
@@ -922,7 +920,8 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
             button({ type: "submit" }, i18n.schoolAddMaterial)
           )
         )
-      : null
+      : null,
+    null
   )
 
   const tpl = template(

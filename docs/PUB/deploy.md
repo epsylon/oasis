@@ -150,6 +150,7 @@ All admin actions go through the launcher itself, which talks to the running Oas
 ./oasis.sh join <invite>           # join another PUB with its invite code
 ./oasis.sh status                  # peer / replication overview
 ./oasis.sh gossip                  # known peers
+./oasis.sh peers                   # peers connected right now
 ./oasis.sh hops [N]                # show or set how far this PUB replicates
 ```
 

@@ -4,7 +4,7 @@ const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink }
 
 const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip, renderContentActions, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -42,6 +42,15 @@ const renderDocumentCommentsSection = (documentKey, rootId, comments = [], retur
   });
 };
 
+const renderDocumentUpdated = (doc) => {
+  const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
+  const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
+  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
+  return showUpdated
+    ? span({ class: "votations-comment-date" }, `${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm")}`)
+    : null;
+};
+
 const renderDocumentList = exports.renderDocumentList = (documents, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
@@ -49,54 +58,38 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
     ? documents.map((doc) => {
         const commentCount = typeof doc.commentCount === "number" ? doc.commentCount : 0;
         const title = safeText(doc.title);
+        const href = `/documents/${encodeURIComponent(doc.key)}`;
 
         const isOwn = doc.author && String(doc.author) === String(userId);
-        const headerActions = typeof params.headerActions === "function"
-          ? params.headerActions(doc)
+        const byline = {
+          author: doc.author,
+          date: doc.createdAt,
+          chips: [
+            doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null,
+            renderLicenseChip(doc.license),
+            ...(typeof params.titleChips === "function" ? params.titleChips(doc) : []),
+            renderLifespanChip(doc.lifetime, i18n)
+          ],
+          bylineExtra: [renderDocumentUpdated(doc)]
+        };
+        const header = typeof params.headerActions === "function"
+          ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(doc))
           : doc.tribeOrigin
-            ? renderContentActions(null, doc.tribeOrigin.href)
-            : renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, { spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, author: doc.author, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title, deleteAction: isOwn ? contentDeleteAction('document', doc.key) : undefined, returnTo });
-        const titleHref = typeof params.headerActions === "function" ? null : doc.tribeOrigin ? doc.tribeOrigin.href : `/documents/${encodeURIComponent(doc.key)}`;
-        const engagement = typeof params.engagement === "function"
-          ? params.engagement(doc)
-          : doc.tribeOrigin ? null : renderEngagement(doc.key,
-            renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
-            renderCommentsLink({ href: `/documents/${encodeURIComponent(doc.key)}`, count: commentCount })
-          );
+            ? renderCardTop(doc.key, doc.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(doc.key)) || null, reportTitle: doc.title })
+            : renderCardTop(doc.key, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title, deleteAction: isOwn ? contentDeleteAction('document', doc.key) : undefined, returnTo });
+        const titleHref = typeof params.headerActions === "function" ? null : doc.tribeOrigin ? doc.tribeOrigin.href : href;
+        const engagement = typeof params.engagement === "function" ? params.engagement(doc) : null;
         return div(
           { class: "trending-card document-card" + (isOwn ? " own-content" : "") },
-          div(
-            { class: "card-header activity-card-header" },
-            span(),
-            headerActions
-          ),
+          header,
           div(
             { class: "card-section document-card-body" },
-            div({ class: "shop-title-row" }, title ? h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title) : null, doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null, renderLicenseChip(doc.license), ...(typeof params.titleChips === "function" ? params.titleChips(doc) : [])),
-            doc.lifetime ? div({ class: "card-chips-row" }, renderLifespanChip(doc.lifetime, i18n)) : null,
+            title ? div({ class: "shop-title-row" }, h2(titleHref ? a({ href: titleHref, class: "card-title-link" }, title) : title)) : null,
             doc?.url
               ? renderPdfDocument(blobUrlOf(doc.url), { title: doc.title })
               : p(i18n.documentNoFile),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(doc) : []),
-            engagement,
-            br(),
-            (() => {
-              const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
-              const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
-              const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-              return p(
-                { class: "card-footer" },
-                span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm")}`),
-                userLink(doc.author),
-                showUpdated
-                  ? span(
-                      { class: "votations-comment-date" },
-                      ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm")}`
-                    )
-                  : null
-              );
-            })()
+            engagement
           )
         );
       })
@@ -249,28 +242,30 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   }
 
   const tagsNode = renderTags(doc.tags);
+  const href = `/documents/${encodeURIComponent(doc.key)}`;
 
-  const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(doc.key, `/documents/${encodeURIComponent(doc.key)}`, {
+  const docSide = div({ class: "tribe-side" },
+    renderCardTop(doc.key, href, { arrow: false,
       author: doc.author,
+      date: doc.createdAt,
+      chips: [
+        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('documents', doc.title, doc.key) : null),
+        renderLicenseChip(doc.license),
+        ...chips
+      ],
+      bylineExtra: [renderEditedChip(doc.key, doc.rootId), renderDocumentUpdated(doc)],
       favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title },
       isFavorite: doc.isFavorite,
       spread: params.spreads || null,
       returnTo: buildReturnTo(filter, { q, sort }),
       reportTitle: doc.title,
       deleteAction: isAuthor ? contentDeleteAction('document', doc.key) : undefined
-    })
-  );
-
-  const docSide = div({ class: "tribe-side" },
+    }),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('documents', doc.title, doc.key) : null),
-      isAuthor ? renderClearnetSwitch('documents', doc.rootId || doc.key, isClearnet) : null,
-      renderLicenseChip(doc.license),
-      renderEditedChip(doc.key, doc.rootId)
+      isAuthor ? renderClearnetSwitch('documents', doc.rootId || doc.key, isClearnet) : null
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    renderDetailShare(doc.key, href, doc.title),
     safeText(doc.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(doc.description))
       : null,
@@ -279,31 +274,12 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   );
 
   const docMain = div({ class: "tribe-main" },
-    detailActions,
     doc?.url
       ? renderPdfDocument(blobUrlOf(doc.url), { title: doc.title, preview: true })
       : p(i18n.documentNoFile),
-    (() => {
-      const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
-      const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
-      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-      return p(
-        { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(doc.createdAt).format("YYYY/MM/DD HH:mm")}`),
-        userLink(doc.author),
-        showUpdated
-          ? span(
-              { class: "votations-comment-date" },
-              ` | ${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm")}`
-            )
-          : null
-      );
-    })(),
     renderEngagement(doc.key,
       renderOpinionsVoting('/documents/opinions', doc.key, doc.opinions, returnTo, doc.opinions_inhabitants),
-      renderDocumentCommentsSection(doc.key, doc.rootId || doc.key, comments, returnTo)
-    )
+      renderDocumentCommentsSection(doc.key, doc.rootId || doc.key, comments, returnTo))
   );
 
   const tpl = template(

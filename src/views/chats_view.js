@@ -1,5 +1,5 @@
-const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, ul, li, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderSpreadButton, renderContentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, paged } = require("./main_views")
+const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
+const { template, i18n, userLink, renderContentActions, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -84,17 +84,17 @@ const renderChatCard = exports.renderChatCard = (chat, filter, params = {}) => {
   const href = `/chats/${encodeURIComponent(chat.key)}`
 
   return div({ class: "tribe-card" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(chat.key, href, {
-        spread: params.spread || null,
-        author: chat.author,
-        favKind: 'chats',
-        isFavorite: chat.isFavorite,
-        returnTo: buildReturnTo(filter, params),
-        reportTitle: chat.title,
-        deleteAction: String(chat.author) === String(userId) ? contentDeleteAction('chat', chat.key) : undefined
-      })
-    ),
+    renderCardTop(chat.key, href, {
+      date: chat.createdAt,
+      chips,
+      spread: params.spread || null,
+      author: chat.author,
+      favKind: 'chats',
+      isFavorite: chat.isFavorite,
+      returnTo: buildReturnTo(filter, params),
+      reportTitle: chat.title,
+      deleteAction: String(chat.author) === String(userId) ? contentDeleteAction('chat', chat.key) : undefined
+    }),
     div({ class: "tribe-card-image-wrapper" },
       a({ href: `/chats/${encodeURIComponent(chat.key)}#chat-latest` },
         renderMediaBlob(chat.image, "/assets/images/default-avatar.png", { class: "tribe-card-hero-image" })
@@ -106,11 +106,11 @@ const renderChatCard = exports.renderChatCard = (chat, filter, params = {}) => {
           a({ href: `/chats/${encodeURIComponent(chat.key)}#chat-latest` }, chat.title || i18n.chatUntitled)
         )
       ),
-      chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
       chat.description ? p({ class: "tribe-card-description" }, chat.description) : null,
       div({ class: "tribe-card-members" },
         span({ class: "tribe-members-count" }, `${i18n.chatParticipants}: ${safeArr(chat.members).length}`)
-      )
+      ),
+      null
     )
   )
 }
@@ -397,8 +397,8 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
       : null
   ].filter(Boolean)
   const chatSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header" },
-      renderContentActions(chat.key, `/chats/${encodeURIComponent(chat.key)}`, { spread: params.spreads || null, author: chat.author, favKind: 'chats', isFavorite: chat.isFavorite, returnTo: params.returnTo, reportTitle: chat.title, deleteAction: isAuthor ? contentDeleteAction('chat', chat.key) : undefined })
+    div({ class: "card-header activity-card-header card-top" },
+      renderContentActions(chat.key, `/chats/${encodeURIComponent(chat.key)}`, { menu: true, arrow: false, spread: params.spreads || null, author: chat.author, favKind: 'chats', isFavorite: chat.isFavorite, returnTo: params.returnTo, reportTitle: chat.title, deleteAction: isAuthor ? contentDeleteAction('chat', chat.key) : undefined })
     ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, chat.title || i18n.chatUntitled)

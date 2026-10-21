@@ -1,8 +1,8 @@
-const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td, progress, strong, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td, progress, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderLicenseSelect, renderLicenseChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderSpreadButton, renderEcoTax, renderLifespanChip , renderSpreadEditWarning, renderContentActions, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged , formatSize, renderMediaLockNote, renderEditedChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -354,30 +354,38 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(torrentObj.tags);
+  const href = `/torrents/${encodeURIComponent(torrentObj.key)}`;
+  const createdTs = torrentObj.createdAt ? new Date(torrentObj.createdAt).getTime() : NaN;
+  const updatedTs = torrentObj.updatedAt ? new Date(torrentObj.updatedAt).getTime() : NaN;
+  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
-  const detailActions = div({ class: "card-header activity-card-header" },
-    renderContentActions(torrentObj.key, `/torrents/${encodeURIComponent(torrentObj.key)}`, {
-      spreadTitle: i18n.seedAction,
+  const torrentSide = div({ class: "tribe-side" },
+    renderCardTop(torrentObj.key, href, { arrow: false,
       author: torrentObj.author,
+      date: torrentObj.createdAt,
+      chips: [
+        torrentObj.tribeId && torrentObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
+        clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('torrents', torrentObj.title, torrentObj.key) : null) : null,
+        torrentObj.tribeId ? null : renderLicenseChip(torrentObj.license),
+        ...chips
+      ],
+      bylineExtra: [
+        renderEditedChip(torrentObj.key, torrentObj.rootId),
+        showUpdated ? span({ class: "votations-comment-date" }, `${i18n.torrentUpdatedAt}: ${moment(torrentObj.updatedAt).format("YYYY/MM/DD HH:mm")}`) : null
+      ],
+      spreadTitle: i18n.seedAction,
       favKind: 'torrents',
       isFavorite: torrentObj.isFavorite,
       spread: params.spreads || null,
       returnTo,
       reportTitle: torrentObj.title,
       deleteAction: String(torrentObj.author) === String(userId) ? contentDeleteAction('torrent', torrentObj.key) : undefined
-    })
-  );
-
-  const torrentSide = div({ class: "tribe-side" },
+    }),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
-      torrentObj.tribeId && torrentObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
-      clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('torrents', torrentObj.title, torrentObj.key) : null) : null,
-      torrentObj.tribeId ? null : renderLicenseChip(torrentObj.license),
-      clearnetAllowed && isAuthor ? renderClearnetSwitch('torrents', torrentObj.rootId || torrentObj.key, isClearnet) : null,
-      renderEditedChip(torrentObj.key, torrentObj.rootId)
+      clearnetAllowed && isAuthor ? renderClearnetSwitch('torrents', torrentObj.rootId || torrentObj.key, isClearnet) : null
     ),
-    chips.length ? div({ class: "card-chips-row" }, ...chips) : null,
+    renderDetailShare(torrentObj.key, href, torrentObj.title),
     safeText(torrentObj.description)
       ? p({ class: "tribe-side-description" }, ...renderStyledText(torrentObj.description))
       : null,
@@ -386,7 +394,6 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
   );
 
   const torrentMain = div({ class: "tribe-main" },
-    detailActions,
     torrentObj.url && torrentObj.url.startsWith("&")
       ? div({ class: "torrent-download" },
           renderOasisDownload(torrentObj, params),
@@ -414,27 +421,9 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
           )
         )
       : p(i18n.torrentNoFile),
-    (() => {
-      const createdTs = torrentObj.createdAt ? new Date(torrentObj.createdAt).getTime() : NaN;
-      const updatedTs = torrentObj.updatedAt ? new Date(torrentObj.updatedAt).getTime() : NaN;
-      const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-
-      return p(
-        { class: "card-footer" },
-        span({ class: "date-link" }, `${moment(torrentObj.createdAt).format("YYYY/MM/DD HH:mm")}`),
-        userLink(torrentObj.author),
-        showUpdated
-          ? span(
-              { class: "votations-comment-date" },
-              ` | ${i18n.torrentUpdatedAt}: ${moment(torrentObj.updatedAt).format("YYYY/MM/DD HH:mm")}`
-            )
-          : null
-      );
-    })(),
-    torrentObj.tribeId ? null : renderEngagement(torrentObj.key,
-      renderOpinionsVoting('/torrents/opinions', torrentObj.key, torrentObj.opinions, returnTo, torrentObj.opinions_inhabitants),
-      renderTorrentCommentsSection(torrentObj.key, comments, returnTo)
-    )
+    renderEngagement(torrentObj.key,
+      torrentObj.tribeId ? null : renderOpinionsVoting('/torrents/opinions', torrentObj.key, torrentObj.opinions, returnTo, torrentObj.opinions_inhabitants),
+      torrentObj.tribeId ? null : renderTorrentCommentsSection(torrentObj.key, comments, returnTo))
   );
 
   return template(
