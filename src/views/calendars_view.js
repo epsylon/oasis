@@ -168,7 +168,7 @@ const renderCreateForm = (calendarToEdit, params) => {
           ]
         : null,
       showClearnet ? renderClearnetSelector(draft.clearnet === true || String(draft.clearnet || "") === "1", i18n) : null,
-      button({ type: "submit", class: "create-button" }, isEdit ? (i18n.calendarUpdate || "Update") : (i18n.calendarCreate || "Create Calendar"))
+      button({ type: "submit", class: "create-button" }, isEdit ? (i18n.calendarUpdate || "Edit") : (i18n.calendarCreate || "Create Calendar"))
     )
   )
 }
@@ -367,7 +367,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           form({ method: "GET", action: "/calendars" },
             input({ type: "hidden", name: "filter", value: "edit" }),
             input({ type: "hidden", name: "id", value: calendar.rootId }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.calendarUpdate || "Update")
+            button({ type: "submit", class: "tribe-action-btn" }, i18n.calendarUpdate || "Edit")
           )
         )
       : null,

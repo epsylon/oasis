@@ -178,12 +178,12 @@ const renderCreateForm = (mode, aiModOn) => {
 
 const renderEditForm = (entry) => {
   return div({ class: "div-center audio-form" },
-    h2(i18n.logsEditTitle || 'Update Log'),
+    h2(i18n.logsEditTitle || 'Edit Log'),
     form({ method: "POST", action: `/logs/update/${encodeURIComponent(entry.key)}` },
       textarea({ maxlength: "5000", name: "text", rows: "8", required: true }, entry.text || ''),
       input({ type: "hidden", name: "label", value: entry.label || '' }),
       br(), br(),
-      button({ type: "submit", class: "create-button" }, i18n.logsUpdateButton || 'Update')
+      button({ type: "submit", class: "create-button" }, i18n.logsUpdateButton || 'Edit')
     )
   );
 };
@@ -202,7 +202,7 @@ const renderDetail = (entry) => {
         button({ type: "submit", class: "tribe-action-btn" }, i18n.generatePdf)
       ),
       form({ method: "GET", action: `/logs/edit/${encodeURIComponent(entry.key)}` },
-        button({ type: "submit", class: "tribe-action-btn" }, i18n.logsEdit || 'Update')
+        button({ type: "submit", class: "tribe-action-btn" }, i18n.logsEdit || 'Edit')
       ),
       form({ method: "POST", action: `/logs/delete/${encodeURIComponent(entry.key)}` },
         button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.logsDelete || 'Delete')

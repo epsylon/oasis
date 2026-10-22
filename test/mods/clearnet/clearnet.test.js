@@ -1,4 +1,4 @@
-const { ok, eq } = require('../../helpers/assert');
+const { ok, eq, notOk } = require('../../helpers/assert');
 
 describe('clearnet: the visitor language', (t) => {
   t('every public page is rendered in the negotiated language and declares it', async () => {
@@ -92,13 +92,22 @@ describe('clearnet: shops and courses read as they were written', (t) => {
   t('each product of a public shop opens its own page, with its picture, text and price', async () => {
     const v = require('../../../src/views/shops_view');
     const shop = { title: 'Quill', key: '%s1.sha256', rootId: '%s1.sha256', author: '@a', createdAt: new Date().toISOString() };
-    const product = { key: '%p1.sha256', rootId: '%p1.sha256', shopId: '%s1.sha256', title: 'Pen', description: '**good** pen\nsecond line', image: '&i.sha256', price: '10', stock: 2 };
+    const fs = require('fs'); const path = require('path'); const crypto = require('crypto');
+    const picture = crypto.randomBytes(32);
+    const blobId = `&${picture.toString('base64')}.sha256`;
+    const hex = picture.toString('hex');
+    const blobFile = path.join(require('../../../src/server/ssb_config').path, 'blobs', 'sha256', hex.slice(0, 2), hex);
+    fs.mkdirSync(path.dirname(blobFile), { recursive: true });
+    fs.writeFileSync(blobFile, 'jpeg');
+    const product = { key: '%p1.sha256', rootId: '%p1.sha256', shopId: '%s1.sha256', title: 'Pen', description: '**good** pen\nsecond line', image: blobId, price: '10', stock: 2 };
     const page = String(await v.clearnetShopView(shop, [product]));
     const link = (page.match(/class="cn-product-cover" href="([^"]+)"/) || [])[1] || '';
     ok(/^\/c\/shops\/[^/]+\/product\//.test(link), 'the whole card links to the product');
     const own = String(await v.clearnetProductView(shop, product));
     ok(own.includes('Pen') && own.includes('<strong>good</strong>') && own.includes('10.000000 ECO'), 'its page shows the product as written');
-    ok(own.includes('/c/blob/'), 'and its picture');
+    ok(own.includes('/c/blob/'), 'and its picture, since the node has it');
+    const later = String(await v.clearnetProductView(shop, { ...product, image: `&${crypto.randomBytes(32).toString('base64')}.sha256` }));
+    notOk(later.includes('/c/blob/'), 'a picture the node does not have yet is simply not shown');
   });
 
   t('the lessons of a public course keep their line breaks and their format', async () => {
@@ -106,5 +115,37 @@ describe('clearnet: shops and courses read as they were written', (t) => {
     if (typeof clearnetCourseView !== 'function') return;
     const html = String(await clearnetCourseView({ id: '%c.sha256', title: 'Course', description: 'd', students: [], author: '@a' }, [{ title: 'One', text: 'first line\nsecond **line**' }]));
     ok(/first line<br\s*\/?>\s*second <strong>line<\/strong>/.test(html), 'breaks and bold survive');
+  });
+});
+
+describe('clearnet: media that has not arrived', (t) => {
+  t('a picture, a file or a PDF whose blob is not on the node is left out of the page, text and the rest stay', () => {
+    const { ok, notOk } = require('../../helpers/assert');
+    const { renderRichText, blobUrl, renderClearnetPdfFrame } = require('../../../src/views/clearnet_view');
+    const missing = '&' + 'A'.repeat(43) + '=.sha256';
+    ok(renderClearnetPdfFrame(blobUrl(missing), 'acta.pdf') === '', 'not even the PDF viewer is shown for a document whose blob has not arrived');
+    const html = renderRichText(`Hola ![image:foto.jpg](${missing}) adiós [pdf:acta.pdf](${missing}) fin https://example.org`);
+    ok(html.includes('Hola') && html.includes('adiós') && html.includes('fin'), 'the text is kept');
+    notOk(/<img|<object|foto\.jpg|acta\.pdf/.test(html), 'the missing media and its names are not shown');
+    ok(html.includes('example.org'), 'links are kept');
+    notOk(blobUrl(missing), 'no clearnet address is given for a blob the node does not have');
+  });
+});
+
+describe('clearnet: search engines', (t) => {
+  t('every public page carries its canonical address and absolute Open Graph tags', () => {
+    const { renderClearnetPage } = require('../../../src/views/clearnet_view');
+    const { requestScope } = require('../../../src/models/typed_log');
+    const render = (scope, opts) => requestScope.run({ capped: false, limit: 0, ...scope }, () => String(renderClearnetPage({ title: 'x', body: '<p>x</p>', ...opts })));
+    const hub = render({ path: '/c', query: 'type=posts&lang=fr', cnBase: 'https://hub.example' }, {});
+    ok(hub.includes('<link rel="canonical" href="https://hub.example/c?type=posts"/>'), 'the canonical keeps the filter and drops the language');
+    ok(hub.includes('<meta property="og:url" content="https://hub.example/c?type=posts"/>'), 'og:url matches the canonical');
+    ok(hub.includes('<meta property="og:type" content="website"/>') && hub.includes('<meta name="twitter:card" content="summary"/>'), 'default page type and card');
+    const item = render({ path: '/c/audios/%25abc', query: '', cnBase: 'https://hub.example', cnCanonical: '/c/audios/my-song-abc' }, { ogImage: '/c/blob/%26x.sha256', ogType: 'article' });
+    ok(item.includes('<link rel="canonical" href="https://hub.example/c/audios/my-song-abc"/>'), 'an item opened by id points at its slug address');
+    ok(item.includes('<meta property="og:image" content="https://hub.example/c/blob/%26x.sha256"/>'), 'og:image is absolute');
+    ok(item.includes('<meta property="og:type" content="article"/>') && item.includes('summary_large_image'), 'article type and large card with a picture');
+    const local = render({ path: '/c', query: '' }, {});
+    notOk(local.includes('rel="canonical"') || local.includes('og:url'), 'no canonical is invented when the public address is unknown');
   });
 });

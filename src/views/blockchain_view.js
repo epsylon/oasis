@@ -340,7 +340,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
   const isDatagram = viewMode === 'datagram';
 
   const blockContent = restricted
-    ? div(
+    ? div({ class: 'block-detail' },
         div({ class: 'block-single' },
           div({ class: 'block-row block-row--meta' },
             span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockID}:`),
@@ -361,7 +361,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
       )
     : isDatagram
       ? renderBlockDiagram([block], qs)
-      : div(
+      : div({ class: 'block-detail' },
           div({ class: 'block-single' },
             div({ class: 'block-row block-row--meta' },
               span({ class: 'blockchain-card-label' }, `${i18n.blockchainBlockID}:`),
@@ -372,7 +372,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
               span({ class: 'blockchain-card-value' }, blockLabel(block).toUpperCase())
             ),
             div({ class: 'block-row block-row--meta' },
-              span({ class: 'blockchain-card-label' }, `${i18n.oasisIdLabel || 'OasisID'}:`),
+              span({ class: 'blockchain-card-label' }, `${i18n.oasisIdLabel || 'Oasis ID'}:`),
               a({ href:`/author/${encodeURIComponent(block.author)}`, class:'block-author user-link' }, block.author)
             )
           ),
@@ -429,7 +429,7 @@ const renderSingleBlockView = (block, filter = 'recent', userId, search = {}, vi
           button({ type:'submit', class:'filter-btn' }, `← ${i18n.blockchainBack}`)
         ),
         !block.isTombstoned && !block.isReplaced && getViewDetailsAction(block.type, block) ?
-          a({ href:getViewDetailsAction(block.type, block), class:'btn-singleview btn-content', title:i18n.visitContent }, renderIcon('open'))
+          a({ href:getViewDetailsAction(block.type, block), class:'filter-btn' }, `${i18n.visitContent} →`)
         : (block.isTombstoned || block.isReplaced) ?
           div({ class: 'deleted-label' },
             i18n.blockchainContentDeleted || "This content has been deleted."
@@ -495,7 +495,6 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
 	),
       div({ id: 'inspect', class: 'blockexplorer-inspect' },
         h3(i18n.bankTaxesLookupTitle || 'Inspect a block'),
-        p(i18n.bankTaxesLookupNote || 'Enter a block ID to look it up in your local feed. The inspector shows the block ID (linked to its detail page), its author, its content type, its size in bytes, its carbon footprint and its ECO tax in ECO.'),
         form({ method: 'GET', action: '/blockexplorer', class: 'blockexplorer-search-form' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           div({ class: 'blockexplorer-search-row' },

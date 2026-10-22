@@ -278,7 +278,7 @@ exports.singlePadView = async (pad, entries, params) => {
       ? form({ method: "GET", action: "/pads" },
           input({ type: "hidden", name: "filter", value: "edit" }),
           input({ type: "hidden", name: "id", value: pad.rootId }),
-          button({ type: "submit", class: "update-btn" }, i18n.padUpdate || "Update")
+          button({ type: "submit", class: "update-btn" }, i18n.padUpdate || "Edit")
         )
       : null
   ].filter(Boolean)

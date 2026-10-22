@@ -182,6 +182,8 @@ function renderStyledText(value, opts = {}) {
       result.push(em(...inner(m.body)));
     } else if (m.type === 'inline-code') {
       result.push(code({ class: 'rt-code' }, m.body));
+    } else if (m.type.startsWith('blob-') && typeof opts.blobAvailable === 'function' && !opts.blobAvailable(m.blob)) {
+      result.push('');
     } else if (m.type === 'blob-image') {
       const imageSrc = blobHref(m.blob);
       if (opts.zoomImages) {

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -140,10 +140,12 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo, opts =
   const dateText = e.date ? moment(e.date).format("YYYY/MM/DD HH:mm") : "";
 
   const isOwn = e.organizer && String(e.organizer) === String(userId);
-  const byline = { author: e.organizer || e.author, date: e.createdAt, chips: chips.length ? [div({ class: "card-chips-row" }, ...chips)] : [] };
+  const byline = { author: e.organizer || e.author, date: e.createdAt, chips: e.scheduledAt ? [renderScheduledChip(e.scheduledAt)] : chips.length ? [div({ class: "card-chips-row" }, ...chips)] : [] };
   const detailHref = `/events/${encodeURIComponent(e.id)}?filter=${encodeURIComponent(currentFilter)}`;
   const cardTop = opts.headerActions !== undefined
     ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), opts.headerActions)
+    : e.scheduledAt
+      ? renderCardTop(e.id, detailHref, { ...byline, report: false, hide: false, arrow: opts.arrow, deleteAction: isOwn ? `/events/scheduled/delete/${encodeURIComponent(e.id)}` : undefined })
     : origin
       ? renderCardTop(e.id, href, { ...byline, spread: spreadInfo || null, reportTitle: e.title })
       : renderCardTop(e.id, detailHref, { ...byline, spread: spreadInfo || null, favKind: 'events', isFavorite: e.isFavorite, reportTitle: e.title, deleteAction: isOwn ? contentDeleteAction('event', e.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` });
@@ -308,7 +310,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
             h2({ class: "report-category-fixed" }, privacyLabel(editPrivacy)),
             form(
               {
-                action: currentFilter === "edit" ? `/events/update/${encodeURIComponent(eventId)}` : "/events/create",
+                action: currentFilter === "edit" && eventToEdit.scheduledAt ? `/events/scheduled/update/${encodeURIComponent(eventId)}` : currentFilter === "edit" ? `/events/update/${encodeURIComponent(eventId)}` : "/events/create",
                 method: "POST",
                 enctype: "multipart/form-data"
               },
@@ -390,7 +392,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 renderIntervalBlock({ min: minCreate }, editInterval, editIntervalUntil)
               ),
               br(),
-              showClearnet ? renderClearnetSelector(formData.clearnet === true || String(formData.clearnet || "") === "1", i18n) : null,
+              ...(currentFilter === "edit" && !eventToEdit.scheduledAt ? [] : [label(i18n.publishAtLabel), br(), input({ type: "datetime-local", name: "publishAt", min: moment().format("YYYY-MM-DDTHH:mm"), value: eventToEdit.scheduledAt ? moment(eventToEdit.scheduledAt).format("YYYY-MM-DDTHH:mm") : "", ...(eventToEdit.scheduledAt ? { required: true } : {}) }), br(), br()]),
               ...(currentFilter === "create" ? [
                 input({ type: "hidden", name: "addToCalendar", value: "0" }),
                 label(i18n.eventAddToCalendar || "Add to Calendar"),
@@ -399,6 +401,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 br(),
                 br()
               ] : []),
+              showClearnet ? renderClearnetSelector(formData.clearnet === true || String(formData.clearnet || "") === "1", i18n) : null,
               button({ type: "submit" }, currentFilter === "edit" ? i18n.eventUpdateButton : i18n.eventCreateButton)
             )
           )
@@ -410,6 +413,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
 };
 
 exports.singleEventView = async (event, filter, comments = [], params = {}) => {
+  if (event.scheduledAt) return template(event.title || i18n.eventsTitle, section(div({ class: "tags-header module-header-line" }, h2(i18n.eventsTitle), p(i18n.eventsDescription))), section(renderEventItem(event, filter, null, { arrow: false, bodyExtra: [String(event.organizer || event.author) === String(userId) ? form({ method: "GET", action: `/events/edit/${encodeURIComponent(event.id)}` }, button({ type: "submit", class: "update-btn" }, i18n.eventUpdateButton)) : null] })));
   const eventChipVisible = (mode) => eventChipFor(currentFilter, Array.isArray(params.censusList) ? params.censusList : null)(mode);
   const currentFilter = filter || "all";
   const commentCount = typeof event.commentCount === "number" ? event.commentCount : 0;

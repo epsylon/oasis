@@ -1189,25 +1189,30 @@ let clearnetIdForcedAt = 0;
 const clearnetIdFor = async (kind, param) => {
   let raw = String(param || '');
   if (!ssbRef.isMsg(raw)) { try { raw = decodeURIComponent(raw); } catch (_) {} }
-  if (!raw || /^[%&@]/.test(raw)) return raw;
-  const { clearnetShortId, clearnetSlugFor } = require('../views/main_views');
+  if (!raw) return raw;
+  const { clearnetShortId, clearnetSlugFor, clearnetItemHref, CLEARNET_MODULES } = require('../views/main_views');
+  const isId = /^[%&@]/.test(raw);
   const short = raw.split('-').pop().toLowerCase();
   const find = (index) => {
     const all = [];
     for (const entry of index) for (const it of (entry.items[kind] || [])) all.push(it);
-    const exact = all.find(it => clearnetSlugFor(it.title, it.id) === raw);
-    if (exact) return exact.id;
-    const byShort = all.find(it => clearnetShortId(it.id) === short);
-    if (byShort) return byShort.id;
-    const bySlug = all.find(it => it.slug && it.slug === raw);
-    return bySlug ? bySlug.id : null;
+    if (isId) return all.find(it => it.id === raw) || null;
+    return all.find(it => clearnetSlugFor(it.title, it.id) === raw)
+      || all.find(it => clearnetShortId(it.id) === short)
+      || all.find(it => it.slug && it.slug === raw)
+      || null;
   };
   let hit = find(await getClearnetIndex());
-  if (!hit && Date.now() - clearnetIdForcedAt >= 10000) {
+  if (!hit && !isId && Date.now() - clearnetIdForcedAt >= 10000) {
     clearnetIdForcedAt = Date.now();
     hit = find(await getClearnetIndex(true));
   }
-  return hit || raw;
+  if (hit) {
+    const mod = CLEARNET_MODULES.find(m => m.key === kind);
+    const store = require('../models/typed_log').requestScope.getStore();
+    if (mod && store) store.cnCanonical = clearnetItemHref(mod.modulePath || mod.key, hit.title, hit.id);
+  }
+  return hit ? hit.id : raw;
 };
 const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
     const MAX_PER_SECTION = max;
@@ -1304,30 +1309,18 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
   }
   if (wants('posts')) {
     try {
-      const ssbX = await cooler.open();
-      items.posts = await new Promise((resolve) => {
-        try {
-          pull(
-            ssbX.createUserStream({ id: feedId, reverse: true, limit: 200 }),
-            pull.filter(m => m && m.value && m.value.content && m.value.content.type === 'post' && !m.value.content.root),
-            pull.collect((err, arr) => {
-              if (err || !Array.isArray(arr)) return resolve([]);
-              resolve(arr.filter(m => { const ok = on('posts')({ key: m.key, ts: m.value && m.value.timestamp }); if (ok) notePublic(m.value.content); return ok; }).slice(0, MAX_PER_SECTION).map(m => {
-                const c = m.value.content;
-                const cleanText = String(c.text || '').replace(/<[^>]+>/g, '').replace(/!?\[(?:pdf|audio|video|image|file|torrent):[^\]]*\]\([^)]*\)/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
-                const firstLine = cleanText.split('\n').find(l => l.trim()) || '';
-                const postTs = tsOf(m.value.timestamp, c.createdAt);
-                return dated({
-                  id: m.key,
-                  title: c.contentWarning || firstLine.slice(0, 80) || 'Blog',
-                  image: null,
-                  snippet: c.contentWarning ? firstLine.slice(0, 200) : cleanText.slice(0, 200),
-                  pdfs: c.contentWarning ? [] : [...String(c.text || '').matchAll(/\[pdf:([^\]]*)\]\(\s*(&[A-Za-z0-9+/=]+\.sha256)\s*\)/g)].map(m => ({ name: m[1], blob: m[2] }))
-                }, postTs);
-              }));
-            })
-          );
-        } catch (_) { resolve([]); }
+      const blogs = (await blogModel.listByAuthor(feedId).catch(() => [])).filter(b => b && !b.scheduledAt);
+      items.posts = blogs.filter(b => { const ok = on('posts')({ key: b.id, ts: tsOf(b.createdAt) }); if (ok) notePublic(b.text); return ok; }).slice(0, MAX_PER_SECTION).map(b => {
+        const cleanText = String(b.text || '').replace(/<[^>]+>/g, '').replace(/!?\[(?:pdf|audio|video|image|file|torrent):[^\]]*\]\([^)]*\)/g, '').replace(/!\[[^\]]*\]\([^)]*\)/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').trim();
+        const firstLine = cleanText.split('\n').find(l => l.trim()) || '';
+        return dated({
+          id: b.id,
+          title: b.subject || firstLine.slice(0, 80) || 'Blog',
+          image: null,
+          snippet: b.subject ? firstLine.slice(0, 200) : cleanText.slice(0, 200),
+          pdfs: b.subject ? [] : [...String(b.text || '').matchAll(/\[pdf:([^\]]*)\]\(\s*(&[A-Za-z0-9+/=]+\.sha256)\s*\)/g)].map(m => ({ name: m[1], blob: m[2] })),
+          tags: tagsOf(b)
+        }, tsOf(b.createdAt));
       });
     } catch (_) {}
   }
@@ -2293,7 +2286,8 @@ const bootstrapFromPub = (invite) => {
 const bookmarksModel = require("../models/bookmarking_model")({ cooler, isPublic: config.public });
 const opinionsModel = require('../models/opinions_model')({ cooler, isPublic: config.public });
 const tasksModel = require('../models/tasks_model')({ cooler, isPublic: config.public, pmModel });
-const votesModel = require('../models/votes_model')({ cooler, isPublic: config.public });
+const schedulerModel = require('../models/scheduler_model')({ cooler, isPublic: config.public, stateFile: stateFilePath('scheduled.json') });
+const votesModel = require('../models/votes_model')({ cooler, isPublic: config.public, scheduler: schedulerModel });
 const ssbConfig = require('../server/ssb_config');
 const pubInvites = require('../models/pub_invites');
 const PUB_PROBE_TIMEOUT_MS = 3000;
@@ -2337,7 +2331,7 @@ const calendarCrypto = cryptoModel.scope('calendars');
 const eventCrypto = cryptoModel.scope('events');
 const forumCrypto = cryptoModel.scope('forum');
 const tribesModel = require('../models/tribes_model')({ cooler, isPublic: config.public, cryptoModel });
-const eventsModel = require('../models/events_model')({ cooler, isPublic: config.public, cryptoModel, eventCrypto, tribesModel });
+const eventsModel = require('../models/events_model')({ cooler, isPublic: config.public, cryptoModel, eventCrypto, tribesModel, scheduler: schedulerModel });
 const larpModel = require('../models/larp_model')({ cooler, tribesModel, cryptoModel });
 const blockchainModel = require('../models/blockchain_model')({ cooler, isPublic: config.public, cryptoModel, tribesModel });
 const reportsModel = require('../models/reports_model')({ cooler, isPublic: config.public });
@@ -2576,7 +2570,7 @@ const sendClearnetRss = async (ctx, mods, label, query) => {
     const date = new Date(Number(it.ts) || Date.now()).toUTCString();
     return `    <item>\n      <title>${esc(it.title || i18n.cnUntitled)}</title>\n      <link>${esc(link)}</link>\n      <guid isPermaLink="false">${esc(String(it.id || link))}</guid>\n      <pubDate>${date}</pubDate>\n      <author>${esc(it.authorName || it.feedId || '')}</author>\n      <description>${esc(String(it.snippet || '').slice(0, 500))}</description>\n    </item>`;
   }).join('\n');
-  ctx.type = 'application/rss+xml';
+  ctx.type = 'application/xml; charset=utf-8';
   ctx.set('Cache-Control', 'public, max-age=600');
   ctx.body = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0">\n  <channel>\n    <title>Oasis HUB · ${esc(label)}</title>\n    <link>${esc(`${base}/c${query}`)}</link>\n    <description>${esc(`${label} ${i18n.cnRssDescription}`)}</description>\n${rssItems}\n  </channel>\n</rss>\n`;
 };
@@ -2652,7 +2646,7 @@ const roomsModel = require('../models/rooms_model')({ cooler, cryptoModel, roomC
 const wikiModel = require('../models/wiki_model')({ cooler, cryptoModel, tribesModel });
 const emergenciesModel = require('../models/emergencies_model')({ cooler });
 const logisticsModel = require('../models/logistics_model')({ cooler });
-const podcastsModel = require('../models/podcasts_model')({ cooler });
+const podcastsModel = require('../models/podcasts_model')({ cooler, scheduler: schedulerModel });
 const campaignsModel = require('../models/campaigns_model')({ cooler });
 const tagsModel = require('../models/tags_model')({ cooler, isPublic: config.public, padsModel, tribesModel });
 const tribesContentModel = require('../models/tribes_content_model')({ cooler, isPublic: config.public, cryptoModel, tribesModel });
@@ -2663,7 +2657,7 @@ const pixeliaModel = require('../models/pixelia_model')({ cooler, isPublic: conf
 const melodyModel = require('../models/melody_model')({ cooler });
 const marketModel = require('../models/market_model')({ cooler, isPublic: config.public, cryptoModel });
 const forumModel = require('../models/forum_model')({ cooler, isPublic: config.public, cryptoModel, forumCrypto });
-const blogModel = require('../models/blog_model')({ cooler, isPublic: config.public });
+const blogModel = require('../models/blog_model')({ cooler, isPublic: config.public, scheduler: schedulerModel });
 const commentsModel = require('../models/comments_model')({ cooler, post });
 const workflowsModel = require('../models/workflows_model');
 const mentionsModel = require('../models/mentions_model')({ cooler });
@@ -2671,7 +2665,7 @@ const jobsModel = require('../models/jobs_model')({ cooler, isPublic: config.pub
 const housingModel = require('../models/housing_model')({ cooler, cryptoModel });
 const shopsModel = require('../models/shops_model')({ cooler, isPublic: config.public, cryptoModel });
 const chatsModel = require('../models/chats_model')({ cooler, cryptoModel, chatCrypto, tribesModel });
-const pollsModel = require('../models/polls_model')({ cooler, isPublic: config.public, cryptoModel, chatsModel });
+const pollsModel = require('../models/polls_model')({ cooler, isPublic: config.public, cryptoModel, chatsModel, scheduler: schedulerModel });
 const projectsModel = require("../models/projects_model")({ cooler, isPublic: config.public });
 const schoolModel = require('../models/school_model')({ cooler, transfersModel, schoolCrypto, chatsModel });
 const agendaModel = require("../models/agenda_model")({ cooler, isPublic: config.public, calendarsModel, eventsModel, tasksModel, marketModel, jobsModel, projectsModel, industryModel, housingModel, schoolModel, campaignsModel, logisticsModel });
@@ -4855,6 +4849,51 @@ const tooLong = (ctx, value, max, label) => {
   }
   return false;
 };
+const announceBlog = async (createdBlog, subject) => {
+  try { activityModel.invalidateCache(); } catch (_) {}
+  try {
+    const me = getViewerId();
+    const subs = (await subscriptionsModel.listSubscribers(me)).filter(id => id !== me);
+    if (subs.length) {
+      const blogHref = createdBlog && createdBlog.key ? `/blogs/${encodeURIComponent(createdBlog.key)}` : '/blogs';
+      await notifyBot('BLOG_NEW', subs, `[${subject || 'New blog entry'}](${blogHref})`);
+    }
+  } catch (_) {}
+};
+const SCHEDULED_PUBLISHERS = {
+  blog: async () => {
+    for (const { msg, entry } of await blogModel.publishDue()) {
+      try { await applyClearnetChoice({ request: { body: { clearnet: entry.clearnet ? '1' : '0' } } }, 'posts', msg); } catch (_) {}
+      await announceBlog(msg, entry.subject);
+    }
+  },
+  podcastEpisode: async () => {
+    for (const { res, entry } of await podcastsModel.publishDue()) {
+      const ep = await podcastsModel.getEpisodeById(res.key).catch(() => null);
+      try { await notifyPodcastWatchers(res.channelId, ep || { id: res.key, title: entry.data.title, number: entry.data.number }); } catch (_) {}
+    }
+  },
+  event: async () => {
+    for (const { res, entry } of await eventsModel.publishDue()) {
+      try { await applyClearnetChoice({ request: { body: { clearnet: entry.data.clearnet } } }, 'events', res); } catch (_) {}
+    }
+    try { activityModel.invalidateCache(); } catch (_) {}
+  },
+  poll: async () => {
+    if ((await pollsModel.publishDue()).length) { try { activityModel.invalidateCache(); } catch (_) {} }
+  },
+  vote: async () => {
+    if ((await votesModel.publishDue()).length) { try { activityModel.invalidateCache(); } catch (_) {} }
+  }
+};
+let publishingScheduled = null;
+const publishScheduled = (kinds = Object.keys(SCHEDULED_PUBLISHERS)) => {
+  if (publishingScheduled) return publishingScheduled;
+  publishingScheduled = (async () => {
+    for (const kind of kinds) { try { await SCHEDULED_PUBLISHERS[kind](); } catch (_) {} }
+  })().finally(() => { publishingScheduled = null; });
+  return publishingScheduled;
+};
 const publishErrorText = (e) => {
   const t = require('../views/main_views').i18n;
   const msg = String((e && e.message) || e || '');
@@ -4972,7 +5011,8 @@ router
     ctx.redirect(`/${homePage}`);
   })
   .get("/robots.txt", (ctx) => {
-    ctx.body = "User-agent: *\nDisallow: /";
+    ctx.type = 'text/plain';
+    ctx.body = `User-agent: *\nAllow: /c$\nAllow: /c?\nAllow: /c/\nDisallow: /\nSitemap: ${resolveExternalBaseUrl(ctx)}/c/sitemap.xml\n`;
   })
   .get(oasisCheckPath, (ctx) => {
     ctx.body = "oasis";
@@ -6510,6 +6550,7 @@ router
     const uid = getViewerId();
     const ch = await podcastsModel.getChannelById(ctx.params.id);
     if (!ch) { ctx.redirect('/podcasts'); return; }
+    if (String(ch.author) === String(uid)) ch.scheduledEpisodes = await podcastsModel.listScheduledEpisodes(ch.id).catch(() => []);
     const favPodcasts = await contentFavorites.getFavoriteSet('podcasts');
     ch.isFavorite = favPodcasts.has(String(ch.id));
     ch.episodes = (ch.episodes || []).map(e => ({ ...e, isFavorite: favPodcasts.has(String(e.id)) }));
@@ -7482,6 +7523,7 @@ router
       wallet:   flag(body.vis_wallet),
       ecoTax:   flag(body.vis_ecoTax),
       larpSign: flag(body.vis_larpSign),
+      aiAgent:  flag(body.vis_aiAgent),
       gpg:      flag(body.vis_gpg),
       phone:    desiredPhoneVisibility(),
       fediverse: flag(body.vis_fediverse),
@@ -8635,6 +8677,12 @@ router
     const b = ctx.request.body || {};
     try {
       if (rejectPastDates(ctx, [[b.deadline]], '/polls')) return;
+      const pollPublishAt = String(b.publishAt || '').trim();
+      if (pollPublishAt) {
+        await pollsModel.schedulePoll({ question: stripDangerousTags(b.question), options: stripDangerousTags(String(b.options || '')).split('\n'), anonymous: [].concat(b.anonymous).includes('1'), multiple: [].concat(b.multiple).includes('1'), deadline: b.deadline, tags: b.tags }, pollPublishAt);
+        ctx.redirect('/polls?filter=MINE');
+        return;
+      }
       await pollsModel.createPoll({
         question: stripDangerousTags(b.question),
         options: stripDangerousTags(String(b.options || '')).split('\n'),
@@ -8645,6 +8693,18 @@ router
       });
     } catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return; }
     try { activityModel.invalidateCache(); } catch (_) {}
+    ctx.redirect('/polls?filter=MINE');
+  })
+  .post('/polls/scheduled/update/:id', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'pollsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    try { await pollsModel.updateScheduledPoll(ctx.params.id, { question: stripDangerousTags(b.question), options: stripDangerousTags(String(b.options || '')).split('\n'), anonymous: [].concat(b.anonymous).includes('1'), multiple: [].concat(b.multiple).includes('1'), deadline: b.deadline, tags: b.tags }, String(b.publishAt || '').trim()); }
+    catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return; }
+    ctx.redirect(`/polls/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/polls/scheduled/delete/:id', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'pollsMod')) { ctx.redirect('/modules'); return; }
+    try { await pollsModel.cancelScheduledPoll(ctx.params.id); } catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 403 }); return; }
     ctx.redirect('/polls?filter=MINE');
   })
   .post('/polls/update/:id', koaBody(), async ctx => {
@@ -8704,7 +8764,13 @@ router
     if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
     const filter = String(ctx.query.filter || 'ALL').toUpperCase();
     const q = String(ctx.query.q || '').trim();
-    if (filter === 'CREATE') { ctx.body = await blogView([], 'CREATE', { q }); return; }
+    if (filter === 'CREATE') {
+      const editing = ctx.query.edit ? await blogModel.getBlogById(String(ctx.query.edit)).catch(() => null) : null;
+      const mine = editing && String(editing.author) === String(getViewerId());
+      if (mine && !editing.scheduledAt) editing.clearnet = await clearnetPublic('posts', editing).catch(() => false);
+      ctx.body = await blogView([], 'CREATE', { q, draft: !mine ? null : editing.scheduledAt ? { ...editing, scheduledId: editing.id, publishAt: editing.scheduledAt } : { ...editing, editId: editing.id } });
+      return;
+    }
     const fav = await contentFavorites.getFavoriteSet('blogs');
     let blogs = await blogModel.listAll(filter, { q, favorites: [...fav] });
     blogs = await applyListFilters(blogs, ctx);
@@ -8745,7 +8811,7 @@ router
     if (blobMarkdown.length) text += blobMarkdown.join('');
     const allowComments = [].concat(b.allowComments).includes('1');
     const tags = String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean);
-    ctx.body = await blogView([], 'CREATE', { draft: { text, subject, allowComments, tags, clearnet: String(b.clearnet || '') === '1' } });
+    ctx.body = await blogView([], 'CREATE', { draft: { text, subject, allowComments, tags, clearnet: String(b.clearnet || '') === '1', publishAt: String(b.publishAt || '') } });
   })
   .post('/blogs/create', koaBody({ multipart: true, urlencoded: true, formidable: { multiples: true, maxFileSize: maxSize } }), async ctx => {
     if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
@@ -8759,25 +8825,72 @@ router
     const keepBlog = async (err) => {
       ctx.status = 400;
       ctx.state.inlineError = publishErrorText(err);
-      ctx.body = await blogView([], 'CREATE', { draft: { text, subject, allowComments, tags, clearnet: String(b.clearnet || '') === '1' } });
+      ctx.body = await blogView([], 'CREATE', { draft: { text, subject, allowComments, tags, clearnet: String(b.clearnet || '') === '1', publishAt: String(b.publishAt || '') } });
     };
     if (longText.tooLong(text)) { await keepBlog(new Error('Text too long')); return; }
     let mentions = [];
     try { mentions = await extractMentions(text); } catch (_) { mentions = []; }
+    const publishAt = String(b.publishAt || '').trim();
+    if (publishAt) {
+      try { await blogModel.scheduleBlog({ text, subject, mentions, allowComments, tags, clearnet: String(b.clearnet || '') === '1', publishAt }); } catch (err) { await keepBlog(err); return; }
+      ctx.redirect('/blogs?filter=MINE');
+      return;
+    }
     let createdBlog = null;
     try {
       createdBlog = await blogModel.createBlog({ text, subject, mentions, allowComments, tags });
     } catch (err) { await keepBlog(err); return; }
     try { await applyClearnetChoice(ctx, 'posts', createdBlog); } catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return; }
+    await announceBlog(createdBlog, subject);
+    ctx.redirect('/blogs?filter=MINE');
+  })
+  .post('/blogs/update/:id', koaBody({ multipart: true, urlencoded: true, formidable: { multiples: true, maxFileSize: maxSize } }), async ctx => {
+    if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    let text = linkMentions(stripDangerousTags((b.text || '').toString().trim()));
+    const subject = stripDangerousTags((b.subject || '').toString().trim());
+    const blobMarkdown = await handleBlobUploads(ctx, 'blob', 9);
+    if (blobMarkdown.length) text += blobMarkdown.join('');
+    const allowComments = [].concat(b.allowComments).includes('1');
+    const tags = String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    if (longText.tooLong(text)) { sendErrorPage(ctx, 'Text too long', { status: 400 }); return; }
+    let mentions = [];
+    try { mentions = await extractMentions(text); } catch (_) { mentions = []; }
+    let updated = null;
+    try { updated = await blogModel.updateBlog(ctx.params.id, { text, subject, mentions, allowComments, tags }); }
+    catch (err) {
+      ctx.status = 400;
+      ctx.state.inlineError = publishErrorText(err);
+      ctx.body = await blogView([], 'CREATE', { draft: { text, subject, allowComments, tags, clearnet: String(b.clearnet || '') === '1', editId: ctx.params.id } });
+      return;
+    }
+    try { await applyClearnetChoice(ctx, 'posts', updated.key); } catch (_) {}
     try { activityModel.invalidateCache(); } catch (_) {}
-    try {
-      const me = getViewerId();
-      const subs = (await subscriptionsModel.listSubscribers(me)).filter(id => id !== me);
-      if (subs.length) {
-        const blogHref = createdBlog && createdBlog.key ? `/blogs/${encodeURIComponent(createdBlog.key)}` : '/blogs';
-        await notifyBot('BLOG_NEW', subs, `[${subject || 'New blog entry'}](${blogHref})`);
-      }
-    } catch (_) {}
+    ctx.redirect(`/blogs/${encodeURIComponent(updated.rootId)}`);
+  })
+  .post('/blogs/scheduled/update/:id', koaBody({ multipart: true, urlencoded: true, formidable: { multiples: true, maxFileSize: maxSize } }), async ctx => {
+    if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    let text = linkMentions(stripDangerousTags((b.text || '').toString().trim()));
+    const subject = stripDangerousTags((b.subject || '').toString().trim());
+    const blobMarkdown = await handleBlobUploads(ctx, 'blob', 9);
+    if (blobMarkdown.length) text += blobMarkdown.join('');
+    const allowComments = [].concat(b.allowComments).includes('1');
+    const tags = String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean);
+    let mentions = [];
+    try { mentions = await extractMentions(text); } catch (_) { mentions = []; }
+    try { await blogModel.updateScheduled(ctx.params.id, { text, subject, mentions, allowComments, tags, clearnet: String(b.clearnet || '') === '1', publishAt: String(b.publishAt || '').trim() }); }
+    catch (err) {
+      ctx.status = 400;
+      ctx.state.inlineError = publishErrorText(err);
+      ctx.body = await blogView([], 'CREATE', { draft: { text, subject, allowComments, tags, clearnet: String(b.clearnet || '') === '1', publishAt: String(b.publishAt || ''), scheduledId: ctx.params.id } });
+      return;
+    }
+    ctx.redirect(`/blogs/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/blogs/scheduled/delete/:id', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'blogsMod')) { ctx.redirect('/modules'); return; }
+    try { await blogModel.cancelScheduled(ctx.params.id); } catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return; }
     ctx.redirect('/blogs?filter=MINE');
   })
   .post('/blogs/opinions/:blogId/:category', koaBody(), async ctx => {
@@ -8863,7 +8976,9 @@ router
       const { profile } = await onboardingModel.status();
       const name = stripDangerousTags(String(body.name || '')).trim() || profile.name;
       if (!name && !image) { onboardingModel.markStep('profile'); ctx.redirect('/welcome'); return; }
-      await post.publishProfileEdit({ name, description: profile.description, image });
+      const aiAgent = body.aiAgent === '1' || body.aiAgent === 'on';
+      const prevPrefs = aiAgent ? ((await about.visibilityPrefs(getViewerId()).catch(() => null)) || {}) : null;
+      await post.publishProfileEdit({ name, description: profile.description, image, ...(aiAgent ? { visibilityPrefs: { ...prevPrefs, aiAgent: true } } : {}) });
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }); return; }
     ctx.redirect('/welcome');
   })
@@ -9730,7 +9845,7 @@ router
     }
     const cover = channel.cover && channel.cover.kind === 'image' && channel.cover.blobId ? base + cnBlobUrl(channel.cover.blobId) : '';
     const category = PODCAST_ITUNES_CATEGORY[channel.category] || '';
-    ctx.type = 'application/rss+xml';
+    ctx.type = 'application/xml; charset=utf-8';
     ctx.set('Cache-Control', 'public, max-age=600');
     ctx.body = `<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:atom="http://www.w3.org/2005/Atom">\n  <channel>\n    <title>${esc(channel.title || i18n.cnUntitled)}</title>\n    <link>${esc(page)}</link>\n    <atom:link href="${esc(`${page}/rss`)}" rel="self" type="application/rss+xml"/>\n    <description>${esc(channel.description || '')}</description>\n    <itunes:explicit>false</itunes:explicit>\n${cover ? `    <itunes:image href="${esc(cover)}"/>\n    <image><url>${esc(cover)}</url><title>${esc(channel.title || '')}</title><link>${esc(page)}</link></image>\n` : ''}${category ? `    <itunes:category text="${esc(category)}"/>\n` : ''}${items.join('\n')}\n  </channel>\n</rss>`;
   })
@@ -9818,16 +9933,17 @@ router
       return;
     }
     const authorName = authorId ? await about.name(authorId).catch(() => '') : '';
-    const full = await longText.joinChunks(ssbX, content, authorId).catch(() => content);
+    const latest = await blogModel.getBlogById(msgKey).catch(() => null);
+    const full = latest ? { text: latest.text, contentWarning: latest.subject, tags: latest.tags } : await longText.joinChunks(ssbX, content, authorId).catch(() => content);
     ctx.type = 'text/html';
     ctx.body = await clearnetBlogView({
       msgKey,
       text: full.text || '',
       author: authorId,
       authorName,
-      contentWarning: content.contentWarning || '',
+      contentWarning: full.contentWarning || '',
       sentAt: msg.timestamp || content.sentAt,
-      tags: Array.isArray(content.tags) ? content.tags : []
+      tags: Array.isArray(full.tags) ? full.tags : []
     });
   })
   .get("/clearnet", async (ctx) => { ctx.redirect("/c"); })
@@ -9877,23 +9993,30 @@ router
     ctx.type = 'text/html';
     ctx.body = await require('../views/tribes_view').clearnetTribeView({ tribe, items, names, slug: clearnetSlugFor(tribe.title, hit.id), page: ctx.query.page, filterType: String(ctx.query.type || ''), filterAuthor: String(ctx.query.author || '') });
   })
-  .get("/c/sitemap.xml", async (ctx) => {
+  .get(["/c/sitemap.xml", "/sitemap.xml"], async (ctx) => {
     const { escapeHtml: esc } = require('../views/clearnet_view');
     const { CLEARNET_MODULES, clearnetSlugFor } = require('../views/main_views');
     const base = resolveExternalBaseUrl(ctx);
     const index = await getClearnetIndex();
-    const urls = [`${base}/c`];
-    for (const t of await getClearnetTribes().catch(() => [])) urls.push(`${base}/c/tribe/${encodeURIComponent(clearnetSlugFor(t.title, t.id))}`);
+    const urls = new Map();
+    const add = (loc, ts) => { const when = Number(ts) || 0; if (!urls.has(loc) || when > urls.get(loc)) urls.set(loc, when); };
+    const newest = (items) => items.reduce((n, it) => Math.max(n, Number(it.ts) || 0), 0);
+    let hubTs = 0;
+    for (const t of await getClearnetTribes().catch(() => [])) add(`${base}/c/tribe/${encodeURIComponent(clearnetSlugFor(t.title, t.id))}`, 0);
     for (const entry of index) {
-      urls.push(`${base}/c/inhabitant/${encodeURIComponent(entry.feedId)}`);
+      let entryTs = 0;
       for (const m of CLEARNET_MODULES) {
-        for (const it of (entry.items[m.key] || [])) {
-          urls.push(`${base}/c/${m.modulePath || m.key}/${encodeURIComponent(clearnetSlugFor(it.title, it.id))}`);
-        }
+        const items = entry.items[m.key] || [];
+        entryTs = Math.max(entryTs, newest(items));
+        for (const it of items) add(`${base}/c/${m.modulePath || m.key}/${encodeURIComponent(clearnetSlugFor(it.title, it.id))}`, it.ts);
       }
+      add(`${base}/c/inhabitant/${encodeURIComponent(entry.feedId)}`, entryTs);
+      hubTs = Math.max(hubTs, entryTs);
     }
+    add(`${base}/c`, hubTs);
+    const lastmod = (ts) => (ts > 0 ? `<lastmod>${new Date(ts).toISOString().slice(0, 10)}</lastmod>` : '');
     ctx.type = 'application/xml';
-    ctx.body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${Array.from(new Set(urls)).map(u => `  <url><loc>${esc(u)}</loc></url>`).join('\n')}\n</urlset>\n`;
+    ctx.body = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${Array.from(urls, ([u, ts]) => `  <url><loc>${esc(u)}</loc>${lastmod(ts)}</url>`).join('\n')}\n</urlset>\n`;
   })
   .get("/c/rss", async (ctx) => {
     const { CLEARNET_MODULES, i18n } = require('../views/main_views');
@@ -13118,6 +13241,21 @@ router
       ctx.redirect(`/podcasts/${encodeURIComponent(res.rootId)}`);
     } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); }
   })
+  .post('/podcasts/scheduled/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
+    if (!checkMod(ctx, 'podcastsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body || {};
+    try {
+      const media = await handleBlobUpload(ctx, 'media');
+      await podcastsModel.updateScheduledEpisode(ctx.params.id, { title: stripDangerousTags(String(b.title || '')), description: stripDangerousTags(String(b.description || '')), media, number: b.number, tags: b.tags }, String(b.publishAt || '').trim());
+      ctx.redirect(`/podcasts/episode/${encodeURIComponent(ctx.params.id)}`);
+    } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 400 }); }
+  })
+  .post('/podcasts/scheduled/delete/:id', koaBody(), async ctx => {
+    if (!checkMod(ctx, 'podcastsMod')) { ctx.redirect('/modules'); return; }
+    const entry = await schedulerModel.get(ctx.params.id).catch(() => null);
+    try { await podcastsModel.cancelScheduledEpisode(ctx.params.id); } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); return; }
+    ctx.redirect(entry && entry.data && entry.data.channelId ? `/podcasts/${encodeURIComponent(entry.data.channelId)}` : '/podcasts');
+  })
   .post('/podcasts/delete/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'podcastsMod')) { ctx.redirect('/modules'); return; }
     try { await podcastsModel.deleteChannel(ctx.params.id); } catch (e) { sendErrorPage(ctx, e.message || String(e), { status: 403 }); return; }
@@ -13128,6 +13266,12 @@ router
     const b = ctx.request.body || {};
     try {
       const media = await handleBlobUpload(ctx, 'media');
+      const publishAt = String(b.publishAt || '').trim();
+      if (publishAt) {
+        await podcastsModel.scheduleEpisode(ctx.params.id, { title: stripDangerousTags(String(b.title || '')), description: stripDangerousTags(String(b.description || '')), media, number: b.number, tags: b.tags || '' }, publishAt);
+        ctx.redirect(`/podcasts/${encodeURIComponent(ctx.params.id)}`);
+        return;
+      }
       const res = await podcastsModel.addEpisode(ctx.params.id, { title: stripDangerousTags(String(b.title || '')), description: stripDangerousTags(String(b.description || '')), media, number: b.number, tags: b.tags || '' });
       const ep = await podcastsModel.getEpisodeById(res.key).catch(() => null);
       await notifyPodcastWatchers(res.channelId, ep || { id: res.key, title: String(b.title || ''), number: b.number });
@@ -13323,6 +13467,13 @@ router
     };
     const eventAttachment = await handleBlobUpload(ctx, 'blob');
     if (rejectPastDates(ctx, [[b.date]], '/events?filter=create')) return;
+    const eventPublishAt = String(b.publishAt || '').trim();
+    if (eventPublishAt) {
+      try { await eventsModel.scheduleEvent({ title: stripDangerousTags(b.title), description: stripDangerousTags(b.description) + (eventAttachment || ''), date: b.date, location: stripDangerousTags(b.location), price: b.price, url: b.url, attendees: b.attendees || [], tags: b.tags, isPublic: b.isPublic, mapUrl: stripDangerousTags(b.mapUrl), clearnetPublic: b.clearnetPublic, media: { images: draftImages, video: media.clip || '' }, recurrence, clearnet: b.clearnet }, eventPublishAt); }
+      catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return; }
+      ctx.redirect('/events?filter=mine');
+      return;
+    }
     const evResult = await eventsModel.createEvent(stripDangerousTags(b.title), stripDangerousTags(b.description) + (eventAttachment || ''), b.date, stripDangerousTags(b.location), b.price, b.url, b.attendees || [], b.tags, b.isPublic, stripDangerousTags(b.mapUrl), b.clearnetPublic, { images: draftImages, video: media.clip || '' }, recurrence);
     await applyClearnetChoice(ctx, 'events', evResult);
     if ([].concat(b.addToCalendar).includes("1") && evResult && evResult.key) {
@@ -13342,6 +13493,18 @@ router
       } catch (_) {}
     }
     ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events']));
+  })
+  .post('/events/scheduled/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
+    if (!checkMod(ctx, 'eventsMod')) { ctx.redirect('/modules'); return; }
+    const b = ctx.request.body;
+    const eventAttachment = await handleBlobUpload(ctx, 'blob');
+    try { await eventsModel.updateScheduledEvent(ctx.params.id, { title: stripDangerousTags(b.title), description: stripDangerousTags(b.description) + (eventAttachment || ''), date: b.date, location: stripDangerousTags(b.location), price: b.price, url: b.url, attendees: b.attendees || [], tags: b.tags, isPublic: b.isPublic, mapUrl: stripDangerousTags(b.mapUrl), clearnetPublic: b.clearnetPublic }, String(b.publishAt || '').trim()); }
+    catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return; }
+    ctx.redirect(`/events/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/events/scheduled/delete/:id', koaBody(), async (ctx) => {
+    try { await eventsModel.cancelScheduledEvent(ctx.params.id); } catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 403 }); return; }
+    ctx.redirect('/events?filter=mine');
   })
   .post('/events/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (await guardRatedMedia(ctx, ctx.params.id)) return;
@@ -13438,7 +13601,9 @@ router
     const parsedOptions = b.options ? b.options.split(',').map(o => o.trim()).filter(Boolean) : defaultOptions;
     try {
       if (rejectPastDates(ctx, [[b.deadline]], '/votes?filter=create')) return;
-      await votesModel.createVote(stripDangerousTags(b.question), b.deadline, parsedOptions, String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean));
+      const votePublishAt = String(b.publishAt || '').trim();
+      if (votePublishAt) await votesModel.scheduleVote(stripDangerousTags(b.question), b.deadline, parsedOptions, String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean), votePublishAt);
+      else await votesModel.createVote(stripDangerousTags(b.question), b.deadline, parsedOptions, String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean));
     } catch (err) {
       voteFormError(ctx, 'create', null, err, b);
       return;
@@ -13454,6 +13619,16 @@ router
       return;
     }
     ctx.redirect(safeReturnTo(ctx, '/votes?filter=mine', ['/votes']));
+  })
+  .post('/votes/scheduled/update/:id', koaBody(), async ctx => {
+    const b = ctx.request.body, parsedOptions = b.options ? b.options.split(',').map(o => o.trim()).filter(Boolean) : undefined;
+    try { await votesModel.updateScheduledVote(ctx.params.id, stripDangerousTags(b.question), b.deadline, parsedOptions, String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean), String(b.publishAt || '').trim()); }
+    catch (err) { voteFormError(ctx, 'edit', ctx.params.id, err, b); return; }
+    ctx.redirect(`/votes/${encodeURIComponent(ctx.params.id)}`);
+  })
+  .post('/votes/scheduled/delete/:id', koaBody(), async ctx => {
+    try { await votesModel.cancelScheduledVote(ctx.params.id); } catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 403 }); return; }
+    ctx.redirect('/votes?filter=mine');
   })
   .post('/votes/delete/:id', koaBody(), async ctx => {
     try { await votesModel.deleteVoteById(ctx.params.id); }
@@ -15943,8 +16118,9 @@ const middleware = [
     if (ctx.method === 'GET' && /^recent$/i.test(String(ctx.query.filter || '')) && ['q', 'search'].some(k => String(ctx.query[k] || '').trim())) ctx.query = { ...ctx.query, filter: ctx.query.filter === 'RECENT' ? 'ALL' : 'all' };
     await next();
   },
-  async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path, query: ctx.querystring, method: ctx.method }, next); },
+  async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path, query: ctx.querystring, method: ctx.method, ...(isClearnetPath(ctx.request) ? { cnBase: resolveExternalBaseUrl(ctx) } : {}) }, next); },
   async (ctx, next) => {
+    if (ctx.method === 'GET' && !config.public && !COMMENT_INDEX_SKIP_RE.test(ctx.path)) await publishScheduled();
     const store = ctx.method === 'GET' && !COMMENT_INDEX_SKIP_RE.test(ctx.path) ? require('../models/typed_log').requestScope.getStore() : null;
     if (store) {
       let timer = null;

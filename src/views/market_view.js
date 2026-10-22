@@ -434,7 +434,6 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: itemEdit?.mapUrl || "" }),
               br(),
               br(),
-              ...(reach === "PUBLIC" ? [renderClearnetSelector(itemEdit.clearnet === true || String(itemEdit.clearnet || "") === "1", i18n), br()] : []),
               label(i18n.marketItemPrice),
               br(),
               input({ type: "number", name: "price", id: "price", value: (itemEdit && itemEdit.price) || params.price || "", required: true, step: "0.000001", min: "0.000001" }),
@@ -470,6 +469,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                 ...(itemEdit && [true, "1", "on", "true"].includes([].concat(itemEdit.includesShipping).pop()) ? { checked: true } : {})
               }),
               br(),br(),
+              ...(reach === "PUBLIC" ? [renderClearnetSelector(itemEdit.clearnet === true || String(itemEdit.clearnet || "") === "1", i18n), br()] : []),
               button({ type: "submit" }, filter === "edit" ? i18n.marketUpdateButton : i18n.marketCreateButton)
             )
           )

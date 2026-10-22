@@ -91,6 +91,17 @@ HOME="$(getent passwd "$(id -un)" | cut -d: -f6)"
 export HOME
 PATH="$OASIS_HOME/node/bin:$PATH"
 export PATH
+OASIS_USER_CONF="$HOME/.ssb/oasis/oasis.conf"
+if [ -f "$OASIS_USER_CONF" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in ""|\#*) continue ;; esac
+        name="${line%%=*}"
+        value="${line#*=}"
+        case "$name" in *[!A-Za-z0-9_]*|"") continue ;; esac
+        eval "current=\${$name:-}"
+        [ -n "$current" ] || export "$name=$value"
+    done < "$OASIS_USER_CONF"
+fi
 uid="$(id -u)"
 slot=0
 if [ "$uid" -gt 1000 ] && [ "$uid" -lt 2000 ]; then

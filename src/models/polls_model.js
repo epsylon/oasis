@@ -7,6 +7,7 @@ const opinionRules = require('../backend/opinion_categories');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
+const SCHEDULED_KIND = 'poll';
 const POLL_TYPE = 'poll';
 const VOTE_TYPE = 'pollVote';
 const OPINION_TYPE = 'pollOpinion';
@@ -36,7 +37,7 @@ const normalizeTags = (raw) => {
   return list.map(t => clean(t)).filter(Boolean).slice(0, 20);
 };
 
-module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = null }) => {
+module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = null, scheduler = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
@@ -235,6 +236,13 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
     return { list, idx, viewerId: viewerId || ssbClient.id };
   };
 
+  const scheduledPoll = (entry) => ({
+    id: entry.id, tipId: entry.id, author: entry.author,
+    question: entry.data.question, options: entry.data.options || [], anonymous: entry.data.anonymous === true, multiple: entry.data.multiple === true,
+    deadline: entry.data.deadline || '', tags: entry.data.tags || [], createdAt: entry.createdAt, scheduledAt: entry.publishAt,
+    status: 'OPEN', votes: {}, voters: [], totalVoters: 0, myChoices: [], opinions: {}, opinions_inhabitants: []
+  });
+
   return {
     POLL_TYPE,
     VOTE_TYPE,
@@ -253,6 +261,7 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
             : scopeHouse ? p.houseKey === scopeHouse
               : (!p.tribeId && !p.chatId && !p.houseKey));
 
+      if (!scopeChat && !scopeTribe && !scopeHouse) out = out.concat(await this.listScheduledPolls());
       if (f === 'MINE') out = out.filter(p => String(p.author) === String(viewerId));
       else if (f === 'OPEN') out = out.filter(p => p.status === 'OPEN');
       else if (f === 'CLOSED') out = out.filter(p => p.status === 'CLOSED');
@@ -276,6 +285,11 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
     },
 
     async getPollById(id, viewerId = null) {
+      if (scheduler && scheduler.isScheduledId(id)) {
+        const entry = await scheduler.get(id);
+        if (!entry || entry.kind !== SCHEDULED_KIND) throw new Error('Poll not found');
+        return scheduledPoll(entry);
+      }
       const { list, idx } = await collect(viewerId);
       const rootId = idx.rootOf(id);
       const poll = list.find(p => p.id === rootId || p.id === id || p.tipId === id);
@@ -286,6 +300,57 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
     async resolveRootId(id) {
       const { idx } = await collect();
       return idx.rootOf(id);
+    },
+
+    async schedulePoll(data = {}, publishAt) {
+      if (isPublic) throw new Error('Not available in public mode');
+      if (!scheduler) throw new Error('Scheduling is not available');
+      const question = clean(data.question);
+      if (!question) throw new Error('Question is required');
+      const options = normalizeOptions(data.options);
+      if (options.length < MIN_OPTIONS) throw new Error(`A poll needs at least ${MIN_OPTIONS} options`);
+      const deadline = clean(data.deadline);
+      if (deadline && !(Date.parse(publishAt || '') < Date.parse(deadline))) throw new Error('The publish date must be before the deadline');
+      const stored = { question, options, anonymous: data.anonymous === true || data.anonymous === 'true' || data.anonymous === '1', multiple: data.multiple === true || data.multiple === 'true' || data.multiple === '1', deadline, tags: normalizeTags(data.tags) };
+      return scheduledPoll(await scheduler.schedule(SCHEDULED_KIND, stored, publishAt));
+    },
+
+    async updateScheduledPoll(id, data = {}, publishAt) {
+      if (isPublic || !scheduler) throw new Error('Not available in public mode');
+      const question = clean(data.question);
+      if (!question) throw new Error('Question is required');
+      const options = normalizeOptions(data.options);
+      if (options.length < MIN_OPTIONS) throw new Error(`A poll needs at least ${MIN_OPTIONS} options`);
+      const deadline = clean(data.deadline);
+      if (deadline && !(Date.parse(publishAt || '') < Date.parse(deadline))) throw new Error('The publish date must be before the deadline');
+      const stored = { question, options, anonymous: data.anonymous === true || data.anonymous === 'true' || data.anonymous === '1', multiple: data.multiple === true || data.multiple === 'true' || data.multiple === '1', deadline, tags: normalizeTags(data.tags) };
+      return scheduledPoll(await scheduler.update(id, stored, publishAt));
+    },
+
+    async listScheduledPolls() {
+      if (!scheduler) return [];
+      return (await scheduler.listMine(SCHEDULED_KIND)).map(scheduledPoll);
+    },
+
+    async cancelScheduledPoll(id) {
+      if (isPublic || !scheduler) throw new Error('Not available in public mode');
+      return scheduler.cancel(id);
+    },
+
+    async publishDue(now = Date.now()) {
+      if (isPublic || !scheduler) return [];
+      const published = [];
+      for (const entry of await scheduler.due(SCHEDULED_KIND, now)) {
+        try {
+          const res = await this.createPoll(entry.data);
+          await scheduler.remove(entry.id);
+          published.push({ res, entry });
+        } catch (e) {
+          await scheduler.fail(entry.id, e && e.message ? e.message : e);
+          console.error('[scheduler] poll', entry.id, 'could not be published:', e && e.message ? e.message : e);
+        }
+      }
+      return published;
     },
 
     async createPoll(data = {}) {

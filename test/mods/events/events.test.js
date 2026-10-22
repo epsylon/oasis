@@ -86,3 +86,36 @@ describe('events: versions republished by other inhabitants', (t) => {
     eq(list[0].organizer, A.keypair.id);
   });
 });
+
+describe('events: announcing an event later', (t) => {
+  const hour = 3600000;
+  t('a scheduled event can be changed by its organizer before its time', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const events = A.use('events');
+    const hour = 3600000;
+    const scheduled = await events.scheduleEvent({ title: 'Soon', description: 'd', date: new Date(Date.now() + 10 * hour).toISOString(), location: 'here' }, new Date(Date.now() + hour).toISOString());
+    const later = new Date(Date.now() + 2 * hour).toISOString();
+    const edited = await events.updateScheduledEvent(scheduled.id, { title: 'Later', description: 'd2', date: new Date(Date.now() + 10 * hour).toISOString(), location: 'there' }, later);
+    eq(edited.title, 'Later', 'the title changes');
+    eq(edited.scheduledAt, later, 'and the date');
+    eq((await events.getEventById(scheduled.id)).location, 'there', 'what is stored is the new version');
+  });
+
+  t('a scheduled event stays with its organizer until its time, then it is published', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const events = A.use('events');
+    const publishAt = new Date(Date.now() + hour).toISOString();
+    const scheduled = await events.scheduleEvent({ title: 'Later', description: 'd', date: new Date(Date.now() + 10 * hour).toISOString(), location: 'here', isPublic: 'public' }, publishAt);
+    eq(scheduled.scheduledAt, publishAt, 'it remembers when to publish');
+    eq((await events.listAll(null, 'all')).map(e => e.title).join(), 'Later', 'the organizer sees it in the list');
+    eq((await events.listAll(null, 'mine')).map(e => e.title).join(), 'Later', 'and in MINE');
+    eq((await makePeer(net).use('events').listAll(null, 'all')).length, 0, 'nobody else does');
+    eq((await events.getEventById(scheduled.id)).title, 'Later', 'and can open it');
+    eq((await events.publishDue()).length, 0, 'nothing is published before its time');
+    eq((await events.publishDue(Date.now() + hour + 1)).length, 1, 'once the time comes it is published');
+    eq((await events.listAll(null, 'all')).map(e => e.title).join(), 'Later', 'as a normal event');
+    let threw = false;
+    try { await events.scheduleEvent({ title: 'x', date: new Date(Date.now() + hour).toISOString() }, new Date(Date.now() + 2 * hour).toISOString()); } catch (_) { threw = true; }
+    ok(threw, 'it must be published before the event happens');
+  });
+});

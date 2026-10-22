@@ -510,3 +510,56 @@ describe('peers: simultaneous connections', (t) => {
     ok(scheduler.includes('this.ssb.oasisConnQuota()'), 'and the scheduler asks the node for it');
   });
 });
+
+describe('peers: a pub keeps the files of its members', (t) => {
+  const plugin = require('../../../src/server/blob_prefetch');
+  const fakePub = (follows) => {
+    const wanted = [];
+    let onAdded = null;
+    const server = {
+      id: '@pub.ed25519',
+      db: { onMsgAdded: (cb) => { onAdded = cb; return () => {}; } },
+      blobs: { has: (ref, cb) => cb(null, ref.startsWith('&have')), want: (ref) => wanted.push(ref) },
+      friends: { isFollowing: ({ dest }, cb) => cb(null, follows.includes(dest)) }
+    };
+    return { server, wanted, added: (author, content) => onAdded({ kvt: { value: { author, content } } }) };
+  };
+  const blob = (c) => `&${c.repeat(43)}=.sha256`;
+
+  t('as soon as a member publishes something with files, the pub asks for them', () => {
+    const { eq } = require('../../helpers/assert');
+    const pub = fakePub(['@member.ed25519']);
+    plugin.init(pub.server, { pub: true });
+    pub.added('@member.ed25519', { type: 'post', text: `hi ![image:a](${blob('a')})`, mentions: [{ link: blob('b') }] });
+    eq(pub.wanted.sort().join(), [blob('a'), blob('b')].sort().join(), 'every file the message refers to is wanted once');
+    pub.added('@member.ed25519', { type: 'post', text: `again ${blob('a')}` });
+    eq(pub.wanted.length, 2, 'a file already asked for is not asked again');
+  });
+
+  t('when the pub starts it also asks for the files of what its members published before', () => {
+    const { eq } = require('../../helpers/assert');
+    const pull = require('../../../src/server/node_modules/pull-stream');
+    const pub = fakePub(['@member.ed25519']);
+    pub.server.createLogStream = () => pull.values([
+      { key: '%1', value: { author: '@member.ed25519', content: { type: 'image', url: blob('f') } } },
+      { key: '%2', value: { author: '@stranger.ed25519', content: { type: 'image', url: blob('g') } } }
+    ]);
+    plugin.init(pub.server, { pub: true });
+    eq(pub.wanted.join(), blob('f'), 'the members files already in the log are wanted, the strangers ones are not');
+  });
+
+  t('files of strangers, files it already has and plain nodes are left alone', () => {
+    const { eq } = require('../../helpers/assert');
+    const pub = fakePub(['@member.ed25519']);
+    plugin.init(pub.server, { pub: true });
+    pub.added('@stranger.ed25519', { type: 'post', text: blob('c') });
+    pub.added('@member.ed25519', { type: 'post', text: `&have${'d'.repeat(39)}=.sha256` });
+    eq(pub.wanted.length, 0, 'nothing is wanted');
+    const node = fakePub(['@member.ed25519']);
+    plugin.init(node.server, { pub: false });
+    eq(typeof node.added, 'function');
+    let hooked = true;
+    try { node.added('@member.ed25519', { type: 'post', text: blob('e') }); } catch (_) { hooked = false; }
+    eq(hooked, false, 'a node that is not a pub does not listen at all');
+  });
+});

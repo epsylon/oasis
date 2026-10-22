@@ -253,7 +253,6 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         label(i18n.mapTagsLabel), br(),
         input({ type: "text", name: "tags", placeholder: i18n.mapTagsPlaceholder, value: tagsValue }),
         br(), br(),
-        showClearnet ? renderClearnetSelector(clearnetOn, i18n) : null,
         label(i18n.mapMarkerLabelField), br(),
         textarea({ maxlength: "5000", name: "markerLabel", placeholder: i18n.mapMarkerLabelPlaceholder, rows: "3" }, markerLabelVal),
         br(), br(),
@@ -281,6 +280,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         }),
         div({ class: "map-form-map-slot" },
           renderMap(pickerMarkers, null, 0, { view, id: "map", nav, pickForm: formId, pickAction: stepAction })),
+        showClearnet ? renderClearnetSelector(clearnetOn, i18n) : null,
         button({ type: "submit", class: "create-button" }, isEdit ? i18n.mapUpdateButton : i18n.mapCreateButton)));
 };
 

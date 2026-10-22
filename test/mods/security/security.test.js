@@ -519,3 +519,18 @@ describe('security: Oasis pages run no code in the browser', (t) => {
     ok(guards.buildCsp(true).includes("script-src 'none'"));
   });
 });
+
+describe('security: what a text keeps after sanitizing', (t) => {
+  t('a PDF attached in a text keeps its viewer, while foreign embeds and ids are dropped', () => {
+    const { ok, notOk } = require('../../helpers/assert');
+    const { sanitizeHtml } = require('../../../src/backend/sanitizeHtml');
+    const { renderStyledHtml } = require('../../../src/backend/renderStyledText');
+    const out = sanitizeHtml(renderStyledHtml('Acta [pdf:Acta.pdf](&Ah1Ffhkqd4ok4Lkqryl/MWUppCttBXCk4t2XbYD04fU=.sha256) fin'));
+    ok(/<object id="pdf-[0-9a-f]+" data="\/pdf\/embed\?[^"]+" type="text\/html" class="pdf-frame"/.test(out), 'the viewer frame survives with its id');
+    ok(out.includes('class="pdf-unmax"'), 'and its close control keeps its class');
+    const evil = sanitizeHtml('<object data="https://evil.org/x" type="text/html"></object><object data="/pdf/embed?src=x" type="application/x-shockwave-flash"></object><a id="main" href="/x">x</a>');
+    notOk(evil.includes('evil.org'), 'an embed pointing outside is dropped');
+    notOk(evil.includes('shockwave'), 'and so is any type but our own viewer');
+    notOk(evil.includes('id="main"'), 'ids that are not ours are dropped');
+  });
+});

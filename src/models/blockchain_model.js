@@ -2,9 +2,9 @@ const pull = require('../server/node_modules/pull-stream');
 const config = require('../server/ssb_config');
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readContentWindow, requestScope, logTip } = require('./typed_log');
+const { readContentWindow, readTyped, requestScope, logTip } = require('./typed_log');
 const { versionGroups, versionEntry } = require('../backend/dedupe');
-const logLimit = getConfig().ssbLogStream?.limit || 1000;
+const logLimit = () => getConfig().ssbLogStream?.limit || 1000;
 
 module.exports = ({ cooler, cryptoModel, tribesModel }) => {
   let ssb;
@@ -93,7 +93,7 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
     const nameByFeedId = new Map();
     if (!ssbClient?.query?.read) return nameByFeedId;
 
-    const limit = Math.max(minLimit, logLimit);
+    const limit = Math.max(minLimit, logLimit());
 
     const source = await ssbClient.query.read({
       query: [{ $filter: { value: { content: { type: 'about' } } } }],
@@ -125,7 +125,7 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
   const readWindow = async (ssbClient) => {
     const tip = await logTip(ssbClient).catch(() => null);
     if (tip && windowCache && windowCache.tip === tip) return windowCache.msgs;
-    const msgs = await readContentWindow(ssbClient, logLimit);
+    const msgs = await readContentWindow(ssbClient, logLimit());
     if (tip) windowCache = { tip, msgs };
     return msgs;
   };
@@ -255,14 +255,22 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
 
     async getBlockById(id, userId) {
       const ssbClient = await openSsb();
-      const results = await readWindow(ssbClient);
-
       const me = userId || config.keys.id;
+      const fpIdx = cryptoModel ? cryptoModel.buildFingerprintIndex() : null;
+      const accessibleTribeIds = await buildAccessibleTribeIds();
+      const found = findBlock(await readWindow(ssbClient), id, { ssbClient, me, fpIdx, accessibleTribeIds });
+      if (found) return found;
+      const raw = await new Promise((resolve) => ssbClient.get(id, (err, m) => resolve(err || !m ? null : m)));
+      if (!raw) return null;
+      const tombstones = await readTyped(ssbClient, ['tombstone'], { limit: logLimit() }).catch(() => []);
+      return findBlock([{ key: id, value: raw, timestamp: raw.timestamp }, ...tombstones], id, { ssbClient, me, fpIdx, accessibleTribeIds });
+    }
+  };
+
+  function findBlock(results, id, { ssbClient, me, fpIdx, accessibleTribeIds }) {
       const tombstoned = buildValidatedTombstoneSet(results);
       const idToBlock = new Map();
       const versions = [];
-      const fpIdx = cryptoModel ? cryptoModel.buildFingerprintIndex() : null;
-      const accessibleTribeIds = await buildAccessibleTribeIds();
 
       for (const msg of results) {
         const k = msg.key;
@@ -301,7 +309,6 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
       const isReplaced = isReplacedBlock(versionGroups(versions), tombstoned, block);
 
       return { ...block, isTombstoned, isReplaced };
-    }
-  };
+  }
 };
 

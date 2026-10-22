@@ -64,8 +64,17 @@ const KIND_KEYS = { audio: 'cnKindAudio', blog: 'cnKindBlog', bookmark: 'cnKindB
 const kindLabel = (kind) => cnText(KIND_KEYS[String(kind || '').toLowerCase()], String(kind || ''));
 const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(kindLabel(kind).toUpperCase())}]</span>`;
 
+const BLOB_ID_RE = /^&([A-Za-z0-9+/=]+)\.sha256$/;
+const hasLocalBlob = (blobId) => {
+  const m = BLOB_ID_RE.exec(String(blobId || ''));
+  if (!m) return false;
+  const hex = Buffer.from(m[1], 'base64').toString('hex');
+  try { return require('fs').existsSync(require('path').join(require('../server/ssb_config').path, 'blobs', 'sha256', hex.slice(0, 2), hex)); } catch (_) { return false; }
+};
+
 const renderRichText = (s, { links = true, wikiLinks = null } = {}) => renderStyledHtml(s, {
   blobPrefix: '/c/blob/',
+  blobAvailable: hasLocalBlob,
   internalLinks: false,
   links,
   plainUrlClass: 'cn-url',
@@ -87,7 +96,7 @@ const blobIdOf = (v) => {
 
 const blobUrl = (v) => {
   const id = blobIdOf(v);
-  return id ? `/c/blob/${encodeURIComponent(id)}` : null;
+  return id && hasLocalBlob(id) ? `/c/blob/${encodeURIComponent(id)}` : null;
 };
 
 const renderClearnetSelector = (on = false, i18nObj = {}) =>
@@ -392,15 +401,31 @@ footer.cn-footer .cn-footer-logo{width:56px;height:auto;display:block;margin:0 a
 footer.cn-footer .cn-footer-line{margin:3px 0}
 `;
 
-const renderRssLink = (href) => `<a class="cn-rss" href="${escapeHtml(href)}" title="RSS" aria-label="RSS"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5.5" cy="18.5" r="2.4" fill="currentColor"/><path d="M3.5 10.5a10 10 0 0 1 10 10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M3.5 3.5a17 17 0 0 1 17 17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></a>`;
+const renderRssLink = (href) => `<a class="cn-rss" href="${escapeHtml(href)}" target="_blank" rel="noopener" title="RSS" aria-label="RSS"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="5.5" cy="18.5" r="2.4" fill="currentColor"/><path d="M3.5 10.5a10 10 0 0 1 10 10" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M3.5 3.5a17 17 0 0 1 17 17" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></a>`;
 
 const renderClearnetHubSearch = ({ type = '', query = '' } = {}) =>
   `<form class="cn-search" method="GET" action="/c">${type ? `<input type="hidden" name="type" value="${escapeHtml(type)}"/>` : ''}<input type="text" name="q" value="${escapeHtml(query || '')}" placeholder="${escapeHtml(cnText('cnSearchPlaceholder', 'Search…'))}" autocomplete="off"/></form>`;
 
-const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null, extraCss = '', body, headerExtra = null, hubFeedId = null, feed = '' }) => {
+const cnAbsolute = (href) => {
+  const base = cnScope().cnBase || '';
+  return base && /^\//.test(String(href || '')) ? `${base}${href}` : String(href || '');
+};
+const cnCanonical = (override) => {
+  const scope = cnScope();
+  if (!scope.cnBase) return '';
+  const target = override || scope.cnCanonical;
+  if (target) return cnAbsolute(target);
+  const params = new URLSearchParams(String(scope.query || ''));
+  params.delete('lang');
+  const qs = params.toString();
+  return cnAbsolute(`${scope.path || '/c'}${qs ? `?${qs}` : ''}`);
+};
+const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null, ogType = 'website', canonical = '', extraCss = '', body, headerExtra = null, hubFeedId = null, feed = '' }) => {
   const safeTitle = escapeHtml(title || 'Oasis');
   const safeOgTitle = escapeHtml(ogTitle || title || 'Oasis');
   const safeOgDesc = escapeHtml(ogDescription || '');
+  const canonicalUrl = cnCanonical(canonical);
+  const ogImageUrl = ogImage ? escapeHtml(cnAbsolute(ogImage)) : '';
   const palette = getCurrentPalette();
   const baseCss = buildBaseCss(palette);
   const brandInner = `<div class="cn-brand">⛱ Oasis HUB</div><div class="cn-brand-sub">${escapeHtml(cnText('cnBrandSub', 'Libre · P2P · Federated'))}</div>`;
@@ -413,9 +438,13 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>${safeTitle}</title>
+  <meta property="og:site_name" content="Oasis HUB"/>
+  <meta property="og:type" content="${escapeHtml(ogType)}"/>
   <meta property="og:title" content="${safeOgTitle}"/>
   <meta property="og:description" content="${safeOgDesc}"/>
-  ${ogImage ? `<meta property="og:image" content="${ogImage}"/>` : ''}
+  ${ogImageUrl ? `<meta property="og:image" content="${ogImageUrl}"/>` : ''}
+  ${canonicalUrl ? `<meta property="og:url" content="${escapeHtml(canonicalUrl)}"/>\n  <link rel="canonical" href="${escapeHtml(canonicalUrl)}"/>` : ''}
+  <meta name="twitter:card" content="${ogImageUrl ? 'summary_large_image' : 'summary'}"/>
   <meta name="description" content="${safeOgDesc}"/>
   <meta name="robots" content="index, follow"/>
   <link rel="icon" href="/c/assets/images/favicon.svg"/>
@@ -522,6 +551,7 @@ const clearnetPdfHref = (path, src, t) => {
 };
 const renderPdfViewer = (...args) => mv().renderPdfViewer(...args);
 const renderClearnetPdfFrame = (blob, t) => {
+  if (!blob) return '';
   const fid = require('../backend/pdf_view').frameIdOf(blob);
   return `<span class="pdf-holder"><object id="${fid}" class="cn-pdf-frame" type="text/html" data="${escapeHtml(`${clearnetPdfHref('/c/pdf/embed', blob, t)}&fid=${fid}`)}" title="${escapeHtml(t || 'PDF')}" aria-label="${escapeHtml(t || 'PDF')}"></object><a href="#" class="pdf-unmax" title="${escapeHtml(cnText('pdfClose', 'Close'))}">✕</a></span>`;
 };

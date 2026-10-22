@@ -16,10 +16,22 @@ const EVENT_TYPES = [
   'tribe-keys', 'tombstone'
 ];
 
-module.exports = ({ cooler, cryptoModel, eventCrypto, tribesModel }) => {
+const SCHEDULED_KIND = 'event';
+
+module.exports = ({ cooler, cryptoModel, eventCrypto, tribesModel, scheduler = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
   const me = async () => (await openSsb()).id;
+  const scheduledEvent = (entry, userId) => {
+    const a = entry.data || {};
+    return {
+      id: entry.id, rootId: entry.id, tipId: entry.id, title: a.title || '', description: a.description || '', date: a.date || '', location: a.location || '',
+      price: a.price || 0, url: a.url || '', attendees: Array.isArray(a.attendees) ? a.attendees : [], tags: Array.isArray(a.tags) ? a.tags : String(a.tags || '').split(',').map(t => t.trim()).filter(Boolean),
+      createdAt: entry.createdAt, scheduledAt: entry.publishAt, organizer: entry.author, author: entry.author, status: 'OPEN', isPublic: a.isPublic || 'public',
+      mapUrl: a.mapUrl || '', images: (a.media && a.media.images) || [], video: (a.media && a.media.video) || '', recurrence: a.recurrence || {},
+      commentCount: 0, opinions: {}, opinions_inhabitants: []
+    };
+  };
 
   const ownCrypto = eventCrypto || cryptoModel;
   const lookupKey = (rid) => (ownCrypto && ownCrypto.getKey(rid)) || (cryptoModel && cryptoModel.getKey(rid)) || null;
@@ -212,6 +224,54 @@ module.exports = ({ cooler, cryptoModel, eventCrypto, tribesModel }) => {
       const messages = await readAll(ssbClient);
       const idx = buildEventIndex(messages);
       return idx.rootOf(id);
+    },
+
+    async scheduleEvent(args = {}, publishAt) {
+      if (!scheduler) throw new Error('Scheduling is not available');
+      const userId = await me();
+      const eventDate = normalizeDate(args.date);
+      if (!String(args.title || '').trim()) throw new Error('Title is required');
+      if (moment(eventDate).isBefore(moment().startOf('minute'))) throw new Error("Cannot create an event in the past");
+      if (!(Date.parse(publishAt || '') < moment(eventDate).valueOf())) throw new Error('The publish date must be before the event');
+      return scheduledEvent(await scheduler.schedule(SCHEDULED_KIND, { ...args, date: eventDate }, publishAt), userId);
+    },
+
+    async updateScheduledEvent(id, args = {}, publishAt) {
+      if (!scheduler) throw new Error('Scheduling is not available');
+      const userId = await me();
+      const eventDate = normalizeDate(args.date);
+      if (!String(args.title || '').trim()) throw new Error('Title is required');
+      if (moment(eventDate).isBefore(moment().startOf('minute'))) throw new Error("Cannot create an event in the past");
+      if (!(Date.parse(publishAt || '') < moment(eventDate).valueOf())) throw new Error('The publish date must be before the event');
+      return scheduledEvent(await scheduler.update(id, { ...args, date: eventDate }, publishAt), userId);
+    },
+
+    async listScheduledEvents() {
+      if (!scheduler) return [];
+      const userId = await me();
+      return (await scheduler.listMine(SCHEDULED_KIND)).map(e => scheduledEvent(e, userId));
+    },
+
+    async cancelScheduledEvent(id) {
+      if (!scheduler) throw new Error('Scheduling is not available');
+      return scheduler.cancel(id);
+    },
+
+    async publishDue(now = Date.now()) {
+      if (!scheduler) return [];
+      const published = [];
+      for (const entry of await scheduler.due(SCHEDULED_KIND, now)) {
+        const a = entry.data;
+        try {
+          const res = await this.createEvent(a.title, a.description, a.date, a.location, a.price, a.url, a.attendees || [], a.tags || [], a.isPublic, a.mapUrl, a.clearnetPublic, a.media || {}, a.recurrence || {});
+          await scheduler.remove(entry.id);
+          published.push({ res, entry });
+        } catch (e) {
+          await scheduler.fail(entry.id, e && e.message ? e.message : e);
+          console.error('[scheduler] event', entry.id, 'could not be published:', e && e.message ? e.message : e);
+        }
+      }
+      return published;
     },
 
     async createEvent(title, description, date, location, price = 0, url = "", attendees = [], tagsRaw = [], isPublic, mapUrl = "", clearnetPublic = false, media = {}, recurrence = {}) {
@@ -480,6 +540,11 @@ module.exports = ({ cooler, cryptoModel, eventCrypto, tribesModel }) => {
     },
 
     async getEventById(eventId) {
+      if (scheduler && scheduler.isScheduledId(eventId)) {
+        const entry = await scheduler.get(eventId);
+        if (!entry || entry.kind !== SCHEDULED_KIND) throw new Error("Error retrieving event");
+        return scheduledEvent(entry, await me());
+      }
       const ssbClient = await openSsb();
       const messages = await readAll(ssbClient);
       const idx = memoIndex('events', messages, buildEventIndex);
@@ -631,6 +696,7 @@ module.exports = ({ cooler, cryptoModel, eventCrypto, tribesModel }) => {
     async listAll(author = null, filter = 'all') {
       const ssbClient = await openSsb();
       const userId = await me();
+      const scheduled = !author ? await this.listScheduledEvents() : [];
       const results = await readAll(ssbClient);
       const tombstoned = buildValidatedTombstoneSet(results);
       const idx = buildEventIndex(results);
@@ -685,7 +751,7 @@ module.exports = ({ cooler, cryptoModel, eventCrypto, tribesModel }) => {
       try { await ensureAttendeeKeys(ssbClient, results, [...byRoot].filter(([rid, e]) => e.encrypted && idx.eventAuthor.get(rid) === userId).map(([rid, e]) => ({ rid, organizer: userId, attendees: e.attendees }))); } catch (_) {}
 
       let out = Array.from(byRoot.values());
-      out = dedupeBy(out, e => e.title ? [norm(e.organizer), norm(e.title), norm(e.date)].join('|') : null);
+      out = dedupeBy(out, e => e.title ? [norm(e.organizer), norm(e.title), norm(e.date)].join('|') : null).concat(scheduled);
 
       if (filter === 'mine') out = out.filter(e => e.organizer === userId);
       if (filter === 'open') out = out.filter(e => String(e.status).toUpperCase() === 'OPEN');

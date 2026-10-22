@@ -448,3 +448,40 @@ describe('polls: versions republished by other inhabitants', (t) => {
     eq(list[0].question, 'Run?');
   });
 });
+
+describe('polls: asking later', (t) => {
+  const hour = 3600000;
+  t('a scheduled poll can be changed by its author before its time', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const polls = A.use('polls');
+    const hour = 3600000;
+    const scheduled = await polls.schedulePoll({ question: 'Soon?', options: ['a', 'b'], deadline: new Date(Date.now() + 10 * hour).toISOString() }, new Date(Date.now() + hour).toISOString());
+    const later = new Date(Date.now() + 2 * hour).toISOString();
+    const edited = await polls.updateScheduledPoll(scheduled.id, { question: 'Later?', options: ['a', 'b', 'c'], deadline: new Date(Date.now() + 10 * hour).toISOString() }, later);
+    eq(edited.question, 'Later?', 'the question changes');
+    eq(edited.options.length, 3, 'and the options');
+    eq(edited.scheduledAt, later, 'and the date');
+    eq((await polls.getPollById(scheduled.id)).question, 'Later?', 'what is stored is the new version');
+    const page = String(await require('../../../src/views/polls_view').singlePollView(await polls.getPollById(scheduled.id), [], {}));
+    ok(page.includes(`href="/polls/${encodeURIComponent(scheduled.id)}"`), 'the detail of a scheduled poll links to itself under /polls');
+    notOk(page.includes('href="null/'), 'no broken link');
+  });
+
+  t('a scheduled poll stays with its author until its time, then it is published', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const polls = A.use('polls');
+    const publishAt = new Date(Date.now() + hour).toISOString();
+    const scheduled = await polls.schedulePoll({ ...basePoll, deadline: new Date(Date.now() + 10 * hour).toISOString() }, publishAt);
+    eq(scheduled.scheduledAt, publishAt, 'it remembers when to publish');
+    eq((await polls.listAll('ALL')).map(p => p.question).join(), basePoll.question, 'the author sees it in the list');
+    eq((await polls.listAll('MINE')).map(p => p.question).join(), basePoll.question, 'and in MINE');
+    eq((await makePeer(net).use('polls').listAll('ALL')).length, 0, 'nobody else does');
+    eq((await polls.getPollById(scheduled.id)).options.length, 3, 'and can open it');
+    eq((await polls.publishDue()).length, 0, 'nothing is published before its time');
+    eq((await polls.publishDue(Date.now() + hour + 1)).length, 1, 'once the time comes it is published');
+    eq((await polls.listAll('ALL')).length, 1, 'as a normal poll');
+    let threw = false;
+    try { await polls.schedulePoll({ ...basePoll, deadline: new Date(Date.now() + hour).toISOString() }, new Date(Date.now() + 2 * hour).toISOString()); } catch (_) { threw = true; }
+    ok(threw, 'it must be published before its deadline');
+  });
+});

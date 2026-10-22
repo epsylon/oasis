@@ -1268,8 +1268,8 @@ audio, video { max-width: 100% !important; }
 .feed-card .card-footer { gap: 4px !important; margin: 4px 0 0 0 !important; }
 .feed-card .card-footer a { font-size: .75em !important; padding: 2px 8px !important; }
 .feed-card .date-link { font-size: .7em !important; padding: 2px 6px !important; }
-.feed-card .activity-card-header { justify-content: flex-end !important; gap: 4px !important; margin-bottom: 4px !important; }
-.feed-card .activity-card-header button, .feed-card .activity-card-header a { width: 34px !important; height: 34px !important; min-width: 34px !important; padding: 4px !important; font-size: .9em !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
+.feed-card .activity-card-header:not(.card-top) { justify-content: flex-end !important; gap: 4px !important; margin-bottom: 4px !important; }
+.feed-card .activity-card-header:not(.card-top) button, .feed-card .activity-card-header:not(.card-top) a { width: 34px !important; height: 34px !important; min-width: 34px !important; padding: 4px !important; font-size: .9em !important; display: inline-flex !important; align-items: center !important; justify-content: center !important; }
 .feed-card .feed-main h2 { text-align: center !important; margin: 6px 0 2px 0 !important; }
 .feed-card .card-footer { justify-content: center !important; flex-wrap: nowrap !important; }
 .feed-card .date-link { display: inline-flex !important; align-items: center !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; max-width: 55% !important; font-size: .65em !important; }

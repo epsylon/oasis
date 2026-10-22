@@ -30,6 +30,18 @@ describe('activity: feed', (t) => {
   });
 });
 
+describe('activity: the feed cache under concurrent changes', (t) => {
+  t('publishing something while the feed is being listed does not break the listing', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const activity = A.use('activity');
+    const listing = activity.listFeed('all');
+    activity.invalidateCache();
+    const feed = await listing;
+    ok(Array.isArray(feed), 'the listing that was running still answers');
+    ok(Array.isArray(await activity.listFeed('all')), 'and the next one too');
+  });
+});
+
 describe('activity: private task comment does not leak', (t) => {
   const start = () => new Date(Date.now() + 3600e3).toISOString();
   const end = () => new Date(Date.now() + 7200e3).toISOString();

@@ -243,8 +243,8 @@ module.exports = ({ cooler, cryptoModel, tribesModel, padsModel, industryModel, 
 
   return {
     invalidateCache() {
-      _feedCache = null;
-      _feedCacheInflight = null;
+      _feedCache = new Map();
+      _feedCacheInflight = new Map();
     },
     async listFeed(filter = 'all') {
       const cacheKey = filter || 'all';
@@ -907,13 +907,14 @@ module.exports = ({ cooler, cryptoModel, tribesModel, padsModel, industryModel, 
       if (filter !== 'top') out.sort((a, b) => (b.ts || 0) - (a.ts || 0));
       return out;
       })();
-      _feedCacheInflight.set(cacheKey, promise);
+      const inflight = _feedCacheInflight;
+      inflight.set(cacheKey, promise);
       try {
         const value = await promise;
-        _feedCache.set(cacheKey, { value, ts: Date.now(), tip: tipNow });
+        if (_feedCacheInflight === inflight) _feedCache.set(cacheKey, { value, ts: Date.now(), tip: tipNow });
         return value;
       } finally {
-        _feedCacheInflight.delete(cacheKey);
+        inflight.delete(cacheKey);
       }
     }
   };

@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, a, span, select, option, label, input, textarea, img, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, WIZARD_THEMES } = require("./main_views")
+const { template, i18n, WIZARD_THEMES, renderAiAgentField } = require("./main_views")
 const { renderRestoreStatus } = require("./backup_view")
 const { renderSuggestedPub } = require("./invites_view")
 const { config } = require("../server/SSB_server.js")
@@ -32,6 +32,7 @@ const stepAction = (key, profile, status) => {
     label(i18n.profileImage),
     profile.image ? img({ loading: "lazy", class: "welcome-profile-avatar", src: `/image/256/${encodeURIComponent(profile.image)}` }) : null,
     input({ type: "file", name: "image", accept: "image/*" }),
+    renderAiAgentField("aiAgent"),
     submitRow(i18n.welcomeStepProfileAction)
   )
   if (key === "ux") {

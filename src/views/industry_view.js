@@ -260,7 +260,7 @@ const renderBuildGovernActions = (b, isMember, returnTo) => {
   const facilityId = b.facilityId || ""
   return [
     (isMember && isProposer && b.updateApproved !== false)
-      ? form({ method: "GET", action: `/industry/builds/${encodeURIComponent(b.id)}/edit` }, button({ type: "submit", class: "update-btn" }, i18n.industryUpdateButton || "Update"))
+      ? form({ method: "GET", action: `/industry/builds/${encodeURIComponent(b.id)}/edit` }, button({ type: "submit", class: "update-btn" }, i18n.industryUpdateButton || "Edit"))
       : null,
     (isMember && isProposer && b.deleteApproved !== false)
       ? form({ method: "POST", action: `/industry/builds/${encodeURIComponent(b.id)}/delete` }, button({ type: "submit", class: "delete-btn danger-btn" }, i18n.industryDeleteButton || "Delete"))
@@ -508,7 +508,7 @@ const renderBlueprintGovernActions = (facilityId, bp, isMember, returnTo) => {
   }
   return [
     (isMember && isAuthor && bp.updateApproved !== false)
-      ? form({ method: "GET", action: `/industry/blueprints/${encodeURIComponent(bp.id)}/edit` }, button({ type: "submit", class: "update-btn" }, i18n.industryUpdateButton || "Update"))
+      ? form({ method: "GET", action: `/industry/blueprints/${encodeURIComponent(bp.id)}/edit` }, button({ type: "submit", class: "update-btn" }, i18n.industryUpdateButton || "Edit"))
       : null,
     (isMember && isAuthor && bp.deleteApproved !== false)
       ? form({ method: "POST", action: `/industry/blueprints/${encodeURIComponent(bp.id)}/delete` }, button({ type: "submit", class: "delete-btn danger-btn" }, i18n.industryDeleteButton || "Delete"))
@@ -573,7 +573,7 @@ const renderBlueprintForm = (fc, bp, mode, spreadWarning = null) => {
       br(), textarea({ maxlength: "5000", name: "materialsText", rows: "3", placeholder: i18n.industryMaterialsPlaceholder || "solar-panel:2:120\nbattery:1:80\nkit:1:15" }, materialsText), br(),
       label(i18n.industryLaborHours || "Labor hours"),
       br(), input({ type: "number", name: "laborHours", min: "0", step: "0.01", value: bp.laborHours != null ? bp.laborHours : "" }), br(),
-      button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Update") : (i18n.industryCreateBlueprintButton || "Create blueprint"))
+      button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Edit") : (i18n.industryCreateBlueprintButton || "Create blueprint"))
     )
   )
 }
@@ -598,7 +598,7 @@ const renderBuildForm = (fc, blueprints, build, mode, spreadWarning = null) => {
       br(), input({ type: "date", name: "endDate", required: true, value: b.endDate || "", min: today }), br(),
       label(i18n.industryBuildNotes || "Notes"),
       br(), textarea({ name: "notes", rows: "3", maxlength: "1000" }, safeText(b.notes)), br(),
-      button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Update") : (i18n.industryProposeBuildButton || "Propose build"))
+      button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Edit") : (i18n.industryProposeBuildButton || "Propose build"))
     )
   )
 }
@@ -659,7 +659,7 @@ const renderFacilitySide = (fc, returnTo, params = {}, cardTop = null) => {
   }
   if (isSteward) {
     sideActions.push(form({ method: "GET", action: `/industry/edit/${encodeURIComponent(fc.id)}` },
-      button({ type: "submit", class: "tribe-action-btn" }, i18n.industryUpdateButton || "Update")
+      button({ type: "submit", class: "tribe-action-btn" }, i18n.industryUpdateButton || "Edit")
     ))
   }
 
@@ -865,7 +865,7 @@ exports.singleBuildView = async (build, params = {}) => {
   }
   if (canUpdateBuild) {
     govRows.push(form({ method: "GET", action: `/industry/builds/${encodeURIComponent(b.id)}/edit` },
-      button({ type: "submit", class: "update-btn" }, i18n.industryUpdateButton || "Update")
+      button({ type: "submit", class: "update-btn" }, i18n.industryUpdateButton || "Edit")
     ))
   }
   if (isMember && isProposer && b.deleteApproved !== false) {

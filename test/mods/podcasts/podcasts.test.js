@@ -6,6 +6,25 @@ const VIDEO = '\n[video:ep2.mp4](&bbbb.sha256)';
 const COVER = '\n![image:cover.png](&cccc.sha256)';
 
 describe('podcasts: channels and episodes', (t) => {
+  t('an episode can be scheduled: only the author sees it until its time, then it is published', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    const podcasts = A.use('podcasts');
+    const ch = await podcasts.createChannel({ title: 'Later show', description: 'd', category: 'talk', cover: COVER, tags: '' });
+    const publishAt = new Date(Date.now() + 3600000).toISOString();
+    const ep = await podcasts.scheduleEpisode(ch.key, { title: 'Soon', media: AUDIO }, publishAt);
+    eq(ep.scheduledAt, publishAt, 'it remembers when to publish');
+    eq((await podcasts.listAll({ filter: 'all' }))[0].episodeCount, 0, 'the channel has no public episode yet');
+    eq((await podcasts.listScheduledEpisodes(ch.key)).map(e => e.title).join(), 'Soon', 'the author sees it scheduled');
+    eq((await podcasts.getEpisodeById(ep.id)).channel.id, ch.key, 'and can open it');
+    eq((await podcasts.publishDue()).length, 0, 'nothing is published before its time');
+    eq((await podcasts.publishDue(Date.now() + 3600001)).length, 1, 'once the time comes it is published');
+    eq((await podcasts.listAll({ filter: 'all' }))[0].episodes[0].title, 'Soon', 'as a normal episode');
+    eq((await podcasts.listScheduledEpisodes(ch.key)).length, 0, 'and leaves the schedule');
+    let bad = false;
+    try { await B.use('podcasts').scheduleEpisode(ch.key, { title: 'x', media: AUDIO }, publishAt); } catch (_) { bad = true; }
+    ok(bad, 'only the author can schedule episodes');
+  });
+
   t('A creates a channel with a cover; episodes get numbered by publication order', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const ch = await A.use('podcasts').createChannel({ title: 'Night talks', description: 'Late conversations', category: 'talk', cover: COVER, tags: 'night, talk' });

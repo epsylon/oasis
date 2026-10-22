@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
+const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { MAX_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
@@ -92,7 +92,7 @@ const renderBallot = (poll, returnTo, basePath, extra = null) => {
 };
 
 const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls") => {
-  const href = `${basePath}/${encodeURIComponent(poll.id)}`;
+  const href = `${basePath || "/polls"}/${encodeURIComponent(poll.id)}`;
   const isOwn = String(poll.author) === String(userId);
   const chips = [
     renderStatusChip(poll),
@@ -103,7 +103,7 @@ const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls") => {
     renderLifespanChip(poll.lifetime, i18n)
   ].filter(Boolean);
   return div({ class: "tribe-card poll-card" + (isOwn ? " own-content" : "") },
-    renderCardTop(poll.id, href, { date: poll.createdAt, chips, spread: spreadInfo || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
+    poll.scheduledAt ? renderCardTop(poll.id, href, { date: poll.createdAt, chips: [renderScheduledChip(poll.scheduledAt)], author: poll.author, report: false, hide: false, arrow: basePath === null ? false : undefined, deleteAction: isOwn ? `/polls/scheduled/delete/${encodeURIComponent(poll.id)}` : undefined }) : renderCardTop(poll.id, href, { date: poll.createdAt, chips, spread: spreadInfo || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
     div({ class: "tribe-card-body" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, a({ href }, poll.question))
@@ -118,7 +118,7 @@ const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls") => {
 
 const renderCreateForm = (poll = null, params = {}) => {
   const isEdit = !!poll;
-  const action = isEdit ? `/polls/update/${encodeURIComponent(poll.id)}` : "/polls/create";
+  const action = isEdit && poll.scheduledAt ? `/polls/scheduled/update/${encodeURIComponent(poll.id)}` : isEdit ? `/polls/update/${encodeURIComponent(poll.id)}` : "/polls/create";
   const lock = isEdit ? renderMediaLockNote(poll) : null;
   const ro = lock ? { readonly: true } : {};
   return section(
@@ -168,6 +168,7 @@ const renderCreateForm = (poll = null, params = {}) => {
         br(),
         input({ type: "text", name: "tags", value: isEdit ? poll.tags.join(", ") : "" }),
         br(), br(),
+        ...(isEdit && !poll.scheduledAt ? [] : [label(i18n.publishAtLabel), br(), input({ type: "datetime-local", name: "publishAt", min: moment().format("YYYY-MM-DDTHH:mm"), value: isEdit ? moment(poll.scheduledAt).format("YYYY-MM-DDTHH:mm") : "", ...(isEdit ? { required: true } : {}) }), br(), br()]),
         button({ type: "submit", class: "create-button" }, isEdit ? i18n.pollUpdateButton : i18n.pollPublishButton)
       )
     )
@@ -244,6 +245,7 @@ exports.pollsView = async (polls = [], filter = "ALL", params = {}) => {
 };
 
 exports.singlePollView = async (poll, comments = [], params = {}) => {
+  if (poll.scheduledAt) return template(poll.question, section(div({ class: "tags-header module-header-line" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))), section(renderPollCard(poll, params.filter, null, null), String(poll.author) === String(userId) ? div({ class: "tribe-side-actions" }, form({ method: "GET", action: "/polls" }, input({ type: "hidden", name: "filter", value: "EDIT" }), input({ type: "hidden", name: "id", value: poll.id }), button({ type: "submit", class: "update-btn" }, i18n.pollUpdateButton))) : null));
   const basePath = "/polls";
   const href = `${basePath}/${encodeURIComponent(poll.id)}`;
   const isOwn = String(poll.author) === String(userId);

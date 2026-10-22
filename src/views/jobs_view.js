@@ -372,7 +372,6 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null, params =
       input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: job.mapUrl || "" }),
       br(),
       br(),
-      reach === "PUBLIC" && clearnetEligible({ ...job, visibility: reach }) ? renderClearnetSelector(job.clearnet === true || String(job.clearnet || "") === "1", i18n) : null,
       label(i18n.jobVacants),
       br(),
       input({ type: "number", name: "vacants", min: "1", placeholder: i18n.jobVacantsPlaceholder, value: job.vacants || 1, required: true }),
@@ -407,6 +406,7 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null, params =
             br()
           ]
         : null,
+      reach === "PUBLIC" && clearnetEligible({ ...job, visibility: reach }) ? renderClearnetSelector(job.clearnet === true || String(job.clearnet || "") === "1", i18n) : null,
       button({ type: "submit" }, isEdit ? i18n.jobsUpdateButton : i18n.createJobButton)
     )
   )

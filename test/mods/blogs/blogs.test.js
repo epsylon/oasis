@@ -21,6 +21,78 @@ describe('blogs: publish and list', (t) => {
     notOk(blog.allowComments, 'comments closed');
   });
 
+  t('a blog can be scheduled: it stays private until its time, then it is published', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const blogs = A.use('blogs');
+    const publishAt = new Date(Date.now() + 3600000).toISOString();
+    const scheduled = await blogs.scheduleBlog({ text: 'later', subject: 'soon', publishAt });
+    ok(blogs.isScheduledId(scheduled.id), 'it gets a scheduled id, not a message');
+    eq(scheduled.scheduledAt, publishAt, 'it remembers when to publish');
+    eq((await blogs.listAll('ALL')).map(b => b.scheduledAt).join(), publishAt, 'the author sees it in the list with its date');
+    eq((await blogs.listAll('MINE')).map(b => b.scheduledAt).join(), publishAt, 'and in MINE');
+    eq((await makePeer(net).use('blogs').listAll('ALL')).length, 0, 'nobody else does');
+    eq((await blogs.getBlogById(scheduled.id)).subject, 'soon', 'and can open it');
+    eq((await blogs.publishDue()).length, 0, 'nothing is published before its time');
+    const published = await blogs.publishDue(Date.now() + 3600001);
+    eq(published.length, 1, 'once the time comes it is published');
+    eq((await blogs.getBlogById(published[0].msg.key)).text, 'later', 'as a normal blog');
+    eq((await blogs.listAll('MINE')).filter(b => b.scheduledAt).length, 0, 'and leaves the schedule');
+    let threw = false;
+    try { await blogs.scheduleBlog({ text: 'past', publishAt: new Date(Date.now() - 1000).toISOString() }); } catch (_) { threw = true; }
+    ok(threw, 'a date in the past is refused');
+  });
+
+  t('a scheduled blog can be cancelled by its author only', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    const blogs = A.use('blogs');
+    const scheduled = await blogs.scheduleBlog({ text: 'maybe', publishAt: new Date(Date.now() + 3600000).toISOString() });
+    let threw = false;
+    try { await B.use('blogs').cancelScheduled(scheduled.id); } catch (_) { threw = true; }
+    ok(threw, 'someone else cannot cancel it');
+    const later = new Date(Date.now() + 7200000).toISOString();
+    const edited = await blogs.updateScheduled(scheduled.id, { text: 'maybe not', publishAt: later });
+    eq(edited.text, 'maybe not', 'the author can change the text');
+    eq(edited.scheduledAt, later, 'and the date');
+    await blogs.cancelScheduled(scheduled.id);
+    eq((await blogs.listAll('MINE')).length, 0, 'the author can');
+  });
+
+  t('the author can update a blog: readers see the new version, comments and opinions stay with it', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    const blogs = A.use('blogs');
+    const created = await blogs.createBlog({ text: 'first words', subject: 'v1', tags: ['a'] });
+    B.setActor();
+    await B.use('blogs').createOpinion(created.key, 'interesting');
+    A.setActor();
+    const updated = await blogs.updateBlog(created.key, { text: 'second words', subject: 'v2' });
+    eq(updated.rootId, created.key, 'the blog keeps its id');
+    const list = await blogs.listAll('ALL');
+    eq(list.length, 1, 'only one blog is listed');
+    eq(list[0].id, created.key, 'under the original id');
+    eq(list[0].text, 'second words', 'with the new text');
+    eq(list[0].subject, 'v2', 'and the new subject');
+    eq(list[0].tags.join(), 'a', 'what was not changed is kept');
+    eq(list[0].tipId, updated.key, 'and points to its latest version');
+    eq(list[0].opinions.interesting, 1, 'opinions given before the change still count');
+    eq((await blogs.getBlogById(updated.key)).id, created.key, 'opening the latest version opens the blog');
+    await blogs.updateBlog(created.key, { tags: ['b', 'c'], allowComments: false });
+    const again = await blogs.getBlogById(created.key);
+    eq(again.tags.join(), 'b,c', 'the tags can be changed');
+    notOk(again.allowComments, 'and comments can be closed');
+    eq(again.text, 'second words', 'without touching the text');
+    await blogs.updateBlog(created.key, { tags: [], allowComments: true });
+    const open = await blogs.getBlogById(created.key);
+    eq(open.tags.length, 0, 'tags can be removed altogether');
+    ok(open.allowComments, 'and comments reopened');
+    B.setActor();
+    let threw = false;
+    try { await B.use('blogs').updateBlog(created.key, { text: 'hijack' }); } catch (_) { threw = true; }
+    ok(threw, 'nobody else can change it');
+    A.setActor();
+    await blogs.deleteBlogById(created.key);
+    eq((await blogs.listAll('ALL')).length, 0, 'deleting an edited blog removes it');
+  });
+
   t('an empty blog is rejected', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const blogs = A.use('blogs');

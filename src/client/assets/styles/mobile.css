@@ -1225,7 +1225,7 @@ a.create-button {
 body:has(.oasis-nav-side-toggle) {
   padding-top: 64px !important;
 }
-body:has(:is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select):focus) .oasis-nav-side-toggle ~ .header {
+body:has(:is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, select):not([autofocus]):focus) .oasis-nav-side-toggle ~ .header {
   position: absolute !important;
 }
 .oasis-nav-side-toggle ~ .header .top-bar-left,
@@ -1515,3 +1515,14 @@ body:has(:is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"
   line-height: 1 !important;
   margin: 0 !important;
 }
+
+.main-column .card-header.card-top { display: block !important; position: relative !important; min-height: 32px !important; padding-right: 0 !important; }
+.main-column .card-header.card-top > .content-actions { position: absolute !important; top: 0 !important; right: 0 !important; margin: 0 !important; gap: 4px !important; }
+.main-column .card-header.card-top > .card-byline { display: block !important; min-height: 32px !important; line-height: 22px !important; }
+.main-column .card-header.card-top > .card-byline::before { content: ""; float: right; width: 76px; height: 32px; }
+.main-column .card-header.card-top:has(> .content-actions > .spread-form) > .card-byline::before { width: 128px; }
+.main-column .card-header.card-top .card-byline > * { display: inline-block !important; vertical-align: middle !important; margin: 0 6px 2px 0 !important; }
+.main-column .card-header.card-top .card-byline-avatar { height: 32px !important; display: inline-flex !important; align-items: center !important; }
+.main-column .card-header.card-top .card-byline > .card-byline-time { font-size: 11px !important; margin-right: 0 !important; }
+.main-column .card-header.card-top > .content-actions .spread-form .btn-singleview { padding: 0 7px !important; min-width: 0 !important; gap: 3px !important; height: 32px !important; }
+.main-column .card-header.card-top > .content-actions .spread-form .btn-singleview .btn-count { font-size: 12px !important; }

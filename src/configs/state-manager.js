@@ -37,6 +37,7 @@ const FOLDERS = {
   'peer-health.json': 'peers',
   'phone-history.json': 'phone',
   'phone-seen.json': 'phone',
+  'scheduled.json': 'content',
   'snapshot.oasissn': 'content',
   'snapshot-recent.oasissn': 'content'
 };

@@ -45,6 +45,27 @@ describe('blockchain (blockexplorer)', (t) => {
   });
 });
 
+describe('blockchain: opening a block older than the recent window', (t) => {
+  t('a block is found in the whole log, and its deletion too', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const publish = (c) => new Promise((res, rej) => A.node.publish(c, (e, m) => e ? rej(e) : res(m)));
+    const configManager = require('../../../src/configs/config-manager.js');
+    const before = configManager.getConfig();
+    configManager.saveConfig({ ...before, ssbLogStream: { ...(before.ssbLogStream || {}), limit: 2 } });
+    try {
+      const old = await publish({ type: 'post', text: 'ancient' });
+      const gone = await publish({ type: 'post', text: 'ancient too' });
+      await publish({ type: 'tombstone', target: gone.key });
+      for (let i = 0; i < 4; i++) await publish({ type: 'post', text: `new ${i}` });
+      const block = await A.use('blockchain').getBlockById(old.key, A.keypair.id);
+      eq(block && block.type, 'post', 'an old block still opens');
+      eq(block.isTombstoned, false, 'and is not marked as deleted');
+      eq((await A.use('blockchain').getBlockById(gone.key, A.keypair.id)).isTombstoned, true, 'a deleted old block shows as deleted');
+      eq(await A.use('blockchain').getBlockById('%' + 'x'.repeat(43) + '=.sha256', A.keypair.id), null, 'what is not in the log is not found');
+    } finally { configManager.saveConfig(before); }
+  });
+});
+
 describe('blockchain: computeStats (explorer stats panel)', (t) => {
   const { computeStats } = require('../../../src/views/blockchain_view');
 

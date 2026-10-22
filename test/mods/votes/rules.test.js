@@ -95,3 +95,35 @@ describe('votes: the rules of a votation', (t) => {
     await throwsAsync(() => A.use('votes').createOpinion(r.key, 'useful'), /Already voted/);
   });
 });
+
+describe('votes: opening a votation later', (t) => {
+  const hour = 3600000;
+  t('a scheduled votation can be changed by its author before its time', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const votes = A.use('votes');
+    const day = 86400000;
+    const scheduled = await votes.scheduleVote('Soon?', new Date(Date.now() + 10 * day).toISOString(), ['YES', 'NO'], [], new Date(Date.now() + day).toISOString());
+    const later = new Date(Date.now() + 2 * day).toISOString();
+    const edited = await votes.updateScheduledVote(scheduled.id, 'Later?', new Date(Date.now() + 10 * day).toISOString(), undefined, ['x'], later);
+    eq(edited.question, 'Later?', 'the question changes');
+    eq(edited.options.join(), 'YES,NO', 'the options stay when none are given');
+    eq(edited.scheduledAt, later, 'and the date changes');
+    eq((await votes.getVoteById(scheduled.id)).tags.join(), 'x', 'what is stored is the new version');
+  });
+
+  t('a scheduled votation stays with its author until its time, then it is published', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const votes = A.use('votes');
+    const publishAt = new Date(Date.now() + hour).toISOString();
+    const scheduled = await votes.scheduleVote('Later?', future(), ['YES', 'NO'], ['gov'], publishAt);
+    eq(scheduled.scheduledAt, publishAt, 'it remembers when to publish');
+    eq((await votes.listAll('all')).map(v => v.question).join(), 'Later?', 'the author sees it in the list');
+    eq((await votes.listAll('mine')).map(v => v.question).join(), 'Later?', 'and in MINE');
+    eq((await makePeer(net).use('votes').listAll('all')).length, 0, 'nobody else does');
+    eq((await votes.getVoteById(scheduled.id)).question, 'Later?', 'and can open it');
+    eq((await votes.publishDue()).length, 0, 'nothing is published before its time');
+    eq((await votes.publishDue(Date.now() + hour + 1)).length, 1, 'once the time comes it is published');
+    eq((await votes.listAll('all')).map(v => v.question).join(), 'Later?', 'as a normal votation');
+    await throwsAsync(() => votes.scheduleVote('Soon?', future(8), ['YES', 'NO'], [], future(2)), 'days after the publish date');
+  });
+});

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderTribeOriginChip } = require("./clearnet_view");
@@ -105,9 +105,11 @@ const renderVoteListItem = exports.renderVoteListItem = (v, voteOptionsDefault, 
   const returnTo = `/votes?filter=${encodeURIComponent(activeFilter || "all")}`;
   const totalOpinions = Object.values(v.opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0);
   const isOwn = isVoteAuthor(v);
-  const topOpts = { author: v.createdBy, date: v.createdAt, chips };
+  const topOpts = { author: v.createdBy, date: v.createdAt, chips: v.scheduledAt ? [renderScheduledChip(v.scheduledAt)] : chips };
   const cardTop = opts.headerActions !== undefined
     ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(topOpts), opts.headerActions)
+    : v.scheduledAt
+      ? renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { ...topOpts, report: false, hide: false, arrow: opts.arrow, deleteAction: isOwn ? `/votes/scheduled/delete/${encodeURIComponent(v.id)}` : undefined })
     : origin
       ? renderCardTop(v.id, origin.href, { ...topOpts, spread: spreadInfo || null, reportTitle: v.question })
       : renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { ...topOpts, spread: spreadInfo || null, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, returnTo, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined });
@@ -335,7 +337,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
             { class: "vote-form" },
             mode === "edit" ? await renderSpreadEditWarning(voteId) : null,
             form(
-              { action: mode === "edit" ? `/votes/update/${encodeURIComponent(voteId)}` : "/votes/create", method: "POST" },
+              { action: mode === "edit" && voteToEdit.scheduledAt ? `/votes/scheduled/update/${encodeURIComponent(voteId)}` : mode === "edit" ? `/votes/update/${encodeURIComponent(voteId)}` : "/votes/create", method: "POST" },
               input({ type: "hidden", name: "returnTo", value: listReturnTo }),
               h2(i18n.voteQuestionLabel),
               input({ type: "text", name: "question", id: "question", required: true, value: questionValue, ...(opinionLock ? { readonly: true } : {}) }), opinionLock, br(), br(),
@@ -350,11 +352,14 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
               }), br(), br(),
               label(i18n.voteTagsLabel), br(),
               input({ type: "text", name: "tags", id: "tags", value: tagsValue }), br(), br(),
+              ...(mode === "edit" && !voteToEdit.scheduledAt ? [] : [label(i18n.publishAtLabel), br(), input({ type: "datetime-local", name: "publishAt", id: "publishAt", min: moment().format("YYYY-MM-DDTHH:mm"), value: voteToEdit.scheduledAt ? moment(voteToEdit.scheduledAt).format("YYYY-MM-DDTHH:mm") : "", ...(voteToEdit.scheduledAt ? { required: true } : {}) }), br(), br()]),
               button({ type: "submit" }, mode === "edit" ? i18n.voteUpdateButton : i18n.voteCreateButton)
             )
           )
         : mode === "detail" && voteId
-          ? renderVoteDetail(filtered[0] || list.find(v => v.id === voteId) || {}, voteOptions, firstRow, secondRow, mode, activeFilter, { ...params, comments })
+          ? ((filtered[0] || list.find(v => v.id === voteId) || {}).scheduledAt
+              ? renderVoteListItem(filtered[0] || list.find(v => v.id === voteId), voteOptions, activeFilter, null, { arrow: false, bodyExtra: [isVoteAuthor(filtered[0] || list.find(v => v.id === voteId) || {}) ? form({ method: "GET", action: `/votes/edit/${encodeURIComponent(voteId)}` }, button({ type: "submit", class: "update-btn" }, i18n.voteUpdateButton)) : null] })
+              : renderVoteDetail(filtered[0] || list.find(v => v.id === voteId) || {}, voteOptions, firstRow, secondRow, mode, activeFilter, { ...params, comments }))
           : filtered.length > 0
             ? div({ class: "jobs-grid" }, paged(filtered).map((v) => renderVoteListItem(v, voteOptions, activeFilter, params.spreadMap && params.spreadMap.get(v.id))))
             : div({ class: "no-content-box" }, p(i18n.novotes)),

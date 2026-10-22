@@ -345,6 +345,7 @@ const blobUrlOf = (v) => (String(v || '').startsWith('/blob/sealed/') ? String(v
 exports.blobUrlOf = blobUrlOf;
 const ACTION_ICONS = {
   hide: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="3" x2="21" y2="21"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
   spread: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>',
   pin: '<path d="M9 3h6l-1 6 4 4H6l4-4-1-6z"/><line x1="12" y1="13" x2="12" y2="21"/>',
   report: '<line x1="5" y1="21" x2="5" y2="3"/><path d="M5 4h12l-2.5 4.5L17 13H5"/>',
@@ -553,6 +554,12 @@ const renderDetailShare = (blockId, viewHref, title) => {
   return share ? div({ class: 'detail-share' }, share) : null;
 };
 exports.renderDetailShare = renderDetailShare;
+const renderScheduledChip = (publishAt) => publishAt
+  ? span({ class: 'pm-exposition-chip pm-exposition-scheduled', title: i18n.scheduledLabel },
+      span({ class: 'pm-exposition-icon' }, renderIcon('clock')),
+      span({ class: 'pm-exposition-text' }, moment(publishAt).format('YYYY/MM/DD HH:mm')))
+  : null;
+exports.renderScheduledChip = renderScheduledChip;
 exports.renderCommentsPill = renderCommentsPill;
 exports.commentCountFor = commentCountFor;
 exports.renderOpinionsPill = renderOpinionsPill;
@@ -603,6 +610,15 @@ const renderDocumentActions = (kind, id, leadingNodes = []) => {
   );
 };
 exports.renderDocumentActions = renderDocumentActions;
+
+const renderAiAgentField = (name, checked = false) =>
+  label({ class: 'ai-agent-field' },
+    input({ type: 'checkbox', name, value: '1', ...(checked ? { checked: true } : {}) }),
+    ` ${i18n.aiAgentFieldLabel}`
+  );
+exports.renderAiAgentField = renderAiAgentField;
+const renderAiBotChip = (prefs) => (prefs && prefs.aiAgent === true ? span({ class: 'status ai-bot' }, i18n.aiBotChip) : null);
+exports.renderAiBotChip = renderAiBotChip;
 
 const renderRelationshipBlock = (relationship, feedId) => {
   const rel = relationship || {};
@@ -3338,6 +3354,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
           ]),
           input({ type: "hidden", name: "fediverseHandle", value: fediverseHandleValue })
         ),
+        renderAiAgentField("vis_aiAgent", visibilityPrefs.aiAgent === true),
         br(),
         button(
           {
@@ -3387,6 +3404,7 @@ exports.clearnetBlogView = async ({ msgKey, text, author, authorName, contentWar
     title: `${titleText} | Oasis`,
     ogTitle: titleText,
     ogDescription: plainPreview,
+    ogType: 'article',
     extraCss,
     body,
     hubFeedId: author || null
@@ -3820,6 +3838,7 @@ exports.authorView = async ({
     wallet:   rawPrefs.wallet   === true,
     ecoTax:   rawPrefs.ecoTax   !== false,
     larpSign: rawPrefs.larpSign === true,
+    aiAgent:  rawPrefs.aiAgent  === true,
     clearnet: rawPrefs.clearnet === true,
     fediverse: rawPrefs.fediverse === true,
     fediverseHandle: typeof rawPrefs.fediverseHandle === 'string' ? rawPrefs.fediverseHandle : '',
@@ -3837,7 +3856,7 @@ exports.authorView = async ({
   const escHtml = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const markdownMention = `[@${escHtml(name)}](<strong>${escHtml(feedId)}</strong>)`;
 
-  const relationshipBlock = renderRelationshipBlock(relationship, feedId);
+  const relationshipBlock = [renderRelationshipBlock(relationship, feedId), renderAiBotChip(prefs)];
 
   const userSensors = renderUserSensors({
     isMe: isOwnProfile, fediverseConfigured, prefs, id: feedId,
@@ -3850,17 +3869,17 @@ exports.authorView = async ({
   const sideColumn = div({ class: "tribe-side profile-side" },
     img({ class: "inhabitant-photo-details", src: avatarUrl, alt: name }),
     h2({ class: "profile-side-name" }, name),
+    description !== ""
+      ? div({ class: "profile-side-description", [RAW_HTML]: sanitizeHtml(renderStyledHtml(description)) })
+      : null,
     div({ class: "profile-side-mention" },
       a({ href: `/author/${encodeURIComponent(feedId)}` }, strong(feedId))
     ),
+    feedId ? renderInviteQrCard({ qrDataUrl: `/qr/${encodeURIComponent(feedId)}` }) : null,
     oasisVersion ? div({ class: "profile-side-version" },
       '🌴 ' + (i18n.oasisVersionLabel || 'Oasis Version') + ': ',
       strong(oasisVersion)
     ) : null,
-    feedId ? renderInviteQrCard({ qrDataUrl: `/qr/${encodeURIComponent(feedId)}` }) : null,
-    description !== ""
-      ? div({ class: "profile-side-description", [RAW_HTML]: sanitizeHtml(renderStyledHtml(description)) })
-      : null,
     ...userSensors,
     div({ class: "profile-side-actions" },
       isOwnProfile ? a({ href: `/profile/edit`, class: "filter-btn" }, `✎ ${i18n.editProfile}`) : null,

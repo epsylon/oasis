@@ -90,6 +90,7 @@ const FACTORIES = {
   games: '../../src/models/games_model',
   logs: '../../src/models/logs_model',
   blogs: '../../src/models/blog_model',
+  scheduler: '../../src/models/scheduler_model',
   polls: '../../src/models/polls_model',
   data: '../../src/models/data_model',
   mentions: '../../src/models/mentions_model',
@@ -116,7 +117,7 @@ function makePeer(network, keypair) {
   const eventCrypto = cryptoModel.scope('events');
   const forumCrypto = cryptoModel.scope('forum');
   const schoolCrypto = cryptoModel.scope('school');
-  const baseDeps = { cooler, isPublic: false, cryptoModel };
+  const baseDeps = { cooler, isPublic: false, cryptoModel, configPath: configDir };
   const models = {};
   const requireOnce = (name) => {
     if (models[name]) return models[name];
@@ -124,8 +125,10 @@ function makePeer(network, keypair) {
     let deps;
     if (name === 'tribesContent' || name === 'torrents' || name === 'files') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes') };
+    } else if (name === 'blogs' || name === 'podcasts' || name === 'votes') {
+      deps = { ...baseDeps, scheduler: requireOnce('scheduler') };
     } else if (name === 'polls') {
-      deps = { ...baseDeps, chatsModel: requireOnce('chats') };
+      deps = { ...baseDeps, chatsModel: requireOnce('chats'), scheduler: requireOnce('scheduler') };
     } else if (name === 'chats') {
       deps = { ...baseDeps, chatCrypto, tribesModel: requireOnce('tribes') };
     } else if (name === 'pads') {
@@ -153,7 +156,7 @@ function makePeer(network, keypair) {
     } else if (name === 'stats' || name === 'blockchain' || name === 'larp') {
       deps = { ...baseDeps, tribesModel: requireOnce('tribes') };
     } else if (name === 'events') {
-      deps = { ...baseDeps, eventCrypto, tribesModel: requireOnce('tribes') };
+      deps = { ...baseDeps, eventCrypto, tribesModel: requireOnce('tribes'), scheduler: requireOnce('scheduler') };
     } else if (name === 'forum') {
       deps = { cooler, isPublic: false, cryptoModel, forumCrypto };
     } else if (name === 'search') {
