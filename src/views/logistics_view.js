@@ -161,7 +161,7 @@ const renderForm = (route, params = {}) => {
       label(i18n.logisticsModeLabel), br(),
       select({ name: "mode" }, ...MODES.map(m => option({ value: m, ...((route ? route.mode : "OFFER") === m ? { selected: true } : {}) }, modeLabel(m)))), br(), br(),
       label(i18n.logisticsDescriptionLabel), br(),
-      textarea({ name: "description", rows: 5, maxlength: "3000", placeholder: i18n.logisticsDescriptionPlaceholder }, route ? route.description : ""), br(),
+      textarea({ name: "description", rows: 5, placeholder: i18n.logisticsDescriptionPlaceholder }, route ? route.description : ""), br(),
       label(i18n.uploadMedia), br(),
       (route && renderMediaLockNote(route)) || input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
       label(i18n.logisticsOriginLabel), br(),
@@ -274,7 +274,7 @@ const renderBookForm = (route) =>
     h3(i18n.logisticsBookTitle),
     route.kind === "TRIP" ? [label(i18n.logisticsSeatsLabel), br(), input({ type: "number", name: "seats", min: "1", max: String(route.seatsLeft || 99), step: "1", value: "1" }), br(), br()] : null,
     label(i18n.logisticsNotesLabel), br(),
-    textarea({ name: "notes", rows: 3, maxlength: "1000", placeholder: i18n.logisticsNotesPlaceholder }), br(), br(),
+    textarea({ name: "notes", rows: 3, placeholder: i18n.logisticsNotesPlaceholder }), br(), br(),
     label(i18n.logisticsOrderRefLabel), br(),
     input({ type: "text", name: "orderRef", maxlength: "200", placeholder: i18n.logisticsOrderRefPlaceholder }), br(), br(),
     button({ type: "submit", class: "create-button" }, i18n.logisticsBook)
@@ -293,7 +293,7 @@ const renderRatings = (route) =>
       ? form({ method: "POST", action: `/logistics/${encodeURIComponent(route.id)}/rate`, class: "logistics-rate-form" },
           label(i18n.logisticsScoreLabel), br(),
           select({ name: "score" }, ...[5, 4, 3, 2, 1].map(n => option({ value: String(n) }, stars(n)))), br(), br(),
-          textarea({ name: "text", rows: 3, maxlength: "1000", placeholder: i18n.logisticsRatingPlaceholder }), br(), br(),
+          textarea({ name: "text", rows: 3, placeholder: i18n.logisticsRatingPlaceholder }), br(), br(),
           button({ type: "submit", class: "create-button" }, i18n.logisticsRate)
         )
       : null
@@ -303,18 +303,28 @@ exports.singleLogisticsView = async (route, params = {}) => {
   const href = routeHref(route);
   const census = Array.isArray(params.censusList) ? params.censusList : [];
   const zones = Array.isArray(params.zones) ? params.zones : [];
-  const ownerActions = route.isOwner
-    ? [
-        form({ method: "GET", action: "/logistics" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: route.id }), button({ type: "submit", class: "update-btn" }, i18n.logisticsUpdate))
-      ]
-    : [];
   const capacity = route.kind === "TRIP"
     ? (route.seats ? [{ label: i18n.logisticsSeatsLabel, value: `${route.seatsLeft} / ${route.seats}` }] : [])
     : [route.size ? { label: i18n.logisticsSizeLabel, value: route.size } : null, route.weight ? { label: i18n.logisticsWeightLabel, value: route.weight } : null].filter(Boolean);
+  const statusRow = route.isOwner
+    ? div({ class: "tribe-side-actions housing-status-row" },
+        span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),
+        statusChip(route),
+        form({ method: "POST", action: `/logistics/status/${encodeURIComponent(route.id)}`, class: "inline-form" },
+          button({ class: "tribe-action-btn", type: "submit", name: "status", value: route.status === "CLOSED" ? "OPEN" : "CLOSED" },
+            String(route.status === "CLOSED" ? i18n.logisticsReopen : i18n.logisticsClose).toUpperCase())
+        )
+      )
+    : null;
   const side = div({ class: "tribe-side" },
-    renderCardTop(route.id, href, { arrow: false, date: route.createdAt, chips: [kindChip(route), modeChip(route), statusChip(route), priceChip(route)], bylineExtra: [renderEditedChip(route.tipId, route.rootId)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
+    renderCardTop(route.id, href, { arrow: false, date: route.createdAt, chips: [kindChip(route), modeChip(route), statusChip(route), priceChip(route)], bylineExtra: [renderEditedChip(route.tipId, route.rootId)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, editAction: route.isOwner ? `/logistics?filter=edit&id=${encodeURIComponent(route.id)}` : undefined, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title)),
     renderDetailShare(route.id, href, route.title),
+    renderTags(route.tags),
+    statusRow
+  );
+  const main = div({ class: "tribe-main" },
+    route.description ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), div({ class: "logistics-body" }, ...renderStyledText(route.description))) : null,
     table({ class: "tribe-info-table jobs-info-table" },
       tr(
         td({ class: "tribe-info-label" }, i18n.logisticsDateLabel),
@@ -341,30 +351,15 @@ exports.singleLogisticsView = async (route, params = {}) => {
     ),
     countersBlock(route),
     renderMapEmbed(params.mapData, route.mapUrl),
+    route.canBook ? div({ class: "card-section" }, renderBookForm(route)) : null,
     route.orderRef
       ? div({ class: "tribe-side-actions" }, form({ method: "GET", action: route.orderRef }, button({ type: "submit", class: "tribe-action-btn" }, `🛍 ${String(i18n.logisticsOrderLink).toUpperCase()}`)))
-      : null,
-    route.isOwner
-      ? div({ class: "tribe-side-actions housing-status-row" },
-          span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),
-          statusChip(route),
-          form({ method: "POST", action: `/logistics/status/${encodeURIComponent(route.id)}`, class: "inline-form" },
-            button({ class: "tribe-action-btn", type: "submit", name: "status", value: route.status === "CLOSED" ? "OPEN" : "CLOSED" },
-              String(route.status === "CLOSED" ? i18n.logisticsReopen : i18n.logisticsClose).toUpperCase())
-          )
-        )
       : null,
     bookingsBlock(route),
     div({ class: "doc-export-actions" },
       form({ method: "GET", action: `${href}/pdf` }, button({ type: "submit", class: "filter-btn" }, i18n.logisticsGenerateReport)),
       form({ method: "POST", action: `${href}/share` }, button({ type: "submit", class: "filter-btn" }, i18n.sharePm))
     ),
-    renderTags(route.tags),
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null
-  );
-  const main = div({ class: "tribe-main" },
-    route.description ? div({ class: "logistics-body" }, ...renderStyledText(route.description)) : null,
-    route.canBook ? div({ class: "card-section" }, renderBookForm(route)) : null,
     route.bookings.length
       ? div({ class: "card-section logistics-bookings" },
           h3(route.isOwner ? `${i18n.logisticsBookingsTitle} (${route.bookings.length})` : i18n.logisticsMyBookingTitle),

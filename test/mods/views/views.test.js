@@ -380,3 +380,18 @@ describe('views: pictures are asked for in sizes the image route serves', (t) =>
     eq(refused.length, 0, `sizes the image route refuses: ${refused.join(', ')}`);
   });
 });
+
+describe('views: a tribe feed opened to everyone can be refeeded from the feed', (t) => {
+  t('the card keeps the refeed column with the public count and posts to the feed route', () => {
+    const { renderFeedCard } = require('../../../src/views/feed_view');
+    const me = '@' + 'a'.repeat(43) + '=.ed25519';
+    const other = '@' + 'b'.repeat(43) + '=.ed25519';
+    const id = '%' + 'o'.repeat(43) + '=.sha256';
+    const feed = { key: id, rootId: id, value: { author: other, timestamp: Date.now(), content: { type: 'feed', text: 'open to all', author: other, refeeds: 3, refeeds_inhabitants: [me] } }, tribeOrigin: { tribeId: '%t.sha256', title: 'T', href: '/tribe/%25t.sha256?section=feed', tribeHref: '/tribe/%25t.sha256', level: 'oasis', openedBy: other } };
+    const node = renderFeedCard(feed, null, {});
+    const html = node && node.outerHTML ? node.outerHTML : String(node);
+    ok(html.includes('refeed-column'), 'the column is there');
+    ok(html.includes('<h1>3</h1>'), 'with the public count');
+    ok(html.includes(`action="/feed/refeed/${encodeURIComponent(id)}"`), 'and the button posts to the feed route');
+  });
+});

@@ -32,24 +32,6 @@ const renderTags = (tags) => {
     : null;
 };
 
-const renderTorrentOwnerActions = (filter, torrentObj, params = {}) => {
-  const returnTo = buildReturnTo(filter, params);
-  const isAuthor = String(torrentObj.author) === String(userId);
-
-  if (!isAuthor) return [];
-
-  const items = [];
-  items.push(
-    form(
-      { method: "GET", action: `/torrents/edit/${encodeURIComponent(torrentObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.torrentUpdateButton)
-    )
-  );
-
-  return items;
-};
-
 const renderTorrentCommentsSection = (torrentId, comments = [], returnTo = null) => {
   return renderSharedCommentsSection({
     action: `/torrents/${encodeURIComponent(torrentId)}/comments`,
@@ -95,8 +77,8 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
         td(t.title || "", t.tribeOrigin ? renderTribeOriginChip(t.tribeOrigin) : t.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('torrents', t.title, t.key)) : null, ...(row && Array.isArray(row.titleChips) ? row.titleChips.filter(Boolean) : [])),
         td(formatSize(t.size)),
-        td({ class: "torrent-spread-cell" }, t.tribeOrigin || row ? "" : renderTorrentSeeds(t, params.spreadMap)),
-        td({ class: "torrent-spread-cell" }, t.tribeOrigin || row ? "" : renderTorrentSpread(t, params.spreadMap)),
+        td({ class: "torrent-spread-cell torrent-seeds-cell", 'data-label': i18n.seedsLabel }, t.tribeOrigin || row ? "" : span({ class: "torrent-seeds-count" }, renderTorrentSeeds(t, params.spreadMap))),
+        td({ class: "torrent-spread-cell torrent-seed-action-cell" }, t.tribeOrigin || row ? "" : renderTorrentSpread(t, params.spreadMap)),
         td(
           row
             ? (row.details || "")
@@ -156,7 +138,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
       br(),
       span(i18n.torrentDescriptionLabel),
       br(),
-      textarea({ maxlength: "5000", name: "description", placeholder: i18n.torrentDescriptionPlaceholder, rows: "4" }, torrentToEdit?.description || ""),
+      textarea({ name: "description", placeholder: i18n.torrentDescriptionPlaceholder, rows: "4" }, torrentToEdit?.description || ""),
       br(),
       span(i18n.torrentTagsLabel),
       br(),
@@ -349,9 +331,6 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
     torrentObj.sizeBytes ? renderEcoTax(torrentObj.sizeBytes, torrentObj.key) : null
   ].filter(Boolean);
 
-  const ownerActions = renderTorrentOwnerActions(filter, torrentObj, { q, sort });
-  const sideActions = [];
-  for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(torrentObj.tags);
   const href = `/torrents/${encodeURIComponent(torrentObj.key)}`;
@@ -379,6 +358,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
       spread: params.spreads || null,
       returnTo,
       reportTitle: torrentObj.title,
+      editAction: String(torrentObj.author) === String(userId) ? `/torrents/edit/${encodeURIComponent(torrentObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: String(torrentObj.author) === String(userId) ? contentDeleteAction('torrent', torrentObj.key) : undefined
     }),
     div({ class: "shop-title-row" },
@@ -386,14 +366,13 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
       clearnetAllowed && isAuthor ? renderClearnetSwitch('torrents', torrentObj.rootId || torrentObj.key, isClearnet) : null
     ),
     renderDetailShare(torrentObj.key, href, torrentObj.title),
-    safeText(torrentObj.description)
-      ? p({ class: "tribe-side-description" }, ...renderStyledText(torrentObj.description))
-      : null,
     tagsNode,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const torrentMain = div({ class: "tribe-main" },
+    safeText(torrentObj.description)
+      ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(torrentObj.description)))
+      : null,
     torrentObj.url && torrentObj.url.startsWith("&")
       ? div({ class: "torrent-download" },
           renderOasisDownload(torrentObj, params),

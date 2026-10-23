@@ -203,21 +203,52 @@ const createScope = (configPath, namespace) => {
   const isSealedMsg = (c) =>
     !!c && c.type === ENVELOPE_TYPE && c.v === ENVELOPE_VERSION && typeof c.fp === 'string' && typeof c.p === 'string';
 
+  const MAX_MESSAGE_CHARS = 8192;
+  const sealedMessageLength = (sealed) => JSON.stringify({
+    previous: '%' + 'x'.repeat(44) + '.sha256',
+    sequence: 1000000,
+    author: '@' + 'x'.repeat(44) + '.ed25519',
+    timestamp: Date.now(),
+    hash: 'sha256',
+    content: sealed,
+    signature: 'x'.repeat(88) + '.sig.ed25519'
+  }, null, 2).length;
+  const assertFits = (sealed) => {
+    const size = sealedMessageLength(sealed);
+    if (size > MAX_MESSAGE_CHARS) throw new Error(`Message too long: once sealed it would be ${size} characters and the network accepts up to ${MAX_MESSAGE_CHARS}`);
+    return sealed;
+  };
   const wrapMsg = (body, kHex) => {
     if (!kHex) throw new Error('wrapMsg: missing key');
     const fp = fingerprint(kHex);
     const aad = buildAad(fp);
     const p = encryptWithKey(JSON.stringify(body), kHex, aad);
-    return { type: ENVELOPE_TYPE, v: ENVELOPE_VERSION, fp, p };
+    return assertFits({ type: ENVELOPE_TYPE, v: ENVELOPE_VERSION, fp, p });
   };
 
-  const unwrapMsg = (envelope, fpIdx) => {
+  const wrapMsgPacked = async (body, kHex, publish) => {
+    try { return wrapMsg(body, kHex); } catch (e) {
+      if (!/too long/i.test(String(e && e.message)) || typeof publish !== 'function') throw e;
+      const longText = require('../backend/long_text');
+      const sealedChunk = (chunk) => publish(wrapMsg({ k: longText.CHUNK_TYPE, rootId: body.rootId, text: chunk.text, index: chunk.index, total: chunk.total, group: chunk.group }, kHex));
+      const head = await longText.packBody(body, { maxBytes: longText.CONTENT_BYTES.sealed, extra: { rootId: body.rootId }, publish: sealedChunk });
+      return wrapMsg(head, kHex);
+    }
+  };
+
+  const unwrapMsg = (envelope, fpIdx, chunkLookup = null) => {
     if (!isSealedMsg(envelope)) return null;
     const aad = buildAad(envelope.fp);
     const tryKey = (rootId, keyHex) => {
       try {
         const pt = decryptWithKey(envelope.p, keyHex, aad);
-        return { body: JSON.parse(pt), rootId, keyHex };
+        let body = JSON.parse(pt);
+        if (body && typeof body.packed === 'string') {
+          const longText = require('../backend/long_text');
+          body = longText.unpackBody(body, chunkLookup, null);
+          if (!body) return null;
+        }
+        return { body, rootId, keyHex };
       } catch (_) { return null; }
     };
     const entry = fpIdx.get(envelope.fp);
@@ -500,7 +531,7 @@ const createScope = (configPath, namespace) => {
   const encryptForGroup = async (content, tribeId, tribesModel) => {
     const chain = await resolveKeyChain(tribeId, tribesModel);
     if (!chain) throw new Error('Missing key chain — cannot encrypt this content');
-    return encryptContent(content, chain, true);
+    return assertFits(encryptContent(content, chain, true));
   };
 
   const decryptFromGroup = async (content, tribesModel) => {
@@ -622,7 +653,7 @@ const createScope = (configPath, namespace) => {
     generateKey, getKey, getKeys, getGen, getAllRootIds,
     setKey, setKeys, mergeKeys, addNewKey, dropKey, keyPlan,
     fingerprint, buildFingerprintIndex,
-    isSealedMsg, wrapMsg, unwrapMsg,
+    isSealedMsg, wrapMsg, wrapMsgPacked, unwrapMsg,
     encryptWithKey, decryptWithKey,
     generateInviteSalt, hashInviteCode, deriveInviteKey,
     encryptForInvite, decryptFromInvite,

@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT/src/server" || exit 1
 
 printf "==========================\n"
-printf "|| OASIS Installer v0.6 ||\n"
+printf "|| OASIS Installer v0.7 ||\n"
 printf "==========================\n"
 
 NODE_MIN=22
@@ -127,6 +127,7 @@ else
         exit 1
     fi
     rm -f "$NPM_LOG"
+    node ../patches/patch-node-modules.js || echo "Warning: the local patches for the installed packages could not be applied."
     DEPS_USED="$NPM_CMD (package-lock.json)"
 fi
 

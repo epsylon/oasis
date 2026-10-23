@@ -169,7 +169,7 @@ const EvidenceForm = (caseId) =>
       },
       label(i18n.courtsEvidenceText),
       br(),
-      textarea({ name: 'text', rows: 3, maxlength: 1000 }),
+      textarea({ name: 'text', rows: 3 }),
       br(),
       br(),
       label(i18n.courtsEvidenceLink),
@@ -201,7 +201,7 @@ const AnswerForm = (caseId) =>
       },
       label(i18n.courtsAnswerText),
       br(),
-      textarea({ name: 'answer', rows: 4, maxlength: 2000 }),
+      textarea({ name: 'answer', rows: 4 }),
       br(),
       br(),
       select(
@@ -235,7 +235,6 @@ const VerdictForm = (caseId) =>
       textarea({
         name: 'orders',
         rows: 4,
-        maxlength: 2000,
         placeholder: i18n.courtsVerdictOrdersPh
       }),
       br(),
@@ -255,7 +254,7 @@ const SettlementForm = (caseId) =>
       },
       label(i18n.courtsSettlementText),
       br(),
-      textarea({ name: 'terms', rows: 3, maxlength: 2000 }),
+      textarea({ name: 'terms', rows: 3 }),
       br(),
       br(),
       button(

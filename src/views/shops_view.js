@@ -181,7 +181,7 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       label(i18n.shopShortDescription), br,
       input({ type: "text", name: "shortDescription", required: true, maxlength: 160, placeholder: i18n.shopShortDescriptionPlaceholder || "Brief description of your shop", value: shop.shortDescription || "" }), br(),
       label(i18n.description || "Description"), br,
-      textarea({ maxlength: "5000", name: "description", rows: 4, placeholder: i18n.shopDescriptionPlaceholder || "Detailed description of your shop" }, shop.description || ""), br,
+      textarea({ name: "description", rows: 4, placeholder: i18n.shopDescriptionPlaceholder || "Detailed description of your shop" }, shop.description || ""), br,
       label(i18n.blogImage || "Upload media (max-size: 75MB)"), br,
       input({ type: "file", name: "image", accept: "image/*,video/*" }), br(), br(),
       label(i18n.shopUrl), br,
@@ -209,7 +209,7 @@ const renderProductForm = (shopId, product = {}, isEdit = false, returnTo = "", 
       label(i18n.title || "Title"), br,
       input({ type: "text", name: "title", maxlength: "100", required: true, value: product.title || "" }), br(),
       label(i18n.description || "Description"), br,
-      textarea({ maxlength: "5000", name: "description", rows: 4 }, product.description || ""), br,
+      textarea({ name: "description", rows: 4 }, product.description || ""), br,
       label(i18n.shopProductPrice), br,
       input({ type: "number", name: "price", step: "0.000001", min: "0.000001", required: true, value: product.price || "" }), renderEcoValueChip(), br(), br(),
       label(i18n.shopProductStock), br,
@@ -291,6 +291,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
   const isClearnet = canClearnet && !!shop.clearnet
   products = safeArr(products)
 
+  const subscriptionOpts = shop.subscription ? { target: shop.rootId || shop.key, scope: "shops", subscribed: shop.subscription.subscribed === true, count: shop.subscription.count, isOwner: isAuthor, canWrite: isAuthor, returnTo } : null
   const shopSide = div({ class: "tribe-side" },
     renderCardTop(shop.key, `/shops/${encodeURIComponent(shop.key)}`, { arrow: false,
       date: shop.createdAt,
@@ -307,14 +308,14 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
               : renderStateChip("closed", "✉", i18n.subscriptionOff))
           : null
       ],
-      spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined
+      spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, subscription: subscriptionOpts, editAction: isAuthor ? `/shops/edit/${encodeURIComponent(shop.key)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined
     }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, shop.title || i18n.shopUntitled)
     ),
     isAuthor && canClearnet ? renderClearnetSwitch('shops', shop.rootId || shop.key, isClearnet) : null,
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    renderDetailShare(shop.key, `/shops/${encodeURIComponent(shop.key)}`, shop.title),
+    renderDetailShare(shop.key, `/shops/${encodeURIComponent(shop.key)}`, shop.title, subscriptionOpts),
     shop.description ? p({ class: "tribe-side-description" }, ...renderStyledText(shop.description)) : null,
     table({ class: "tribe-info-table" },
       shop.location ? tr(
@@ -335,7 +336,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
     ),
     isAuthor
-      ? div({ class: "tribe-side-actions shop-visibility-row" },
+      ? div({ class: "tribe-side-actions shop-visibility-row housing-visibility-row" },
           span({ class: "card-label" }, `${i18n.visibilityLabel || "Visibility"}: `),
           shop.encrypted
             ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E")
@@ -367,17 +368,6 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
               shop.encrypted ? i18n.shopMakePublic : i18n.shopMakePrivate))
         )
       : null,
-    shop.subscription
-      ? renderSubscriptionBox({
-          target: shop.rootId || shop.key,
-          scope: "shops",
-          subscribed: shop.subscription.subscribed === true,
-          count: shop.subscription.count,
-          isOwner: isAuthor,
-          canWrite: isAuthor,
-          returnTo
-        })
-      : null,
     isAuthor
       ? div({ class: "tribe-side-actions" },
           form({ method: "GET", action: `/shops/${encodeURIComponent(shop.key)}/orders` },
@@ -385,13 +375,6 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
               i18n.shopOrdersTitle || "Orders",
               Number(shop.pendingOrders || 0) > 0 ? span({ class: "shop-orders-badge", title: i18n.shopOrdersPending || "Pending orders" }, ` ● ${shop.pendingOrders}`) : null
             )
-          )
-        )
-      : null,
-    isAuthor
-      ? div({ class: "tribe-side-actions owner-actions" },
-          form({ method: "GET", action: `/shops/edit/${encodeURIComponent(shop.key)}` },
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.shopUpdate)
           )
         )
       : null,
@@ -433,13 +416,23 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
   const stock = Number(product.stock) || 0
 
   const productSide = div({ class: "tribe-side" },
-    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { arrow: false, date: product.createdAt, bylineExtra: [renderEditedChip(product.key, product.rootId)], spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
+    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { arrow: false, date: product.createdAt, bylineExtra: [renderEditedChip(product.key, product.rootId)], spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, editAction: isAuthor ? `/shops/product/edit/${encodeURIComponent(product.key)}?shopId=${encodeURIComponent(product.shopId)}&returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
+    div({ class: "tribe-side-actions" },
+      form({ method: "GET", action: `/shops/${encodeURIComponent(product.shopId)}` },
+        button({ type: "submit", class: "tribe-action-btn" }, `← ${i18n.shopBackToShop}`)
+      )
+    ),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled)
     ),
     renderStarRating(product.opinions, safeArr(product.opinions_inhabitants).length),
+    renderDetailShare(product.key, `/shops/product/${encodeURIComponent(product.key)}`, product.title)
+  )
+
+  const canBuy = !isAuthor && stock > 0
+  const priceChip = div({ class: "price-chip" }, `${Number(product.price || 0).toFixed(6)} ECO`)
+  const productMain = div({ class: "tribe-main" },
     product.image ? renderMediaBlob(product.image, null, { class: "tribe-detail-image" }) : null,
-    renderDetailShare(product.key, `/shops/product/${encodeURIComponent(product.key)}`, product.title),
     div({ class: "confirmations-block stock-block" },
       div({ class: "card-field" },
         span({ class: "card-label" }, `${i18n.shopProductStock}: `),
@@ -447,25 +440,6 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
       ),
       progress({ class: "confirmations-progress stock-progress", value: Math.min(stock, 100), max: 100 })
     ),
-    div({ class: "tribe-side-actions" },
-      form({ method: "GET", action: `/shops/${encodeURIComponent(product.shopId)}` },
-        button({ type: "submit", class: "tribe-action-btn" }, `← ${i18n.shopBackToShop}`)
-      )
-    ),
-    isAuthor
-      ? div({ class: "tribe-side-actions owner-actions" },
-          form({ method: "GET", action: `/shops/product/edit/${encodeURIComponent(product.key)}` },
-            input({ type: "hidden", name: "shopId", value: product.shopId }),
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ class: "tribe-action-btn", type: "submit" }, i18n.shopUpdate)
-          )
-        )
-      : null
-  )
-
-  const canBuy = !isAuthor && stock > 0
-  const priceChip = div({ class: "price-chip" }, `${Number(product.price || 0).toFixed(6)} ECO`)
-  const productMain = div({ class: "tribe-main" },
     product.description
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.marketItemDescription || i18n.shopDescription),
@@ -478,7 +452,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
           form({ method: "POST", action: `/shops/product/buy/${encodeURIComponent(product.key)}`, class: "shop-buy-form" },
             input({ type: "hidden", name: "returnTo", value: returnTo }),
             div({ class: "title-with-chip" }, label(i18n.shopBuyDeliveryAddress || "Delivery address"), renderEncryptedChip(i18n)),
-            textarea({ maxlength: "5000", name: "deliveryAddress", required: true, rows: 3, placeholder: i18n.shopBuyDeliveryAddressPlaceholder || "" }),
+            textarea({ name: "deliveryAddress", required: true, rows: 3, placeholder: i18n.shopBuyDeliveryAddressPlaceholder || "" }),
             br(),
             br(),
             label(i18n.shopBuyContact || "Contact"),
@@ -488,7 +462,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
             br(),
             label(i18n.shopBuyNotes || "Notes"),
             br(),
-            textarea({ maxlength: "5000", name: "notes", rows: 2, placeholder: i18n.shopBuyNotesPlaceholder || "" }),
+            textarea({ name: "notes", rows: 2, placeholder: i18n.shopBuyNotesPlaceholder || "" }),
             br(),
             priceChip,
             br(),

@@ -279,7 +279,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                     br(),
                     label(i18n.description),
                     br(),
-                    textarea({ maxlength: "5000", name: "description", rows: "6" }, formData.description || ""),
+                    textarea({ name: "description", rows: "6" }, formData.description || ""),
                     br(),
                     label(i18n.reportsCategory),
                     br(),
@@ -321,7 +321,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                     br(),
                     label(i18n.description),
                     br(),
-                    textarea({ maxlength: "5000", name: "description", rows: "6" }, reportToEdit?.description || ""),
+                    textarea({ name: "description", rows: "6" }, reportToEdit?.description || ""),
                     br(),
                     label(i18n.reportsCategory),
                     br(),
@@ -378,13 +378,6 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   if (!isAuthor && !confirmations.includes(userId)) sideActions.push(form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
     button({ type: "submit", class: "tribe-action-btn" }, i18n.reportsConfirmButton)
   ));
-  const ownerActions = [];
-  if (isAuthor) {
-    ownerActions.push(form({ method: "GET", action: `/reports/edit/${encodeURIComponent(report.id)}` },
-      button({ type: "submit", class: "tribe-action-btn" }, i18n.reportsUpdateButton)
-    ));
-  }
-
   const tagsNode = report.tags && report.tags.length
     ? div({ class: "card-tags" },
         report.tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
@@ -401,41 +394,42 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   pushRow(i18n.reportsSeverity, normU(report.severity || "low"));
   pushRow(i18n.reportsCategory, report.category);
 
+  const statusRow = isAuthor
+    ? div({ class: "tribe-side-actions housing-status-row" },
+        span({ class: "card-label" }, `${i18n.reportsStatus}: `),
+        renderStateChip(normalizeStatus(report.status) === "RESOLVED" ? "mutuals" : "whole", "◆", String(report.status || "OPEN").toUpperCase()),
+        renderReportStatusSetter(report)
+      )
+    : null;
+
   const reportSide = div({ class: "tribe-side" },
-    renderCardTop(report.id, `/reports/${encodeURIComponent(report.id)}`, { arrow: false, date: report.createdAt, chips, bylineExtra: [renderEditedChip(report.id, report.rootId)], spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, returnTo: `/reports/${encodeURIComponent(report.id)}`, deleteAction: isAuthor ? contentDeleteAction('report', report.id) : undefined }),
+    renderCardTop(report.id, `/reports/${encodeURIComponent(report.id)}`, { arrow: false, date: report.createdAt, chips, bylineExtra: [renderEditedChip(report.id, report.rootId)], spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, returnTo: `/reports/${encodeURIComponent(report.id)}`, editAction: isAuthor ? `/reports/edit/${encodeURIComponent(report.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('report', report.id) : undefined }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, report.title)
     ),
     renderDetailShare(report.id, `/reports/${encodeURIComponent(report.id)}`, report.title),
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     tagsNode,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
-    ),
-    sideActions.length ? div({ class: "tribe-side-actions report-confirm-actions" }, ...sideActions) : null,
-    isAuthor
-      ? div({ class: "tribe-side-actions housing-status-row" },
-          span({ class: "card-label" }, `${i18n.reportsStatus}: `),
-          renderStateChip(normalizeStatus(report.status) === "RESOLVED" ? "mutuals" : "whole", "◆", String(report.status || "OPEN").toUpperCase()),
-          renderReportStatusSetter(report)
-        )
-      : null,
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
-    renderDocumentActions('reports', report.id, [
-      a({ href: "/tasks?filter=create", class: "filter-btn" }, i18n.reportsCreateTaskButton)
-    ])
+    statusRow
   );
 
   const opinionsBar = renderOpinionsVoting('/reports/opinions', report.id, report.opinions, null, report.opinions_inhabitants);
 
   const reportMain = div({ class: "tribe-main" },
+    renderPhotoGallery(report, 'report'),
     String(report.description || "").trim()
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.description),
           p({ class: "tribe-side-description" }, ...renderStyledText(String(report.description)))
         )
       : null,
-    renderPhotoGallery(report, 'report'),
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    sideActions.length ? div({ class: "tribe-side-actions detail-action-row report-confirm-actions" }, ...sideActions) : null,
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
+    ),
+    renderDocumentActions('reports', report.id, [
+      a({ href: "/tasks?filter=create", class: "filter-btn" }, i18n.reportsCreateTaskButton)
+    ]),
     renderEngagement(report.id, opinionsBar, renderReportCommentsSection(report.id, comments))
   );
 

@@ -84,7 +84,7 @@ exports.aiView = (history = [], userPrompt = '', { status = null, split = false 
         ordered.length ? div({ class: 'chat-messages-list ai-messages-list' }, ...ordered.flatMap((e, i) => renderEntry(e, { split: split && i === ordered.length - 1 }))) : null,
         thinking ? null : div({ class: 'chat-message-form ai-message-form' },
           form({ id: 'ai-prompt-form', method: 'POST', action: '/ai', class: 'ai-prompt-form' },
-            textarea({ maxlength: "5000", name: 'input', rows: 3, placeholder: i18n.aiInputPlaceholder, required: true })
+            textarea({ name: 'input', rows: 3, placeholder: i18n.aiInputPlaceholder, required: true })
           ),
           div({ class: 'ai-submit-row' },
             stateChip('waiting'),

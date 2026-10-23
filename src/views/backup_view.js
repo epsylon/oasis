@@ -106,17 +106,16 @@ const renderRestore = (job) =>
   div({ class: "backup-section" },
     renderRestoreStatus(job),
     job && job.running ? null : form({ method: "POST", action: "/backup/import", enctype: "multipart/form-data" },
-      input({ type: "file", name: "uploadedFile", required: true, accept: ".oasisbk" }), br(), br(),
       p(i18n.backupRestorePassword),
-      input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(),
+      input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(), br(),
+      input({ type: "file", name: "uploadedFile", required: true, accept: ".oasisbk" }), br(), br(),
       button({ type: "submit" }, i18n.backupRestoreButton)
     ),
-    br(),
-    p(i18n.importDescription),
+    p({ class: "backup-hint" }, i18n.importDescription),
     form({ action: "/backup/keys/import", method: "POST", enctype: "multipart/form-data" },
-      input({ type: "file", name: "uploadedFile", required: true }), br(), br(),
       p(i18n.passwordImport),
-      input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(),
+      input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(), br(),
+      input({ type: "file", name: "uploadedFile", required: true }), br(), br(),
       button({ type: "submit" }, i18n.backupKeysImportButton)
     )
   );

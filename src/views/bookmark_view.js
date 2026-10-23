@@ -146,7 +146,7 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
       label(i18n.bookmarkDescriptionLabel),
       br(),
       textarea(
-        { name: "description", id: "description", maxlength: "5000", placeholder: i18n.bookmarkDescriptionPlaceholder, rows: "4" },
+        { name: "description", id: "description", placeholder: i18n.bookmarkDescriptionPlaceholder, rows: "4" },
         filter === "edit" ? bookmarkToEdit.description || "" : ""
       ),
       br(),
@@ -275,14 +275,6 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
     bookmark.sizeBytes ? renderEcoTax(bookmark.sizeBytes, bookmark.id) : null
   ].filter(Boolean);
 
-  const sideActions = [];
-  if (isAuthor) {
-    sideActions.push(form(
-      { method: "GET", action: `/bookmarks/edit/${encodeURIComponent(bookmark.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.bookmarkUpdateButton)
-    ));
-  }
 
   const tagsNode = renderTags(bookmark.tags);
   const href = `/bookmarks/${encodeURIComponent(bookmark.id)}`;
@@ -301,6 +293,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
       spread: params.spreads || null,
       returnTo,
       reportTitle: bookmark.title,
+      editAction: isAuthor ? `/bookmarks/edit/${encodeURIComponent(bookmark.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('bookmark', bookmark.id) : undefined
     }),
     div({ class: "shop-title-row" },
@@ -308,15 +301,14 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
     ),
     renderDetailShare(bookmark.id, href, bookmark.title),
     isAuthor ? renderClearnetSwitch("bookmarks", bookmark.rootId || bookmark.id, isClearnet) : null,
-    bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null,
-    safeText(bookmark.description)
-      ? p({ class: "tribe-side-description" }, ...renderStyledText(bookmark.description))
-      : null,
     tagsNode,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const bookmarkMain = div({ class: "tribe-main" },
+    safeText(bookmark.description)
+      ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(bookmark.description)))
+      : null,
+    bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null,
     renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
     renderEngagement(bookmark.id,
       renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),

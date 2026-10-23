@@ -32,21 +32,6 @@ const renderTags = (tags) => {
     : null;
 };
 
-const renderFileOwnerActions = (filter, fileObj, params = {}) => {
-  const returnTo = buildReturnTo(filter, params);
-  const isAuthor = String(fileObj.author) === String(userId);
-
-  if (!isAuthor) return [];
-
-  return [
-    form(
-      { method: "GET", action: `/files/edit/${encodeURIComponent(fileObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.fileUpdateButton)
-    )
-  ];
-};
-
 const renderFileCommentsSection = (fileId, comments = [], returnTo = null) => {
   return renderSharedCommentsSection({
     action: `/files/${encodeURIComponent(fileId)}/comments`,
@@ -89,8 +74,8 @@ const renderFileTable = exports.renderFileTable = (files, filter, params = {}) =
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
         td(t.title || "", t.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('files', t.title, t.key)) : null),
         td(formatSize(t.size)),
-        td({ class: "torrent-spread-cell" }, renderFileSeeds(t, params.spreadMap)),
-        td({ class: "torrent-spread-cell" }, renderFileSpread(t, params.spreadMap)),
+        td({ class: "torrent-spread-cell torrent-seeds-cell", 'data-label': i18n.seedsLabel }, span({ class: "torrent-seeds-count" }, renderFileSeeds(t, params.spreadMap))),
+        td({ class: "torrent-spread-cell torrent-seed-action-cell" }, renderFileSpread(t, params.spreadMap)),
         td(
           form(
             { method: "GET", action: `/files/${encodeURIComponent(t.key)}` },
@@ -125,7 +110,7 @@ const renderNextcloudForm = (returnTo) => div(
     br(),
     span(i18n.fileDescriptionLabel),
     br(),
-    textarea({ maxlength: "5000", name: "description", placeholder: i18n.fileDescriptionPlaceholder, rows: "4" }),
+    textarea({ name: "description", placeholder: i18n.fileDescriptionPlaceholder, rows: "4" }),
     br(),
     span(i18n.fileTagsLabel),
     br(),
@@ -164,7 +149,7 @@ const renderFileForm = (filter, fileId, fileToEdit, params = {}) => {
       br(),
       span(i18n.fileDescriptionLabel),
       br(),
-      textarea({ maxlength: "5000", name: "description", placeholder: i18n.fileDescriptionPlaceholder, rows: "4" }, fileToEdit?.description || ""),
+      textarea({ name: "description", placeholder: i18n.fileDescriptionPlaceholder, rows: "4" }, fileToEdit?.description || ""),
       br(),
       span(i18n.fileTagsLabel),
       br(),
@@ -285,9 +270,6 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
     fileObj.sizeBytes ? renderEcoTax(fileObj.sizeBytes, fileObj.key) : null
   ].filter(Boolean);
 
-  const ownerActions = renderFileOwnerActions(filter, fileObj, { q, sort });
-  const sideActions = [];
-  for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(fileObj.tags);
   const href = `/files/${encodeURIComponent(fileObj.key)}`;
@@ -310,6 +292,7 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
         showUpdated ? span({ class: "votations-comment-date" }, `${i18n.fileUpdatedAt}: ${moment(fileObj.updatedAt).format("YYYY/MM/DD HH:mm")}`) : null
       ],
       spreadTitle: i18n.seedAction,
+      editAction: String(fileObj.author) === String(userId) ? `/files/edit/${encodeURIComponent(fileObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: String(fileObj.author) === String(userId) ? contentDeleteAction("file", fileObj.key) : null,
       favKind: 'files',
       ...(fileObj.url && fileObj.url.startsWith("&") ? { torrentFrom: { blobId: fileObj.url, name: fileObj.fileName || fileObj.title } } : {}),
@@ -323,14 +306,13 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
       clearnetAllowed && isAuthor ? renderClearnetSwitch('files', fileObj.rootId || fileObj.key, isClearnet) : null
     ),
     renderDetailShare(fileObj.key, href, fileObj.title),
-    safeText(fileObj.description)
-      ? p({ class: "tribe-side-description" }, ...renderStyledText(fileObj.description))
-      : null,
     tagsNode,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const fileMain = div({ class: "tribe-main" },
+    safeText(fileObj.description)
+      ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(fileObj.description)))
+      : null,
     fileObj.url && fileObj.url.startsWith("&")
       ? div({ class: "torrent-download" },
           div({ class: "torrent-oasis torrent-detail-section" },

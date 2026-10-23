@@ -283,30 +283,20 @@ const GovernmentCard = (g, meta, hemicycle = null, seatsMode = 'election', house
     hemicycle
       ? renderHemicycle(hemicycle, { mode: seatsMode, baseHref: '/parliament?filter=government', houseNames })
       : div({ class: 'method-image-centered' }, img({ src: methodImageSrc(methodKey), alt: methodLabel })),
-    div(
-      { class: 'table-wrap' },
-      applyEl(table, { class: 'table table--centered gov-overview' }, [
-        thead(tr(
-          th(i18n.parliamentGovMethod),
-          th(i18n.parliamentThPresented || 'CANDIDATURES'),
-          th(i18n.parliamentPoliciesProposal || 'LAWS PROPOSAL'),
-          th(i18n.parliamentPoliciesApproved || 'LAWS APPROVED'),
-          th(i18n.parliamentPoliciesDeclined || 'LAWS DECLINED'),
-          th(i18n.parliamentPoliciesDiscarded || 'LAWS DISCARDED'),
-          th(i18n.parliamentPoliciesRevocated || 'LAWS REVOCATED'),
-          th(i18n.parliamentEfficiency || '% EFFICIENCY')
-        )),
-        tbody(tr(
-          td(methodLabel),
-          td(String(g.presented || 0)),
-          td(String(g.proposed || 0)),
-          td(String(g.approved || 0)),
-          td(String(g.declined || 0)),
-          td(String(g.discarded || 0)),
-          td(String(g.revocated || 0)),
-          td(`${String(g.efficiency || 0)} %`)
-        ))
-      ])
+    table({ class: 'tribe-info-table parliament-overview-table' },
+      ...[
+        [i18n.parliamentGovMethod, methodLabel],
+        [i18n.parliamentThPresented || 'CANDIDATURES', String(g.presented || 0)],
+        [i18n.parliamentPoliciesProposal || 'LAWS PROPOSAL', String(g.proposed || 0)],
+        [i18n.parliamentPoliciesApproved || 'LAWS APPROVED', String(g.approved || 0)],
+        [i18n.parliamentPoliciesDeclined || 'LAWS DECLINED', String(g.declined || 0)],
+        [i18n.parliamentPoliciesDiscarded || 'LAWS DISCARDED', String(g.discarded || 0)],
+        [i18n.parliamentPoliciesRevocated || 'LAWS REVOCATED', String(g.revocated || 0)],
+        [i18n.parliamentEfficiency || '% EFFICIENCY', `${String(g.efficiency || 0)} %`]
+      ].map(([labelText, value]) => tr(
+        td({ class: 'tribe-info-label' }, labelText),
+        td({ class: 'tribe-info-value' }, value)
+      ))
     ),
     (g.powerType === 'tribe' || g.powerType === 'inhabitant')
       ? div(
@@ -470,7 +460,7 @@ const ProposalForm = () =>
       label(i18n.parliamentProposalTitle), br(),
       input({ type: 'text', name: 'title', maxlength: '100', required: true }), br(), br(),
       label(i18n.parliamentProposalDescription), br(),
-      textarea({ name: 'description', rows: 5, maxlength: 1000 }), br(), br(),
+      textarea({ name: 'description', rows: 5 }), br(), br(),
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentProposalPublish)
     )
   );
@@ -589,7 +579,7 @@ const RevocationForm = (laws = []) =>
       ),
       br(), br(),
       label(i18n.parliamentRevocationReasons), br(),
-      textarea({ name: 'reasons', rows: 4, maxlength: 1000 }),
+      textarea({ name: 'reasons', rows: 4 }),
       br(), br(),
       button({ type: 'submit', class: 'create-button' }, i18n.parliamentRevocationPublish || 'Publish Revocation')
     )

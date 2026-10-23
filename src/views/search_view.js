@@ -62,7 +62,7 @@ const renderSearchForm = ({ action, query = "", queryName = "query", hidden = []
 };
 exports.renderSearchForm = renderSearchForm;
 
-const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, spreadMap = null, favIndex = null }) => {
+const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, resultCounts = null, spreadMap = null, favIndex = null }) => {
 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
@@ -210,8 +210,8 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         const votesList = content.votes && typeof content.votes === 'object'
           ? Object.entries(content.votes).map(([option, count]) => ({ option, count }))
           : [];
+        const voteOptionLabel = (opt) => { const k = String(opt).split('_').map((x) => x.charAt(0) + x.slice(1).toLowerCase()).join(''); return i18n['voteOption' + k] || i18n['vote' + k] || opt; };
         return div({ class: 'search-vote' },
-          br(),
           content.question ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.voteQuestionLabel + ':' ),
             span({ class: 'card-value' }, content.question)
@@ -228,12 +228,18 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
             span({ class: 'card-label' }, i18n.voteTotalVotes + ':' ),
             span({ class: 'card-value' }, content.totalVotes !== undefined ? content.totalVotes : '0')
           ),
-          br(),
           votesList.length > 0 ? div({ class: 'card-votes' },
-            table(
-              tr(...votesList.map(({ option }) => th(i18n[option] || option))),
-              tr(...votesList.map(({ count }) => td(count)))
-            )
+            process.env.OASIS_MOBILE === '1'
+              ? table({ class: 'block-info-table vote-results-table' },
+                  ...votesList.map(({ option, count }) => tr(
+                    td({ class: 'card-label' }, voteOptionLabel(option)),
+                    td({ class: 'card-value' }, String(count))
+                  ))
+                )
+              : table(
+                  tr(...votesList.map(({ option }) => th(voteOptionLabel(option)))),
+                  tr(...votesList.map(({ count }) => td(count)))
+                )
           ) : null
         );
     case 'tribe':
@@ -623,17 +629,27 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
   };
 
   const typeLabel = (type) => String((type === 'comment' ? i18n.typeComment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)]) || type || '').toUpperCase();
-  const totalResults = Object.values(results).reduce((n, msgs) => n + (Array.isArray(msgs) ? msgs.length : 0), 0);
+  const counts = resultCounts && typeof resultCounts === 'object'
+    ? resultCounts
+    : Object.fromEntries(Object.entries(results).map(([t, msgs]) => [t, Array.isArray(msgs) ? msgs.length : 0]));
+  const totalResults = Object.values(counts).reduce((n, c) => n + (Number(c) || 0), 0);
+  const searchBase = `/search?query=${encodeURIComponent(hashtag ? `#${hashtag}` : String(query || ''))}`;
   const resultStats = renderModuleStats(totalResults,
-    Object.entries(results)
-      .map(([type, msgs]) => ({ label: typeLabel(type), count: Array.isArray(msgs) ? msgs.length : 0 }))
-      .sort((x, y) => y.count - x.count || x.label.localeCompare(y.label)));
+    Object.entries(counts)
+      .map(([t, count]) => ({ label: typeLabel(t), count: Number(count) || 0, href: `${searchBase}&type=${encodeURIComponent(t)}`, active: types.includes(t) }))
+      .sort((x, y) => y.count - x.count || x.label.localeCompare(y.label)),
+    null,
+    { totalHref: searchBase, totalActive: types.length === 0 });
   const pageGroups = paged(Object.entries(results).flatMap(([key, msgs]) => msgs.map((msg) => [key, msg])))
     .reduce((acc, [key, msg]) => { (acc[key] = acc[key] || []).push(msg); return acc; }, {});
   const resultSection = Object.entries(results).length > 0
     ? Object.entries(pageGroups).map(([key, msgs]) =>
       div(
         { class: "search-result-group" },
+        h2({ class: "job-section-title search-group-title" }, (() => {
+          const type = String((msgs[0] && msgs[0].value && msgs[0].value.content && msgs[0].value.content.type) || key || '');
+          return String(i18n['type' + type.charAt(0).toUpperCase() + type.slice(1)] || type).toUpperCase();
+        })()),
         ...msgs.map((msg) => {
           const content = msg.value.content || {};
           const contentHtml = renderContentHtml(content);

@@ -65,11 +65,23 @@ const kindLabel = (kind) => cnText(KIND_KEYS[String(kind || '').toLowerCase()], 
 const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(kindLabel(kind).toUpperCase())}]</span>`;
 
 const BLOB_ID_RE = /^&([A-Za-z0-9+/=]+)\.sha256$/;
-const hasLocalBlob = (blobId) => {
+let missingBlobHook = null;
+const onMissingBlob = (fn) => { missingBlobHook = typeof fn === 'function' ? fn : null; };
+const localBlobPaths = (hex, dir) => {
+  const base = require('path').join(dir, 'blobs', 'sha256', hex.slice(0, 2));
+  return [require('path').join(base, hex.slice(2)), require('path').join(base, hex)];
+};
+const hasLocalBlob = (blobId, dir = null) => {
   const m = BLOB_ID_RE.exec(String(blobId || ''));
   if (!m) return false;
   const hex = Buffer.from(m[1], 'base64').toString('hex');
-  try { return require('fs').existsSync(require('path').join(require('../server/ssb_config').path, 'blobs', 'sha256', hex.slice(0, 2), hex)); } catch (_) { return false; }
+  let present = false;
+  try {
+    const fs = require('fs');
+    present = localBlobPaths(hex, dir || require('../server/ssb_config').path).some(p => { try { return fs.statSync(p).size > 0; } catch (_) { return false; } });
+  } catch (_) { present = false; }
+  if (!present && missingBlobHook) { try { missingBlobHook(String(blobId)); } catch (_) {} }
+  return present;
 };
 
 const renderRichText = (s, { links = true, wikiLinks = null } = {}) => renderStyledHtml(s, {
@@ -730,5 +742,7 @@ module.exports = {
   renderClearnetPdfEmbed,
   renderClearnetPdfView,
   renderClearnetPdfFrame,
+  hasLocalBlob,
+  onMissingBlob,
   CLEARNET_PDF_CSS
 };

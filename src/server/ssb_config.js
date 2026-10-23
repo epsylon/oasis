@@ -15,7 +15,7 @@ config = { ...config, ...configData };
 
 const debug = process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
 if (debug) {
-  config.logging = { ...(config.logging || {}), level: 'debug' };
+  config.logging = { ...(config.logging || {}), level: 'info' };
 }
 
 const megabyte = Math.pow(2, 20);

@@ -54,13 +54,7 @@ const attendanceLabel = (isAttending) => (isAttending ? i18n.eventAttended : i18
 const renderEventOwnerActions = (e, returnTo) => {
   const st = normalizeEventStatus(e.status);
   if (e.organizer !== userId || st !== "OPEN") return [];
-  const actions = [
-    form(
-      { method: "GET", action: `/events/edit/${encodeURIComponent(e.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "update-btn" }, i18n.eventUpdateButton)
-    )
-  ];
+  const actions = [];
   if (normalizePrivacy(e.isPublic) === "private") {
     actions.push(form(
       { method: "POST", action: `/events/generate-invite/${encodeURIComponent(e.id)}` },
@@ -508,21 +502,30 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   if (urlHref) pushRow(i18n.eventUrlLabel, a({ href: urlHref, target: "_blank", rel: "noopener noreferrer" }, urlHref));
   const price = parseFloat(event.price || 0);
   if (price > 0) pushRow(i18n.eventPriceLabel, `${price.toFixed(6)} ECO`);
+  pushRow(i18n.eventAttendees, String(attendees.length));
 
-  const attendeesListNode = attendees.length
-    ? div({ class: "card-assigned-list" },
-        ...attendees.filter(Boolean).map((id) => userLink(id))
-      )
-    : null;
-
+  const subscriptionOpts = event.subscription ? { target: event.id, scope: "events", subscribed: event.subscription.subscribed === true, count: event.subscription.count, isOwner: isEventOwner, returnTo: returnToSelf } : null;
   const eventSide = div({ class: "tribe-side" },
-    renderCardTop(event.id, returnToSelf, { arrow: false, date: event.createdAt, chips, bylineExtra: [renderEditedChip(event.id, event.rootId)], spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` }),
+    renderCardTop(event.id, returnToSelf, { arrow: false, date: event.createdAt, chips, bylineExtra: [renderEditedChip(event.id, event.rootId)], spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, subscription: subscriptionOpts, editAction: isOrganizer && normalizeEventStatus(event.status) === "OPEN" ? `/events/edit/${encodeURIComponent(event.id)}?returnTo=${encodeURIComponent(returnToSelf)}` : undefined, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, event.title)
     ),
-    renderDetailShare(event.id, returnToSelf, event.title),
+    renderDetailShare(event.id, returnToSelf, event.title, subscriptionOpts),
     isOrganizer && canClearnet ? renderClearnetSwitch('events', event.rootId || event.id, isClearnet) : null,
+    tagsNode
+  );
+
+  const returnToOpinions = `/events/${encodeURIComponent(event.id)}?filter=${encodeURIComponent(currentFilter)}`;
+  const opinionsBar = renderOpinionsVoting('/events/opinions', event.id, event.opinions, returnToOpinions, event.opinions_inhabitants);
+
+  const eventMain = div({ class: "tribe-main" },
     renderPhotoGallery(event, 'event'),
+    event.description
+      ? div({ class: "job-section" },
+          h2({ class: "job-section-title" }, i18n.eventDescriptionLabel),
+          p({ class: "tribe-side-description" }, ...renderStyledText(event.description))
+        )
+      : null,
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     event.recurring && Array.isArray(event.occurrences) && event.occurrences.length > 1
       ? details({ class: "event-occurrences" },
@@ -532,37 +535,10 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
           )
         )
       : null,
-    tagsNode,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
-    ),
-    attendeesListNode,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
-    (event.subscription && sharesEvent)
-      ? renderSubscriptionBox({
-          target: event.id,
-          scope: "events",
-          subscribed: event.subscription.subscribed === true,
-          count: event.subscription.count,
-          isOwner: isEventOwner,
-          returnTo: returnToSelf
-        })
-      : null,
-    renderDocumentActions('events', event.id)
-  );
-
-  const returnToOpinions = `/events/${encodeURIComponent(event.id)}?filter=${encodeURIComponent(currentFilter)}`;
-  const opinionsBar = renderOpinionsVoting('/events/opinions', event.id, event.opinions, returnToOpinions, event.opinions_inhabitants);
-
-  const eventMain = div({ class: "tribe-main" },
-    event.description
-      ? div({ class: "job-section" },
-          h2({ class: "job-section-title" }, i18n.eventDescriptionLabel),
-          p({ class: "tribe-side-description" }, ...renderStyledText(event.description))
-        )
-      : null,
     event.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, event.mapUrl)) : null,
+    sideActions.length ? div({ class: "tribe-side-actions detail-action-row" }, ...sideActions) : null,
+    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
+    renderDocumentActions('events', event.id),
     renderEngagement(event.id, opinionsBar, renderEventCommentsSection(event.id, comments, currentFilter))
   );
 

@@ -21,6 +21,21 @@ const chain = (base, contents, t0 = 1700000000000) => {
   return out;
 };
 const posts = (...texts) => texts.map(text => ({ type: 'post', text }));
+const chainLoose = (base, contents, t0 = 1700000000000) => {
+  let state = validate.initial();
+  for (const m of base) state = validate.append(state, null, m.value);
+  let ts = t0 + base.length * 1000;
+  const out = [];
+  const ssbKeys = require('../../../src/server/node_modules/ssb-keys');
+  let prev = state.feeds[keys.id] || null;
+  for (const c of contents) {
+    const value = ssbKeys.signObj(keys, null, { previous: prev ? prev.id : null, sequence: (prev ? prev.sequence : 0) + 1, author: keys.id, timestamp: ts += 1000, hash: 'sha256', content: c });
+    const key = validate.id(value);
+    prev = { id: key, sequence: value.sequence, timestamp: value.timestamp };
+    out.push({ key, value, timestamp: ts });
+  }
+  return out;
+};
 
 const fakeNode = (local, remote) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oasis-feed-guard-'));
@@ -38,9 +53,9 @@ const fakeNode = (local, remote) => {
       add: (value, cb) => { calls.added.push(value); feed.push({ key: validate.id(value), value }); cb(null); },
       publish: (content, cb) => {
         calls.published.push(content);
-        let st = validate.initial();
-        for (const m of feed) st = validate.append(st, null, m.value);
-        const value = validate.create(st.feeds[keys.id] || null, keys, null, content, Date.now());
+        const prev = feed[feed.length - 1];
+        const st = prev ? { id: prev.key, sequence: prev.value.sequence, timestamp: prev.value.timestamp, queue: [] } : null;
+        const value = validate.create(st, keys, null, content, Date.now());
         const msg = { key: validate.id(value), value };
         feed.push(msg);
         cb(null, msg);
@@ -64,7 +79,7 @@ describe('peers: my own feed is kept in step with the network', (t) => {
       ok(node.connected(), 'the guard listens for connections');
       const res = await node.api.check(node.rpc);
       eq(res && res.kind, 'fork');
-      eq([res.forkAt, res.removed, res.adopted, res.republished, res.skipped].join(), '4,2,3,2,0');
+      eq([res.from, res.removed, res.adopted, res.republished, res.skipped].join(), '4,2,3,2,0');
       eq(node.calls.deleted, 1, 'the local feed is deleted once');
       const feed = node.feed();
       eq(feed.length, 8, 'three kept, three adopted, two re-published');
@@ -137,7 +152,7 @@ describe('peers: my own feed is kept in step with the network', (t) => {
     try {
       const res = await node.api.check(node.rpc);
       eq(res && res.kind, 'fork');
-      eq([res.forkAt, res.removed, res.adopted, res.republished].join(), '4,3,1,3');
+      eq([res.from, res.removed, res.adopted, res.republished].join(), '4,3,1,3');
       eq(node.feed().length, 7);
       eq(node.feed()[3].key, theirs[0].key, 'the network message replaces mine at the fork');
       eq(node.feed().slice(4).map(m => m.value.content.text).join(), 'A,B,C', 'everything I had written is published again on top');
@@ -184,5 +199,63 @@ describe('peers: my own feed is kept in step with the network', (t) => {
     const api = plugin.init({ id: keys.id }, { path: os.tmpdir() });
     eq(typeof api.status, 'function');
     eq(api.check, undefined);
+  });
+});
+
+describe('peers: a feed nobody can accept any more', (t) => {
+  const bigPost = () => ({ type: 'post', text: 'x'.repeat(8000) });
+  t('a message that fits the local check but not the network is withdrawn with everything after it, and the rest is published again', async () => {
+    const base = chain([], posts('one', 'two', 'three'));
+    const tail = chainLoose(base, [bigPost(), { type: 'post', text: 'after' }, { type: 'contact', contact: '@x.ed25519', following: true }]);
+    const node = fakeNode(base.concat(tail), base);
+    try {
+      ok(require('../../../src/server/feed_guard').firstInvalid(base.concat(tail)).seq === 4, 'the chain breaks at the big message');
+      const res = await node.api.selfCheck();
+      eq(res && res.kind, 'invalid-tail');
+      eq([res.from, res.removed, res.republished, res.skipped].join(), '4,3,3,0', 'nothing is lost: the big one is published again in pieces');
+      const feed = node.feed();
+      const chunks = feed.filter(m => m.value.content.type === 'textChunk');
+      ok(chunks.length >= 1, 'its pieces are in the feed');
+      const big = feed.find(m => m.value.content.type === 'post' && m.value.content.chunks);
+      ok(big && big.value.content.chunkField === 'text' && big.value.content.text.length < 8000, 'and the head carries the start of the text plus the references');
+      ok(feed.every(m => JSON.stringify(m.value, null, 2).length <= 8192), 'every message now fits');
+      eq(feed.slice(-2).map(m => m.value.content.text || m.value.content.type).join(), 'after,contact', 'the rest follows in order');
+      eq(node.calls.deleted, 1);
+      eq(await node.api.selfCheck(), null, 'a second look finds nothing');
+      ok(!node.reports().some(n => n.endsWith('-local-feed.json')), 'nothing was left out, so the copy is removed');
+    } finally { node.cleanup(); }
+  });
+
+  t('on contact with a peer that stopped at the bad message the same repair happens', async () => {
+    const base = chain([], posts('one', 'two', 'three'));
+    const tail = chainLoose(base, [bigPost(), { type: 'post', text: 'after' }]);
+    const node = fakeNode(base.concat(tail), base);
+    try {
+      node.api.status().selfChecked = true;
+      const res = await node.api.check(node.rpc);
+      eq(res && res.kind, 'invalid-tail');
+      eq([res.from, res.removed, res.republished, res.skipped].join(), '4,2,2,0');
+    } finally { node.cleanup(); }
+  });
+
+  t('a peer that is simply behind a valid tail triggers nothing', async () => {
+    const base = chain([], posts('one', 'two', 'three'));
+    const node = fakeNode(base.concat(chain(base, posts('four', 'five'))), base);
+    try {
+      eq(await node.api.check(node.rpc), null);
+      eq(node.calls.deleted, 0);
+    } finally { node.cleanup(); }
+  });
+
+  t('publishing something the network would reject is refused before it enters the log', async () => {
+    const base = chain([], posts('one'));
+    const node = fakeNode(base, base);
+    try {
+      const err = await new Promise((resolve) => node.server.db.publish(bigPost(), (e) => resolve(e)));
+      ok(err && /too large/.test(err.message), 'the publish fails with a clear error');
+      eq(node.feed().length, 1, 'nothing was written');
+      const fine = await new Promise((resolve) => node.server.db.publish({ type: 'post', text: 'small' }, (e, m) => resolve(e || m)));
+      eq(fine.value.content.text, 'small', 'normal messages go through');
+    } finally { node.cleanup(); }
   });
 });

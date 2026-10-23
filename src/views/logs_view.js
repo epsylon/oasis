@@ -168,7 +168,7 @@ const renderCreateForm = (mode, aiModOn) => {
     : div({ class: "div-center audio-form" },
         form({ method: "POST", action: "/logs/create" },
           input({ type: "hidden", name: "mode", value: "manual" }),
-          textarea({ maxlength: "5000", name: "text", rows: "8", required: true, placeholder: i18n.logsTextPlaceholder || 'Describe your experiences...' }),
+          textarea({ name: "text", rows: "8", required: true, placeholder: i18n.logsTextPlaceholder || 'Describe your experiences...' }),
           br(), br(),
           button({ type: "submit", class: "create-button" }, i18n.logsWriteButton || 'Write')
         )
@@ -180,7 +180,7 @@ const renderEditForm = (entry) => {
   return div({ class: "div-center audio-form" },
     h2(i18n.logsEditTitle || 'Edit Log'),
     form({ method: "POST", action: `/logs/update/${encodeURIComponent(entry.key)}` },
-      textarea({ maxlength: "5000", name: "text", rows: "8", required: true }, entry.text || ''),
+      textarea({ name: "text", rows: "8", required: true }, entry.text || ''),
       input({ type: "hidden", name: "label", value: entry.label || '' }),
       br(), br(),
       button({ type: "submit", class: "create-button" }, i18n.logsUpdateButton || 'Edit')

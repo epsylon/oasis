@@ -122,7 +122,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       br(),
       label(i18n.documentDescriptionLabel),
       br(),
-      textarea({ maxlength: "5000", name: "description", placeholder: i18n.documentDescriptionPlaceholder, rows: "4" }, docToEdit?.description || ""),
+      textarea({ name: "description", placeholder: i18n.documentDescriptionPlaceholder, rows: "4" }, docToEdit?.description || ""),
       br(),
       label(i18n.documentTagsLabel),
       br(),
@@ -232,14 +232,6 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
     doc.sizeBytes ? renderEcoTax(doc.sizeBytes, doc.key) : null
   ].filter(Boolean);
 
-  const sideActions = [];
-  if (isAuthor) {
-    sideActions.push(form(
-      { method: "GET", action: `/documents/edit/${encodeURIComponent(doc.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.documentUpdateButton)
-    ));
-  }
 
   const tagsNode = renderTags(doc.tags);
   const href = `/documents/${encodeURIComponent(doc.key)}`;
@@ -259,6 +251,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
       spread: params.spreads || null,
       returnTo: buildReturnTo(filter, { q, sort }),
       reportTitle: doc.title,
+      editAction: isAuthor ? `/documents/edit/${encodeURIComponent(doc.key)}?returnTo=${encodeURIComponent(returnTo)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('document', doc.key) : undefined
     }),
     div({ class: "shop-title-row" },
@@ -266,14 +259,13 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
       isAuthor ? renderClearnetSwitch('documents', doc.rootId || doc.key, isClearnet) : null
     ),
     renderDetailShare(doc.key, href, doc.title),
-    safeText(doc.description)
-      ? p({ class: "tribe-side-description" }, ...renderStyledText(doc.description))
-      : null,
     tagsNode,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const docMain = div({ class: "tribe-main" },
+    safeText(doc.description)
+      ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(doc.description)))
+      : null,
     doc?.url
       ? renderPdfDocument(blobUrlOf(doc.url), { title: doc.title, preview: true })
       : p(i18n.documentNoFile),

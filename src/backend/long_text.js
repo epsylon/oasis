@@ -117,6 +117,73 @@ const joinText = (head, keys, lookup, author) => {
 
 const hasChunks = (content) => !!content && Array.isArray(content.chunks) && content.chunks.length > 0;
 
+const CHUNK_FIELD = 'chunkField';
+const MAX_MESSAGE_CHARS = 8192;
+const UNCHUNKABLE = new Set(['type', 'recps', 'chunks', CHUNK_FIELD, 'encryptedPayload', 'p', 'fp']);
+const SEALED_TYPES = new Set(['tribe-msg']);
+const looksLikeReference = (s) => /^[%&@]/.test(s) || /^https?:\/\//i.test(s) || /^data:/i.test(s);
+const looksLikeCiphertext = (s) => (s.length >= 64 && /^[A-Fa-f0-9]+$/.test(s)) || /\.box\d*$/.test(s);
+const chunkableField = (content) => {
+  let best = null;
+  let bestBytes = 0;
+  for (const [k, v] of Object.entries(content)) {
+    if (UNCHUNKABLE.has(k) || typeof v !== 'string' || looksLikeReference(v) || looksLikeCiphertext(v)) continue;
+    const n = byteLength(v);
+    if (n > bestBytes) { best = k; bestBytes = n; }
+  }
+  return bestBytes >= MIN_HEAD_BYTES ? best : null;
+};
+const hasRecps = (content) => Array.isArray(content.recps) && content.recps.length > 0;
+const messageChars = (content) => {
+  try {
+    return JSON.stringify({ previous: '%' + 'x'.repeat(44) + '.sha256', sequence: 1000000, author: '@' + 'x'.repeat(44) + '.ed25519', timestamp: Date.now(), hash: 'sha256', content, signature: 'x'.repeat(88) + '.sig.ed25519' }, null, 2).length;
+  } catch (_) { return Infinity; }
+};
+const mustSplit = (content) => hasRecps(content) ? contentBytes(content) > CONTENT_BYTES.boxed : messageChars(content) > MAX_MESSAGE_CHARS;
+const autoChunk = async (content, publish) => {
+  if (!content || typeof content !== 'object' || Array.isArray(content) || hasChunks(content) || SEALED_TYPES.has(content.type)) return content;
+  const budget = hasRecps(content) ? CONTENT_BYTES.boxed : CONTENT_BYTES.plain;
+  if (!mustSplit(content)) return content;
+  const field = chunkableField(content);
+  if (!field) return content;
+  let out;
+  try {
+    out = await chunkContent(content, field, { maxBytes: budget, extra: hasRecps(content) ? { recps: content.recps } : {}, publish });
+  } catch (e) {
+    if (e && /does not fit/.test(String(e.message))) return content;
+    throw e;
+  }
+  return hasChunks(out) ? { ...out, [CHUNK_FIELD]: field } : out;
+};
+const PACKED_FIELD = 'packed';
+const packBody = async (body, { maxBytes = CONTENT_BYTES.sealed, extra = {}, publish } = {}) => {
+  const head = { k: body.k, rootId: body.rootId, replaces: body.replaces, op: body.op, [PACKED_FIELD]: JSON.stringify(body) };
+  for (const key of Object.keys(head)) if (head[key] === undefined) delete head[key];
+  return chunkContent(head, PACKED_FIELD, { maxBytes, extra, publish });
+};
+const isPacked = (body) => !!body && typeof body === 'object' && typeof body[PACKED_FIELD] === 'string';
+const unpackBody = (body, lookup, author) => {
+  if (!isPacked(body)) return body;
+  const full = hasChunks(body) ? joinText(body[PACKED_FIELD], body.chunks, lookup || (() => null), author) : body[PACKED_FIELD];
+  try { return JSON.parse(full); } catch (_) { return null; }
+};
+const autoJoin = async (msg, getChunk) => {
+  const value = msg && msg.value;
+  const c = value && value.content;
+  if (!c || typeof c !== 'object' || typeof c[CHUNK_FIELD] !== 'string' || !hasChunks(c)) return msg;
+  const found = new Map();
+  for (const k of c.chunks) {
+    if (!isChunkKey(k)) break;
+    let ch = null;
+    try { ch = await getChunk(k); } catch (_) { ch = null; }
+    if (!ch) break;
+    found.set(k, ch);
+  }
+  const joined = resolveField(c, c[CHUNK_FIELD], value.author, lookupIn(found));
+  const { chunks, [CHUNK_FIELD]: field, ...rest } = joined;
+  return { ...msg, value: { ...value, content: rest } };
+};
+
 const resolveField = (content, field, author, lookup) => {
   if (!hasChunks(content)) return content;
   return { ...content, [field]: joinText(content[field], content.chunks, lookup, author) };
@@ -175,6 +242,16 @@ const joinChunks = async (ssb, content, author, { field = 'text', unbox = null }
 
 module.exports = {
   CHUNK_TYPE,
+  CHUNK_FIELD,
+  PACKED_FIELD,
+  packBody,
+  isPacked,
+  unpackBody,
+  MAX_MESSAGE_CHARS,
+  messageChars,
+  chunkableField,
+  autoChunk,
+  autoJoin,
   TEXT_CAP,
   CONTENT_BYTES,
   byteLength,

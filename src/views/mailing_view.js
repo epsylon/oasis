@@ -100,7 +100,7 @@ const renderForm = (list) =>
       label(i18n.mailingTitleLabel), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.mailingTitlePlaceholder, value: list ? list.title : "" }), br(),
       label(i18n.mailingDescriptionLabel), br(),
-      textarea({ name: "description", rows: 4, maxlength: "1000", placeholder: i18n.mailingDescriptionPlaceholder }, list ? list.description : ""), br(),
+      textarea({ name: "description", rows: 4, placeholder: i18n.mailingDescriptionPlaceholder }, list ? list.description : ""), br(),
       list
         ? [
             label(i18n.mailingStatusLabel), br(),
@@ -113,7 +113,7 @@ const renderForm = (list) =>
       (!list || list.closed)
         ? [
             label(i18n.mailingMembersLabel), br(),
-            textarea({ name: "members", rows: 3, maxlength: "4000", placeholder: i18n.mailingMembersPlaceholder }, list ? list.members.filter(m => m !== list.author).join(", ") : ""), br()
+            textarea({ name: "members", rows: 3, placeholder: i18n.mailingMembersPlaceholder }, list ? list.members.filter(m => m !== list.author).join(", ") : ""), br()
           ]
         : null,
       label(i18n.mailingTagsLabel), br(),
@@ -255,13 +255,8 @@ exports.singleMailingView = async (list, params = {}) => {
       )
     : null;
   const sideActions = [subscribeForm(list, href)].filter(Boolean);
-  const ownerActions = isAuthor
-    ? [
-        form({ method: "GET", action: "/mailing" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: list.id }), button({ type: "submit", class: "update-btn" }, i18n.mailingUpdate))
-      ]
-    : [];
   const side = div({ class: "tribe-side" },
-    renderCardTop(list.id, href, { arrow: false, date: list.createdAt, chips: [renderOpenClosedChip(list.listType, { statusChipOPEN: typeLabel("OPEN"), statusChipCLOSED: typeLabel("CLOSED") }), statusChip(list)], author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null, deleteAction: isAuthor ? contentDeleteAction("mailingList", list.id) : null }),
+    renderCardTop(list.id, href, { arrow: false, date: list.createdAt, chips: [renderOpenClosedChip(list.listType, { statusChipOPEN: typeLabel("OPEN"), statusChipCLOSED: typeLabel("CLOSED") }), statusChip(list)], author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null, editAction: isAuthor ? `/mailing?filter=edit&id=${encodeURIComponent(list.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("mailingList", list.id) : null }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, list.title)),
     renderDetailShare(list.id, href, list.title),
     list.description ? p({ class: "tribe-side-description" }, ...renderStyledText(list.description)) : null,
@@ -288,7 +283,6 @@ exports.singleMailingView = async (list, params = {}) => {
       form({ method: "POST", action: `${href}/share` }, button({ type: "submit", class: "filter-btn" }, i18n.sharePm))
     ),
     renderTags(list.tags),
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
     null
   );
   const main = div({ class: "tribe-main" },

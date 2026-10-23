@@ -10,8 +10,10 @@ const VOTE_QUORUM = 2;
 
 const safeArray = (v) => Array.isArray(v) ? v : [];
 
-const voteLabel = (opt) =>
-  i18n["vote" + opt.split("_").map(w => w.charAt(0) + w.slice(1).toLowerCase()).join("")] || opt;
+const voteLabel = (opt) => {
+  const k = opt.split("_").map(w => w.charAt(0) + w.slice(1).toLowerCase()).join("");
+  return i18n["voteOption" + k] || i18n["vote" + k] || opt;
+};
 
 const computeVoteOutcome = (baseCounts, voteOptions, totalVotesNum) => {
   const noResult = { text: i18n.voteNoQuorum || "NO QUORUM", variant: "pending" };
@@ -41,22 +43,6 @@ const statusLabel = (s) => {
 const { isVoteEditLocked } = require("../models/votes_model");
 const isVoteAuthor = (v) => !!(v && v.createdBy && String(v.createdBy) === String(userId));
 const canModifyVote = (v) => isVoteAuthor(v) && !isVoteEditLocked(v);
-
-const renderVoteOwnerActions = (v, returnTo) => {
-  const showUpdateButton = canModifyVote(v);
-
-  const actions = [];
-  if (showUpdateButton) {
-    actions.push(
-      form(
-        { method: "GET", action: `/votes/edit/${encodeURIComponent(v.id)}` },
-        input({ type: "hidden", name: "returnTo", value: returnTo }),
-        button({ class: "update-btn", type: "submit" }, i18n.voteUpdateButton)
-      )
-    );
-  }
-  return actions;
-};
 
 const renderVoteButtons = (v, voteOptions, firstRow, secondRow, returnTo) => {
   if (normalizeStatus(v.status) !== "OPEN") return null;
@@ -176,9 +162,6 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
     renderEcoTax(v.msgSize, v.id)
   ].filter(Boolean);
 
-  const sideActions = [];
-  for (const a of renderVoteOwnerActions(v, returnTo)) sideActions.push(a);
-
   const cleanTags = (Array.isArray(v.tags) ? v.tags : []).filter((t) => t && !String(t).includes(":"));
   const tagsNode = cleanTags.length
     ? div({ class: "card-tags" },
@@ -196,23 +179,18 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
   pushRow(i18n.voteStatus, statusLabel(v.status));
 
   const voteSide = div({ class: "tribe-side" },
-    renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { arrow: false, date: v.createdAt, chips, bylineExtra: [renderEditedChip(v.id, v.rootId)], spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined }),
+    renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { arrow: false, date: v.createdAt, chips, bylineExtra: [renderEditedChip(v.id, v.rootId)], spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, editAction: canModifyVote(v) ? `/votes/edit/${encodeURIComponent(v.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, v.question)
     ),
     renderDetailShare(v.id, `/votes/${encodeURIComponent(v.id)}`, v.question),
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
-    tagsNode,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
-    ),
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
-    renderDocumentActions('votes', v.id)
+    tagsNode
   );
 
   const voteButtonsNode = renderVoteButtons(v, voteOptions, firstRow, secondRow, returnTo);
 
   const voteMain = div({ class: "tribe-main" },
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     voteButtonsNode
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.voteCastTitle || "Cast Vote"),
@@ -220,17 +198,21 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
         )
       : null,
     div({ class: "job-section" },
-      h2({ class: "job-section-title" },
-        `${i18n.voteResults || "Results"}: `,
-        span({ class: `vote-outcome vote-outcome-${outcome.variant}` }, outcome.text)
+      div({ class: "tribe-card-members" },
+        span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
       ),
       div({ class: "vote-table" },
         table(
           tr(...voteOptions.map((opt) => th(voteLabel(opt)))),
           tr(...voteOptions.map((opt) => td(baseCounts[opt])))
         )
+      ),
+      h2({ class: "job-section-title vote-outcome-title" },
+        `${i18n.voteResults || "Results"}: `,
+        span({ class: `vote-outcome vote-outcome-${outcome.variant}` }, outcome.text)
       )
     ),
+    renderDocumentActions('votes', v.id),
     renderEngagement(v.id, renderOpinionsBar(v, returnTo),
       mode === "detail" ? renderCommentsSection(v.id, params.comments || [], activeFilter) : null)
   );

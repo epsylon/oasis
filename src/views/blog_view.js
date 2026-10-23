@@ -187,28 +187,16 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
   const href = `/blogs/${encodeURIComponent(blog.id)}`;
   const isAuthor = String(blog.author) === String(userId);
   const isClearnet = !!blog.clearnet;
+  const editAction = isAuthor ? `/blogs?filter=CREATE&edit=${encodeURIComponent(blog.id)}` : undefined;
+  const subscriptionOpts = params.subscription ? { target: blog.author, scope: "blogs", subscribed: params.subscription.subscribed === true, count: params.subscription.count, isOwner: isAuthor, returnTo: href } : null;
 
   const blogSide = div({ class: "tribe-side" },
-    renderCardTop(blog.id, href, blogTopOptions(blog, href, isAuthor, blog.scheduledAt ? { arrow: false, returnTo: href } : { arrow: false, chips: [renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("blog", blog.subject || blog.text, blog.id) : null)], bylineExtra: [renderEditedChip(blog.tipId, blog.id)], spread: params.spreads || null, returnTo: href })),
+    renderCardTop(blog.id, href, blogTopOptions(blog, href, isAuthor, blog.scheduledAt ? { arrow: false, returnTo: href, editAction } : { arrow: false, chips: [renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("blog", blog.subject || blog.text, blog.id) : null)], bylineExtra: [renderEditedChip(blog.tipId, blog.id)], spread: params.spreads || null, returnTo: href, editAction, subscription: subscriptionOpts })),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, blog.subject || i18n.blogTitle)
     ),
-    blog.scheduledAt ? null : renderDetailShare(blog.id, href, blog.subject || blog.text),
-    isAuthor ? div({ class: "tribe-side-actions" }, form({ method: "GET", action: "/blogs" }, input({ type: "hidden", name: "filter", value: "CREATE" }), input({ type: "hidden", name: "edit", value: blog.id }), button({ type: "submit", class: "update-btn" }, i18n.blogUpdate))) : null,
-    isAuthor && !blog.scheduledAt ? renderClearnetSwitch("posts", blog.rootId || blog.id, isClearnet) : null,
-    blog.scheduledAt ? null : div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.blogComments}: ${blog.commentCount || 0}`)
-    ),
-    params.subscription && !blog.scheduledAt
-      ? renderSubscriptionBox({
-          target: blog.author,
-          scope: "blogs",
-          subscribed: params.subscription.subscribed === true,
-          count: params.subscription.count,
-          isOwner: isAuthor,
-          returnTo: href
-        })
-      : null,
+    blog.scheduledAt ? null : renderDetailShare(blog.id, href, blog.subject || blog.text, subscriptionOpts),
+    isAuthor && !blog.scheduledAt ? renderClearnetSwitch("posts", blog.rootId || blog.id, isClearnet) : null
   );
 
   const blogMain = div({ class: "tribe-main" },

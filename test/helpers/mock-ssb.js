@@ -36,6 +36,15 @@ function makeNode(network, keypair, opts = {}) {
     id: keypair.id,
     keys: keypair,
     publish(content, cb) {
+      const longText = require('../../src/backend/long_text');
+      const raw = (c, done) => node.publishRaw(c, done);
+      if (content && typeof content === 'object' && !longText.hasChunks(content)) {
+        longText.autoChunk(content, (chunk) => new Promise((resolve, reject) => raw(chunk, (e, m) => e ? reject(e) : resolve(m)))).then((head) => raw(head, cb), (e) => { if (cb) cb(e); });
+        return;
+      }
+      raw(content, cb);
+    },
+    publishRaw(content, cb) {
       let actualContent = content;
       if (content && typeof content === 'object' && Array.isArray(content.recps) && content.recps.length) {
         try {
@@ -66,6 +75,20 @@ function makeNode(network, keypair, opts = {}) {
       network.publish(msg);
       if (cb) cb(null, { key, value: msg.value });
     },
+    joinLong(src) {
+      const longText = require('../../src/backend/long_text');
+      const getChunk = async (key) => {
+        const m = network.log.find(x => x.key === key);
+        if (!m || !m.value) return null;
+        let c = m.value.content;
+        if (typeof c === 'string') { try { c = ssbKeys.unbox(c, keypair.private); } catch (_) { c = null; } }
+        return c ? longText.chunkOf(m.value.author, c) : null;
+      };
+      return pull(src, pull.asyncMap((m, cb) => {
+        if (!m || m.sync || !m.value || !m.value.content || typeof m.value.content !== 'object' || !longText.hasChunks(m.value.content)) return cb(null, m);
+        longText.autoJoin(m, getChunk).then((r) => cb(null, r), () => cb(null, m));
+      }));
+    },
     createLogStream(opt = {}) {
       const { limit, reverse, live, old } = opt;
       const items = network.log.slice();
@@ -73,7 +96,7 @@ function makeNode(network, keypair, opts = {}) {
       let prepared = baseItems;
       if (reverse) prepared = prepared.slice().reverse();
       if (limit) prepared = prepared.slice(0, limit);
-      if (!live) return pull.values(prepared);
+      if (!live) return node.joinLong(pull.values(prepared));
       const p = pullPushable();
       for (const m of prepared) p.push(m);
       const off = network.listen(m => p.push(m));
@@ -86,12 +109,13 @@ function makeNode(network, keypair, opts = {}) {
       let items = network.log.filter(m => m.value && m.value.author === id);
       if (reverse) items = items.slice().reverse();
       if (limit) items = items.slice(0, limit);
-      return pull.values(items);
+      return node.joinLong(pull.values(items));
     },
     get(key, cb) {
-      const m = network.log.find(x => x.key === key);
+      const id = key && typeof key === 'object' ? key.id : key;
+      const m = network.log.find(x => x.key === id);
       if (!m) return cb(new Error('not found'));
-      cb(null, m.value);
+      pull(node.joinLong(pull.values([m])), pull.collect((err, out) => cb(null, out && out[0] ? out[0].value : m.value)));
     },
     add(value, cb) {
       if (!value || !value.author || typeof value.sequence !== 'number') { if (cb) cb(new Error('invalid message')); return; }
@@ -133,7 +157,7 @@ function makeNode(network, keypair, opts = {}) {
           out.push({ key: m.key, value: { ...m.value, content: decoded, private: true }, timestamp: m.timestamp });
         }
         if (opts.reverse) out.reverse();
-        return pull.values(opts.limit ? out.slice(0, opts.limit) : out);
+        return node.joinLong(pull.values(opts.limit ? out.slice(0, opts.limit) : out));
       },
       unbox(arg) {
         const c = arg && arg.value ? arg.value.content : arg;
@@ -188,7 +212,7 @@ function makeNode(network, keypair, opts = {}) {
         if (opts.values) out.push(m);
         else out.push({ source: m.value.author, dest: opts.dest, key: m.key });
       }
-      return pull.values(out);
+      return node.joinLong(pull.values(out));
     },
     messagesByType(opts = {}) {
       const wantedType = typeof opts === 'string' ? opts : opts.type;
@@ -196,7 +220,7 @@ function makeNode(network, keypair, opts = {}) {
         const c = m.value && m.value.content;
         return c && typeof c === 'object' && c.type === wantedType;
       });
-      return pull.values(items);
+      return node.joinLong(pull.values(items));
     },
     backlinks: {
       read(opts = {}) {
@@ -223,7 +247,7 @@ function makeNode(network, keypair, opts = {}) {
           if (dest && !refsFor(c).includes(dest)) return false;
           return true;
         });
-        return pull.values(opts && opts.reverse ? matches.slice().reverse() : matches);
+        return node.joinLong(pull.values(opts && opts.reverse ? matches.slice().reverse() : matches));
       }
     },
     friends: {

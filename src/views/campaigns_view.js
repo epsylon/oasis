@@ -90,7 +90,7 @@ const renderForm = (cp) =>
       label(i18n.campaignTitleLabel), br(),
       input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.campaignTitlePlaceholder, value: cp ? cp.title : "" }), br(),
       label(i18n.campaignTextLabel), br(),
-      textarea({ name: "text", rows: 10, maxlength: "8000", placeholder: i18n.campaignTextPlaceholder }, cp ? cp.text : ""), br(),
+      textarea({ name: "text", rows: 10, placeholder: i18n.campaignTextPlaceholder }, cp ? cp.text : ""), br(),
       label(i18n.uploadMedia), br(),
       (cp && renderMediaLockNote(cp)) || input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
       label(i18n.campaignCategoryLabel), br(),
@@ -163,7 +163,7 @@ const renderUpdate = (cp, u, href, editing) =>
       : null,
     editing
       ? form({ method: "POST", action: `/campaigns/updates/${encodeURIComponent(u.id)}/edit`, enctype: "multipart/form-data", class: "campaign-update-form" },
-          textarea({ name: "text", rows: 3, maxlength: "3000", required: true, autofocus: true }, u.text), br(),
+          textarea({ name: "text", rows: 3, required: true, autofocus: true }, u.text), br(),
           input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
           button({ type: "submit", class: "create-button" }, i18n.campaignUpdate)
         )
@@ -178,7 +178,7 @@ const renderUpdates = (cp, href, editUpdate) =>
       : p(i18n.campaignNoUpdates),
     cp.isOwner
       ? form({ method: "POST", action: `/campaigns/updates/${encodeURIComponent(cp.id)}`, enctype: "multipart/form-data", class: "campaign-update-form" },
-          textarea({ name: "text", rows: 3, maxlength: "3000", required: true, placeholder: i18n.campaignUpdatePlaceholder }), br(),
+          textarea({ name: "text", rows: 3, required: true, placeholder: i18n.campaignUpdatePlaceholder }), br(),
           input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
           button({ type: "submit", class: "create-button" }, i18n.campaignAddUpdate)
         )
@@ -191,11 +191,17 @@ exports.singleCampaignView = async (cp, params = {}) => {
   const isClearnet = canClearnet && !!cp.clearnet;
   const census = Array.isArray(params.censusList) ? params.censusList : [];
   const sideActions = [];
-  const ownerActions = cp.isOwner
-    ? [
-        form({ method: "GET", action: "/campaigns" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: cp.id }), button({ type: "submit", class: "update-btn" }, i18n.campaignUpdate))
-      ].filter(Boolean)
-    : [];
+  const subscriptionOpts = params.subscription ? { target: cp.id, scope: "campaigns", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: cp.isOwner, returnTo: href, canWrite: cp.isOwner } : null;
+  const statusRow = cp.isOwner && !cp.expired
+    ? div({ class: "tribe-side-actions housing-status-row" },
+        span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),
+        statusChip(cp),
+        form({ method: "POST", action: `/campaigns/status/${encodeURIComponent(cp.id)}`, class: "inline-form" },
+          button({ class: "tribe-action-btn", type: "submit", name: "status", value: cp.status === "CLOSED" ? "OPEN" : "CLOSED" },
+            String(cp.status === "CLOSED" ? i18n.campaignReopen : i18n.campaignClose).toUpperCase())
+        )
+      )
+    : null;
   const side = div({ class: "tribe-side" },
     renderCardTop(cp.id, href, { arrow: false,
       date: cp.createdAt,
@@ -204,10 +210,16 @@ exports.singleCampaignView = async (cp, params = {}) => {
         renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("campaigns", cp.title, cp.id) : null)
       ],
       bylineExtra: [renderEditedChip(cp.tipId, cp.rootId)],
-      author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: params.spread || null, returnTo: href, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined
+      author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: params.spread || null, returnTo: href, subscription: subscriptionOpts, editAction: cp.isOwner ? `/campaigns?filter=edit&id=${encodeURIComponent(cp.id)}` : undefined, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined
     }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, cp.title)),
     cp.isOwner && canClearnet ? renderClearnetSwitch("campaigns", cp.rootId || cp.id, isClearnet) : null,
+    renderDetailShare(cp.id, href, cp.title, subscriptionOpts),
+    renderTags(cp.tags),
+    statusRow
+  );
+  const main = div({ class: "tribe-main" },
+    cp.text ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), div({ class: "campaign-body" }, ...renderStyledText(cp.text))) : null,
     cp.deadline
       ? table({ class: "tribe-info-table jobs-info-table" },
           tr(
@@ -216,42 +228,12 @@ exports.singleCampaignView = async (cp, params = {}) => {
           )
         )
       : null,
+    renderProgress(cp),
     div({ class: "campaign-qr" },
       img({ src: `${href}/qr.png`, alt: i18n.campaignQrAlt, class: "campaign-qr-img" }),
       p({ class: "campaign-qr-caption" }, i18n.campaignQrCaption)
     ),
-    renderDetailShare(cp.id, href, cp.title),
-    renderProgress(cp),
     renderMapEmbed(params.mapData, cp.mapUrl),
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
-    div({ class: "campaign-signed" },
-      cp.signed ? renderStateChip("mutuals", "✓", i18n.campaignSigned) : renderStateChip("closed", "✗", i18n.campaignNotSigned)
-    ),
-    cp.canElevate
-      ? div({ class: "tribe-side-actions campaign-elevate" }, form({ method: "POST", action: `/campaigns/elevate/${encodeURIComponent(cp.id)}` }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.campaignElevate).toUpperCase())))
-      : null,
-    cp.isOwner && !cp.expired
-      ? div({ class: "tribe-side-actions housing-status-row" },
-          span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),
-          statusChip(cp),
-          form({ method: "POST", action: `/campaigns/status/${encodeURIComponent(cp.id)}`, class: "inline-form" },
-            button({ class: "tribe-action-btn", type: "submit", name: "status", value: cp.status === "CLOSED" ? "OPEN" : "CLOSED" },
-              String(cp.status === "CLOSED" ? i18n.campaignReopen : i18n.campaignClose).toUpperCase())
-          )
-        )
-      : null,
-    div({ class: "doc-export-actions" },
-      form({ method: "GET", action: `${href}/pdf` }, button({ type: "submit", class: "filter-btn" }, i18n.campaignGenerateReport)),
-      form({ method: "POST", action: `${href}/share` }, button({ type: "submit", class: "filter-btn" }, i18n.sharePm))
-    ),
-    renderTags(cp.tags),
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
-    params.subscription
-      ? renderSubscriptionBox({ target: cp.id, scope: "campaigns", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: cp.isOwner, returnTo: href, canWrite: cp.isOwner })
-      : null
-  );
-  const main = div({ class: "tribe-main" },
-    cp.text ? div({ class: "campaign-body" }, ...renderStyledText(cp.text)) : null,
     cp.canSign
       ? div({ class: "card-section campaign-sign" },
           h3(i18n.campaignSignTitle),
@@ -261,6 +243,17 @@ exports.singleCampaignView = async (cp, params = {}) => {
           )
         )
       : null,
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    div({ class: "campaign-signed" },
+      cp.signed ? renderStateChip("mutuals", "✓", i18n.campaignSigned) : renderStateChip("closed", "✗", i18n.campaignNotSigned)
+    ),
+    cp.canElevate
+      ? div({ class: "tribe-side-actions campaign-elevate" }, form({ method: "POST", action: `/campaigns/elevate/${encodeURIComponent(cp.id)}` }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.campaignElevate).toUpperCase())))
+      : null,
+    div({ class: "doc-export-actions" },
+      form({ method: "GET", action: `${href}/pdf` }, button({ type: "submit", class: "filter-btn" }, i18n.campaignGenerateReport)),
+      form({ method: "POST", action: `${href}/share` }, button({ type: "submit", class: "filter-btn" }, i18n.sharePm))
+    ),
     renderUpdates(cp, href, String(params.editUpdate || "")),
     renderSignatures(cp),
     renderEngagement(cp.id,

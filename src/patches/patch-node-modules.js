@@ -497,3 +497,20 @@ if (fs.existsSync(inviteClientPath)) {
 } else {
   log('ssb-invite-client patch skipped: file not found');
 }
+
+// === Patch async-append-only-log ===
+const aaolPath = path.resolve(__dirname, '../server/node_modules/async-append-only-log/index.js');
+if (fs.existsSync(aaolPath)) {
+  const data = fs.readFileSync(aaolPath, 'utf8');
+  const marker = '      const actualBlockBuf = blocksWithDeletables.get(blockIndex) || blockBuf\n      Record.overwriteWithZeroes(actualBlockBuf, getOffsetInBlock(offset))';
+  if (data.includes('latestBlockBuf !== actualBlockBuf')) {
+    log('async-append-only-log already patched');
+  } else if (data.includes(marker)) {
+    fs.writeFileSync(aaolPath, data.replace(marker, '      const actualBlockBuf = blocksWithDeletables.get(blockIndex) || blockBuf\n      if (blockIndex === latestBlockIndex && latestBlockBuf && latestBlockBuf !== actualBlockBuf) {\n        Record.overwriteWithZeroes(latestBlockBuf, getOffsetInBlock(offset))\n      }\n      Record.overwriteWithZeroes(actualBlockBuf, getOffsetInBlock(offset))'), 'utf8');
+    log('Patched async-append-only-log so deleting a record in the open block is not undone by the next append');
+  } else {
+    log('async-append-only-log patch skipped: unexpected del() layout');
+  }
+} else {
+  log('async-append-only-log patch skipped: file not found at ' + aaolPath);
+}

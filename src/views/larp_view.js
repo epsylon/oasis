@@ -199,7 +199,7 @@ const renderPostsBlock = (posts, house, canPost) => {
     canPost
       ? form({ method: 'POST', action: '/larp/post', class: 'larp-post-form' },
           input({ type: 'hidden', name: 'house', value: house.key }),
-          textarea({ id: 'larp_post_text', name: 'text', rows: '3', maxlength: '4000', placeholder: i18n.larpPostPlaceholder || 'What does this house need to say?' }),
+          textarea({ id: 'larp_post_text', name: 'text', rows: '3', placeholder: i18n.larpPostPlaceholder || 'What does this house need to say?' }),
           button({ type: 'submit', class: 'filter-btn larp-post-submit' }, i18n.larpPostSubmit || 'Publish')
         )
       : null,

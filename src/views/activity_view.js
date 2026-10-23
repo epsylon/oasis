@@ -417,14 +417,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
 
     if (type === 'votes') {
       const { question, deadline, status, votes, totalVotes } = content;
-      const commentCount =
-        typeof action.commentCount === 'number'
-          ? action.commentCount
-          : (typeof content.commentCount === 'number' ? content.commentCount : commentCountFor([action.id, action.rootId, action.key]));
 
       const votesList = votes && typeof votes === 'object'
         ? Object.entries(votes).map(([option, count]) => ({ option, count }))
         : [];
+      const voteOptionLabel = (opt) => { const k = String(opt).split('_').map((x) => x.charAt(0) + x.slice(1).toLowerCase()).join(''); return i18n['voteOption' + k] || i18n['vote' + k] || opt; };
 
       const voteOutcome = (() => {
         const totalNum = Number(totalVotes || 0);
@@ -435,8 +432,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         const top = entries.filter(([, c]) => (Number(c) || 0) === maxCount);
         if (maxCount === 0 || top.length > 1) return noResult;
         const w = top[0][0];
-        const label = i18n['vote' + w.split('_').map(x => x.charAt(0) + x.slice(1).toLowerCase()).join('')] || w;
-        return { text: label, tone: w === 'YES' ? 'yes' : w === 'NO' ? 'no' : 'none' };
+        return { text: voteOptionLabel(w), tone: w === 'YES' ? 'yes' : w === 'NO' ? 'no' : 'none' };
       })();
 
       cardBody.push(
@@ -461,15 +457,17 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             span({ class: 'card-label' }, (i18n.voteResults || 'Results') + ':'),
             span({ class: `card-value vote-outcome vote-outcome-${voteOutcome.tone}` }, voteOutcome.text)
           ),
-          div(
-            { class: 'card-field' },
-            span({ class: 'card-label' }, i18n.voteCommentsLabel + ':'),
-            span({ class: 'card-value' }, String(commentCount))
-          ),
-          table(
-            tr(...votesList.map(({ option }) => th(i18n[option] || option))),
-            tr(...votesList.map(({ count }) => td(count)))
-          )
+          process.env.OASIS_MOBILE === '1'
+            ? table({ class: 'block-info-table vote-results-table' },
+                ...votesList.map(({ option, count }) => tr(
+                  td({ class: 'card-label' }, voteOptionLabel(option)),
+                  td({ class: 'card-value' }, String(count))
+                ))
+              )
+            : table(
+                tr(...votesList.map(({ option }) => th(voteOptionLabel(option)))),
+                tr(...votesList.map(({ count }) => td(count)))
+              )
         )
       );
     }

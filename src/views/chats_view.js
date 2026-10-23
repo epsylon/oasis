@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderContentActions, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
 const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -127,7 +127,7 @@ const renderChatForm = (filter, chat = {}, params = {}) => {
       span(i18n.title || "Title"), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.chatTitlePlaceholder, value: chat.title || "" }), br(), br(),
       span(i18n.chatDescription), br(),
-      textarea({ name: "description", rows: 4, maxlength: "1000", placeholder: i18n.chatDescriptionPlaceholder }, chat.description || ""), br(), br(),
+      textarea({ name: "description", rows: 4, placeholder: i18n.chatDescriptionPlaceholder }, chat.description || ""), br(), br(),
       span(i18n.uploadMedia), br(),
       input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
       span(i18n.chatCategory), br(),
@@ -397,13 +397,10 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
       : null
   ].filter(Boolean)
   const chatSide = div({ class: "tribe-side" },
-    div({ class: "card-header activity-card-header card-top" },
-      renderContentActions(chat.key, `/chats/${encodeURIComponent(chat.key)}`, { menu: true, arrow: false, spread: params.spreads || null, author: chat.author, favKind: 'chats', isFavorite: chat.isFavorite, returnTo: params.returnTo, reportTitle: chat.title, deleteAction: isAuthor ? contentDeleteAction('chat', chat.key) : undefined })
-    ),
+    renderCardTop(chat.key, `/chats/${encodeURIComponent(chat.key)}`, { arrow: false, date: chat.createdAt, chips: detailChips, spread: params.spreads || null, author: chat.author, favKind: 'chats', isFavorite: chat.isFavorite, returnTo: params.returnTo, reportTitle: chat.title, editAction: isAuthor ? `/chats/edit/${encodeURIComponent(chat.key)}` : undefined, leaveAction: !isAuthor && isMember ? `/chats/leave/${encodeURIComponent(chat.key)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('chat', chat.key) : undefined }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, chat.title || i18n.chatUntitled)
     ),
-    detailChips.length ? div({ class: "card-chips-row" }, ...detailChips) : null,
     renderMediaBlob(chat.image, "/assets/images/default-avatar.png", { class: "tribe-detail-image" }),
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.chatParticipants}: ${safeArr(chat.members).length}`)
@@ -460,13 +457,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           input({ type: "hidden", name: "chatId", value: chat.key }),
           button({ type: "submit", class: "tribe-action-btn" }, i18n.tribeOpenInvitation)
         )
-      })(),
-      !isAuthor && isMember
-        ? form({ method: "POST", action: `/chats/leave/${encodeURIComponent(chat.key)}` },
-            input({ type: "hidden", name: "returnTo", value: returnTo }),
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeLeaveButton)
-          )
-        : null
+      })()
       ].flat().filter(Boolean)
       return sideActionNodes.length ? div({ class: "tribe-side-actions" }, ...sideActionNodes) : null
     })(),
@@ -482,11 +473,6 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
             : null
         )
       : null,
-    !isAuthor ? null : div({ class: "tribe-side-actions owner-actions" },
-      form({ method: "GET", action: `/chats/edit/${encodeURIComponent(chat.key)}` },
-        button({ type: "submit", class: "tribe-action-btn" }, i18n.chatUpdate)
-      )
-    ),
     !isMember && chat.status === "INVITE-ONLY"
       ? div({ class: "chat-join-section" },
           a({ class: "tribe-action-btn", href: "/invites?filter=others" }, i18n.tribeEnterInvite)
@@ -555,7 +541,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           form({ method: "POST", action: `/chats/${encodeURIComponent(chat.key)}/message`, enctype: "multipart/form-data" },
             input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}#chat-latest` }),
             replyMsg ? input({ type: "hidden", name: "replyTo", value: replyMsg.key }) : null,
-            textarea({ name: "text", rows: 3, maxlength: "3000", placeholder: i18n.chatMessagePlaceholder }), br(),
+            textarea({ name: "text", rows: 3, placeholder: i18n.chatMessagePlaceholder }), br(),
             span(i18n.uploadMedia), br(),
             input({ type: "file", name: "image", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
             button({ type: "submit", class: "filter-btn" }, i18n.chatSendMessage)
@@ -570,7 +556,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
             span(i18n.pollQuestion), br(),
             input({ type: "text", name: "question", required: true, maxlength: "300", placeholder: i18n.pollQuestionPlaceholder }), br(), br(),
             span(i18n.pollOptions), br(),
-            textarea({ maxlength: "1000", name: "options", rows: 4, required: true, placeholder: i18n.pollOptionsPlaceholder }), br(), br(),
+            textarea({ name: "options", rows: 4, required: true, placeholder: i18n.pollOptionsPlaceholder }), br(), br(),
             div({ class: "poll-switch" },
               input({ type: "hidden", name: "anonymous", value: "0" }),
               label(input({ type: "checkbox", name: "anonymous", value: "1" }), " ", i18n.pollAnonymousLabel)

@@ -4,7 +4,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderCardTop, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -73,15 +73,27 @@ const renderCreateForumButton = () =>
     )
   );
 
-const renderVotes = (target, score, forumId) =>
-  div({ class: 'forum-score-box' },
-    form({ method: 'POST', action: `/forum/${encodeURIComponent(forumId)}/vote`, class: 'forum-score-form' },
-      button({ name: 'value', value: 1, class: 'score-btn' }, '▲'),
-      div({ class: 'score-total' }, String(score || 0)),
-      button({ name: 'value', value: -1, class: 'score-btn' }, '▼'),
-      input({ type: 'hidden', name: 'target', value: target }),
-      input({ type: 'hidden', name: 'forumId', value: forumId })
+const renderVoteColumn = (target, score, forumId, positive = 0, negative = 0) =>
+  div({ class: 'forum-vote-column' },
+    div({ class: 'forum-score-box' },
+      form({ method: 'POST', action: `/forum/${encodeURIComponent(forumId)}/vote`, class: 'forum-score-form' },
+        button({ name: 'value', value: 1, class: 'score-btn', title: '▲' }, '▲'),
+        div({ class: 'score-total' }, String(score || 0)),
+        button({ name: 'value', value: -1, class: 'score-btn', title: '▼' }, '▼'),
+        input({ type: 'hidden', name: 'target', value: target }),
+        input({ type: 'hidden', name: 'forumId', value: forumId })
+      )
+    ),
+    span({ class: 'forum-vote-counts' },
+      span({ class: 'votes-count' }, `▲ ${positive || 0}`),
+      span({ class: 'votes-count votes-count-negative' }, `▼ ${negative || 0}`)
     )
+  );
+
+const renderVoteRow = (voteColumn, ...main) =>
+  div({ class: 'forum-row' },
+    voteColumn,
+    div({ class: 'forum-main' }, ...main)
   );
 
 const renderForumForm = (draft = null) =>
@@ -145,27 +157,14 @@ const renderThread = (nodes, level = 0, forumId, bestKey = null) => {
 
       const commentBox = div(
         { class: classList, id: forumReplyAnchor(m.key) },
-        div({ class: 'comment-header' },
-          span({ class: 'date-link' },
-            `${moment(m.timestamp).format('YYYY/MM/DD HH:mm')}`),
-          userLink(m.author),
-          div({ class: 'comment-votes' },
-            span({ class: 'votes-count' }, `▲: ${m.positiveVotes || 0}`),
-            span({ class: 'votes-count votes-count-negative' },
-              `▼: ${m.negativeVotes || 0}`)
-          )
-        ),
-        div({ class: 'comment-body-row' },
-          div({ class: 'comment-vote-col' },
-            renderVotes(m.key, m.score, forumId)
-          ),
-          div({ class: 'comment-text-col' },
-            div(
-              ...(m.text || '').split('\n')
-                .map(l => l.trim())
-                .filter(l => l)
-                .map(l => p(...renderStyledText(l, { zoomImages: true })))
-            )
+        div({ class: 'forum-reply-head' }, renderCardByline({ author: m.author, date: m.timestamp })),
+        renderVoteRow(
+          renderVoteColumn(m.key, m.score, forumId, m.positiveVotes, m.negativeVotes),
+          div({ class: 'forum-reply-text' },
+            ...(m.text || '').split('\n')
+              .map(l => l.trim())
+              .filter(l => l)
+              .map(l => p(...renderStyledText(l, { zoomImages: true })))
           )
         ),
         details({ class: 'new-reply forum-inline-reply', ...(draftFor(m.key) ? { open: true } : {}) },
@@ -314,6 +313,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
   const isForumOwner = String(forum.author) === String(userId);
   const sharesForum = isForumOwner || (forum.participants || []).includes(userId);
   const forumSubIn = isForumOwner || (forum.subscription && forum.subscription.subscribed === true);
+  const subscriptionOpts = (forum.subscription && sharesForum) ? { target: forum.rootId || forum.key, scope: 'forum', subscribed: forum.subscription.subscribed === true, count: forum.subscription.count, isOwner: isForumOwner, returnTo: `/forum/${encodeURIComponent(forum.key)}` } : null;
   return template(forum.title,
     section(
       div({ class: 'tags-header module-header-line' },
@@ -334,88 +334,55 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
       )
     ),
     div({ class: 'forum-thread-container' },
-      div({ class: 'forum-card forum-thread-header' },
-        div({ class: 'root-vote-col' }, renderVotes(
-          forum.key,
-          messagesData.totalScore,
-          forum.key
-        )),
-        div({ class: 'forum-main-col' },
-          div({ class: 'card-header activity-card-header' },
-            renderContentActions(forum.key, forumHref(forum), {
-              author: forum.author,
-              favKind: 'forum',
-              isFavorite: forum.isFavorite,
-              spread: params.spreads || null,
-              reportTitle: forum.title,
-              deleteAction: isForumOwner ? `/forum/delete/${encodeURIComponent(forum.key)}` : null
-            })
-          ),
-          div({ class: 'forum-header-row' },
-            a({
-              class: 'forum-category',
-              href: `/forum?filter=${encodeURIComponent(forum.category)}`
-            }, `[${catLabel(forum.category)}]`),
-            a({
-              class: 'forum-title',
-              href: `/forum/${encodeURIComponent(forum.key)}`
-            }, forum.title),
+      div({ class: 'trending-card forum-thread-card' },
+        renderCardTop(forum.key, forumHref(forum), { arrow: false,
+          date: forum.createdAt,
+          chips: [
+            a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(forum.category)}` }, `[${catLabel(forum.category)}]`),
             forum.isPrivate ? renderPrivacyChip(true, i18n) : null,
             forum.isPrivate ? renderForumEncryptedChip(i18n) : null,
             renderLifespanChip(forum.lifetime, i18n),
             (forum.subscription && sharesForum)
               ? renderStateChip(forumSubIn ? 'mutuals' : 'closed', '✉', forumSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
-              : null,
-            (forum.isPrivate && forum.author === userId)
-              ? form({ method: 'POST', action: `/forum/generate-invite/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
-                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite))
-              : null,
-            (forum.isPrivate && forum.author === userId && !forum.openInviteCode)
-              ? form({ method: 'POST', action: `/forum/open-invite/create/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
-                  button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeOpenInvitation))
-              : null,
-            (forum.isPrivate && forum.author === userId && forum.openInviteCode)
-              ? div({ class: 'tribe-open-invite' },
-                  span({ class: 'card-label' }, i18n.tribeInviteCodeText),
-                  span({ class: 'tribe-open-invite-code' }, forum.openInviteCode),
-                  renderInviteQrCard({ qrDataUrl: `/qr-invite-code/forum/${encodeURIComponent(forum.openInviteCode)}` }))
-              : null,
-            (forum.isPrivate && forum.author === userId && forum.openInviteCode)
-              ? form({ method: 'POST', action: `/forum/open-invite/remove/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
-                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeRemoveInvitation))
-              : null,
-            (forum.isPrivate && forum.author !== userId)
-              ? a({ class: 'tribe-action-btn', href: '/invites?filter=others' }, i18n.tribeEnterInvite)
               : null
-          ),
-          (forum.subscription && sharesForum)
-            ? renderSubscriptionBox({
-                target: forum.rootId || forum.key,
-                scope: 'forum',
-                subscribed: forum.subscription.subscribed === true,
-                count: forum.subscription.count,
-                isOwner: isForumOwner,
-                returnTo: `/forum/${encodeURIComponent(forum.key)}`
-              })
-            : null,
-	  div({
-	    class: 'forum-body',
-	    [RAW_HTML]: sanitizeHtml(renderStyledHtml(forum.text || ''))
-	  }),
-          div({ class: 'forum-meta' },
-            span({ class: 'forum-positive-votes' },
-              `▲: ${messagesData.positiveVotes}`),
-            span({ class: 'forum-negative-votes' },
-              `▼: ${messagesData.negativeVotes}`),
-            span({ class: 'forum-participants' },
-              `${i18n.forumParticipants.toUpperCase()}: ${forum.participants?.length || 1}`),
-            span({ class: 'forum-messages' },
-              `${i18n.forumMessages.toUpperCase()}: ${messagesData.total}`)
-          ),
-          div({ class: 'forum-footer' },
-            span({ class: 'date-link' },
-              `${moment(forum.createdAt).format('YYYY/MM/DD HH:mm')}`),
-            userLink(forum.author)
+          ].filter(Boolean),
+          author: forum.author, favKind: 'forum', isFavorite: forum.isFavorite, spread: params.spreads || null, reportTitle: forum.title,
+          subscription: subscriptionOpts,
+          deleteAction: isForumOwner ? `/forum/delete/${encodeURIComponent(forum.key)}` : undefined
+        }),
+        div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, forum.title)),
+        renderDetailShare(forum.key, forumHref(forum), forum.title, subscriptionOpts),
+        forum.isPrivate
+          ? div({ class: 'tribe-side-actions forum-invite-row' },
+              (forum.author === userId)
+                ? form({ method: 'POST', action: `/forum/generate-invite/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
+                    button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeGenerateInvite))
+                : null,
+              (forum.author === userId && !forum.openInviteCode)
+                ? form({ method: 'POST', action: `/forum/open-invite/create/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
+                    button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeOpenInvitation))
+                : null,
+              (forum.author === userId && forum.openInviteCode)
+                ? div({ class: 'tribe-open-invite' },
+                    span({ class: 'card-label' }, i18n.tribeInviteCodeText),
+                    span({ class: 'tribe-open-invite-code' }, forum.openInviteCode),
+                    renderInviteQrCard({ qrDataUrl: `/qr-invite-code/forum/${encodeURIComponent(forum.openInviteCode)}` }))
+                : null,
+              (forum.author === userId && forum.openInviteCode)
+                ? form({ method: 'POST', action: `/forum/open-invite/remove/${encodeURIComponent(forum.key)}`, class: 'forum-invite-form' },
+                    button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeRemoveInvitation))
+                : null,
+              (forum.author !== userId)
+                ? a({ class: 'tribe-action-btn', href: '/invites?filter=others' }, i18n.tribeEnterInvite)
+                : null
+            )
+          : null,
+        renderVoteRow(
+          renderVoteColumn(forum.key, messagesData.totalScore, forum.key, messagesData.positiveVotes, messagesData.negativeVotes),
+          div({ class: 'forum-body', [RAW_HTML]: sanitizeHtml(renderStyledHtml(forum.text || '')) }),
+          div({ class: 'forum-vote-stats' },
+            span({ class: 'forum-participants' }, `${i18n.forumParticipants}: ${forum.participants?.length || 1}`),
+            span({ class: 'forum-messages' }, `${i18n.forumMessages}: ${messagesData.total}`)
           )
         )
       ),

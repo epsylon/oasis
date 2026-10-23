@@ -149,3 +149,19 @@ describe('clearnet: search engines', (t) => {
     notOk(local.includes('rel="canonical"') || local.includes('og:url'), 'no canonical is invented when the public address is unknown');
   });
 });
+
+describe('clearnet: media that has not arrived is asked for', (t) => {
+  t('every public blob the node lacks is requested when a page needs it, and only once per minute', () => {
+    const view = require('../../../src/views/clearnet_view');
+    const asked = [];
+    view.onMissingBlob((id) => asked.push(id));
+    try {
+      const missing = '&' + 'B'.repeat(43) + '=.sha256';
+      notOk(view.blobUrl(missing), 'the page shows nothing for it');
+      view.renderRichText(`![image:x.jpg](${missing})`);
+      eq(asked.filter(id => id === missing).length, 2, 'but the node is told to fetch it each time a page needs it');
+      ok(view.hasLocalBlob(missing) === false);
+      eq(asked.includes('&not-a-blob'), false);
+    } finally { view.onMissingBlob(null); }
+  });
+});

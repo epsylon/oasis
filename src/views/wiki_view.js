@@ -157,7 +157,7 @@ const renderForm = (page, params = {}) => {
       label(i18n.wikiTitleLabel), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.wikiTitlePlaceholder, value: titleValue }), br(),
       label(i18n.wikiBodyLabel), br(),
-      richTextarea({ name: "body", rows: 14, maxlength: "20000", placeholder: i18n.wikiBodyPlaceholder }, bodyValue), br(),
+      richTextarea({ name: "body", rows: 14, placeholder: i18n.wikiBodyPlaceholder }, bodyValue), br(),
       label(i18n.uploadMedia), br(),
       input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
       page ? [label(i18n.wikiSummaryLabel), br(), input({ type: "text", name: "summary", maxlength: "200", placeholder: i18n.wikiSummaryPlaceholder, value: summaryValue }), br()] : null,
@@ -297,19 +297,9 @@ exports.wikiPageView = async (page, params = {}) => {
   const shownTitle = version ? version.title : page.title;
   const shownBody = version ? version.body : page.body;
   const census = Array.isArray(params.censusList) ? params.censusList : [];
-  const subscriptionNodes = params.subscription
-    ? renderSubscriptionBox({ target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base, inline: true, compact: true })
-    : null;
-  const actions = div({ class: "tribe-side-actions wiki-actions-top" },
-    page.isOwner && !tribeId && !page.encrypted ? renderClearnetSwitch("wiki", page.rootId || page.id, !!page.clearnet) : null,
-    ...(subscriptionNodes && subscriptionNodes.length ? subscriptionNodes : []),
-    page.canEdit && !version
-      ? form({ method: "GET", action: "/wiki" },
-          input({ type: "hidden", name: "filter", value: "edit" }),
-          input({ type: "hidden", name: "id", value: page.id }),
-          tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
-          button({ type: "submit", class: "update-btn" }, i18n.wikiEdit))
-      : null,
+  const reachSwitch = page.isOwner && !tribeId && !page.encrypted ? renderClearnetSwitch("wiki", page.rootId || page.id, !!page.clearnet) : null;
+  const subscriptionOpts = params.subscription ? { target: page.id, scope: "wiki", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: page.isOwner, returnTo: base } : null;
+  const shareRow = renderDetailShare(page.id, base, page.title, subscriptionOpts, reachSwitch, [
     form({ method: "GET", action: `/wiki/${encodeURIComponent(page.id)}/history` },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
       button({ type: "submit", class: "update-btn" }, `${i18n.wikiHistory} (${page.versionCount})`)),
@@ -318,7 +308,7 @@ exports.wikiPageView = async (page, params = {}) => {
     page.isOwner && tribeId
       ? form({ method: "POST", action: `/wiki/delete/${encodeURIComponent(page.id)}` }, input({ type: "hidden", name: "tribeId", value: tribeId }), button({ type: "submit", class: "delete-btn" }, i18n.wikiDelete))
       : null
-  );
+  ]);
   let diffBlock = null;
   if (diffVersion) {
     const idx = page.versions.findIndex(v => v.key === diffVersion.key);
@@ -336,15 +326,14 @@ exports.wikiPageView = async (page, params = {}) => {
         renderCardTop(page.id, base, { arrow: false,
           date: page.createdAt,
           chips: [reachChip(page), statusChip(page), renderLicenseChip(page.license), ...pageChips(page, params, { withStatus: false })],
-          author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: params.spread || null, deleteAction: page.isOwner && !tribeId ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined
+          author: page.author, reportTitle: page.title, favKind: 'wiki', isFavorite: page.isFavorite, spread: params.spread || null, subscription: subscriptionOpts, editAction: page.canEdit && !version ? `/wiki?filter=edit&id=${encodeURIComponent(page.id)}${tribeId ? `&tribeId=${encodeURIComponent(tribeId)}` : ""}` : undefined, deleteAction: page.isOwner && !tribeId ? `/wiki/delete/${encodeURIComponent(page.id)}` : undefined
         }),
         div({ class: "card-section" },
-          actions,
+          shareRow,
           div({ class: "shop-title-row" }, h2({ class: "wiki-page-title" }, shownTitle)),
           version ? p({ class: "wiki-version-notice" }, `${i18n.wikiViewingVersion} (${moment(version.createdAt).format("YYYY/MM/DD HH:mm")}) — `, a({ href: base }, i18n.wikiBackToPage)) : null,
           diffBlock || renderWikiBody(shownBody, { missing: page.missingLinks, tribeId }),
-          renderTags(page.tags),
-          renderDetailShare(page.id, base, page.title)
+          renderTags(page.tags)
         ),
       ),
       div({ class: "card-section wiki-backlinks" },

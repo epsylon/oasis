@@ -48,21 +48,6 @@ const renderImageMedia = (imgObj, filter, params = {}) => {
     : p(i18n.imageNoFile);
 };
 
-const renderImageOwnerActions = (filter, imgObj, params = {}) => {
-  const returnTo = buildReturnTo(filter, params);
-  const isAuthor = String(imgObj.author) === String(userId);
-
-  if (!isAuthor) return [];
-
-  return [
-    form(
-      { method: "GET", action: `/images/edit/${encodeURIComponent(imgObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.imageUpdateButton)
-    )
-  ];
-};
-
 const renderImageUpdated = (imgObj) => {
   const createdTs = imgObj.createdAt ? new Date(imgObj.createdAt).getTime() : NaN;
   const updatedTs = imgObj.updatedAt ? new Date(imgObj.updatedAt).getTime() : NaN;
@@ -144,7 +129,7 @@ const renderImageForm = (filter, imageId, imageToEdit, params = {}) => {
       br(),
       label(i18n.imageDescriptionLabel),
       br(),
-      textarea({ maxlength: "5000", name: "description", placeholder: i18n.imageDescriptionPlaceholder, rows: "4" }, imageToEdit?.description || ""),
+      textarea({ name: "description", placeholder: i18n.imageDescriptionPlaceholder, rows: "4" }, imageToEdit?.description || ""),
       br(),
       label(i18n.mapLocationTitle || "Map Location"),
       br(),
@@ -308,9 +293,6 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
     imageObj.sizeBytes ? renderEcoTax(imageObj.sizeBytes, imageObj.key) : null
   ].filter(Boolean);
 
-  const ownerActions = renderImageOwnerActions(filter, imageObj, { q, sort });
-  const sideActions = [];
-  for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(imageObj.tags);
   const href = `/images/${encodeURIComponent(imageObj.key)}`;
@@ -325,6 +307,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
         ...chips
       ],
       bylineExtra: [renderEditedChip(imageObj.key, imageObj.rootId), renderImageUpdated(imageObj)],
+      editAction: String(imageObj.author) === String(userId) ? `/images/edit/${encodeURIComponent(imageObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: String(imageObj.author) === String(userId) ? contentDeleteAction("image", imageObj.key) : null,
       favKind: 'images', torrentFrom: { blobId: imageObj.url, name: imageObj.title },
       isFavorite: imageObj.isFavorite,
@@ -337,15 +320,14 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
       isAuthor ? renderClearnetSwitch('images', imageObj.rootId || imageObj.key, isClearnet) : null
     ),
     renderDetailShare(imageObj.key, href, imageObj.title),
-    safeText(imageObj.description)
-      ? p({ class: "tribe-side-description" }, ...renderStyledText(imageObj.description))
-      : null,
     tagsNode,
     renderMapEmbed(params.mapData, imageObj.mapUrl),
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const imageMain = div({ class: "tribe-main" },
+    safeText(imageObj.description)
+      ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(imageObj.description)))
+      : null,
     imageObj?.url
       ? div(
           { class: "image-container" },

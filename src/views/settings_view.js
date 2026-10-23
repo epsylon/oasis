@@ -169,7 +169,7 @@ const settingsView = (params) => {
               roomsEnabled ? uxCard("rooms", i18n.roomsTitle || "Rooms", "/assets/images/ux-rooms.png") : null
             );
           })(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.saveUxMode)
         )
       )
     ),
@@ -242,7 +242,7 @@ const settingsView = (params) => {
             span({ class: "lan-checkbox-text" }, i18n.aiSuggestionsEnable)
           ),
           br(),
-          button({ type: "submit" }, i18n.saveSettings),
+          button({ type: "submit" }, i18n.saveAiSettings),
           Number(aiExportCount) > 0 ? button({ type: "submit", formaction: "/ai/export", attrs: { formmethod: "GET" }, class: "ai-export-btn" }, `${i18n.aiExportFineTuning} (${aiExportCount})`) : null
         )
       )
@@ -261,7 +261,7 @@ const settingsView = (params) => {
           max: 100000,
           value: currentConfig.ssbLogStream?.limit || 1000
         }), br(),br(),
-        button({ type: "submit" }, i18n.saveSettings)
+        button({ type: "submit" }, i18n.saveLogLimit)
       )
      )
     ),
@@ -282,8 +282,7 @@ const settingsView = (params) => {
             }),
             span({ class: "lan-checkbox-text" }, i18n.settingsLanEnable || 'Enable LAN broadcasting')
           ),
-          br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          div({ class: "settings-save-row" }, button({ type: "submit" }, i18n.saveLanBroadcasting))
         )
       )
     ),
@@ -294,7 +293,7 @@ const settingsView = (params) => {
         form(
           { action: "/settings/connections", method: "POST" },
           input({ type: "number", id: "connections", name: "connections", min: CONNECTIONS_MIN, max: CONNECTIONS_MAX, step: 1, required: true, value: currentConfig.connections }), br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.saveConnections)
         )
       )
     ),
@@ -314,7 +313,7 @@ const settingsView = (params) => {
             option({ value: "on", ...(currentPhone.video !== false ? { selected: true } : {}) }, i18n.settingsPhoneVideoOn),
             option({ value: "off", ...(currentPhone.video === false ? { selected: true } : {}) }, i18n.settingsPhoneVideoOff)
           ), br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.savePhoneSettings)
         )
       )
     ) : null,
@@ -327,6 +326,7 @@ const settingsView = (params) => {
 	),
         form(
           { action: "/settings/wallet", method: "POST" },
+          walletUser ? div({ class: "settings-save-row wallet-disconnect-row" }, button({ type: "submit", class: "delete-btn", formaction: "/settings/wallet/disconnect", attrs: { formmethod: "POST" } }, i18n.walletDisconnectButton)) : null,
           label({ for: "wallet_url" }, i18n.walletRpcUrl), br(),
           input({ type: "text", id: "wallet_url", name: "wallet_url", placeholder: "http://localhost:7474", value: walletUrl || "http://localhost:7474" }), br(),
           label({ for: "wallet_user" }, i18n.walletUser), br(),
@@ -335,9 +335,7 @@ const settingsView = (params) => {
           input({ type: "password", id: "wallet_pass", name: "wallet_pass" }), br(),
           label({ for: "wallet_fee" }, i18n.walletFee), br(),
           input({ type: "text", id: "wallet_fee", name: "wallet_fee", placeholder: "5", value: walletFee || "5" }), br(),
-          button({ type: "submit" }, i18n.walletConfiguration),
-          walletUser ? " " : null,
-          walletUser ? button({ type: "submit", class: "delete-btn", formaction: "/settings/wallet/disconnect", attrs: { formmethod: "POST" } }, i18n.walletDisconnectButton) : null
+          button({ type: "submit" }, i18n.walletConfiguration)
         )
       )
     ) : null,
@@ -391,7 +389,7 @@ const settingsView = (params) => {
             option({ value: "only-lan", ...(currentWish === "only-lan" ? { selected: true } : {})}, i18n.settingsWishOnlyLan || "Only LAN"),
             option({ value: "local", ...(currentWish === "local" ? { selected: true } : {})}, i18n.settingsWishLocal || "Local")
           ), br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.saveWish)
         )
       )
     ),
@@ -412,7 +410,7 @@ const settingsView = (params) => {
             value: currentHops
           }),
           br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.saveReplication)
         )
       )
     ),
@@ -428,7 +426,7 @@ const settingsView = (params) => {
           br(),
           select({ id: "blob_cache_mb", name: "blob_cache_mb" }, ...BLOB_CACHE_OPTIONS.map(mb => option({ value: String(mb), ...(mb === blobCache.maxMB ? { selected: true } : {}) }, blobCacheOptionLabel(mb)))),
           br(), br(),
-          button({ type: "submit" }, i18n.saveSettings),
+          button({ type: "submit" }, i18n.saveBlobCache),
           blobCache.maxMB > 0 ? button({ type: "submit", formaction: "/settings/blob-cache/collect", class: "blob-cache-clean-btn" }, i18n.settingsBlobCacheCleanNow) : null
         )
       )
@@ -444,7 +442,7 @@ const settingsView = (params) => {
             option({ value: "following", ...(currentPmVisibility === "following" ? { selected: true } : {})}, i18n.settingsPmVisibilityFollowing),
             option({ value: "mutuals", ...(currentPmVisibility === "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals)
           ), br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.savePmVisibility)
         )
       )
     ),
@@ -459,7 +457,7 @@ const settingsView = (params) => {
             option({ value: "following", ...(currentMentionsVisibility === "following" ? { selected: true } : {})}, i18n.settingsPmVisibilityFollowing),
             option({ value: "mutuals", ...(currentMentionsVisibility === "mutuals" ? { selected: true } : {})}, i18n.settingsPmVisibilityMutuals)
           ), br(), br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.saveMentionsVisibility)
         )
       )
     ),
@@ -483,7 +481,7 @@ const settingsView = (params) => {
             )
           ),
           br(),
-          button({ type: "submit" }, i18n.saveSettings)
+          button({ type: "submit" }, i18n.saveInboxBots)
         )
       )
     ) : null,

@@ -61,24 +61,6 @@ const renderVideoPlayer = (videoObj) =>
       )
     : p(i18n.videoNoFile);
 
-const renderVideoOwnerActions = (filter, videoObj, params = {}) => {
-  const returnTo = buildReturnTo(filter, params);
-  const isAuthor = String(videoObj.author) === String(userId);
-
-  if (!isAuthor) return [];
-
-  const items = [];
-  items.push(
-    form(
-      { method: "GET", action: `/videos/edit/${encodeURIComponent(videoObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.videoUpdateButton)
-    )
-  );
-
-  return items;
-};
-
 const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => {
   return renderSharedCommentsSection({
     action: `/videos/${encodeURIComponent(videoId)}/comments`,
@@ -164,7 +146,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
       br(),
       span(i18n.videoDescriptionLabel),
       br(),
-      textarea({ maxlength: "5000", name: "description", placeholder: i18n.videoDescriptionPlaceholder, rows: "4" }, videoToEdit?.description || ""),
+      textarea({ name: "description", placeholder: i18n.videoDescriptionPlaceholder, rows: "4" }, videoToEdit?.description || ""),
       br(),
       span(i18n.mapLocationTitle || "Map Location"),
       br(),
@@ -288,9 +270,6 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
     videoObj.sizeBytes ? renderEcoTax(videoObj.sizeBytes, videoObj.key) : null
   ].filter(Boolean);
 
-  const ownerActions = renderVideoOwnerActions(filter, videoObj, { q, sort });
-  const sideActions = [];
-  for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(videoObj.tags);
   const href = `/videos/${encodeURIComponent(videoObj.key)}`;
@@ -310,6 +289,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       spread: params.spreads || null,
       returnTo,
       reportTitle: videoObj.title,
+      editAction: String(videoObj.author) === String(userId) ? `/videos/edit/${encodeURIComponent(videoObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: String(videoObj.author) === String(userId) ? contentDeleteAction('video', videoObj.key) : undefined
     }),
     div({ class: "shop-title-row" },
@@ -317,15 +297,14 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       isAuthor ? renderClearnetSwitch('videos', videoObj.rootId || videoObj.key, isClearnet) : null
     ),
     renderDetailShare(videoObj.key, href, videoObj.title),
-    safeText(videoObj.description)
-      ? p({ class: "tribe-side-description" }, ...renderStyledText(videoObj.description))
-      : null,
     tagsNode,
     renderMapEmbed(params.mapData, videoObj.mapUrl),
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const videoMain = div({ class: "tribe-main" },
+    safeText(videoObj.description)
+      ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(videoObj.description)))
+      : null,
     renderVideoPlayer(videoObj),
     videoObj?.url ? renderDownloadButton(blobUrlOf(videoObj.url), videoObj.title || "") : null,
     renderEngagement(videoObj.key,

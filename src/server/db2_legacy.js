@@ -274,6 +274,10 @@ module.exports = [
     init(sbot, config) {
       sbot.db.registerIndex(LinksIndex);
       const linksIndex = () => sbot.db.getIndex('oasisLinks');
+      if (typeof sbot.createHistoryStream === 'function') {
+        const originalHistory = sbot.createHistoryStream;
+        sbot.createHistoryStream = (opts = {}) => pull(originalHistory(opts), pull.unique((m) => typeof m === 'string' ? m : (m && m.key) || (m && m.author ? `${m.author}:${m.sequence}` : JSON.stringify(m))));
+      }
 
       const pages = (ops, extra) => {
         let seq = 0;
@@ -295,9 +299,25 @@ module.exports = [
         return pull(next, pull.map((page) => pull.values(page)), pull.flatten());
       };
 
-      const query = (ops, extra, size) => size
+      const onceEach = () => pull.unique((m) => (m && m.key) || (m && m.value && m.value.author ? `${m.value.author}:${m.value.sequence}` : JSON.stringify(m)));
+      const longText = require('../backend/long_text');
+      const chunkCache = new Map();
+      const getChunk = (key) => new Promise((resolve) => {
+        if (chunkCache.has(key)) return resolve(chunkCache.get(key));
+        get({ id: key, private: true }, (err, value) => {
+          const ch = err || !value ? null : longText.chunkOf(value.author, value.content);
+          if (ch) { chunkCache.set(key, ch); if (chunkCache.size > 2000) chunkCache.delete(chunkCache.keys().next().value); }
+          resolve(ch);
+        });
+      });
+      const joinLong = (m, cb) => {
+        if (!m || m.sync || !m.value || !m.value.content || typeof m.value.content !== 'object' || !longText.hasChunks(m.value.content)) return cb(null, m);
+        longText.autoJoin(m, getChunk).then((r) => cb(null, r), () => cb(null, m));
+      };
+      const joined = () => pull.asyncMap(joinLong);
+      const query = (ops, extra, size) => pull(size
         ? sbot.db.query(...[ops ? where(ops) : null, ...extra, batch(size), toPullStream()].filter(Boolean))
-        : pages(ops, extra);
+        : pages(ops, extra), onceEach());
 
       const stream = (ops, opts = {}) => {
         const shape = () => pull.map(m => legacy(m, { private: opts.private }));
@@ -307,17 +327,17 @@ module.exports = [
         const order = [opts.arrival ? sortByArrival() : null, opts.reverse ? descending() : null].filter(Boolean);
         const fmt = formatter(opts);
         const size = limit >= 0 ? Math.max(1, Math.min(limit, FIRST_PAGE)) : undefined;
-        if (!opts.live) return pull(query(ops, order, size), shape(), boxed(), pass(), limit >= 0 ? pull.take(limit) : pull.through(), pull.map(fmt));
+        if (!opts.live) return pull(query(ops, order, size), shape(), boxed(), pass(), limit >= 0 ? pull.take(limit) : pull.through(), joined(), pull.map(fmt));
         const match = (m) => (!opts.skipPrivate || typeof (m.value && m.value.content) !== 'string') && (!opts.match || opts.match(m)) && (!opts.filter || opts.filter(m));
         const live$ = liveTap(sbot, config.keys, { private: opts.private, decryptedOnly: opts.decryptedOnly }, match);
         const old$ = pull(query(ops, order, size), shape(), boxed(), pass(), limit >= 0 ? pull.take(limit) : pull.through());
-        return pull(withSync(old$, live$, opts), pull.map(fmt));
+        return pull(withSync(old$, live$, opts), joined(), pull.map(fmt));
       };
 
       const bySeqs = (list, opts = {}) => {
         const unique = [...new Set(list)];
         if (!unique.length) return pull.empty();
-        return pull(query(seqs(unique), []), pull.map(m => legacy(m, { private: opts.private })));
+        return pull(query(seqs(unique), []), pull.map(m => legacy(m, { private: opts.private })), joined());
       };
 
       const linked = (dest, opts, cb) => {
@@ -448,7 +468,7 @@ module.exports = [
         sbot.db.getMsg(id, (err, msg) => {
           if (err) return cb(err);
           const shaped = legacy(msg, { private: isObj && idOrObject.private === true });
-          cb(null, isObj && idOrObject.meta ? shaped : shaped.value);
+          joinLong(shaped, (_, full) => cb(null, isObj && idOrObject.meta ? full : full.value));
         });
       };
 

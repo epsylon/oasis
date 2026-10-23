@@ -280,7 +280,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     br(),
     label({ for: 'description' }, i18n.tribeDescriptionLabel),
     br,
-    textarea({ maxlength: "3000", name: 'description', id: 'description', required: true, rows: 4, cols: 50, placeholder: i18n.tribeDescriptionPlaceholder }, tribeToEdit.description || ''),
+    textarea({ name: 'description', id: 'description', required: true, rows: 4, cols: 50, placeholder: i18n.tribeDescriptionPlaceholder }, tribeToEdit.description || ''),
     br,
     label({ for: 'location' }, i18n.tribeLocationLabel),
     br,
@@ -841,8 +841,8 @@ const renderFeedTribeView = (feedItems, tribe, query = {}) => {
     const controls = renderTribeReachControls(tribe, m, returnTo);
     return renderFeedCard(toFeedShape(m), null, {
       hashtagHref: tribeTagHref(tribe),
-      refeedAction: `${tribeUrl}/refeed/${encodeURIComponent(m.id)}`,
-      canRefeed: member,
+      refeedAction: m.publicRefeed ? `/feed/refeed/${encodeURIComponent(m.publicRefeed)}` : `${tribeUrl}/refeed/${encodeURIComponent(m.id)}`,
+      canRefeed: m.publicRefeed || member,
       headerActions: tribeCardActions(tribe, m, member, m.description),
       chips: chip || controls ? [chip ? div({ class: 'card-chips-row' }, chip) : null, controls] : null,
       engagement: tribeEngagement(tribe, m, member, returnTo)
@@ -1102,7 +1102,7 @@ const renderTribePollsSection = (tribe, items, query = {}) => {
           label(i18n.pollQuestion), br(),
           input({ type: 'text', name: 'question', required: true, maxlength: '300', placeholder: i18n.pollQuestionPlaceholder }), br(), br(),
           label(i18n.pollOptions), br(),
-          textarea({ name: 'options', rows: '5', required: true, maxlength: '3000', placeholder: i18n.pollOptionsPlaceholder }, ''), br(),
+          textarea({ name: 'options', rows: '5', required: true, placeholder: i18n.pollOptionsPlaceholder }, ''), br(),
           div({ class: 'poll-switch' },
             input({ type: 'hidden', name: 'anonymous', value: '0' }),
             label(input({ type: 'checkbox', name: 'anonymous', value: '1' }), ' ', i18n.pollAnonymousLabel)
@@ -1558,11 +1558,15 @@ const renderSubTribesSection = (tribe, items, query) => {
   const tribeUrl = `/tribe/${encodeURIComponent(tribe.id)}`;
 
   return div({ class: 'tribe-content-list' },
-    canCreate ? form({ method: 'GET', action: tribeUrl },
-      input({ type: 'hidden', name: 'section', value: 'subtribes' }),
-      input({ type: 'hidden', name: 'action', value: 'create' }),
-      button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeSubTribesCreate)
-    ) : null,
+    canCreate
+      ? div({ class: subTribes.length === 0 ? 'tribe-side-actions tribe-side-center tribe-subtribes-empty' : 'tribe-side-actions' },
+          form({ method: 'GET', action: tribeUrl },
+            input({ type: 'hidden', name: 'section', value: 'subtribes' }),
+            input({ type: 'hidden', name: 'action', value: 'create' }),
+            button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeSubTribesCreate)
+          )
+        )
+      : null,
     !canCreate && tribe.inviteMode === 'strict'
       ? p({ class: 'tribe-strict-denied' }, i18n.tribeSubTribesStrictDenied)
       : null,
@@ -1625,7 +1629,6 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
   const isMemberOfTribe = Array.isArray(tribe.members) && tribe.members.includes(userId);
   const isAuthorOfTribe = tribe.author === userId;
   const isOutsider = !isMemberOfTribe && !isAuthorOfTribe;
-  const canCreateSub = !tribe.parentTribeId && (tribe.inviteMode === 'open' ? (isMemberOfTribe || isAuthorOfTribe) : isAuthorOfTribe);
   const isLarpHouse = isLarpHouseTribe(tribe);
   const larpHouseKey = tribe.larpHouseKey || null;
   const canGenerateInvite = isLarpHouse
@@ -1640,6 +1643,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
   const hasSideActions = canGenerateInvite || showOwnerControls || canLeave || (isOutsider && !showInviteTop);
   const tribeHref = `/tribe/${encodeURIComponent(tribe.id)}`;
 
+  const subscriptionOpts = (tribe.subscription && !isOutsider) ? { target: tribe.id, scope: 'tribes', subscribed: tribe.subscription.subscribed === true, count: tribe.subscription.count, isOwner: String(tribe.author) === String(userIdParam), returnTo: `/tribe/${encodeURIComponent(tribe.id)}` } : null;
   const tribeDetails = div({ class: 'tribe-details' },
     div({ class: 'tribe-side' },
       renderCardTop(tribe.id, tribeHref, { arrow: false, spread: tribe.isAnonymous ? undefined : (tribe.spreads || null),
@@ -1650,7 +1654,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           renderModeChip(tribe.inviteMode, i18n),
           renderLifespanChip(tribe.lifetime, i18n)
         ],
-        author: tribe.author, reportTitle: tribe.title, deleteAction: showOwnerControls ? contentDeleteAction('tribe', tribe.id) : undefined
+        author: tribe.author, reportTitle: tribe.title, subscription: subscriptionOpts, editAction: showOwnerControls ? `/tribes/edit/${encodeURIComponent(tribe.id)}` : undefined, leaveAction: canLeave ? (isLarpHouse ? '/larp/leave' : `/tribes/leave/${encodeURIComponent(tribe.id)}`) : undefined, deleteAction: showOwnerControls ? contentDeleteAction('tribe', tribe.id) : undefined
       }),
       tribe.parentTribe
         ? div({ class: 'tribe-parent-box' },
@@ -1660,18 +1664,21 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
             )
           )
         : null,
-    renderDetailShare(tribe.id, tribeHref, tribe.title),
+    renderDetailShare(tribe.id, tribeHref, tribe.title, subscriptionOpts),
       div({ class: 'shop-title-row' },
         h2({ class: 'tribe-card-title' }, tribe.title)
       ),
       renderMediaBlob(imageSrc, '/assets/images/default-tribe.png', { alt: tribe.title, class: 'tribe-detail-image' }),
-      tribe.location ? table({ class: 'tribe-info-table' },
-        tr(
+      table({ class: 'tribe-info-table' },
+        tribe.location ? tr(
           td({ class: 'tribe-info-label' }, i18n.tribeLocationLabel || 'LOCATION'),
           td({ class: 'tribe-info-value', colspan: '3' }, ...renderStyledText(tribe.location))
+        ) : null,
+        tr(
+          td({ class: 'tribe-info-label' }, i18n.tribeMembersCount),
+          td({ class: 'tribe-info-value', colspan: '3' }, String(tribe.memberCount != null ? tribe.memberCount : tribe.members.length))
         )
-      ) : null,
-      h2({ class: 'tribe-members-count' }, `${i18n.tribeMembersCount}: ${tribe.memberCount != null ? tribe.memberCount : tribe.members.length}`),
+      ),
       (isOutsider && hasOpenInvite)
         ? div({ class: 'tribe-side-actions tribe-side-center' },
             renderInviteQrCard({ qrDataUrl: tribe.openInviteQr, name: tribe.title }),
@@ -1703,16 +1710,6 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
           ? a({ class: 'tribe-action-btn', href: inviteHref }, i18n.tribeEnterInvite)
           : null
       ) : null,
-      (tribe.subscription && !isOutsider)
-        ? renderSubscriptionBox({
-            target: tribe.id,
-            scope: 'tribes',
-            subscribed: tribe.subscription.subscribed === true,
-            count: tribe.subscription.count,
-            isOwner: String(tribe.author) === String(userIdParam),
-            returnTo: `/tribe/${encodeURIComponent(tribe.id)}`
-          })
-        : null,
       (isLarpHouse && larpHouseKey === 'academia' && isOutsider && String(tribe.viewerHouse || '') !== 'academia')
         ? div({ class: 'tribe-side-actions' },
             form({ method: 'POST', action: '/larp/join' },
@@ -1738,14 +1735,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
       showInviteTop
         ? div({ class: 'tribe-side-actions tribe-side-center tribe-enter-invite' }, a({ class: 'tribe-action-btn', href: inviteHref }, i18n.tribeEnterInvite))
         : null,
-      (!tribe.parentTribeId && (canCreateSub || subTribes.length > 0)) ? div({ class: 'tribe-side-subtribes' },
-        canCreateSub
-          ? form({ method: 'GET', action: `/tribe/${encodeURIComponent(tribe.id)}` },
-              input({ type: 'hidden', name: 'section', value: 'subtribes' }),
-              input({ type: 'hidden', name: 'action', value: 'create' }),
-              button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeSubTribesCreate)
-            )
-          : null,
+      (!tribe.parentTribeId && subTribes.length > 0) ? div({ class: 'tribe-side-subtribes' },
         subTribes.length > 0
           ? div({ class: 'tribe-subtribes-list' },
               subTribes.map(st =>
@@ -1759,22 +1749,6 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
       tribe.tags && tribe.tags.filter(Boolean).length ? div({ class: 'tribe-side-tags' }, tribe.tags.filter(Boolean).map(tag =>
         a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: 'tag-link' }, `#${tag}`)
       )) : null,
-      (showOwnerControls || canLeave) ? div({ class: 'tribe-side-actions tribe-side-actions-bottom' },
-        showOwnerControls
-          ? form({ method: 'GET', action: `/tribes/edit/${encodeURIComponent(tribe.id)}` },
-              button({ type: 'submit', class: 'tribe-action-btn' }, i18n.tribeUpdateButton)
-            )
-          : null,
-        canLeave
-          ? (isLarpHouse
-              ? form({ method: 'POST', action: '/larp/leave' },
-                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeLeaveButton)
-                )
-              : form({ method: 'POST', action: `/tribes/leave/${encodeURIComponent(tribe.id)}` },
-                  button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, i18n.tribeLeaveButton)
-                ))
-          : null
-      ) : null,
       null
     ),
     div({ class: 'tribe-main' },
@@ -2081,7 +2055,7 @@ const rulesBlock = (tribe, rules, isCreator) => div({},
           label({}, i18n.tribeGovRuleTitle || 'Title'), br(),
           input({ type: 'text', name: 'title', maxlength: '100', required: true }), br(), br(),
           label({}, i18n.tribeGovRuleBody || 'Body'), br(),
-          textarea({ maxlength: "3000", name: 'body', rows: 4 }), br(), br(),
+          textarea({ name: 'body', rows: 4 }), br(), br(),
           button({ type: 'submit', class: 'create-button' }, i18n.save || 'Save')
         )
       )

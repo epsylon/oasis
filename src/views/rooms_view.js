@@ -136,7 +136,7 @@ const renderRoomForm = (room, params = {}) => {
       span(i18n.title || "Title"), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.roomTitlePlaceholder, value: draft.title || "" }), br(),
       span(i18n.roomDescriptionLabel), br(),
-      textarea({ name: "description", rows: 4, maxlength: "1000", placeholder: i18n.roomDescriptionPlaceholder }, draft.description || ""), br(),
+      textarea({ name: "description", rows: 4, placeholder: i18n.roomDescriptionPlaceholder }, draft.description || ""), br(),
       span(i18n.uploadMedia), br(),
       input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
       span(i18n.roomTagsLabel), br(),
@@ -327,8 +327,9 @@ const renderLivePanel = (room, live, occ, canJoin = false) => {
 }
 
 exports.singleRoomView = async (room, params = {}) => {
-  const isAuthor = String(room.author) === String(userId)
-  const isMember = safeArr(room.members).includes(userId) || (!!room.tribeId && !!room.isTribeMember)
+  const me = params.viewerId || userId
+  const isAuthor = String(room.author) === String(me)
+  const isMember = safeArr(room.members).includes(me) || (!!room.tribeId && !!room.isTribeMember)
   const restricted = !isMember && !isAuthor && room.type === "INVITE-ONLY"
   const live = params.live && params.live.ref === room.rootId ? params.live : null
   const occ = params.occ || null
@@ -368,12 +369,7 @@ exports.singleRoomView = async (room, params = {}) => {
             )
           : form({ method: "POST", action: `/rooms/close/${encodeURIComponent(room.rootId)}` },
               button({ type: "submit", class: "update-btn delete-btn" }, i18n.roomClose)
-            ),
-        form({ method: "GET", action: "/rooms" },
-          input({ type: "hidden", name: "filter", value: "edit" }),
-          input({ type: "hidden", name: "id", value: room.rootId }),
-          button({ type: "submit", class: "update-btn" }, i18n.roomUpdate)
-        )
+            )
       ].filter(Boolean)
     : []
 
@@ -384,7 +380,7 @@ exports.singleRoomView = async (room, params = {}) => {
         ...roomChips(room, live ? { count: live.count, max: live.max } : occ, !!live),
         canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? roomClearnetHref(room) : null) : null
       ],
-      spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title, deleteAction: isAuthor ? contentDeleteAction("room", room.rootId) : undefined
+      spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title, editAction: isAuthor ? `/rooms?filter=edit&id=${encodeURIComponent(room.rootId)}` : undefined, leaveAction: !isAuthor && !room.tribeId && safeArr(room.members).includes(me) ? `/rooms/leave/${encodeURIComponent(room.rootId)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("room", room.rootId) : undefined
     }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, restricted ? i18n.roomStatusInviteOnly : (room.title || "—"))),
     isAuthor && canClearnet ? div({ class: "card-chips-row" }, renderClearnetSwitch("rooms", room.rootId, isClearnet)) : null,
@@ -397,13 +393,6 @@ exports.singleRoomView = async (room, params = {}) => {
         )
       : null,
     inviteActions.length ? div({ class: "tribe-side-actions" }, ...inviteActions) : null,
-    !isAuthor && !room.tribeId && safeArr(room.members).includes(userId)
-      ? div({ class: "tribe-side-actions" },
-          form({ method: "POST", action: `/rooms/leave/${encodeURIComponent(room.rootId)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeLeaveButton)
-          )
-        )
-      : null,
     isAuthor && !room.isClosed
       ? div({ class: "tribe-side-actions housing-status-row" },
           span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),

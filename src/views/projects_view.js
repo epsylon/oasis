@@ -420,11 +420,9 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
           div({ class: "shop-title-row" },
             h2({ class: "tribe-card-title" },
               a({ href: `/projects/${encodeURIComponent(pr.id)}` }, pr.title || i18n.projectsTitle)
-            )
+            ),
+            goal > 0 ? div({ class: "price-chip" }, `${pr.goal} ECO`) : null
           ),
-          goal > 0
-            ? div({ class: "price-chip" }, `${pr.goal} ECO`)
-            : null,
           goal > 0
             ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100)
             : null,
@@ -463,7 +461,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       br(),
       label(i18n.projectDescription),
       br(),
-      textarea({ maxlength: "5000", name: "description", rows: "6", required: true, placeholder: i18n.projectDescriptionPlaceholder }, pr.description || ""),
+      textarea({ name: "description", rows: "6", required: true, placeholder: i18n.projectDescriptionPlaceholder }, pr.description || ""),
       br(),
       label(i18n.projectImage),
       br(),
@@ -494,7 +492,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       br(),
       label(i18n.projectMilestoneDescription),
       br(),
-      textarea({ maxlength: "5000", name: "milestoneDescription", rows: "3", placeholder: i18n.projectMilestoneDescriptionPlaceholder }),
+      textarea({ name: "milestoneDescription", rows: "3", placeholder: i18n.projectMilestoneDescriptionPlaceholder }),
       br(),
       label(i18n.projectMilestoneTargetPercent),
       br(),
@@ -606,8 +604,8 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
   ].filter(Boolean)
 
   const sideActions = []
-  if (!isAuthor && statusUpper === "ACTIVE") {
-    sideActions.push(isFollower
+  const followToggle = (!isAuthor && statusUpper === "ACTIVE")
+    ? (isFollower
       ? form({ method: "POST", action: `/projects/unfollow/${encodeURIComponent(pr.id)}` },
           input({ type: "hidden", name: "returnTo", value: returnTo }),
           button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.projectUnfollowButton).toUpperCase())
@@ -615,13 +613,9 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
       : form({ method: "POST", action: `/projects/follow/${encodeURIComponent(pr.id)}` },
           input({ type: "hidden", name: "returnTo", value: returnTo }),
           button({ type: "submit", class: "tribe-action-btn" }, String(i18n.projectFollowButton).toUpperCase())
-        )
-    )
-  }
+        ))
+    : null
   if (isAuthor) {
-    sideActions.push(form({ method: "GET", action: `/projects/edit/${encodeURIComponent(pr.id)}` },
-      button({ class: "tribe-action-btn", type: "submit" }, i18n.projectUpdateButton)
-    ))
     sideActions.push(form(
       { method: "POST", action: `/projects/status/${encodeURIComponent(pr.id)}`, class: "project-control-form project-control-form--status" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -642,30 +636,19 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     ))
   }
 
+  const subscriptionOpts = pr.subscription ? { target: pr.rootId || pr.id, scope: "projects", subscribed: pr.subscription.subscribed === true, count: pr.subscription.count, isOwner: isAuthor, canWrite: isAuthor, returnTo } : null
   const projectSide = div({ class: "tribe-side" },
-    renderCardTop(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { arrow: false, date: pr.createdAt, chips, bylineExtra: [renderEditedChip(pr.id, pr.rootId)], spread: params.spreads || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, returnTo: `/projects/${encodeURIComponent(pr.id)}`, deleteAction: isAuthor ? contentDeleteAction('project', pr.id || pr.key) : undefined }),
+    renderCardTop(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { arrow: false, date: pr.createdAt, chips, bylineExtra: [renderEditedChip(pr.id, pr.rootId)], spread: params.spreads || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, returnTo: `/projects/${encodeURIComponent(pr.id)}`, subscription: subscriptionOpts, editAction: isAuthor ? `/projects/edit/${encodeURIComponent(pr.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('project', pr.id || pr.key) : undefined }),
     div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, pr.title)
+      h2({ class: "tribe-card-title" }, pr.title),
+      div({ class: "price-chip" }, `${pr.goal || 0} ECO`)
     ),
     isAuthor && canClearnet ? renderClearnetSwitch('projects', pr.rootId || pr.id || pr.key, isClearnet) : null,
     pr.image ? renderMediaBlob(pr.image, { class: "tribe-detail-image" }) : null,
-    renderDetailShare(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, pr.title),
-    div({ class: "price-chip" }, `${pr.goal || 0} ECO`),
-    div({ class: "job-price-line card-salary" }, `${i18n.projectFollowers}: ${followersCount(pr)}`),
+    renderDetailShare(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, pr.title, subscriptionOpts),
     renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
     goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
-    pr.subscription
-      ? renderSubscriptionBox({
-          target: pr.rootId || pr.id,
-          scope: "projects",
-          subscribed: pr.subscription.subscribed === true,
-          count: pr.subscription.count,
-          isOwner: isAuthor,
-          canWrite: isAuthor,
-          returnTo
-        })
-      : null
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   )
 
   const projectMain = div({ class: "tribe-main" },
@@ -681,6 +664,10 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     renderBackers(pr, f),
     renderMilestonesAndBounties(pr, f, isAuthor),
     renderPledgeBox(pr, f, isAuthor),
+    div({ class: "tribe-side-actions project-followers-row" },
+      span({ class: "card-label" }, `${i18n.projectFollowers}: ${followersCount(pr)}`),
+      followToggle
+    ),
     renderFollowers(pr),
     renderEngagement(pr.id || pr.key,
       renderOpinionsVoting('/projects/opinions', pr.id || pr.key, pr.opinions, null, pr.opinions_inhabitants),

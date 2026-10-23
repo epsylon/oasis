@@ -95,9 +95,10 @@ const buildGraphSvg = (me, peers, links = []) => {
 };
 
 const zoomableGraph = (id, svg, stats = []) => [
-  div({ class: 'graphos-legend graphos-statsbar' }, ...stats.filter(Boolean)),
+  div({ class: 'graphos-legend graphos-statsbar' }, ...stats.filter(Boolean),
+    a({ href: process.env.OASIS_MOBILE === '1' ? `#${id}-focus` : `#${id}`, id: `${id}-src`, class: 'tribe-action-btn graphos-zoom-btn' }, span({ class: 'graphos-zoom-icon' }, '\u2922'), ` ${String(i18n.graphosZoom || 'Enlarge').toUpperCase()}`)
+  ),
   div({ class: 'graphos-canvas' },
-    a({ href: process.env.OASIS_MOBILE === '1' ? `#${id}-focus` : `#${id}`, id: `${id}-src`, class: 'tribe-action-btn graphos-zoom-btn' }, span({ class: 'graphos-zoom-icon' }, '\u2922'), ` ${String(i18n.graphosZoom || 'Enlarge').toUpperCase()}`),
     div({ class: 'graphos-canvas-svg', [RAW_HTML]: svg })
   ),
   div({ id, class: 'lightbox graphos-lightbox' },

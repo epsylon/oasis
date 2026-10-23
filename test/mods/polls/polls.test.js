@@ -258,7 +258,8 @@ describe('polls: rendering', (t) => {
     const detail = String(await singlePollView(poll, [], {}));
     ok(detail.includes('/polls/opinions/'), 'opinions are votable');
     ok(detail.includes('/comments'), 'comments are open');
-    ok(detail.includes('@a.ed25519'), 'a public poll lists its voters');
+    notOk(detail.includes('@a.ed25519'), 'a public poll shows no list of voters');
+    ok(detail.includes(': 4<'), 'only the number of voters');
 
     const anon = String(await singlePollView({ ...poll, anonymous: true, votersHidden: true, voters: [] }, [], {}));
     notOk(anon.includes('@a.ed25519'), 'an anonymous poll does not list voters');

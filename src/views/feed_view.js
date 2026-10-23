@@ -149,7 +149,7 @@ const renderFeedCard = exports.renderFeedCard = (feed, spreadMap = null, opts = 
             { class: "card-section feed-card-body" },
         div(
             { class: "feed-row" },
-            feed.tribeOrigin ? null : div(
+            div(
                 { class: "refeed-column" },
                 h1(String(refeedsNum)),
                 canRefeed
@@ -157,7 +157,7 @@ const renderFeedCard = exports.renderFeedCard = (feed, spreadMap = null, opts = 
                         { method: "POST", action: refeedAction },
                         button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", title: i18n.refeedButton, "aria-label": i18n.refeedButton, ...(alreadyRefeeded ? { disabled: true } : {}) }, "▲")
                     )
-                    : null,
+                    : null
             ),
             div(
                 { class: "feed-main" },
@@ -343,7 +343,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
               : form(
                   { method: "POST", action: `/feed/refeed/${encodeURIComponent(feed.key)}` },
                   button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", title: i18n.refeedButton, "aria-label": i18n.refeedButton, ...(alreadyRefeeded ? { disabled: true } : {}) }, "▲")
-              ),
+              )
           ),
           div(
             { class: "feed-main" },

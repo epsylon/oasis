@@ -84,44 +84,6 @@ const formatBlockSize = (bytes) => {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`
 }
 
-const renderBlockInfoCard = (block) => {
-  if (!block || !block.id) return null
-  return div(
-    { class: "transfer-block-card" },
-    div({ class: "card-field" },
-      span({ class: "card-label" }, `${i18n.blockchainBlockID || "Block ID"}: `),
-      span({ class: "card-value" },
-        a({ href: `/blockexplorer/block/${encodeURIComponent(block.id)}` }, block.id)
-      )
-    )
-  )
-}
-
-const renderConfirmationsBar = (confirmedCount, required) => {
-  const req = Math.max(1, Number(required || 2))
-  const cc = Math.max(0, Number(confirmedCount || 0))
-  return div(
-    { class: "confirmations-block" },
-    div({ class: "card-field" },
-      span({ class: "card-label" }, `${i18n.transfersConfirmations}: `),
-      span({ class: "card-value" }, `${cc}/${req}`)
-    ),
-    progress({ class: "confirmations-progress", value: cc, max: req })
-  )
-}
-
-const renderOwnerActions = (transfer, returnTo) => {
-  const canEdit = transfer.from === userId && String(transfer.status || "").toUpperCase() === "UNCONFIRMED"
-  if (!canEdit) return []
-  return [
-    form(
-      { method: "GET", action: `/transfers/edit/${encodeURIComponent(transfer.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "update-btn" }, i18n.transfersUpdateButton)
-    )
-  ]
-}
-
 const renderTransferStatusChip = (status) => {
   const up = String(status || "").toUpperCase()
   const variant =
@@ -465,14 +427,8 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
     ))
   }
   const canEdit = transfer.from === userId && String(transfer.status || "").toUpperCase() === "UNCONFIRMED"
-  if (canEdit) {
-    sideActions.push(form({ method: "GET", action: `/transfers/edit/${encodeURIComponent(transfer.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "update-btn" }, i18n.transfersUpdateButton)
-    ))
-  }
   const canDelete = canEdit && !isExpired && confirmedCount < required
-  const exportActions = div({ class: "doc-export-actions" },
+  const exportActions = div({ class: "doc-export-actions transfer-export-actions" },
     form({ method: "GET", action: `/transfers/contract/${encodeURIComponent(transfer.id)}`, class: "transfer-contract-form" },
       button({ type: "submit", class: "filter-btn" }, i18n.transfersExportContract)
     ),
@@ -487,12 +443,18 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
       td({ class: "tribe-info-label" }, labelText),
       td({ class: "tribe-info-value" }, valueNode)
     ))
+  const confirmedList = confirmedBy.filter(Boolean)
   pushRow(i18n.transfersFrom, userLink(transfer.from))
   pushRow(i18n.transfersTo, userLink(transfer.to))
-  if (cat !== "TRUST") pushRow(i18n.transfersAmount, fmtAmountWithUnit(transfer))
+  pushRow(i18n.transfersConcept, transfer.concept || "")
   pushRow(i18n.transfersCategory || "Category", categoryLabel(cat))
-  if (!isUbi) pushRow(i18n.transfersDeadline, dl && dl.isValid() ? dl.format("YYYY/MM/DD HH:mm") : "")
   pushRow(i18n.transfersStatus, i18n[statusKey(transfer.status)] || String(transfer.status || ""))
+  if (cat !== "TRUST") pushRow(i18n.transfersAmount, fmtAmountWithUnit(transfer))
+  if (!isUbi) pushRow(i18n.transfersDeadline, dl && dl.isValid() ? dl.format("YYYY/MM/DD HH:mm") : "")
+  pushRow(i18n.transfersConfirmations, [
+    `${confirmedCount}/${required}`,
+    confirmedList.length ? div({ class: "card-assigned-list" }, ...confirmedList.map(id => userLink(id))) : null
+  ])
 
   const updatedAt = transfer.updatedAt ? moment(transfer.updatedAt) : null
   const showUpdated = updatedAt && updatedAt.isValid() && updatedAt.valueOf() !== new Date(transfer.createdAt).getTime()
@@ -511,41 +473,20 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
       isFavorite: transfer.isFavorite,
       returnTo,
       reportTitle: transfer.concept,
+      editAction: canEdit ? `/transfers/edit/${encodeURIComponent(transfer.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined,
       deleteAction: canDelete ? contentDeleteAction('transfer', transfer.id) : undefined
     }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, transferTitle(transfer))
     ),
     renderDetailShare(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, transfer.concept),
-    table({ class: "tribe-info-table" }, ...infoRows),
-    tagsNode,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.transfersConfirmations}: ${confirmedCount}/${required}`)
-    ),
-    params.block && params.block.id
-      ? div({ class: "card-field" },
-          span({ class: "card-label" }, `${i18n.blockchainBlockID || "Block ID"}: `),
-          span({ class: "card-value" }, a({ class: "user-link", href: `/blockexplorer/block/${encodeURIComponent(params.block.id)}` }, params.block.id))
-        )
-      : null,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
-    exportActions
+    tagsNode
   )
 
-  const confirmedList = Array.isArray(transfer.confirmedBy) ? transfer.confirmedBy.filter(Boolean) : []
-
   const transferMain = div({ class: "tribe-main" },
-    div({ class: "job-section" },
-      h2({ class: "job-section-title" }, i18n.transfersConcept),
-      p({ class: "tribe-side-description" }, transfer.concept || "")
-    ),
-    div({ class: "job-section" },
-      h2({ class: "job-section-title" }, i18n.transfersConfirmations),
-      p({ class: "tribe-side-description" }, `${confirmedCount}/${required}`),
-      confirmedList.length
-        ? div({ class: "card-assigned-list" }, ...confirmedList.map(id => userLink(id)))
-        : null
-    ),
+    table({ class: "tribe-info-table" }, ...infoRows),
+    exportActions,
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     renderEngagement(transfer.id,
       renderOpinionsVoting('/transfers/opinions', transfer.id, transfer.opinions, returnTo, transfer.opinions_inhabitants),
       renderSharedCommentsSection({

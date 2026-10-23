@@ -45,19 +45,6 @@ const visibilityLabel = (v) => {
   return i18n.taskPublic;
 };
 
-const renderTaskOwnerActions = (task, returnTo) => {
-  const st = normalizeStatus(task.status || "OPEN");
-  const setStatusLabel = i18n.taskSetStatus;
-
-  return [
-    form(
-      { method: "GET", action: `/tasks/edit/${encodeURIComponent(task.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "update-btn" }, i18n.taskUpdateButton)
-    ),
-  ];
-};
-
 const renderTaskStatusRow = exports.renderTaskStatusRow = (task, returnTo, action = null) => {
   const st = normalizeStatus(task.status || "OPEN");
   return div({ class: "tribe-side-actions housing-status-row" },
@@ -283,7 +270,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
               label(i18n.taskTitleLabel), br(),
               input({ type: "text", name: "title", maxlength: "100", required: true, value: formData.title || params.prefillTitle || "" }), br(),
               label(i18n.taskDescriptionLabel), br(),
-              textarea({ maxlength: "5000", name: "description", required: true, placeholder: i18n.taskDescriptionPlaceholder, rows: "4" }, formData.description || params.prefillDescription || ""), br(),
+              textarea({ name: "description", required: true, placeholder: i18n.taskDescriptionPlaceholder, rows: "4" }, formData.description || params.prefillDescription || ""), br(),
               ...renderGalleryFields(formData, currentFilter === "edit"),
               br(),
               label(i18n.taskStartTimeLabel), br(),
@@ -396,7 +383,6 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
 
   const sideActions = [];
   const assignNode = renderTaskAssignAction(task, isAssignedToMe, returnToSelf);
-  const ownerActions = isAuthor ? renderTaskOwnerActions(task, returnToSelf) : [];
 
   const infoRows = [];
   const pushRow = (labelText, valueNode) =>
@@ -411,35 +397,34 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
   if (task.location && String(task.location).trim()) pushRow(i18n.taskLocationLabel, task.location);
 
   const taskSide = div({ class: "tribe-side" },
-    renderCardTop(task.id, `/tasks/${encodeURIComponent(task.id)}`, { arrow: false, date: task.createdAt, chips, bylineExtra: [renderEditedChip(task.id, task.rootId)], spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined }),
+    renderCardTop(task.id, `/tasks/${encodeURIComponent(task.id)}`, { arrow: false, date: task.createdAt, chips, bylineExtra: [renderEditedChip(task.id, task.rootId)], spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, editAction: isAuthor ? `/tasks/edit/${encodeURIComponent(task.id)}?returnTo=${encodeURIComponent(returnToSelf)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, task.title)
     ),
     renderDetailShare(task.id, `/tasks/${encodeURIComponent(task.id)}`, task.title),
-    renderPhotoGallery(task, 'task'),
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
-    assignNode ? div({ class: "tribe-side-actions housing-status-row task-assign-row" }, ...assignNode) : null,
-    isAuthor ? renderTaskStatusRow(task, returnToSelf) : null,
     tagsNode,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
-    ),
-    assigneesListNode,
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
-    renderDocumentActions('tasks', task.id)
+    isAuthor ? renderTaskStatusRow(task, returnToSelf) : null
   );
 
   const returnToOpinions = `/tasks/${encodeURIComponent(task.id)}?filter=${encodeURIComponent(currentFilter)}`;
   const opinionsBar = renderOpinionsVoting('/tasks/opinions', task.id, task.opinions, returnToOpinions, task.opinions_inhabitants);
 
   const taskMain = div({ class: "tribe-main" },
+    renderPhotoGallery(task, 'task'),
     task.description
       ? div({ class: "job-section" },
           h2({ class: "job-section-title" }, i18n.taskDescriptionLabel),
           p({ class: "tribe-side-description" }, ...renderStyledText(task.description))
         )
       : null,
+    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
+    assignNode ? div({ class: "tribe-side-actions detail-action-row task-assign-row" }, ...assignNode) : null,
+    div({ class: "tribe-card-members" },
+      span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
+    ),
+    assigneesListNode,
+    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    renderDocumentActions('tasks', task.id),
     renderEngagement(task.id, opinionsBar, renderTaskCommentsSection(task.id, comments, currentFilter))
   );
 

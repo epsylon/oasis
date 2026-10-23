@@ -273,16 +273,10 @@ exports.singlePadView = async (pad, entries, params) => {
       ? form({ method: "POST", action: `/pads/close/${encodeURIComponent(pad.rootId)}` },
           button({ type: "submit", class: "update-btn" }, i18n.padClose || "Close")
         )
-      : null,
-    isAuthor
-      ? form({ method: "GET", action: "/pads" },
-          input({ type: "hidden", name: "filter", value: "edit" }),
-          input({ type: "hidden", name: "id", value: pad.rootId }),
-          button({ type: "submit", class: "update-btn" }, i18n.padUpdate || "Edit")
-        )
       : null
   ].filter(Boolean)
 
+  const subscriptionOpts = (pad.subscription && sharesPad) ? { target: pad.rootId || pad.key, scope: "pads", subscribed: pad.subscription.subscribed === true, count: pad.subscription.count, isOwner: isAuthor, returnTo } : null
   const padSide = div({ class: "tribe-side" },
     renderCardTop(pad.rootId, returnTo, { arrow: false,
       date: pad.createdAt,
@@ -293,28 +287,23 @@ exports.singlePadView = async (pad, entries, params) => {
       spread: (params && params.spreads) || null,
       returnTo,
       reportTitle: pad.title,
+      subscription: subscriptionOpts,
+      editAction: isAuthor ? `/pads?filter=edit&id=${encodeURIComponent(pad.rootId)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('pad', pad.rootId) : undefined
     }),
-    topButtons.length ? div({ class: "tribe-side-actions wiki-actions-top pad-actions-top" }, ...topButtons) : null,
-    div({ class: "shop-title-row" },
-      h2({ class: "tribe-card-title" }, pad.title || "\u2014")
-    ),
-    renderDetailShare(pad.rootId, returnTo, pad.title),
-    (isRestrictedInviteOnly || !pad.deadline) ? null : div({ class: "pad-meta" },
-      span({ class: "card-label" }, `${i18n.padDeadlineLabel || "Deadline"}: `),
-      span(moment(pad.deadline).format("YYYY/MM/DD HH:mm"))
+    div({ class: "pad-title-row" },
+      div({ class: "shop-title-row" },
+        h2({ class: "tribe-card-title" }, pad.title || "\u2014")
+      ),
+      renderDetailShare(pad.rootId, returnTo, pad.title, subscriptionOpts),
+      (isRestrictedInviteOnly || !pad.deadline) ? null : div({ class: "pad-meta" },
+        span({ class: "card-label" }, `${i18n.padDeadlineLabel || "Deadline"}: `),
+        span(moment(pad.deadline).format("YYYY/MM/DD HH:mm"))
+      )
     ),
     tags,
-    (isRestrictedInviteOnly || !inviteActions.length) ? null : div({ class: "tribe-side-actions" }, ...inviteActions),
-    (pad.subscription && sharesPad)
-      ? renderSubscriptionBox({
-          target: pad.rootId || pad.key,
-          scope: "pads",
-          subscribed: pad.subscription.subscribed === true,
-          count: pad.subscription.count,
-          isOwner: isAuthor,
-          returnTo
-        })
+    topButtons.length || (!isRestrictedInviteOnly && inviteActions.length)
+      ? div({ class: "tribe-side-actions pad-actions-row" }, ...topButtons, ...(isRestrictedInviteOnly ? [] : inviteActions))
       : null,
     !isAuthor && pad.status === "INVITE-ONLY" && !isMember
       ? div({ class: "pad-invite-section" },
@@ -395,7 +384,7 @@ exports.singlePadView = async (pad, entries, params) => {
           form({ method: "POST", action: `/pads/entry/${encodeURIComponent(pad.rootId)}` },
             div({ class: "pad-editor-wrap" },
               gutter,
-              textarea({ maxlength: "3000", name: "text", rows: String(editorRows), class: "pad-editor", placeholder: i18n.padEditorPlaceholder || "Start writing...", wrap: "off" }, currentText)
+              textarea({ name: "text", rows: String(editorRows), class: "pad-editor", placeholder: i18n.padEditorPlaceholder || "Start writing...", wrap: "off" }, currentText)
             ),
             div({ class: "pad-editor-bar" },
               button({ type: "submit", class: "create-button" }, i18n.padSubmitEntry || "Submit")

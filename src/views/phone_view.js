@@ -127,7 +127,6 @@ const renderCompose = (compose) => {
           key('clear', '✕', 'phone-key phone-key-fn', { title: i18n.phoneDialClear })
         )
       ),
-      p({ class: 'phone-empty phone-dial-hint' }, String(i18n.phoneLimitsHint).replace('{n}', String(max))),
       div({ class: 'phone-recipients' },
         span({ class: 'card-label' }, `${i18n.phoneDialInhabitants}: ${recipients.length}/${max}`),
         recipients.length ? div({ class: 'phone-recipient-list' },

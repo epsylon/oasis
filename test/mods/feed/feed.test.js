@@ -1,4 +1,4 @@
-const { eq, ok } = require('../../helpers/assert');
+const { eq, ok, deepEq, throwsAsync } = require('../../helpers/assert');
 const { makeNetwork, makePeer } = require('../../helpers/setup');
 
 describe('feed: create + refeed + comment', (t) => {
@@ -177,5 +177,29 @@ describe('feed: what a feed needs', (t) => {
     let refused = false;
     try { await feed.createFeed('   ', [], null); } catch (e) { refused = /required/i.test(e.message); }
     ok(refused, 'an empty feed is refused');
+  });
+});
+
+describe('feed: a tribe feed opened to OASIS/CLEARNET has one public refeed counter', (t) => {
+  const openId = '%' + 'o'.repeat(43) + '=.sha256';
+
+  t('anyone refeeds the opened message by its id, once per inhabitant', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    B.setActor();
+    await B.use('feed').createRefeed(openId, { external: true });
+    await throwsAsync(() => B.use('feed').createRefeed(openId, { external: true }), /Already refeeded/);
+    C.setActor();
+    await C.use('feed').createRefeed(openId, { external: true });
+    A.setActor();
+    const counts = await A.use('feed').refeedsFor([openId]);
+    eq(counts.get(openId).refeeds, 2);
+    deepEq(counts.get(openId).refeeds_inhabitants.sort(), [B.keypair.id, C.keypair.id].sort());
+  });
+
+  t('an id nobody refeeded counts zero, and a sealed tribe id is never refeeded through the feed route', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const counts = await A.use('feed').refeedsFor([openId]);
+    eq(counts.get(openId).refeeds, 0);
+    await throwsAsync(() => A.use('feed').createRefeed(openId), /Invalid feed/);
   });
 });

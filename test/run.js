@@ -55,6 +55,17 @@ if (target) {
   loadAll(ROOT);
 }
 
+const TEST_TIMEOUT_MS = Number(process.env.TEST_TIMEOUT_MS) || 300000;
+let running = null;
+let stray = 0;
+process.removeAllListeners('uncaughtException');
+process.on('uncaughtException', (err) => { stray++; console.log(`${RED}uncaught error${running ? ` while "${running}" was running` : ''}: ${(err && err.stack) || err}${RESET}`); });
+const keepAlive = setInterval(() => {}, 1000);
+process.on('exit', (code) => { if (running) console.log(`${RED}the process ended with code ${code} while "${running}" was still running: something let the event loop drain${RESET}`); });
+const withTimeout = (fn, name) => new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error(`test timed out after ${TEST_TIMEOUT_MS} ms`)), TEST_TIMEOUT_MS);
+  Promise.resolve().then(fn).then((v) => { clearTimeout(timer); resolve(v); }, (e) => { clearTimeout(timer); reject(e); });
+});
 (async () => {
   let total = 0, passed = 0, failed = 0;
   const failures = [];
@@ -63,8 +74,9 @@ if (target) {
     console.log(`\n${YELLOW}■ ${suite.name}${RESET}`);
     for (const t of suite.tests) {
       total++;
+      running = `${suite.name} / ${t.name}`;
       try {
-        await Promise.resolve(t.fn());
+        await withTimeout(t.fn, t.name);
         passed++;
         console.log(`  ${GREEN}✓${RESET} ${t.name}`);
       } catch (e) {
@@ -76,6 +88,9 @@ if (target) {
       }
     }
   }
+  running = null;
+  clearInterval(keepAlive);
+  if (stray) { failed += stray; console.log(`${RED}${stray} uncaught error(s) during the run${RESET}`); }
   const ms = Date.now() - startTime;
   console.log(`\n${total === passed ? GREEN : RED}${passed}/${total} passed${failed ? ` (${failed} failed)` : ''} in ${ms}ms${RESET}\n`);
   if (failed && !process.env.STACK) console.log(`Run with STACK=1 to see stack traces`);

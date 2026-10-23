@@ -214,7 +214,7 @@ const ERROR_PATTERNS = [
   [/not found/i, 'errorNotFound'],
   [/\bis closed\b/i, 'errorClosed'],
   [/invite-only/i, 'errorInviteOnly'],
-  [/too long/i, 'errorTooLong'],
+  [/too long|too large|does not fit|must not be larger|8192/i, 'errorTooLong'],
   [/\brequired\b/i, 'errorRequired'],
   [/^invalid\b|\binvalid\b/i, 'errorInvalid'],
   [/not the author|only the (author|owner)/i, 'errorNotAuthor']
@@ -237,6 +237,32 @@ const signedErrorOf = (ctx) => {
   const sig = String(ctx.query.errsig || '');
   if (!message || sig.length !== 32) return '';
   try { return require('crypto').timingSafeEqual(Buffer.from(sig), Buffer.from(errorSignature(message))) ? message : ''; } catch (_) { return ''; }
+};
+const KEEP_STASH = new Map();
+const KEEP_TTL_MS = 15 * 60 * 1000;
+const KEEP_MAX = 200;
+const KEEP_SKIP_RE = /password|secret|passphrase|token|csrf|private/i;
+const keepableFields = (body, extra) => {
+  const out = {};
+  const add = (k, v) => { if (typeof v === 'string' && v !== '' && !KEEP_SKIP_RE.test(k) && v.length <= longText.TEXT_CAP) out[k] = v; };
+  if (body && typeof body === 'object') for (const [k, v] of Object.entries(body)) add(k, v);
+  for (const [k, v] of Object.entries(extra || {})) add(k, v == null ? '' : String(v));
+  return out;
+};
+const stashKeep = (pathname, fields) => {
+  const now = Date.now();
+  for (const [k, e] of KEEP_STASH) if (now - e.at > KEEP_TTL_MS) KEEP_STASH.delete(k);
+  while (KEEP_STASH.size >= KEEP_MAX) KEEP_STASH.delete(KEEP_STASH.keys().next().value);
+  const token = require('crypto').randomBytes(12).toString('hex');
+  KEEP_STASH.set(token, { at: now, path: pathname, fields });
+  return token;
+};
+const takeKeep = (token, pathname) => {
+  const e = KEEP_STASH.get(String(token || ''));
+  if (!e) return null;
+  KEEP_STASH.delete(String(token));
+  if (Date.now() - e.at > KEEP_TTL_MS || e.path !== pathname) return null;
+  return e.fields;
 };
 const sendErrorPage = (ctx, rawMessage, { title, status, keep, to, exact } = {}) => {
   if (isClearnetPath(ctx.request)) {
@@ -267,6 +293,8 @@ const sendErrorPage = (ctx, rawMessage, { title, status, keep, to, exact } = {})
       if (v === undefined || v === null || v === '') backUrl.searchParams.delete(k);
       else backUrl.searchParams.set(k, String(v).slice(0, 2000));
     }
+    const fields = keepableFields(ctx.method === 'POST' ? ctx.request.body : null, keep);
+    if (Object.keys(fields).length) backUrl.searchParams.set('keep', stashKeep(backUrl.pathname, fields));
     ctx.redirect(backUrl.pathname + backUrl.search + backUrl.hash);
     return;
   }
@@ -293,14 +321,18 @@ const pendingPicture = (text) => {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${PENDING_PICTURE_SIZE} ${PENDING_PICTURE_SIZE}" width="${PENDING_PICTURE_SIZE}" height="${PENDING_PICTURE_SIZE}" role="img" aria-label="${xmlText(text)}"><rect x="1" y="1" width="${PENDING_PICTURE_SIZE - 2}" height="${PENDING_PICTURE_SIZE - 2}" rx="10" fill="#80808026" stroke="#8a8a8a" stroke-dasharray="6 6"/><text text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="${PENDING_FONT_SIZE}" fill="#a0a0a0">${spans}</text></svg>`;
 };
 const PENDING_MEDIA_RE = /<(video|audio)\b[^>]*?\ssrc="\/(?:c\/)?blob\/(%26[^"?#]+)[^"]*"[^>]*>[\s\S]*?<\/\1>/g;
+const PENDING_PICTURE_RE = /<img\b[^>]*?\ssrc="\/(?:c\/)?(?:blob|image\/\d+)\/(%26[^"?#]+)([^"]*)"[^>]*>/g;
 const wantedMedia = new Set();
+const brokenPictures = new Map();
 const markPendingMedia = async (html) => {
   const idOf = (enc) => { try { return decodeURIComponent(enc); } catch (_) { return ''; } };
-  const ids = [...new Set([...html.matchAll(PENDING_MEDIA_RE)].map(m => idOf(m[2])).filter(id => isBlob(id)))];
+  const pictureIds = [...html.matchAll(PENDING_PICTURE_RE)].filter(m => !m[2].includes('fallback=avatar')).map(m => idOf(m[1]));
+  const ids = [...new Set([...[...html.matchAll(PENDING_MEDIA_RE)].map(m => idOf(m[2])), ...pictureIds].filter(id => isBlob(id)))];
   if (!ids.length) return html;
   const ssb = await cooler.open();
   const missing = new Set();
   await Promise.all(ids.map(id => new Promise(resolve => ssb.blobs.has(id, (err, has) => {
+    if (brokenPictures.get(id) === true) { missing.add(id); resolve(); return; }
     if (!err && !has) {
       missing.add(id);
       if (!wantedMedia.has(id)) { wantedMedia.add(id); try { ssb.blobs.want(id, () => wantedMedia.delete(id)); } catch (_) { wantedMedia.delete(id); } }
@@ -308,15 +340,36 @@ const markPendingMedia = async (html) => {
     resolve();
   }))));
   if (!missing.size) return html;
-  const notice = `<div class="pending-media" role="note">${xmlText(require('../views/main_views').i18n.contentNotAvailableYet)}</div>`;
-  return html.replace(PENDING_MEDIA_RE, (whole, tag, enc) => missing.has(idOf(enc)) ? notice : whole);
+  const text = xmlText(require('../views/main_views').i18n.contentNotAvailableYet);
+  const notice = `<div class="pending-media" role="note">${text}</div>`;
+  const pictureNotice = `<span class="pending-media pending-media-picture" role="note">${text}</span>`;
+  return html
+    .replace(PENDING_MEDIA_RE, (whole, tag, enc) => missing.has(idOf(enc)) ? notice : whole)
+    .replace(PENDING_PICTURE_RE, (whole, enc, rest) => !rest.includes('fallback=avatar') && missing.has(idOf(enc)) ? pictureNotice : whole);
+};
+const wantsPicture = (ctx) => {
+  const dest = String(ctx.get('sec-fetch-dest') || '');
+  return dest === 'image' || (!dest && /^image\//.test(String(ctx.get('accept') || '')));
+};
+const pictureDecodes = async (blobId, buffer) => {
+  if (brokenPictures.has(blobId)) return brokenPictures.get(blobId) !== true;
+  const sharp = getSharp();
+  if (!sharp) return true;
+  let ok = true;
+  try { await sharp(buffer, { failOn: 'error' }).resize(16, 16).raw().toBuffer(); } catch (_) { ok = false; }
+  brokenPictures.set(blobId, !ok);
+  return ok;
+};
+const blobIdOfParam = (param) => {
+  try { const raw = decodeURIComponent(String(param || '')).trim(); return raw.startsWith('&') ? raw : `&${raw}`; } catch (_) { return ''; }
 };
 const sendPendingContent = (ctx) => {
   const text = require('../views/main_views').i18n.contentNotAvailableYet;
   const dest = String(ctx.get('sec-fetch-dest') || '');
   const accept = String(ctx.get('accept') || '');
+  ctx.remove('Content-Disposition');
   ctx.set('Cache-Control', 'no-store');
-  if (dest === 'image' || (!dest && /^image\//.test(accept))) {
+  if (wantsPicture(ctx)) {
     ctx.status = 200;
     ctx.type = 'image/svg+xml';
     ctx.set('X-Content-Type-Options', 'nosniff');
@@ -333,7 +386,7 @@ const exceedsSsbLimit = (content, extraOverhead = 0) => {
   catch (_) { return false; }
 };
 
-const isSsbTooLargeError = (e) => e && /8192|must not be larger/i.test(String(e && e.message));
+const isSsbTooLargeError = (e) => e && /8192|must not be larger|too large/i.test(String(e && e.message));
 
 const INLINE_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'video/mp4', 'video/webm', 'video/ogg', 'audio/mpeg', 'audio/ogg', 'audio/mp4', 'audio/wav', 'audio/webm', 'audio/flac']);
 const inlineMediaType = (type) => { const t = String(type || '').split(';')[0].trim().toLowerCase(); return INLINE_MEDIA_TYPES.has(t) ? t : null; };
@@ -600,7 +653,8 @@ const getLocalLanIPv4 = () => {
   return null;
 };
 const resolveExternalBaseUrl = (ctx) => {
-  const protocol = ctx.protocol || 'http';
+  const forwarded = String(ctx.get('x-forwarded-proto') || '').split(',')[0].trim().toLowerCase();
+  const protocol = forwarded === 'https' || forwarded === 'http' ? forwarded : (ctx.protocol || 'http');
   const rawHost = String(ctx.host || '').trim();
   const [hostname, port] = rawHost.split(':');
   const loopback = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
@@ -1177,8 +1231,21 @@ const clearnetBlobSet = async (force = false) => {
   }
   try { collect(await getOpenTribeItems()); } catch (_) {}
   clearnetBlobCache = { ts: Date.now(), set, forcedAt: clearnetBlobCache.forcedAt };
+  const { hasLocalBlob } = require('../views/clearnet_view');
+  for (const id of set) if (!hasLocalBlob(id)) wantClearnetBlob(id);
   return set;
 };
+const CLEARNET_WANT_RETRY_MS = 60 * 1000;
+const clearnetWants = new Map();
+const wantClearnetBlob = (blobId) => {
+  if (!isBlob(blobId)) return;
+  const last = clearnetWants.get(blobId) || 0;
+  if (Date.now() - last < CLEARNET_WANT_RETRY_MS) return;
+  clearnetWants.set(blobId, Date.now());
+  if (clearnetWants.size > 5000) clearnetWants.delete(clearnetWants.keys().next().value);
+  Promise.resolve().then(() => blob.want({ blobId })).catch(() => {});
+};
+require('../views/clearnet_view').onMissingBlob(wantClearnetBlob);
 const clearnetBlobAllowed = async (blobId) => {
   if ((await clearnetBlobSet(false)).has(blobId)) return true;
   if (Date.now() - clearnetBlobCache.forcedAt < 10000) return false;
@@ -2388,7 +2455,7 @@ const sealedPointerOf = (manifestBlobId, query) => {
   return { type: 'fileShare', v: 1, key, manifestBlobId: String(manifestBlobId), filename: name, mime };
 };
 const pdfView = require('./pdf_view');
-const PDF_BLOB_WAIT_MS = 8000;
+const PDF_BLOB_WAIT_MS = 30000;
 const PDF_TITLE_MAX = 200;
 const PDF_PLACEHOLDER = { w: 600, h: 800 };
 const pdfSourceOf = (src) => {
@@ -4324,7 +4391,7 @@ async function resolveMentionText(text) {
 
 const preparePreview = async function (ctx) {
   let text = String(ctx.request.body.text || "")
-  if (text.length > 8000) text = text.slice(0, 8000)
+  if (text.length > LONG_TEXT_MAX) text = text.slice(0, LONG_TEXT_MAX)
   const contentWarning = stripDangerousTags(String(ctx.request.body.contentWarning || ""))
   const ensureAt = (id) => {
     const s = String(id || "")
@@ -4838,8 +4905,8 @@ const version = JSON.parse(fs.readFileSync(packagePath, "utf8")).version;
 const nullImageId = '&0000000000000000000000000000000000000000000=.sha256';
 const getAvatarUrl = img => !img || img === nullImageId ? '/assets/images/default-avatar.png' : `/image/256/${encodeURIComponent(img)}`;
 const MAX_TITLE_LENGTH = 150;
-const MAX_TEXT_LENGTH = 8000;
 const LONG_TEXT_MAX = longText.TEXT_CAP;
+const MAX_TEXT_LENGTH = LONG_TEXT_MAX;
 const parseSizeMB = (s) => { if (!s) return 0; const m = String(s).match(/([\d.]+)\s*(GB|MB|KB|B)/i); if (!m) return 0; const v = parseFloat(m[1]), u = m[2].toUpperCase(); return u === 'GB' ? v * 1024 : u === 'MB' ? v : u === 'KB' ? v / 1024 : v / (1024 * 1024); };
 const FEED_MEDIA_MD_RE = /^\n?!?\[[^\]\n]{0,200}\]\(&[A-Za-z0-9+/=]{44}\.sha256\)$/;
 const tooLong = (ctx, value, max, label) => {
@@ -5636,7 +5703,7 @@ router
       if (c.type === 'schoolCourse' && String(c.visibility || '').toUpperCase() === 'INVITE' && c.author !== userId && !(Array.isArray(c.invited) && c.invited.includes(userId))) return false;
       return true;
     });
-    const results = await searchModel.search({ query, types });
+    const results = await searchModel.search({ query });
     const hvSearch = await hiddenView();
     const notHidden = (m) => !(m?.value?.author && hvSearch.authors.has(m.value.author)) && !(m?.key && hvSearch.ids.has(m.key));
     for (const t of Object.keys(results)) results[t] = (results[t] || []).filter(notHidden);
@@ -5695,7 +5762,9 @@ router
       if (blogs.length) finalResults.post = blogs; else delete finalResults.post;
       if (comments.length) finalResults.comment = comments;
     }
-    ctx.body = await searchView({ results: finalResults, query, types, ...(await searchExtras(finalResults, ctx)) });
+    const resultCounts = Object.fromEntries(Object.entries(finalResults).map(([t, msgs]) => [t, msgs.length]));
+    const shownResults = types.length ? Object.fromEntries(Object.entries(finalResults).filter(([t]) => types.includes(t))) : finalResults;
+    ctx.body = await searchView({ results: shownResults, resultCounts, query, types, ...(await searchExtras(shownResults, ctx)) });
   })
   .get("/images", async (ctx) => {
     if (!checkMod(ctx, 'imagesMod')) { ctx.redirect('/modules'); return; }
@@ -6216,6 +6285,15 @@ router
       return back(code, '', code === 'pub' ? callable.filter(id => phoneModel.isPub(id)) : []);
     }
     ctx.redirect(refusing.length ? `/phone?refused=${encodeURIComponent(refusing.join(','))}` : '/phone');
+  })
+  .post('/feed-status/seen', koaBody(), async (ctx) => {
+    if (config.public) { ctx.redirect('/'); return; }
+    const file = path.join(ssbConfig.path, 'oasis', 'content', 'feed-repairs', 'status.json');
+    try {
+      const st = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (st && typeof st === 'object' && String(st.at || '') === String((ctx.request.body || {}).at || st.at || '')) fs.writeFileSync(file, JSON.stringify({ ...st, seen: true }, null, 2), 'utf8');
+    } catch (_) {}
+    safeRefererRedirect(ctx, '/');
   })
   .post('/phone/dnd', koaBody(), async (ctx) => {
     if (config.public || !checkMod(ctx, 'phoneMod')) { ctx.redirect('/modules'); return; }
@@ -7005,6 +7083,10 @@ router
       sectionData = members.map(u => ({ ...u, lastActivityBucket: buckets.get(u.id), ...(details.get(u.id) || {}) }));
     } else if (section === 'feed') {
       sectionData = await listByTribeAllChain(tribe.id, 'feed').catch(() => []);
+      const openIdOf = m => m.reach && m.reach !== 'tribe' ? String(m.originId || m.id) : null;
+      const openIds = sectionData.map(openIdOf).filter(Boolean);
+      const publicRefeeds = openIds.length ? await feedModel.refeedsFor(openIds).catch(() => new Map()) : new Map();
+      sectionData = sectionData.map(m => publicRefeeds.has(openIdOf(m)) ? { ...m, ...publicRefeeds.get(openIdOf(m)), publicRefeed: openIdOf(m) } : m);
     } else if (section === 'forum') {
       const forums = await listByTribeAllChain(tribe.id, 'forum');
       const replies = await listByTribeAllChain(tribe.id, 'forum-reply');
@@ -7666,14 +7748,15 @@ router
   .get("/blob/:blobId", async (ctx) => {
     blobCacheModel.touch(ctx.params.blobId);
     await serveBlob(ctx);
-    if (ctx.status === 504) sendPendingContent(ctx);
+    if (ctx.status >= 400 || (wantsPicture(ctx) && !String(ctx.type || '').startsWith('image/'))) return sendPendingContent(ctx);
+    if (wantsPicture(ctx) && ctx.status === 200 && Buffer.isBuffer(ctx.body) && ctx.type !== 'image/svg+xml' && !(await pictureDecodes(blobIdOfParam(ctx.params.blobId), ctx.body))) sendPendingContent(ctx);
   })
   .get("/c/blob/:cnBlobId", async (ctx) => {
     const blobId = ctx.params.cnBlobId;
     if (!isBlob(blobId) || !(await clearnetBlobAllowed(blobId))) { ctx.status = 404; ctx.body = ''; return; }
     let buffer;
     try { buffer = await blob.getLocal({ blobId }); } catch (_) {}
-    if (!buffer) return sendPendingContent(ctx);
+    if (!buffer) { wantClearnetBlob(blobId); return sendPendingContent(ctx); }
     let mime = 'application/octet-stream';
     try {
       const ft = await FileType.fromBuffer(buffer);
@@ -7833,6 +7916,7 @@ router
         }
       }
     } catch (err) {
+      if (!avatarFallback) return sendPendingContent(ctx);
       ctx.body = await fallbackImage();
     }
   })
@@ -8239,7 +8323,9 @@ router
     const q = typeof ctx.query.q === "string" ? ctx.query.q : "";
     const tag = typeof ctx.query.tag === "string" ? ctx.query.tag : "";
     const msg = typeof ctx.query.msg === "string" ? ctx.query.msg : "";
-    const tribeOpen = (await tribeItemsFor('feed')).map(t => ({ key: t.key, rootId: t.rootId, value: { author: t.author, timestamp: Date.parse(t.createdAt) || t._ts || 0, content: { type: 'feed', text: String(t.description || '').trim(), author: t.author, createdAt: t.createdAt, tags: (String(t.description || '').match(/#[A-Za-z0-9_]{1,32}/g) || []).map(x => x.slice(1).toLowerCase()) } }, tribeOrigin: t.tribeOrigin })).filter(f => f.value.content.text);
+    const tribeOpenItems = await tribeItemsFor('feed');
+    const tribeRefeeds = await feedModel.refeedsFor(tribeOpenItems.map(t => t.key)).catch(() => new Map());
+    const tribeOpen = tribeOpenItems.map(t => ({ key: t.key, rootId: t.rootId, value: { author: t.author, timestamp: Date.parse(t.createdAt) || t._ts || 0, content: { type: 'feed', text: String(t.description || '').trim(), author: t.author, createdAt: t.createdAt, tags: (String(t.description || '').match(/#[A-Za-z0-9_]{1,32}/g) || []).map(x => x.slice(1).toLowerCase()), ...(tribeRefeeds.get(t.key) || { refeeds: 0, refeeds_inhabitants: [] }) } }, tribeOrigin: t.tribeOrigin })).filter(f => f.value.content.text);
     const tribeTerms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const tribeShown = ['RECENT', 'TODAY', 'MINE', 'ALL'].includes(filter) ? tribeOpen.filter(f => (filter !== 'MINE' || f.value.author === getViewerId()) && (!['RECENT', 'TODAY'].includes(filter) || Date.now() - f.value.timestamp < 86400000) && tribeTerms.every(term => f.value.content.text.toLowerCase().includes(term)) && (!tag.trim() || f.value.content.tags.includes(tag.trim().toLowerCase()))) : [];
     let feeds = (await feedModel.listFeeds({ filter, q, tag })).concat(tribeShown).sort((a, b) => filter === 'TOP' ? 0 : (b.value?.timestamp || 0) - (a.value?.timestamp || 0));
@@ -10379,7 +10465,7 @@ router
       } catch { ctx.redirect('/tribes'); return; }
     } else {
       const members = Array.isArray(pad.members) ? pad.members : [];
-      const isOpen = String(pad.status || '').toUpperCase() === 'OPEN';
+      const isOpen = !pad.isClosed;
       if (!isOpen && pad.author !== uid && !members.includes(uid)) { ctx.redirect('/pads?filter=all'); return; }
     }
     const fav = await contentFavorites.getFavoriteSet('pads');
@@ -10443,7 +10529,7 @@ router
     room.clearnet = await clearnetPublic('rooms', room).catch(() => false);
     const roomMember = room.author === uid || room.members.includes(uid) || isTribeMember;
     ctx.body = await singleRoomView({ ...room, isFavorite: fav.has(String(room.rootId)), isTribeMember }, {
-      live, occ, available: await phoneModel.available().catch(() => false),
+      viewerId: uid, live, occ, available: await phoneModel.available().catch(() => false),
       recordings: roomMember ? listRoomRecordings(room.rootId) : [],
       spreads: await spreads.forMessage(room.rootId).catch(() => null),
       modesAvail: roomModesFromCensus(census, uid, await roomsModel.occupancies(census.filter(r => !r.isClosed)))
@@ -11286,32 +11372,12 @@ router
     if (!checkMod(ctx, 'transfersMod')) { ctx.redirect('/modules'); return; }
     let filter = ctx.query.filter || 'all'; if (filter === 'favs') filter = 'all';
     const transfer = await transfersModel.getTransferById(ctx.params.transferId, getViewerId());
-    let block = null;
-    if (transfer && transfer.id) {
-      try {
-        const ssbX = await cooler.open();
-        const msg = await new Promise((resolve) => {
-          ssbX.get(transfer.id, (err, m) => resolve(err ? null : m));
-        });
-        if (msg && msg.content) {
-          const size = Buffer.byteLength(JSON.stringify(msg), 'utf8');
-          block = {
-            id: transfer.id,
-            author: msg.author,
-            ts: msg.timestamp || (msg.value && msg.value.timestamp) || transfer.createdAt,
-            type: msg.content.type,
-            size
-          };
-          if (transfer) transfer.msgSize = size;
-        }
-      } catch (_) { block = null; }
-    }
     await enrichItemLifetime(transfer, { author: transfer.from });
     const comments = await commentsFor(transfer.id);
     const fav = await contentFavorites.getFavoriteSet('transfers');
     await warmAuthorNames([transfer, { author: transfer.from }, { author: transfer.to }], comments);
     const singleCensus = await censusOf('transfers', () => transfersModel.listAll('all', getViewerId())).catch(() => []);
-    ctx.body = await singleTransferView({ ...transfer, isFavorite: fav.has(String(transfer.id)) }, filter, { censusList: singleCensus, q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', returnTo: safeReturnTo(ctx, `/transfers?filter=${encodeURIComponent(filter)}`, ['/transfers']), block, comments, spreads: await spreads.forMessage(transfer.id).catch(() => null) });
+    ctx.body = await singleTransferView({ ...transfer, isFavorite: fav.has(String(transfer.id)) }, filter, { censusList: singleCensus, q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', returnTo: safeReturnTo(ctx, `/transfers?filter=${encodeURIComponent(filter)}`, ['/transfers']), comments, spreads: await spreads.forMessage(transfer.id).catch(() => null) });
   })
   .post('/ai', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'aiMod')) return ctx.redirect('/modules');
@@ -12239,7 +12305,8 @@ router
   })
   .post("/feed/refeed/:id", koaBody(), async (ctx) => {
     try {
-      await feedModel.createRefeed(ctx.params.id);
+      const external = (await tribeItemsFor('feed')).some(t => t.key === ctx.params.id);
+      await feedModel.createRefeed(ctx.params.id, { external });
     try { activityModel.invalidateCache(); } catch (_) {}
     } catch (e) {
       if (e.message !== "Already refeeded") throw e;
@@ -16118,7 +16185,16 @@ const middleware = [
     if (ctx.method === 'GET' && /^recent$/i.test(String(ctx.query.filter || '')) && ['q', 'search'].some(k => String(ctx.query[k] || '').trim())) ctx.query = { ...ctx.query, filter: ctx.query.filter === 'RECENT' ? 'ALL' : 'all' };
     await next();
   },
-  async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path, query: ctx.querystring, method: ctx.method, ...(isClearnetPath(ctx.request) ? { cnBase: resolveExternalBaseUrl(ctx) } : {}) }, next); },
+  async (ctx, next) => {
+    if (ctx.method === 'GET' && ctx.query.keep) {
+      const fields = takeKeep(ctx.query.keep, ctx.path);
+      const { keep, ...rest } = ctx.query;
+      ctx.query = fields ? { ...Object.fromEntries(Object.entries(fields).filter(([k]) => rest[k] === undefined)), ...rest } : rest;
+      ctx.state.keepFields = fields || null;
+    }
+    await next();
+  },
+  async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path, query: ctx.querystring, method: ctx.method, ...(ctx.state.keepFields ? { keepFields: ctx.state.keepFields } : {}), ...(isClearnetPath(ctx.request) ? { cnBase: resolveExternalBaseUrl(ctx) } : {}) }, next); },
   async (ctx, next) => {
     if (ctx.method === 'GET' && !config.public && !COMMENT_INDEX_SKIP_RE.test(ctx.path)) await publishScheduled();
     const store = ctx.method === 'GET' && !COMMENT_INDEX_SKIP_RE.test(ctx.path) ? require('../models/typed_log').requestScope.getStore() : null;
@@ -16234,7 +16310,7 @@ const middleware = [
   },
   async (ctx, next) => {
     await next();
-    if (ctx.method !== 'GET' || typeof ctx.body !== 'string' || !/<(?:video|audio)\b/.test(ctx.body)) return;
+    if (ctx.method !== 'GET' || typeof ctx.body !== 'string' || !/<(?:video|audio|img)\b/.test(ctx.body)) return;
     try { ctx.body = await markPendingMedia(ctx.body); } catch (_) {}
   },
   routes,

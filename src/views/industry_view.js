@@ -167,7 +167,7 @@ const renderFacilityForm = (facility, mode, spreadWarning = null) => {
       br(),
       label(i18n.industryDescriptionLabel || "Description"),
       br(),
-      textarea({ name: "description", rows: "5", maxlength: "2000", placeholder: i18n.industryDescriptionPlaceholder || "What does this facility produce?" }, fc.description || ""),
+      textarea({ name: "description", rows: "5", placeholder: i18n.industryDescriptionPlaceholder || "What does this facility produce?" }, fc.description || ""),
       br(),
       label(i18n.uploadMedia || "Upload media (max-size: 75MB)"),
       br(),
@@ -374,7 +374,6 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
 }
 
 const membershipActions = (fc, returnTo) => {
-  const isSteward = fc.steward === userId
   const isMember = safeArr(fc.members).includes(userId)
   const status = String(fc.status || "ACTIVE").toUpperCase()
   const policy = fc.membershipPolicy
@@ -400,12 +399,6 @@ const membershipActions = (fc, returnTo) => {
         button({ type: "submit", class: "subscribe-btn" }, i18n.industryJoinButton || "Join")
       ))
     }
-  }
-  if (isMember && !isSteward) {
-    rows.push(form({ method: "POST", action: `/industry/leave/${encodeURIComponent(fc.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ type: "submit", class: "unsubscribe-btn" }, i18n.industryLeaveButton || "Leave")
-    ))
   }
   return rows
 }
@@ -562,7 +555,7 @@ const renderBlueprintForm = (fc, bp, mode, spreadWarning = null) => {
       label(i18n.industryName || "Name"),
       br(), input({ type: "text", name: "name", required: true, maxlength: "80", value: bp.name || "" }), br(),
       label(i18n.industryDescriptionLabel || "Description"),
-      br(), textarea({ name: "description", rows: "4", maxlength: "2000", placeholder: i18n.industryBlueprintDescPlaceholder || "Specs, dimensions, weight, docs…" }, bp.description || ""), br(),
+      br(), textarea({ name: "description", rows: "4", placeholder: i18n.industryBlueprintDescPlaceholder || "Specs, dimensions, weight, docs…" }, bp.description || ""), br(),
       label(i18n.uploadMedia || "Upload media (max-size: 75MB)"),
       br(), (isEdit && renderMediaLockNote(bp)) || input({ type: "file", name: "image" }),
       bp.image ? div({ class: "industry-form-media" }, renderMediaBlob(bp.image, { class: "post-image" })) : null,
@@ -570,7 +563,7 @@ const renderBlueprintForm = (fc, bp, mode, spreadWarning = null) => {
       label(i18n.industryOutputKind || "Product type"),
       br(), select({ name: "outKind" }, ["physical", "digital"].map(k => option({ value: k, ...(k === curKind ? { selected: true } : {}) }, i18n["industryKind_" + k] || k))), br(),
       label(i18n.industryMaterials || "Materials"),
-      br(), textarea({ maxlength: "5000", name: "materialsText", rows: "3", placeholder: i18n.industryMaterialsPlaceholder || "solar-panel:2:120\nbattery:1:80\nkit:1:15" }, materialsText), br(),
+      br(), textarea({ name: "materialsText", rows: "3", placeholder: i18n.industryMaterialsPlaceholder || "solar-panel:2:120\nbattery:1:80\nkit:1:15" }, materialsText), br(),
       label(i18n.industryLaborHours || "Labor hours"),
       br(), input({ type: "number", name: "laborHours", min: "0", step: "0.01", value: bp.laborHours != null ? bp.laborHours : "" }), br(),
       button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Edit") : (i18n.industryCreateBlueprintButton || "Create blueprint"))
@@ -597,7 +590,7 @@ const renderBuildForm = (fc, blueprints, build, mode, spreadWarning = null) => {
       label(i18n.industryBuildEnd || "End date"),
       br(), input({ type: "date", name: "endDate", required: true, value: b.endDate || "", min: today }), br(),
       label(i18n.industryBuildNotes || "Notes"),
-      br(), textarea({ name: "notes", rows: "3", maxlength: "1000" }, safeText(b.notes)), br(),
+      br(), textarea({ name: "notes", rows: "3" }, safeText(b.notes)), br(),
       button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Edit") : (i18n.industryProposeBuildButton || "Propose build"))
     )
   )
@@ -646,10 +639,9 @@ const renderFacilityChips = (fc) => {
   ].filter(Boolean)
 }
 
-const renderFacilitySide = (fc, returnTo, params = {}, cardTop = null) => {
+const renderFacilitySide = (fc, returnTo, params = {}, cardTop = null, subscriptionOpts = null) => {
   const isSteward = fc.steward === userId
   const isMember = safeArr(fc.members).includes(userId)
-  const isOwner = String(fc.steward || fc.author) === String(userId)
   const memberCount = fc.memberCount != null ? fc.memberCount : safeArr(fc.members).length
 
   const sideActions = []
@@ -657,17 +649,12 @@ const renderFacilitySide = (fc, returnTo, params = {}, cardTop = null) => {
   if (!isSteward && fc.steward) {
     sideActions.push(a({ href: `/reports?filter=create&category=ABUSE&title=${encodeURIComponent(`${i18n.industryTitle || "Industry"}: ${safeText(fc.name)}`)}`, class: "filter-btn" }, i18n.industryReportButton || "Report"))
   }
-  if (isSteward) {
-    sideActions.push(form({ method: "GET", action: `/industry/edit/${encodeURIComponent(fc.id)}` },
-      button({ type: "submit", class: "tribe-action-btn" }, i18n.industryUpdateButton || "Edit")
-    ))
-  }
 
   return div({ class: "tribe-side" },
     cardTop,
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/${encodeURIComponent(fc.id)}` }, safeText(fc.name) || (i18n.industryTitle || "Industry")))),
     fc.image ? renderMediaBlob(fc.image, { class: "tribe-detail-image" }) : null,
-    renderDetailShare(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, fc.name),
+    renderDetailShare(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, fc.name, subscriptionOpts),
     fc.description ? p({ class: "tribe-side-description" }, ...renderStyledText(safeText(fc.description))) : null,
     table({ class: "tribe-info-table" },
       tr(td({ class: "tribe-info-label" }, i18n.industryLaborRate || "Labor rate"), td({ class: "tribe-info-value", colspan: "3" }, `${fc.laborRate || 0} ECO/h`)),
@@ -682,16 +669,6 @@ const renderFacilitySide = (fc, returnTo, params = {}, cardTop = null) => {
     h2({ class: "tribe-members-count" }, `${i18n.industryMembers || "Members"}: ${memberCount}`),
     renderInviteSection(fc, returnTo),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
-    (fc.subscription && (isSteward || isMember))
-      ? renderSubscriptionBox({
-          target: fc.rootId || fc.id,
-          scope: "industry",
-          subscribed: fc.subscription.subscribed === true,
-          count: fc.subscription.count,
-          isOwner: isOwner,
-          returnTo: returnTo
-        })
-      : null,
     renderDissolveBlock(fc, returnTo)
   )
 }
@@ -702,8 +679,10 @@ exports.singleFacilityView = async (facility, filter, params = {}) => {
   const returnTo = `/industry/${encodeURIComponent(fc.id)}?filter=${encodeURIComponent(f)}`
   const isMember = safeArr(fc.members).includes(userId)
   const memberCount = fc.memberCount != null ? fc.memberCount : safeArr(fc.members).length
+  const subscriptionOpts = (fc.subscription && (fc.steward === userId || isMember)) ? { target: fc.rootId || fc.id, scope: "industry", subscribed: fc.subscription.subscribed === true, count: fc.subscription.count, isOwner: String(fc.steward || fc.author) === String(userId), returnTo: returnTo } : null
   const facilitySide = renderFacilitySide(fc, returnTo, params,
-    renderCardTop(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, { arrow: false, date: fc.createdAt, chips: renderFacilityChips(fc), bylineExtra: [renderEditedChip(fc.id, fc.root)], spread: params.spreads || null, author: fc.steward, reportTitle: fc.name, deleteAction: fc.steward === userId && memberCount <= 1 ? `/industry/delete/${encodeURIComponent(fc.id)}` : null })
+    renderCardTop(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, { arrow: false, date: fc.createdAt, chips: renderFacilityChips(fc), bylineExtra: [renderEditedChip(fc.id, fc.root)], spread: params.spreads || null, author: fc.steward, reportTitle: fc.name, subscription: subscriptionOpts, editAction: fc.steward === userId ? `/industry/edit/${encodeURIComponent(fc.id)}` : undefined, leaveAction: safeArr(fc.members).includes(userId) && fc.steward !== userId ? `/industry/leave/${encodeURIComponent(fc.id)}` : undefined, deleteAction: fc.steward === userId && memberCount <= 1 ? `/industry/delete/${encodeURIComponent(fc.id)}` : null }),
+    subscriptionOpts
   )
 
   const facilityMain = div({ class: "tribe-main" },

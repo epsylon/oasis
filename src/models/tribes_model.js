@@ -81,6 +81,7 @@ module.exports = ({ cooler, cryptoModel }) => {
     if (tribeIndex && Date.now() - tribeIndexTs < 5000) return tribeIndex;
     const fpIdx = cryptoModel.buildFingerprintIndex();
     const msgs = await streamLog();
+    const chunkLookup = sealedChunkLookup(msgs, fpIdx);
 
     const tribeMsgs = new Map();
     const tombstones = new Map();
@@ -103,7 +104,7 @@ module.exports = ({ cooler, cryptoModel }) => {
 
       let body = null;
       if (cryptoModel.isSealedMsg(c)) {
-        const r = cryptoModel.unwrapMsg(c, fpIdx);
+        const r = cryptoModel.unwrapMsg(c, fpIdx, chunkLookup);
         if (!r || !r.body || !r.body.k) continue;
         if (r.body.k === 'open-invite' || r.body.k === 'open-invite-tombstone') {
           sealedInvites.push({ key: m.key, author, body: r.body, keyRoot: r.rootId, ts });
@@ -312,14 +313,25 @@ module.exports = ({ cooler, cryptoModel }) => {
     };
   };
 
+  const publishSealed = (client, envelope) => new Promise((resolve, reject) => client.publish(envelope, (err, r) => err ? reject(err) : resolve(r)));
+  const sealedChunkLookup = (msgs, fpIdx) => {
+    const longText = require('../backend/long_text');
+    const lookup = new Map();
+    for (const m of msgs) {
+      const c = m && m.value && m.value.content;
+      if (!c || !cryptoModel.isSealedMsg(c)) continue;
+      const r = cryptoModel.unwrapMsg(c, fpIdx);
+      const ch = r && r.body ? longText.chunkOf(m.value.author, r.body) : null;
+      if (ch) lookup.set(m.key, ch);
+    }
+    return (k) => lookup.get(k) || null;
+  };
   const wrapAndPublish = async (rootId, body) => {
     const client = await openSsb();
     const key = cryptoModel.getKey(rootId);
     if (!key) throw new Error('Missing tribe key for ' + rootId);
-    const envelope = cryptoModel.wrapMsg(body, key);
-    const result = await new Promise((resolve, reject) =>
-      client.publish(envelope, (err, r) => err ? reject(err) : resolve(r))
-    );
+    const envelope = await cryptoModel.wrapMsgPacked(body, key, (env) => publishSealed(client, env));
+    const result = await publishSealed(client, envelope);
     tribeIndex = null;
     return result;
   };
@@ -449,7 +461,7 @@ module.exports = ({ cooler, cryptoModel }) => {
       };
       let envelope;
       if (isPrivate) {
-        envelope = cryptoModel.wrapMsg({ k: 'tribe', op: 'create', rootId: null, replaces: null, ...baseFields }, newKey);
+        envelope = await cryptoModel.wrapMsgPacked({ k: 'tribe', op: 'create', rootId: null, replaces: null, ...baseFields }, newKey, (env) => publishSealed(client, env));
       } else {
         envelope = { type: 'tribe', op: 'create', ...baseFields };
       }
@@ -990,6 +1002,7 @@ module.exports = ({ cooler, cryptoModel }) => {
       const myFollows = new Map();
       const myInviteMsgKeys = new Set();
       const msgs = await streamLog();
+      const discoverLookup = sealedChunkLookup(msgs, fpIdx);
       for (const m of msgs) {
         const v = m.value;
         if (!v) continue;
@@ -1014,7 +1027,7 @@ module.exports = ({ cooler, cryptoModel }) => {
           continue;
         }
         if (cryptoModel.isSealedMsg(c)) {
-          const r = cryptoModel.unwrapMsg(c, fpIdx);
+          const r = cryptoModel.unwrapMsg(c, fpIdx, discoverLookup);
           if (!r || !r.body) continue;
           if (r.body.k !== 'tribe') continue;
           if (!tribeChainSet.has(m.key) && !tribeChainSet.has(r.body.replaces || '') && r.rootId !== rootId) continue;

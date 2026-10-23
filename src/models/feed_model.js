@@ -126,24 +126,26 @@ module.exports = ({ cooler }) => {
     });
   };
 
-  const createRefeed = async (contentId) => {
+  const createRefeed = async (contentId, { external = false } = {}) => {
     const ssbClient = await openSsb();
     const userId = ssbClient.id;
 
     const idx = await buildIndex(ssbClient);
     if (idx.vg.isForeignCopy(idx.vg.rootOf(contentId))) throw new Error("Invalid feed");
-    const tipId = idx.resolve(contentId);
+    const tipId = external ? contentId : idx.resolve(contentId);
 
-    let msg;
-    try {
-      msg = idx.feedsById.get(tipId) || (await getMsg(ssbClient, tipId));
-    } catch {
-      throw new Error("Invalid feed");
+    if (!external) {
+      let msg;
+      try {
+        msg = idx.feedsById.get(tipId) || (await getMsg(ssbClient, tipId));
+      } catch {
+        throw new Error("Invalid feed");
+      }
+
+      const c = msg?.value?.content;
+      if (!c || c.type !== "feed") throw new Error("Invalid feed");
+      if (!isValidFeedText(c.text)) throw new Error("Invalid feed");
     }
-
-    const c = msg?.value?.content;
-    if (!c || c.type !== "feed") throw new Error("Invalid feed");
-    if (!isValidFeedText(c.text)) throw new Error("Invalid feed");
 
     const existing = idx.actionsByRoot.get(tipId) || [];
     for (const a of existing) {
@@ -363,6 +365,24 @@ module.exports = ({ cooler }) => {
     return feeds;
   };
 
+  const refeedsFor = async (ids) => {
+    const out = new Map();
+    const list = [...new Set([].concat(ids).filter(Boolean).map(String))];
+    if (!list.length) return out;
+    const ssbClient = await openSsb();
+    const idx = await buildIndex(ssbClient);
+    for (const id of list) {
+      const voters = new Set();
+      for (const a of idx.actionsByRoot.get(id) || []) {
+        const ac = a?.value?.content || {};
+        const author = a?.value?.author || ac.author;
+        if (ac.type === "feed-action" && ac.action === "refeed" && author) voters.add(author);
+      }
+      out.set(id, { refeeds: voters.size, refeeds_inhabitants: Array.from(voters) });
+    }
+    return out;
+  };
+
   const getFeedById = async (feedId) => {
     const ssbClient = await openSsb();
     const idx = await buildIndex(ssbClient);
@@ -418,6 +438,6 @@ module.exports = ({ cooler }) => {
     return new Promise((res, rej) => ssbClient.publish({ type: "tombstone", target: currentId, deletedAt: new Date().toISOString(), author: userId }, (e, m) => e ? rej(e) : res(m)));
   };
 
-  return { createFeed, createRefeed, addOpinion, listFeeds, resolveCurrentId, getFeedById, getComments, addComment, deleteFeedById };
+  return { createFeed, createRefeed, refeedsFor, addOpinion, listFeeds, resolveCurrentId, getFeedById, getComments, addComment, deleteFeedById };
 };
 

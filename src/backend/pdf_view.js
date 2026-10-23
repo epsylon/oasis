@@ -11,7 +11,7 @@ const PDF_WEBP_EFFORT = 1;
 const PDF_ZOOMS = [50, 75, 100, 125, 150, 200, 300];
 const PDF_ZOOM_DEFAULT = 100;
 const PDF_PAGE_MAX_PX = 4096;
-const PDF_CALL_MS = 20000;
+const PDF_CALL_MS = 60000;
 const PDF_DOCS_BYTES = 128 * 1024 * 1024;
 const PDF_ROTATIONS = [0, 90, 180, 270];
 const PDF_FRAME_ID_LEN = 12;
@@ -81,7 +81,8 @@ if (!isMainThread && workerData === WORKER_TAG) {
   const debug = process.argv.includes('--debug') || process.env.OASIS_DEBUG === '1' || process.env.OASIS_DEBUG === 'true';
   const ready = import(MUPDF_URL).then((m) => {
     mupdf = m;
-    mupdf.setLog(debug ? (message) => console.error(`[pdf] ${message}`) : () => {});
+    const PDF_LOG_NOISE = /xref|repair|trailer|object number|garbage|expected/i;
+    mupdf.setLog(debug ? (message) => { if (!PDF_LOG_NOISE.test(String(message))) console.error(`[pdf] ${message}`); } : () => {});
   });
   parentPort.on('message', async ({ id, op, args }) => {
     try {

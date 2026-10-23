@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
-const { clearnetItemHref, template, i18n, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -96,7 +96,7 @@ const renderStatusChip = (status) => {
 
 const renderRequestedChip = () => renderStateChip("whole", "★", i18n.housingRequestedBadge || "REQUESTED")
 
-const renderInfoTable = (item) => {
+const renderInfoTable = (item, opts = {}) => {
   const rows = []
   const pushRow = (labelText, valueNode, valueClass) =>
     rows.push(tr(
@@ -115,6 +115,13 @@ const renderInfoTable = (item) => {
     const mapNode = renderMapLocationVisitLabel(item.mapUrl)
     if (mapNode) pushRow(i18n.mapLocationTitle || "Map", mapNode)
   }
+  if (opts.includeRequests) {
+    const requesters = safeArr(item.requests).filter(Boolean)
+    pushRow(i18n.housingRequests, [
+      String(item.requestCount || 0),
+      requesters.length ? div({ class: "card-assigned-list" }, ...requesters.map(id => userLink(id))) : null
+    ])
+  }
   return table({ class: "tribe-info-table housing-info-table" }, ...rows)
 }
 
@@ -132,16 +139,6 @@ const renderStatusRow = (item, returnTo) => {
         isOpen ? (i18n.housingSetClosed || "Close") : (i18n.housingSetOpen || "Reopen"))
     )
   )
-}
-
-const renderOwnerActions = (item, returnTo) => {
-  if (String(item.author) !== String(userId)) return []
-  return [
-    form({ method: "GET", action: `/housing/edit/${encodeURIComponent(item.id)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.housingUpdateButton)
-    )
-  ]
 }
 
 const renderRequestToggle = (item, returnTo) => {
@@ -283,12 +280,12 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       ...renderGalleryFields(item, isEdit, maxImages),
       label(i18n.housingDescription),
       br(),
-      textarea({ maxlength: "5000", name: "description", rows: "6", required: true, placeholder: i18n.housingDescriptionPlaceholder }, item.description || ""),
+      textarea({ name: "description", rows: "6", required: true, placeholder: i18n.housingDescriptionPlaceholder }, item.description || ""),
       br(),
       br(),
       label(i18n.housingRules),
       br(),
-      textarea({ maxlength: "5000", name: "rules", rows: "4", placeholder: i18n.housingRulesPlaceholder }, item.rules || ""),
+      textarea({ name: "rules", rows: "4", placeholder: i18n.housingRulesPlaceholder }, item.rules || ""),
       br(),
       br(),
       label(i18n.housingPlace),
@@ -445,7 +442,6 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
   const sideActions = []
   const requestToggle = renderRequestToggle(item, returnTo)
   if (requestToggle) sideActions.push(requestToggle)
-  const ownerActions = renderOwnerActions(item, returnTo)
 
   const nextVisibility = item.visibility === "PUBLIC" ? "HIDDEN" : "PUBLIC"
   const isHidden = item.visibility === "HIDDEN"
@@ -464,25 +460,17 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
       )
     : null
 
-  const cover = imagesOf(item)[0]
   const housingSide = div({ class: "tribe-side" },
-    renderCardTop(item.id, `/housing/${encodeURIComponent(item.id)}`, { arrow: false, date: item.createdAt, chips, bylineExtra: [renderEditedChip(item.id, item.rootId)], spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, deleteAction: isAuthor ? contentDeleteAction("housing", item.id) : null }),
+    renderCardTop(item.id, `/housing/${encodeURIComponent(item.id)}`, { arrow: false, date: item.createdAt, chips, bylineExtra: [renderEditedChip(item.id, item.rootId)], spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, editAction: isAuthor ? `/housing/edit/${encodeURIComponent(item.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("housing", item.id) : null }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, safeText(item.title) || i18n.housingTitle)
     ),
     isAuthor && canClearnet ? renderClearnetSwitch("housing", item.rootId || item.id, isClearnet) : null,
     renderStarRating(item.opinions, voters.length),
-    cover && !isVideoEntry(cover) ? img({ src: blobUrl(blobIdOf(cover), 256), class: "tribe-detail-image", alt: "" }) : null,
     renderDetailShare(item.id, `/housing/${encodeURIComponent(item.id)}`, item.title),
-    renderInfoTable(item),
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.housingRequests}: ${item.requestCount || 0}`)
-    ),
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
+    renderTags(item.tags),
     renderStatusRow(item, returnTo),
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
-    visibilityRow,
-    renderTags(item.tags)
+    visibilityRow
   )
 
   const renderSection = (titleText, bodyText) =>
@@ -497,7 +485,9 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     renderPhotoGallery(item),
     renderSection(i18n.housingDescription, item.description),
     renderSection(i18n.housingRules, item.rules),
+    renderInfoTable(item, { includeRequests: true }),
     item.mapUrl ? div({ class: "job-section" }, renderMapEmbed(params.mapData, item.mapUrl)) : null,
+    sideActions.length ? div({ class: "tribe-side-actions detail-action-row" }, ...sideActions) : null,
     renderEngagement(item.id,
       !isAuthor && item.everRequestedByViewer
         ? renderOpinionsVoting("/housing/opinions", item.id, item.opinions, returnTo, voters)

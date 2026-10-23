@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, userLink, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { MAX_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
@@ -258,57 +258,48 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
       td({ class: "tribe-info-value" }, valueNode)
     ));
   if (poll.deadline) pushRow(i18n.pollDeadline, moment(poll.deadline).format("YYYY/MM/DD HH:mm"));
-  pushRow(i18n.pollOutcome, outcomeOf(poll));
 
   const tagsNode = poll.tags.length
     ? div({ class: "card-tags" }, poll.tags.map(tag =>
         a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
     : null;
 
-  const ownerActions = isOwn && poll.totalVoters === 0 && poll.status === "OPEN"
-    ? div({ class: "tribe-side-actions" },
-        form({ method: "GET", action: "/polls" },
-          input({ type: "hidden", name: "filter", value: "EDIT" }),
-          input({ type: "hidden", name: "id", value: poll.id }),
-          button({ type: "submit", class: "update-btn" }, i18n.pollUpdateButton)
-        )
+  const editAction = isOwn && poll.totalVoters === 0 && poll.status === "OPEN" ? `/polls?filter=EDIT&id=${encodeURIComponent(poll.id)}` : undefined;
+
+  const statusRow = isOwn
+    ? div({ class: "tribe-side-actions housing-status-row" },
+        span({ class: "card-label" }, `${i18n.pollStatusLabel}: `),
+        renderStatusChip(poll),
+        poll.status === "OPEN"
+          ? form({ method: "POST", action: `/polls/close/${encodeURIComponent(poll.id)}` },
+              button({ type: "submit", class: "status-btn project-control-btn" }, i18n.pollCloseButton)
+            )
+          : null
       )
     : null;
 
   const pollSide = div({ class: "tribe-side" },
-    renderCardTop(poll.id, href, { arrow: false, date: poll.createdAt, chips, bylineExtra: [renderEditedChip(poll.tipId, poll.rootId)], spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
+    renderCardTop(poll.id, href, { arrow: false, date: poll.createdAt, chips, bylineExtra: [renderEditedChip(poll.tipId, poll.rootId)], spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, editAction, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question)),
     renderDetailShare(poll.id, href, poll.question),
-    table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     tagsNode,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.pollVoters}: ${poll.totalVoters}`)
-    ),
-    isOwn
-      ? div({ class: "tribe-side-actions housing-status-row" },
-          span({ class: "card-label" }, `${i18n.pollStatusLabel}: `),
-          renderStatusChip(poll),
-          poll.status === "OPEN"
-            ? form({ method: "POST", action: `/polls/close/${encodeURIComponent(poll.id)}` },
-                button({ type: "submit", class: "status-btn project-control-btn" }, i18n.pollCloseButton)
-              )
-            : null
-        )
-      : null,
-    ownerActions
+    statusRow
   );
 
   const pollMain = div({ class: "tribe-main" },
+    infoRows.length ? table({ class: "tribe-info-table jobs-info-table" }, ...infoRows) : null,
     div({ class: "job-section" },
       h2({ class: "job-section-title" }, i18n.pollOutcome),
       renderBallot(poll, href, basePath),
-      renderResults(poll)
+      div({ class: "tribe-card-members" },
+        span({ class: "tribe-members-count" }, `${i18n.pollVoters}: ${poll.totalVoters}`)
+      ),
+      renderResults(poll),
+      h2({ class: "job-section-title vote-outcome-title poll-outcome-title" },
+        `${i18n.pollOutcome}: `,
+        span({ class: "vote-outcome vote-outcome-none" }, outcomeOf(poll))
+      )
     ),
-    poll.votersHidden
-      ? null
-      : (poll.voters.length
-          ? div({ class: "card-assigned-list" }, ...poll.voters.map(v => userLink(v)))
-          : null),
     renderEngagement(poll.id,
       poll.tribeId ? null : renderOpinionsVoting('/polls/opinions', poll.id, poll.opinions, href, poll.opinions_inhabitants),
       poll.tribeId ? null : renderComments(poll, comments, basePath))

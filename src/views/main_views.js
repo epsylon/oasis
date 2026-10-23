@@ -174,6 +174,24 @@ const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, retu
   const showPm = canWrite !== undefined ? canWrite : (isOwner || subscribed);
   const total = Number(count) || 0;
   const countSuffix = total ? ` (${total})` : '';
+  if (inline) {
+    const countNode = total ? span({ class: 'subscription-pill-count' }, `(${total})`) : null;
+    return [span({ class: 'subscription-actions' },
+      isOwner
+        ? span({ class: 'subscription-pill subscription-pill-static', title: `${i18n.subscriptionTitle}${countSuffix}` },
+            span({ class: 'subscription-pill-icon' }, '🔔'), countNode)
+        : form({ method: 'POST', action: '/subscriptions/toggle', class: 'subscription-form' },
+            input({ type: 'hidden', name: 'target', value: target }),
+            input({ type: 'hidden', name: 'scope', value: String(scope || '') }),
+            input({ type: 'hidden', name: 'on', value: subscribed ? '0' : '1' }),
+            returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
+            button({ type: 'submit', class: subscribed ? 'subscription-pill engage-on' : 'subscription-pill', title: subscribed ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe },
+              span({ class: 'subscription-pill-icon' }, '🔔'),
+              span({ class: 'subscription-pill-label' }, subscribed ? i18n.subscriptionOn : i18n.subscriptionSubscribe),
+              countNode)
+          )
+    )];
+  }
   const parts = [
     total && !compact ? span({ class: 'card-label' }, `${i18n.subscriptionTitle} (${total})${isOwner ? '' : ':'}`) : null,
     compact && isOwner && total ? renderStateChip('mutuals', '🔔', `${i18n.subscriptionTitle}${countSuffix}`) : null,
@@ -194,8 +212,7 @@ const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, retu
         : null
     )
   ];
-  const nodes = parts.filter(Boolean);
-  return inline ? nodes : div({ class: 'tribe-side-actions shop-visibility-row stacked-action-row subscription-box-block' }, ...nodes);
+  return div({ class: 'tribe-side-actions shop-visibility-row stacked-action-row subscription-box-block' }, ...parts.filter(Boolean));
 };
 exports.renderSubscriptionBox = renderSubscriptionBox;
 
@@ -344,7 +361,9 @@ exports.renderFileDownloads = renderFileDownloads;
 const blobUrlOf = (v) => (String(v || '').startsWith('/blob/sealed/') ? String(v) : `/blob/${encodeURIComponent(v)}`);
 exports.blobUrlOf = blobUrlOf;
 const ACTION_ICONS = {
-  hide: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="3" x2="21" y2="21"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
+  leave: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
+  hide:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="3" x2="21" y2="21"/>',
   clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
   spread: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>',
   pin: '<path d="M9 3h6l-1 6 4 4H6l4-4-1-6z"/><line x1="12" y1="13" x2="12" y2="21"/>',
@@ -429,14 +448,34 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
   const pmBtn = o.contact === true && o.author && String(o.author) !== String(myId)
     ? a({ href: `/pm?recipients=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-pm', title: i18n.pmContentTooltip }, renderIcon('mail'))
     : null;
+  const subscribersPmBtn = (() => {
+    const s = o.subscription && typeof o.subscription === 'object' ? o.subscription : null;
+    if (!s || !s.target) return null;
+    const total = Number(s.count) || 0;
+    const showPm = s.canWrite !== undefined ? s.canWrite : (s.isOwner || s.subscribed);
+    return showPm && total
+      ? a({ href: `/pm?list=${encodeURIComponent(s.target)}`, class: 'btn-singleview btn-pm', title: i18n.pmCreateButton || 'Write a PM' }, renderIcon('mail'))
+      : null;
+  })();
   const callBtn = o.contact === true && o.author && String(o.author) !== String(myId) && phoneOn() && !sharedState.isPubId(o.author)
     ? a({ href: `/phone?filter=create&to=${encodeURIComponent(o.author)}`, class: 'btn-singleview btn-call', title: i18n.phoneCallTooltip }, renderIcon('call'))
+    : null;
+
+  const editBtn = o.editAction
+    ? a({ href: o.editAction, class: 'btn-singleview btn-delete btn-edit', title: i18n.editContent }, renderIcon('edit'))
     : null;
 
   const deleteBtn = o.deleteAction
     ? form({ method: 'POST', action: o.deleteAction, class: 'content-action-form' },
         o.returnTo && o.returnTo !== viewHref ? input({ type: 'hidden', name: 'returnTo', value: o.returnTo }) : null,
         button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.chatDelete }, renderIcon('close'))
+      )
+    : null;
+
+  const leaveBtn = o.leaveAction
+    ? form({ method: 'POST', action: o.leaveAction, class: 'content-action-form' },
+        o.returnTo ? input({ type: 'hidden', name: 'returnTo', value: o.returnTo }) : null,
+        button({ type: 'submit', class: 'btn-singleview btn-delete btn-leave', title: i18n.leaveContent }, renderIcon('leave'))
       )
     : null;
 
@@ -450,10 +489,12 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     : null;
 
   if (o.menu !== true) {
-    if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !callBtn && !deleteBtn && !donateBtn && !torrentBtn && !hideBtn) return null;
-    return div({ class: 'content-actions' }, deleteBtn, spreadBtn, pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, callBtn, torrentBtn, linkBtn, chainBtn, contentBtn);
+    if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !subscribersPmBtn && !callBtn && !editBtn && !deleteBtn && !leaveBtn && !donateBtn && !torrentBtn && !hideBtn) return null;
+    return div({ class: 'content-actions' }, editBtn, deleteBtn, leaveBtn, spreadBtn, pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, subscribersPmBtn, callBtn, torrentBtn, linkBtn, chainBtn, contentBtn);
   }
-  const menuItems = [deleteBtn, pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, callBtn, torrentBtn, linkBtn, chainBtn].flat().filter(Boolean);
+  const commonItems = [pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, subscribersPmBtn, callBtn, torrentBtn, linkBtn, chainBtn].flat().filter(Boolean);
+  const dangerItems = [editBtn, deleteBtn, leaveBtn].filter(Boolean);
+  const menuItems = [...commonItems, ...(dangerItems.length ? [commonItems.length ? div({ class: 'card-menu-sep' }) : null, ...dangerItems] : [])].filter(Boolean);
   if (!menuItems.length && !spreadBtn && !contentBtn) return null;
   return div({ class: 'content-actions' },
     spreadBtn,
@@ -476,7 +517,10 @@ const renderCardByline = (opts = {}) => {
   const author = opts.bylineAuthor || opts.author ? String(opts.bylineAuthor || opts.author) : '';
   const when = opts.date ? moment(opts.date) : null;
   const time = when && when.isValid() ? span({ class: 'card-byline-time', title: when.format('YYYY/MM/DD HH:mm') }, when.fromNow()) : null;
-  const extra = [].concat(opts.bylineExtra || [], opts.chips || []).filter(Boolean);
+  const chipNodes = [].concat(opts.chips || []).filter(Boolean);
+  const isChipsRow = (n) => !!n && String(n.class || n.className || '').split(/\s+/).includes('card-chips-row');
+  const chipsRow = !chipNodes.length ? null : (chipNodes.length === 1 && isChipsRow(chipNodes[0]) ? chipNodes[0] : div({ class: 'card-chips-row' }, ...chipNodes));
+  const extra = [].concat(opts.bylineExtra || [], chipsRow).filter(Boolean);
   if (!author && !time && !extra.length) return span();
   return div({ class: 'card-byline' },
     author ? a({ href: `/author/${encodeURIComponent(author)}`, class: 'card-byline-avatar' }, img({ src: avatarSrc(author), alt: '' })) : null,
@@ -549,9 +593,13 @@ const renderShareButton = (blockId, viewHref, title) => {
 exports.renderCardByline = renderCardByline;
 exports.renderCardTop = renderCardTop;
 exports.renderShareButton = renderShareButton;
-const renderDetailShare = (blockId, viewHref, title) => {
+const renderDetailShare = (blockId, viewHref, title, subscription = null, lead = null, tail = null) => {
   const share = renderShareButton(blockId, viewHref, title);
-  return share ? div({ class: 'detail-share' }, share) : null;
+  const subNodes = subscription ? renderSubscriptionBox({ ...subscription, inline: true }) : null;
+  const sub = Array.isArray(subNodes) && subNodes.length ? span({ class: 'detail-share-sub' }, ...subNodes) : null;
+  const tailNodes = [].concat(tail || []).filter(Boolean);
+  const tailNode = tailNodes.length ? span({ class: 'detail-share-tail' }, ...tailNodes) : null;
+  return share || sub || lead || tailNode ? div({ class: 'detail-share' }, lead, share, sub, tailNode) : null;
 };
 exports.renderDetailShare = renderDetailShare;
 const renderScheduledChip = (publishAt) => publishAt
@@ -619,6 +667,27 @@ const renderAiAgentField = (name, checked = false) =>
 exports.renderAiAgentField = renderAiAgentField;
 const renderAiBotChip = (prefs) => (prefs && prefs.aiAgent === true ? span({ class: 'status ai-bot' }, i18n.aiBotChip) : null);
 exports.renderAiBotChip = renderAiBotChip;
+
+const feedStatusPath = () => require('path').join(require('../server/ssb_config').path, 'oasis', 'content', 'feed-repairs', 'status.json');
+const readFeedStatus = () => {
+  try {
+    const st = JSON.parse(require('fs').readFileSync(feedStatusPath(), 'utf8'));
+    return st && typeof st === 'object' && !st.seen ? st : null;
+  } catch (_) { return null; }
+};
+exports.readFeedStatus = readFeedStatus;
+const renderFeedBanner = (status) => {
+  if (!status || status.seen || status.kind !== 'conflict') return null;
+  return div({ class: 'update-banner feed-banner feed-banner-warn' },
+    span({ class: 'update-banner-icon' }, '⚠'),
+    span({ class: 'update-banner-text' }, i18n.feedConflictBanner),
+    form({ method: 'POST', action: '/feed-status/seen', class: 'feed-banner-form' },
+      input({ type: 'hidden', name: 'at', value: String(status.at || '') }),
+      button({ type: 'submit', class: 'feed-banner-dismiss' }, i18n.feedBannerDismiss)
+    )
+  );
+};
+exports.renderFeedBanner = renderFeedBanner;
 
 const renderRelationshipBlock = (relationship, feedId) => {
   const rel = relationship || {};
@@ -699,7 +768,6 @@ const renderEcoTax = (sizeBytes, blockId) => {
     : '';
   const title = `${label} · ${formatCarbon(sizeBytes)}${reducerNote}`;
   return a({ href, class: `eco-tax-chip eco-tax-chip-${band}`, title },
-    span({ class: 'eco-tax-chip-label' }, label + ': '),
     span({ class: 'eco-tax-chip-value' }, formatCarbon(sizeBytes))
   );
 };
@@ -737,6 +805,37 @@ const renderMobileCounters = () => {
 const LIST_PAGE_SIZE = 50;
 const LIST_PAGE_SIZES = ['10', '50', '100', 'all'];
 const listScope = () => { try { return require('../models/typed_log').requestScope.getStore() || null; } catch (_) { return null; } };
+const escapeFormAttr = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeFormText = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const SKIP_INPUT_TYPES = new Set(['checkbox', 'radio', 'file', 'hidden', 'submit', 'button', 'password', 'image', 'reset']);
+const restoreFormFields = (html, fields) => {
+  let out = String(html || '');
+  for (const [name, value] of Object.entries(fields || {})) {
+    if (typeof value !== 'string' || !/^[A-Za-z0-9_.:\-\[\]]{1,64}$/.test(name)) continue;
+    const nameRe = escapeRe(name);
+    const textarea = new RegExp(`(<textarea\\b[^>]*\\sname="${nameRe}"[^>]*>)([\\s\\S]*?)(</textarea>)`, 'i');
+    if (textarea.test(out)) { out = out.replace(textarea, (m, open, inner, close) => `${open}${escapeFormText(value)}${close}`); continue; }
+    const input = out.match(new RegExp(`<input\\b[^>]*\\sname="${nameRe}"[^>]*>`, 'i'));
+    if (input) {
+      const tag = input[0];
+      const type = (tag.match(/\stype="([^"]*)"/i) || [null, 'text'])[1].toLowerCase();
+      if (SKIP_INPUT_TYPES.has(type)) continue;
+      const attr = ` value="${escapeFormAttr(value)}"`;
+      const filled = /\svalue="[^"]*"/i.test(tag) ? tag.replace(/\svalue="[^"]*"/i, () => attr) : tag.replace(/\s*\/?>$/, (end) => `${attr}${end.trim()}`);
+      out = out.replace(tag, () => filled);
+      continue;
+    }
+    const select = out.match(new RegExp(`(<select\\b[^>]*\\sname="${nameRe}"[^>]*>)([\\s\\S]*?)(</select>)`, 'i'));
+    if (select) {
+      const option = new RegExp(`(<option\\b[^>]*\\svalue="${escapeRe(escapeFormAttr(value))}"[^>]*)>`, 'i');
+      const inner = select[2].replace(/\sselected(="[^"]*")?/gi, '').replace(option, '$1 selected>');
+      out = out.replace(select[0], () => `${select[1]}${inner}${select[3]}`);
+    }
+  }
+  return out;
+};
+exports.restoreFormFields = restoreFormFields;
 const listPerPage = (query) => {
   const v = String(new URLSearchParams(String(query || '')).get('perPage') || '').toLowerCase();
   return LIST_PAGE_SIZES.includes(v) ? v : String(LIST_PAGE_SIZE);
@@ -979,10 +1078,13 @@ const renderModuleStats = (total, segments = [], totalLabel = null, opts = {}) =
     inh > 0 ? { label: i18n.inhabitants, count: inh } : null,
     trb > 0 ? { label: i18n.tribesTitle, count: trb } : null
   ];
-  const toNode = s => span(s.labelClass ? span({ class: s.labelClass }, `${s.label}: `) : `${s.label}: `, strong(String(s.count)));
+  const toNode = s => {
+    const inner = [s.labelClass ? span({ class: s.labelClass }, `${s.label}: `) : `${s.label}: `, strong(String(s.count))];
+    return s.href ? a({ href: s.href, class: s.active ? 'module-stat-link active' : 'module-stat-link' }, ...inner) : span(...inner);
+  };
   return div({ class: 'module-stats-line' },
     ...network.filter(Boolean).map(toNode),
-    span(`${totalLabel || i18n.statsTotalLabel}: `, strong(String(total))),
+    toNode({ label: totalLabel || i18n.statsTotalLabel, count: total, href: opts.totalHref || null, active: opts.totalActive === true }),
     ...segments.filter(s => s && Number(s.count) > 0).map(toNode)
   );
 };
@@ -1055,7 +1157,7 @@ const renderPdfViewer = (state, { title: docTitle = "", base = "/pdf", keep = {}
   const shell = (...children) => div({ id: "pdf-viewer", class: ["pdf-viewer-container", embed ? "pdf-embedded" : "", state.full ? "pdf-maximized" : ""].filter(Boolean).join(" ") }, ...children);
   if (state.error) {
     return shell(
-      div({ class: "pdf-canvas-wrap pdf-message-wrap" }, p({ class: "pdf-message" }, i18n.contentNotAvailableYet)),
+      div({ class: "pdf-canvas-wrap pdf-message-wrap" }, div({ class: "pending-media", role: "note" }, i18n.contentNotAvailableYet)),
       state.error === "unavailable" ? div({ class: "pdf-controls" }, ctl(href({}), "↻", i18n.pdfRetry), download) : null
     );
   }
@@ -2398,6 +2500,7 @@ const template = (titlePrefix, ...elements) => {
       (getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? null : buildAiSuggestion(false),
       buildPhoneBanner(),
       buildEmergencyBanner(false),
+      renderFeedBanner(readFeedStatus()),
       div(
         { class: uxMode === "ainav" ? "main-content ainav-only" : uxMode === "chats" ? "main-content chatsux-only" : uxMode === "feed" || uxMode === "phone" || uxMode === "rooms" ? "main-content chatsux-only" : "main-content" },
         uxMode !== "blocks" ? null : div(
@@ -2577,7 +2680,8 @@ const template = (titlePrefix, ...elements) => {
     renderFooter()
     )
   );
-  return doctypeString + nodes.outerHTML;
+  const kept = scope && scope.keepFields && typeof scope.keepFields === 'object' ? scope.keepFields : null;
+  return doctypeString + (kept ? restoreFormFields(nodes.outerHTML, kept) : nodes.outerHTML);
 };
 
 exports.template = template;

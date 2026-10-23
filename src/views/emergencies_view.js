@@ -79,7 +79,7 @@ const renderForm = (emergency, params = {}) =>
       label(i18n.emergencyCategoryLabel), br(),
       select({ name: "category" }, ...CATEGORIES.map(c => option({ value: c, ...((emergency ? emergency.category : "NEIGHBORHOOD") === c ? { selected: true } : {}) }, catLabel(c)))), br(), br(),
       label(i18n.emergencyTextLabel), br(),
-      textarea({ name: "text", rows: 8, maxlength: "5000", placeholder: i18n.emergencyTextPlaceholder }, emergency ? emergency.text : ""), br(),
+      textarea({ name: "text", rows: 8, placeholder: i18n.emergencyTextPlaceholder }, emergency ? emergency.text : ""), br(),
       label(i18n.uploadMedia), br(),
       input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
       label(i18n.mapLocationTitle || "Map Location"), br(),
@@ -143,19 +143,29 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
       : null,
     confirmed ? span({ class: "status supporting" }, i18n.emergencyConfirmed) : null
   ].filter(Boolean);
-  const ownerActions = isAuthor
-    ? [
-        (emergency.confirmationCount || 0) > 0
-          ? null
-          : form({ method: "GET", action: "/emergencies" }, input({ type: "hidden", name: "filter", value: "edit" }), input({ type: "hidden", name: "id", value: emergency.id }), button({ type: "submit", class: "update-btn" }, i18n.emergencyUpdate))
-      ].filter(Boolean)
-    : [];
+  const editAction = isAuthor && (emergency.confirmationCount || 0) === 0 ? `/emergencies?filter=edit&id=${encodeURIComponent(emergency.id)}` : undefined;
   const updates = Array.isArray(emergency.updates) ? emergency.updates : [];
+  const subscriptionOpts = params.subscription ? { target: emergency.id, scope: "emergencies", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: isAuthor, returnTo: href } : null;
+  const statusRow = isAuthor && emergency.status !== "EXPIRED"
+    ? div({ class: "tribe-side-actions housing-status-row" },
+        span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),
+        statusChip(emergency),
+        form({ method: "POST", action: `/emergencies/status/${encodeURIComponent(emergency.id)}`, class: "inline-form" },
+          button({ class: "tribe-action-btn", type: "submit", name: "status", value: emergency.status === "ACTIVE" ? "RESOLVED" : "ACTIVE" },
+            String(emergency.status === "ACTIVE" ? i18n.emergencyResolveButton : i18n.emergencyReopenButton).toUpperCase())
+        )
+      )
+    : null;
   const side = div({ class: "tribe-side" },
-    renderCardTop(emergency.id, href, { arrow: false, date: emergency.createdAt, chips: [severityChip(emergency), statusChip(emergency), categoryChip(emergency), renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("emergencies", emergency.title, emergency.id) : null)], author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: params.spread || null, returnTo: href, deleteAction: isAuthor ? contentDeleteAction("emergency", emergency.id) : undefined }),
+    renderCardTop(emergency.id, href, { arrow: false, date: emergency.createdAt, chips: [severityChip(emergency), statusChip(emergency), categoryChip(emergency), renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("emergencies", emergency.title, emergency.id) : null)], author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: params.spread || null, returnTo: href, subscription: subscriptionOpts, editAction, deleteAction: isAuthor ? contentDeleteAction("emergency", emergency.id) : undefined }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, emergency.title)),
-    renderDetailShare(emergency.id, href, emergency.title),
+    renderDetailShare(emergency.id, href, emergency.title, subscriptionOpts),
     isAuthor && canClearnet ? renderClearnetSwitch("emergencies", emergency.rootId || emergency.id, isClearnet) : null,
+    renderTags(emergency.tags),
+    statusRow
+  );
+  const main = div({ class: "tribe-main" },
+    emergency.text ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), div({ class: "emergency-body" }, ...renderStyledText(emergency.text))) : null,
     emergency.expiresAt
       ? table({ class: "tribe-info-table jobs-info-table" },
           tr(
@@ -164,33 +174,15 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
           )
         )
       : null,
+    renderMapEmbed(params.mapData, emergency.mapUrl),
+    sideActions.length ? div({ class: "tribe-side-actions detail-action-row" }, ...sideActions) : null,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.emergencyConfirmations}: ${emergency.confirmationCount || 0}`)
     ),
-    renderMapEmbed(params.mapData, emergency.mapUrl),
-    sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
-    isAuthor && emergency.status !== "EXPIRED"
-      ? div({ class: "tribe-side-actions housing-status-row" },
-          span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),
-          statusChip(emergency),
-          form({ method: "POST", action: `/emergencies/status/${encodeURIComponent(emergency.id)}`, class: "inline-form" },
-            button({ class: "tribe-action-btn", type: "submit", name: "status", value: emergency.status === "ACTIVE" ? "RESOLVED" : "ACTIVE" },
-              String(emergency.status === "ACTIVE" ? i18n.emergencyResolveButton : i18n.emergencyReopenButton).toUpperCase())
-          )
-        )
-      : null,
     div({ class: "doc-export-actions" },
       form({ method: "GET", action: `/emergencies/${encodeURIComponent(emergency.id)}/pdf` }, button({ type: "submit", class: "filter-btn" }, i18n.emergencyGenerateReport)),
       form({ method: "POST", action: `/emergencies/${encodeURIComponent(emergency.id)}/share` }, button({ type: "submit", class: "filter-btn" }, i18n.sharePm))
     ),
-    renderTags(emergency.tags),
-    ownerActions.length ? div({ class: "tribe-side-actions owner-actions" }, ...ownerActions) : null,
-    params.subscription
-      ? renderSubscriptionBox({ target: emergency.id, scope: "emergencies", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: isAuthor, returnTo: href })
-      : null
-  );
-  const main = div({ class: "tribe-main" },
-    emergency.text ? div({ class: "emergency-body" }, ...renderStyledText(emergency.text)) : null,
     div({ class: "card-section emergency-updates" },
       h3(i18n.emergencyUpdatesTitle),
       updates.length
@@ -219,7 +211,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
               ),
               editing
                 ? form({ method: "POST", action: `/emergencies/updates/${encodeURIComponent(u.id)}/edit`, enctype: "multipart/form-data", class: "emergency-update-form" },
-                    textarea({ name: "text", rows: 3, maxlength: "2000", required: true, autofocus: true }, u.text), br(),
+                    textarea({ name: "text", rows: 3, required: true, autofocus: true }, u.text), br(),
                     input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
                     button({ type: "submit", class: "create-button" }, i18n.emergencyUpdate)
                   )
@@ -229,7 +221,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
         : p(i18n.emergencyNoUpdates),
       isAuthor && emergency.status === "ACTIVE"
         ? form({ method: "POST", action: `/emergencies/updates/${encodeURIComponent(emergency.id)}`, enctype: "multipart/form-data", class: "emergency-update-form" },
-            textarea({ name: "text", rows: 3, maxlength: "2000", required: true, placeholder: i18n.emergencyUpdatePlaceholder }), br(),
+            textarea({ name: "text", rows: 3, required: true, placeholder: i18n.emergencyUpdatePlaceholder }), br(),
             input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
             button({ type: "submit", class: "create-button" }, i18n.emergencyAddUpdate)
           )

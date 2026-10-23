@@ -145,7 +145,7 @@ const renderCourseForm = (filter, course = {}, params = {}) => {
       label(i18n.title), br,
       input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolCourseTitlePlaceholder, value: course.title || "" }), br(),
       label(i18n.description), br,
-      textarea({ name: "description", rows: 5, required: true, maxlength: "2000", placeholder: i18n.schoolCourseDescriptionPlaceholder }, course.description || ""), br,
+      textarea({ name: "description", rows: 5, required: true, placeholder: i18n.schoolCourseDescriptionPlaceholder }, course.description || ""), br,
       label(i18n.blogImage), br,
       (isEdit && renderMediaLockNote(course)) || input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
       label(i18n.schoolTags), br,
@@ -265,7 +265,7 @@ const renderTeacherPanel = (course, certificates, returnTo, lessons = [], exams 
       form({ method: "POST", action: `/school/lesson/add/${encodeURIComponent(course.id)}` },
         input({ type: "hidden", name: "returnTo", value: returnTo }),
         input({ type: "text", name: "title", maxlength: "120", required: true, placeholder: i18n.schoolLessonTitlePlaceholder }), br(),
-        textarea({ name: "text", rows: 5, required: true, maxlength: "4000", placeholder: i18n.schoolLessonTextPlaceholder }), br,
+        textarea({ name: "text", rows: 5, required: true, placeholder: i18n.schoolLessonTextPlaceholder }), br,
         label(i18n.schoolLessonUnit), br,
         input({ type: "text", name: "unit", maxlength: "60", placeholder: i18n.schoolLessonUnitPlaceholder }), br(),
         label(i18n.schoolLessonOrder), br,
@@ -395,6 +395,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
   const myCompleted = lessons.filter(lesson => lesson.completed).length
   const nextLesson = isStudent ? lessons.find(l => !l.locked && !l.completed) : null
 
+  const subscriptionOpts = (params.subscription && (isTeacher || isStudent)) ? { target: course.rootId || course.id, scope: "school", subscribed: params.subscription.subscribed === true, count: params.subscription.count, isOwner: isTeacher, returnTo } : null
   const courseSide = div({ class: "tribe-side" },
     renderCardTop(course.id, returnTo, { arrow: false,
       date: course.createdAt,
@@ -419,13 +420,16 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       isFavorite: course.isFavorite,
       returnTo,
       reportTitle: course.title,
+      subscription: subscriptionOpts,
+      editAction: isTeacher ? `/school?filter=edit&courseId=${encodeURIComponent(course.id)}` : undefined,
+      leaveAction: !isTeacher && (isStudent || myPending) ? `/school/unenroll/${encodeURIComponent(course.id)}` : undefined,
       deleteAction: isTeacher ? contentDeleteAction('schoolCourse', course.id) : undefined
     }),
     h2({ class: "tribe-card-title" }, course.title),
     renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
     isTeacher && canClearnet ? renderClearnetSwitch('school', course.rootId || course.id, isClearnet) : null,
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    renderDetailShare(course.id, returnTo, course.title),
+    renderDetailShare(course.id, returnTo, course.title, subscriptionOpts),
     course.description ? p({ class: "tribe-side-description" }, ...renderStyledText(course.description)) : null,
     course.startDate
       ? table({ class: "tribe-info-table" },
@@ -511,16 +515,6 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
             : null
         )
       : null,
-    params.subscription && (isTeacher || isStudent)
-      ? renderSubscriptionBox({
-          target: course.rootId || course.id,
-          scope: "school",
-          subscribed: params.subscription.subscribed === true,
-          count: params.subscription.count,
-          isOwner: isTeacher,
-          returnTo
-        })
-      : null,
     safeArr(course.tags).length
       ? div({ class: "tribe-side-tags" }, safeArr(course.tags).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
       : null,
@@ -534,22 +528,6 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
             input({ type: "hidden", name: "returnTo", value: returnTo }),
             input({ type: "hidden", name: "status", value: course.status === "CLOSED" ? "ONGOING" : "CLOSED" }),
             button({ type: "submit", class: "tribe-action-btn" }, course.status === "CLOSED" ? i18n.schoolReopenCourse : i18n.schoolCloseCourse)
-          )
-        )
-      : null,
-    isTeacher
-      ? div({ class: "tribe-side-actions owner-actions" },
-          form({ method: "GET", action: "/school" },
-            input({ type: "hidden", name: "filter", value: "edit" }),
-            input({ type: "hidden", name: "courseId", value: course.id }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.chatUpdate)
-          )
-        )
-      : null,
-    !isTeacher && (isStudent || myPending)
-      ? div({ class: "tribe-side-actions owner-actions" },
-          form({ method: "POST", action: `/school/unenroll/${encodeURIComponent(course.id)}` },
-            button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.schoolUnenrollButton)
           )
         )
       : null
@@ -844,6 +822,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
       author: lesson.author || course.author,
       reportTitle: lesson.title || course.title,
       returnTo: courseUrl,
+      editAction: isTeacher ? `${lessonUrl}?edit=1` : undefined,
       deleteAction: String(lesson.author || course.author) === String(userId) ? `/school/lesson/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` : undefined
     }),
     h2({ class: "tribe-card-title" }, a({ href: courseUrl }, course.title)),
@@ -869,14 +848,6 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
             button({ type: "submit", class: "tribe-action-btn" }, lesson.completed ? `✓ ${i18n.schoolProgressDone}` : i18n.schoolProgressMark)
           )
         )
-      : null,
-    isTeacher
-      ? div({ class: "tribe-side-actions owner-actions" },
-          form({ method: "GET", action: lessonUrl },
-            input({ type: "hidden", name: "edit", value: "1" }),
-            button({ type: "submit", class: "tribe-action-btn" }, i18n.chatUpdate)
-          )
-        )
       : null
   )
 
@@ -887,7 +858,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
           form({ method: "POST", action: `/school/lesson/update/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` },
             label(i18n.title), br,
             input({ type: "text", name: "title", maxlength: "120", required: true, value: lesson.title || "" }), br(),
-            textarea({ name: "text", rows: 5, required: true, maxlength: "4000" }, lesson.text || ""), br,
+            textarea({ name: "text", rows: 5, required: true }, lesson.text || ""), br,
             label(i18n.schoolLessonUnit), br,
             input({ type: "text", name: "unit", maxlength: "60", value: lesson.unit || "" }), br(),
             label(i18n.schoolLessonOrder), br,
@@ -916,7 +887,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
             label(i18n.title), br,
             input({ type: "text", name: "caption", maxlength: "120" }), br(), br(),
             label(i18n.description), br,
-            textarea({ name: "text", rows: 3, maxlength: "2000", placeholder: i18n.schoolMaterialTextPlaceholder }), br,
+            textarea({ name: "text", rows: 3, placeholder: i18n.schoolMaterialTextPlaceholder }), br,
             button({ type: "submit" }, i18n.schoolAddMaterial)
           )
         )

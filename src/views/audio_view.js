@@ -67,24 +67,6 @@ const renderAudioPlayer = (audioObj, opts = {}) =>
       )
     : p(i18n.audioNoFile);
 
-const renderAudioOwnerActions = (filter, audioObj, params = {}) => {
-  const returnTo = buildReturnTo(filter, params);
-  const isAuthor = String(audioObj.author) === String(userId);
-
-  if (!isAuthor) return [];
-
-  const items = [];
-  items.push(
-    form(
-      { method: "GET", action: `/audios/edit/${encodeURIComponent(audioObj.key)}` },
-      input({ type: "hidden", name: "returnTo", value: returnTo }),
-      button({ class: "update-btn", type: "submit" }, i18n.audioUpdateButton)
-    )
-  );
-
-  return items;
-};
-
 const renderAudioCommentsSection = (audioId, comments = [], returnTo = null) => {
   return renderSharedCommentsSection({
     action: `/audios/${encodeURIComponent(audioId)}/comments`,
@@ -169,7 +151,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       br(),
       span(i18n.audioDescriptionLabel),
       br(),
-      textarea({ maxlength: "5000", name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows: "4" }, audioToEdit?.description || ""),
+      textarea({ name: "description", placeholder: i18n.audioDescriptionPlaceholder, rows: "4" }, audioToEdit?.description || ""),
       br(),
       span(i18n.mapLocationTitle || "Map Location"),
       br(),
@@ -294,7 +276,6 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
     audioObj.sizeBytes ? renderEcoTax(audioObj.sizeBytes, audioObj.key) : null
   ].filter(Boolean);
 
-  const ownerActions = renderAudioOwnerActions(filter, audioObj, { q, sort });
   const sideActions = [];
   if (audioObj.isBcs) {
     sideActions.push(form(
@@ -302,7 +283,6 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
     ));
   }
-  for (const a of ownerActions) sideActions.push(a);
 
   const tagsNode = renderTags(audioObj.tags);
 
@@ -321,6 +301,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       spread: params.spreads || null,
       returnTo,
       reportTitle: audioObj.title,
+      editAction: isAuthor ? `/audios/edit/${encodeURIComponent(audioObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('audio', audioObj.key) : undefined
     }),
     div({ class: "shop-title-row" },
@@ -328,15 +309,15 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       isAuthor ? renderClearnetSwitch('audios', audioObj.rootId || audioObj.key, isClearnet) : null
     ),
     renderDetailShare(audioObj.key, href, audioObj.title),
-    safeText(audioObj.description)
-      ? p({ class: "tribe-side-description" }, ...renderStyledText(audioObj.description))
-      : null,
     tagsNode,
     renderMapEmbed(params.mapData, audioObj.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
   );
 
   const audioMain = div({ class: "tribe-main" },
+    safeText(audioObj.description)
+      ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(audioObj.description)))
+      : null,
     renderAudioPlayer(audioObj),
     audioObj?.url ? renderDownloadButton(blobUrlOf(audioObj.url), audioObj.title || "") : null,
     renderEngagement(audioObj.key,
