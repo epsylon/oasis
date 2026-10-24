@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
-const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -15,6 +15,8 @@ const FILTERS = [
   { key: "ALL", i18n: "housingFilterAll" },
   { key: "RECENT", i18n: "housingFilterRecent" },
   { key: "MINE", i18n: "housingFilterMine" },
+  { key: "SUPPORTED", i18n: "filterSupported" },
+  { key: "REPLICATED", i18n: "filterReplicated" },
   { key: "TOP", i18n: "housingFilterTop" },
   { key: "REQUESTED", i18n: "housingFilterRequested" },
   { key: "SALE", i18n: "housingFilterSale" },
@@ -94,7 +96,7 @@ const renderStatusChip = (status) => {
   })
 }
 
-const renderRequestedChip = () => renderStateChip("whole", "★", i18n.housingRequestedBadge || "REQUESTED")
+const renderRequestedChip = () => renderStateChip("transport", "★", i18n.housingRequestedBadge || "REQUESTED")
 
 const renderInfoTable = (item, opts = {}) => {
   const rows = []
@@ -335,7 +337,7 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       br(),
       br(),
       ...(showClearnet ? [renderClearnetSelector(item.clearnet === true || String(item.clearnet || "") === "1", i18n), br()] : []),
-      button({ type: "submit" }, isEdit ? i18n.housingUpdateButton : i18n.housingCreateButton)
+      button({ type: "submit" }, isEdit ? i18n.save : i18n.housingCreateButton)
     )
   )
 }
@@ -345,6 +347,7 @@ const housingChip = (censusH, filter, x) => {
   if (m === filter) return true
   if (m === "TOP") return censusH.length > 0
   if (m === "MINE") return censusH.some(h => String(h.author) === String(userId))
+  if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusH)
   if (m === "RECENT") return censusH.length > 0
   if (m === "REQUESTED") return censusH.some(h => safeArr(h.requests).includes(userId))
   if (m === "SALE" || m === "RENT" || m === "COUCHSURFING") return censusH.some(h => String(h.housing_type || "").toUpperCase() === m)
@@ -467,7 +470,7 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     ),
     isAuthor && canClearnet ? renderClearnetSwitch("housing", item.rootId || item.id, isClearnet) : null,
     renderStarRating(item.opinions, voters.length),
-    renderDetailShare(item.id, `/housing/${encodeURIComponent(item.id)}`, item.title),
+    renderDetailShare(item.id, `/housing/${encodeURIComponent(item.id)}`, item.title, null, null, null, item.author),
     renderTags(item.tags),
     renderStatusRow(item, returnTo),
     visibilityRow

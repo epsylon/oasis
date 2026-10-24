@@ -3,7 +3,7 @@ const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, renderScheduledChip, renderEditedChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, renderScheduledChip, renderEditedChip, hasRelation } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledHtml } = require("../backend/renderStyledText");
@@ -15,6 +15,8 @@ const FILTERS = [
   { key: "ALL", i18n: "blogFilterAll" },
   { key: "RECENT", i18n: "blogFilterRecent" },
   { key: "MINE", i18n: "blogFilterMine" },
+  { key: "SUPPORTED", i18n: "filterSupported" },
+  { key: "REPLICATED", i18n: "filterReplicated" },
   { key: "FAVORITES", i18n: "blogFilterFavorites" },
   { key: "TOP", i18n: "blogFilterTop" }
 ];
@@ -41,6 +43,7 @@ const renderFilterBar = (filter, q, showSearch = true, total = null, censusList 
     if (m === filter || m === "ALL") return true;
     if (m === "TOP") return censusB.length > 0;
     if (m === "MINE") return censusB.some(b => String(b.author) === String(userId));
+    if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusB);
     if (m === "RECENT") return censusB.length > 0;
     if (m === "FAVORITES") return censusB.some(b => b.isFavorite);
     return true;
@@ -145,7 +148,7 @@ const renderCreateForm = (draft = null) => {
         renderClearnetSelector(!!(draft && draft.clearnet === true), i18n),
         br(),
         ...(editId ? [] : [button({ type: "submit", class: "filter-btn", formaction: "/blogs/preview", attrs: { formmethod: "POST" } }, i18n.preview), " "]),
-        button({ type: "submit", class: "create-button" }, scheduledId || editId ? i18n.blogUpdate : i18n.blogPublish)
+        button({ type: "submit", class: "create-button" }, scheduledId || editId ? i18n.save : i18n.blogPublish)
       )
     )
   );
@@ -195,7 +198,7 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, blog.subject || i18n.blogTitle)
     ),
-    blog.scheduledAt ? null : renderDetailShare(blog.id, href, blog.subject || blog.text, subscriptionOpts),
+    blog.scheduledAt ? null : renderDetailShare(blog.id, href, blog.subject || blog.text, subscriptionOpts, null, null, blog.author),
     isAuthor && !blog.scheduledAt ? renderClearnetSwitch("posts", blog.rootId || blog.id, isClearnet) : null
   );
 

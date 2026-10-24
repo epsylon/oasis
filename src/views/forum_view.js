@@ -4,7 +4,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -24,7 +24,7 @@ exports.renderForumInvitePage = (code) => {
   return template(i18n.invitesForumsTitle || 'Forums', section(pageContent));
 };
 
-const BASE_FILTERS = ['all','recent','mine','top'];
+const BASE_FILTERS = ['all','recent','mine','supported','replicated','top'];
 const CAT_BLOCK1 = ['GENERAL','OASIS','L.A.R.P.'];
 const CAT_BLOCK2 = ['POLITICS','TECH','SCIENCE','MUSIC','ART','GAMING','BOOKS','FILMS'];
 const CAT_BLOCK3 = ['PHILOSOPHY','SOCIETY','PRIVACY','CYBERWARFARE','SURVIVALISM'];
@@ -45,6 +45,8 @@ function wilsonScore(pos, neg) {
 function getFilteredForums(filter, forums) {
   const now = Date.now();
   if (filter === 'mine')    return forums.filter(f => f.author === userId);
+  if (filter === 'supported') return forums.filter(f => f.isSupported);
+  if (filter === 'replicated') return forums.filter(f => f.isReplicated);
   if (filter === 'recent')  return forums.filter(f => new Date(f.createdAt).getTime() >= now - 86400000);
   if (filter === 'top')     return forums.filter(f => !f.tribeOrigin).sort((a,b) => b.score - a.score);
   if (ALL_CATS.includes(filter))
@@ -77,6 +79,7 @@ const renderVoteColumn = (target, score, forumId, positive = 0, negative = 0) =>
   div({ class: 'forum-vote-column' },
     div({ class: 'forum-score-box' },
       form({ method: 'POST', action: `/forum/${encodeURIComponent(forumId)}/vote`, class: 'forum-score-form' },
+        input({ type: 'hidden', name: 'returnTo', value: hereAt(target) || '' }),
         button({ name: 'value', value: 1, class: 'score-btn', title: '▲' }, '▲'),
         div({ class: 'score-total' }, String(score || 0)),
         button({ name: 'value', value: -1, class: 'score-btn', title: '▼' }, '▼'),
@@ -235,7 +238,7 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
             f.isPrivate ? renderForumEncryptedChip(i18n) : null,
             renderLifespanChip(f.lifetime, i18n),
             f.subscriptionIn === true
-              ? renderStateChip('mutuals', '✉', i18n.subscriptionOn)
+              ? renderStateChip('transport', '✉', i18n.subscriptionOn)
               : (f.subscriptionIn === false ? renderStateChip('closed', '✉', i18n.subscriptionOff) : null)
           ],
           spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title, deleteAction: f.author === userId ? `/forum/delete/${encodeURIComponent(f.key)}` : null
@@ -258,6 +261,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
   const baseChipVisible = (mode) => {
     if (mode === currentFilter || mode === 'all') return true;
     if (mode === 'mine') return censusForums.some(f => String(f.author) === String(userId));
+    if (mode === 'supported' || mode === 'replicated') return hasRelation(mode, censusForums);
     if (mode === 'recent') return censusForums.length > 0;
     return censusForums.length > 0;
   };
@@ -272,6 +276,8 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
         generateFilterButtons(BASE_FILTERS.filter(baseChipVisible), currentFilter, '/forum', {
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,
+          supported: i18n.filterSupported,
+          replicated: i18n.filterReplicated,
           recent: i18n.forumFilterRecent,
           top: i18n.forumFilterTop
         }),
@@ -324,6 +330,8 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
         generateFilterButtons(BASE_FILTERS, currentFilter, '/forum', {
           all: i18n.forumFilterAll,
           mine: i18n.forumFilterMine,
+          supported: i18n.filterSupported,
+          replicated: i18n.filterReplicated,
           recent: i18n.forumFilterRecent,
           top: i18n.forumFilterTop
         }),
@@ -343,7 +351,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
             forum.isPrivate ? renderForumEncryptedChip(i18n) : null,
             renderLifespanChip(forum.lifetime, i18n),
             (forum.subscription && sharesForum)
-              ? renderStateChip(forumSubIn ? 'mutuals' : 'closed', '✉', forumSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
+              ? renderStateChip(forumSubIn ? 'transport' : 'closed', '✉', forumSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
               : null
           ].filter(Boolean),
           author: forum.author, favKind: 'forum', isFavorite: forum.isFavorite, spread: params.spreads || null, reportTitle: forum.title,
@@ -351,7 +359,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
           deleteAction: isForumOwner ? `/forum/delete/${encodeURIComponent(forum.key)}` : undefined
         }),
         div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, forum.title)),
-        renderDetailShare(forum.key, forumHref(forum), forum.title, subscriptionOpts),
+        renderDetailShare(forum.key, forumHref(forum), forum.title, subscriptionOpts, null, null, forum.author),
         forum.isPrivate
           ? div({ class: 'tribe-side-actions forum-invite-row' },
               (forum.author === userId)

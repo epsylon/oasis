@@ -18,7 +18,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -170,7 +170,7 @@ const renderAudioForm = (filter, audioId, audioToEdit, params = {}) => {
       br(),
       renderClearnetSelector(filter === "edit" ? !!audioToEdit?.clearnet : false, i18n),
       br(),
-      button({ type: "submit" }, filter === "edit" ? i18n.audioUpdateButton : i18n.audioCreateButton)
+      button({ type: "submit" }, filter === "edit" ? i18n.save : i18n.audioCreateButton)
     )
   );
 };
@@ -180,6 +180,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (!Array.isArray(censusM)) return true;
   if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
   if (mode === "bcs") return censusM.some((x) => !x.tribeOrigin && String(x.title || "").toUpperCase().startsWith("BCS-"));
@@ -214,6 +215,7 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.audioFilterFavorites).toUpperCase()
@@ -308,7 +310,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       title ? h2({ class: "tribe-card-title" }, title) : null,
       isAuthor ? renderClearnetSwitch('audios', audioObj.rootId || audioObj.key, isClearnet) : null
     ),
-    renderDetailShare(audioObj.key, href, audioObj.title),
+    renderDetailShare(audioObj.key, href, audioObj.title, null, null, null, audioObj.author),
     tagsNode,
     renderMapEmbed(params.mapData, audioObj.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
@@ -340,6 +342,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.audioFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.audioFilterFavorites).toUpperCase()
@@ -379,7 +382,7 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
         renderCardTop(audio.key, `/audios/${encodeURIComponent(audio.key)}`, { author: audio.author, date: audio.createdAt, chips: [itemSize ? renderEcoTax(itemSize, audio.key) : null], reportTitle: audio.title }),
         audio.title ? h2(audio.title) : null,
         renderAudioPlayer(audio, { skipTranscode: true }),
-        renderDetailShare(audio.key, `/audios/${encodeURIComponent(audio.key)}`, audio.title),
+        renderDetailShare(audio.key, `/audios/${encodeURIComponent(audio.key)}`, audio.title, null, null, null, audio.author),
         safeText(audio.description) ? p({ class: "melody-bcs-desc" }, audio.description) : null,
         renderTags(audio.tags),
         form({ method: "POST", action: `/melody/transcode/${encodeURIComponent(audio.key)}`, class: "audio-transcode-run-form audio-transcode-form" },

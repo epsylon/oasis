@@ -1,5 +1,6 @@
 const { div, h2, p, section, button, form, input, ul, li, a, h3, span, strong, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe");
 const { template, i18n, userLink } = require('./main_views');
+const { buildSeriesChartSvg, renderRangedChart, bucketLabel, bucketXLabels } = require('./banking_views');
 const sharedState = require('../configs/shared-state');
 
 Object.assign(i18n, {
@@ -37,7 +38,7 @@ exports.statsView = (stats, filter) => {
   const description = i18n.statsDescription;
   const modes = ['ALL', 'MINE', 'TOMBSTONE'];
   const types = [
-    'bookmark', 'event', 'task', 'votes', 'report', 'feed', 'project', 'industry', 'industryBlueprint',
+    'bookmark', 'event', 'task', 'votes', 'poll', 'report', 'feed', 'project', 'industry', 'industryBlueprint',
     'image', 'torrent', 'file', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
     'chat', 'chatMessage', 'pad', 'padEntry', 'room', 'roomMember', 'wikiPage', 'emergency', 'emergencyConfirm', 'emergencyUpdate', 'mailingList', 'logisticsRoute', 'logisticsRating', 'podcast', 'podcastEpisode', 'podcastPlay', 'campaign', 'campaignSignature', 'campaignUpdate', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
@@ -50,6 +51,7 @@ exports.statsView = (stats, filter) => {
     event: i18n.statsEvent,
     task: i18n.statsTask,
     votes: i18n.statsVotes,
+    poll: i18n.pollsTitle,
     report: i18n.statsReport,
     feed: i18n.statsFeed,
     project: i18n.statsProject,
@@ -113,7 +115,8 @@ exports.statsView = (stats, filter) => {
     courtsNomination: i18n.statsCourtsNomination,
     courtsNominationVote: i18n.statsCourtsNominationVote
   };
-  const totalContent = types.filter(t => t !== 'karmaScore').reduce((sum, t) => sum + C(stats, t), 0);
+  const CONTENT_HIDDEN = new Set(['karmaScore', 'shopProduct', 'padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'parliamentTerm']);
+  const totalContent = types.filter(t => !CONTENT_HIDDEN.has(t)).reduce((sum, t) => sum + C(stats, t), 0);
   const totalOpinions = types.reduce((sum, t) => sum + O(stats, t), 0);
 
   const fmtNum = (n) => {
@@ -214,7 +217,7 @@ exports.statsView = (stats, filter) => {
           div({ class: `carbon-bar-fill carbon-bar-mine ${wClass(pct)}` })
         ),
         p({ class: 'carbon-bar-note' }, strong(`${pct.toFixed(1)}%`), ` ${i18n.statsCarbonOfNetwork || 'of network total'}`),
-        p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
+        p({ class: 'carbon-bar-formula' }, `${i18n.statsCarbonBasisStorage} `, strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
       );
     }
     if (filter === 'TOMBSTONE') {
@@ -239,7 +242,7 @@ exports.statsView = (stats, filter) => {
           div({ class: `carbon-bar-fill carbon-bar-mine ${wClass(tombPct)}` })
         ),
         p({ class: 'carbon-bar-note' }, strong(`${tombPct.toFixed(1)}%`), ` ${i18n.statsCarbonOfNetwork || 'of network total'} (${tombCount} tombstones × ~${avgTombBytes} bytes)`),
-        p({ class: 'carbon-bar-formula' }, 'Based on estimated tombstone message size ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
+        p({ class: 'carbon-bar-formula' }, `${i18n.statsCarbonBasisTombstone} `, strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'))
       );
     }
     const pct = Math.min(100, (networkCO2 / maxAnnualCO2) * 100);
@@ -263,7 +266,7 @@ exports.statsView = (stats, filter) => {
         div({ class: `carbon-bar-fill carbon-bar-network ${wClass(pct)}` })
       ),
       p({ class: 'carbon-bar-note' }, strong(`${pct.toFixed(1)}%`), ` ${i18n.statsCarbonOfEstMax || 'of estimated max capacity'} · `, strong(`${yearPct.toFixed(1)}%`), ` ${i18n.statsCarbonYearProgress || 'of the year elapsed'}`),
-      p({ class: 'carbon-bar-formula' }, 'Based on local data storage weight ', strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'), ` · max: ${gCO2PerInhabitantYear} g CO₂ × ${Math.max(1, inhabitants)} inhabitants`)
+      p({ class: 'carbon-bar-formula' }, `${i18n.statsCarbonBasisStorage} `, strong('(0.0002 kWh/MB × 475 g CO₂/kWh)'), ` · ${i18n.statsCarbonMax}: ${gCO2PerInhabitantYear} g CO₂ × ${Math.max(1, inhabitants)} ${String(i18n.inhabitants || '').toLowerCase()}`)
     );
   })();
 
@@ -420,10 +423,7 @@ exports.statsView = (stats, filter) => {
   const myPrivateTribesDetailed = Array.isArray(stats.myPrivateTribesDetailed) ? stats.myPrivateTribesDetailed : [];
 
   const buildContentRows = () => {
-    const excluded = new Set([
-      'karmaScore', 'shopProduct', 'padEntry', 'chatMessage', 'calendarDate', 'calendarNote',
-      'parliamentTerm'
-    ]);
+    const excluded = CONTENT_HIDDEN;
     const rows = [];
     types.filter(t => !excluded.has(t)).forEach(t => {
       const cnt = C(stats, t);
@@ -519,6 +519,35 @@ exports.statsView = (stats, filter) => {
       })()
     : null;
 
+  const chainCharts = (() => {
+    const ch = stats.chain;
+    if (!ch || !ch.usage || !ch.growth) return null;
+    const usagePts = Array.isArray(ch.usage.points) ? ch.usage.points : [];
+    const growthPts = Array.isArray(ch.growth.points) ? ch.growth.points : [];
+    const usageSvg = usagePts.length >= 2 ? buildSeriesChartSvg({
+      series: [{ label: `${i18n.statsUsageSeries} ${bucketLabel(ch.usage.bucket)}`, points: usagePts.map(pt => Number(pt.count) || 0) }],
+      xLabels: bucketXLabels(usagePts, ch.usage.bucket),
+      empty: i18n.bankExchangeChartEmpty, yDecimals: 0
+    }) : null;
+    const growthSvg = growthPts.length >= 2 ? buildSeriesChartSvg({
+      series: [{ label: i18n.statsChainSizeSeries, points: growthPts.map(pt => Number(pt.mb) || 0) }],
+      xLabels: bucketXLabels(growthPts, ch.growth.bucket),
+      empty: i18n.bankExchangeChartEmpty, yDecimals: 2
+    }) : null;
+    const wrap = (node) => node ? div({ class: 'stats-block stats-charts' }, node) : null;
+    const evoPts = ch.evolution && Array.isArray(ch.evolution.points) ? ch.evolution.points : [];
+    const evoSvg = evoPts.length >= 2 ? buildSeriesChartSvg({
+      series: [{ label: i18n.statsTombstoneTotalSeries, points: evoPts.map(pt => Number(pt.total) || 0) }],
+      xLabels: bucketXLabels(evoPts, ch.evolution.bucket),
+      empty: i18n.bankExchangeChartEmpty, yDecimals: 0
+    }) : null;
+    return {
+      evolution: ch.evolution ? wrap(renderRangedChart('stats-tomb-chart', i18n.statsTombstoneEvolutionTitle, filter, ch.evolution.range, !!ch.evolution.hasAnyData, evoSvg, '/stats')) : null,
+      usage: wrap(renderRangedChart('stats-usage-chart', i18n.statsUsageChartTitle, filter, ch.usage.range, !!ch.usage.hasAnyData, usageSvg, '/stats')),
+      growth: wrap(renderRangedChart('stats-growth-chart', i18n.statsChainGrowthTitle, filter, ch.growth.range, !!ch.growth.hasAnyData, growthSvg, '/stats'))
+    };
+  })() || {};
+
   const ets = stats.ecoTaxStats || null;
   const userTax = Number(stats.userEcoinTax || 0);
   const ecoTaxBlock = ets ? div({ class: 'stats-card' },
@@ -553,8 +582,11 @@ exports.statsView = (stats, filter) => {
       section(
         filter === 'MINE' ? accountCard : null,
         filter === 'ALL' ? storageCard : null,
-        filter === 'ALL' ? networkStrip : null,
         tombMode,
+        filter === 'ALL' ? chainCharts.growth : null,
+        filter === 'ALL' ? networkStrip : null,
+        filter === 'ALL' ? chainCharts.usage : null,
+        filter === 'TOMBSTONE' ? chainCharts.evolution : null,
         filter === 'TOMBSTONE' ? null : networkBlock,
         filter === 'TOMBSTONE' && !(Number(stats.userTombstoneCount || 0) || Number(stats.tombstoneKPIs?.networkTombstoneCount || 0)) ? null : carbonCard,
         filter !== 'TOMBSTONE' ? ecoTaxBlock : null,

@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect, renderTribeOriginChip } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { renderCommentsSection } = require("./comments_view");
@@ -7,7 +7,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const FILTERS = ["all", "recent", "mine", "linked"];
+const FILTERS = ["all", "recent", "mine", "supported", "replicated", "linked"];
 
 const pageHref = (idOrSlug, tribeId = null) =>
   `/wiki/${encodeURIComponent(idOrSlug)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`;
@@ -73,13 +73,13 @@ const reachChip = (page) =>
     : renderReachChip(!!page.clearnet, i18n, page.clearnet ? clearnetItemHref('wiki', page.title, page.id) : null);
 
 const statusChip = (page) =>
-  renderStateChip(page.editPolicy === "author" ? "closed" : "open", "", page.editPolicy === "author" ? i18n.wikiStatusClosed : i18n.wikiStatusOpen);
+  renderStateChip(page.editPolicy === "author" ? "hidden" : "mutuals", "", page.editPolicy === "author" ? i18n.wikiStatusClosed : i18n.wikiStatusOpen);
 
 const pageChips = (page, params = {}, { withStatus = true } = {}) => [
   page.encrypted ? renderEncryptedChip(i18n) : null,
   withStatus ? statusChip(page) : null,
-  page.versionCount > 1 ? renderStateChip("neutral", "", `${page.versionCount} ${i18n.wikiVersions || "versions"}`) : null,
-  page.isLinked ? renderStateChip("open", "", i18n.wikiLinkedChip || "Linked") : null
+  page.versionCount > 1 ? renderStateChip("whole", "", `${page.versionCount} ${i18n.wikiVersions || "versions"}`) : null,
+  page.isLinked ? renderStateChip("whole", "", i18n.wikiLinkedChip || "Linked") : null
 ].filter(Boolean);
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
@@ -108,11 +108,12 @@ const renderFilters = (filter, q, params = {}, census = []) => {
   const chipVisible = (mode) => {
     if (mode === filter || mode === "all") return true;
     if (mode === "mine") return census.some(p => String(p.author) === String(userId) || (p.versions || []).some(v => String(v.author) === String(userId)));
+    if (mode === "supported" || mode === "replicated") return hasRelation(mode, census);
     if (mode === "recent") return census.length > 0;
     if (mode === "linked") return census.some(p => p.isLinked);
     return true;
   };
-  const labelOf = (mode) => String(i18n[`wikiFilter${mode.charAt(0).toUpperCase() + mode.slice(1)}`] || mode).toUpperCase();
+  const labelOf = (mode) => RELATION_FILTERS.includes(mode) ? relationFilterLabel(mode) : String(i18n[`wikiFilter${mode.charAt(0).toUpperCase() + mode.slice(1)}`] || mode).toUpperCase();
   return div({ class: "filters" },
     form({ method: "GET", action: "/wiki", class: "ui-toolbar ui-toolbar--filters" },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
@@ -171,7 +172,7 @@ const renderForm = (page, params = {}) => {
       br(),
       button({ type: "submit", class: "filter-btn", formaction: "/wiki/preview", attrs: { formmethod: "POST" } }, i18n.wikiPreview),
       " ",
-      button({ type: "submit", class: "create-button" }, page ? i18n.wikiUpdate : i18n.wikiCreate)
+      button({ type: "submit", class: "create-button" }, page ? i18n.save : i18n.wikiCreate)
     )
   );
 };
@@ -249,7 +250,7 @@ const versionRow = (page, v, idx, current, tribeId) => {
   return div({ class: "card-section wiki-version" + (isCurrent ? " wiki-version-current" : "") },
     div({ class: "card-field" },
       span({ class: "card-label" }, `${i18n.wikiVersion} ${idx + 1}`),
-      isCurrent ? span({ class: "card-value" }, renderStateChip("mutuals", "", i18n.wikiCurrentVersion)) : span({ class: "card-value" })
+      isCurrent ? span({ class: "card-value" }, renderStateChip("whole", "", i18n.wikiCurrentVersion)) : span({ class: "card-value" })
     ),
     v.summary ? [br(), p({ class: "wiki-change-summary" }, v.summary.startsWith("restore:") ? i18n.wikiRestoredSummary : v.summary), br()] : null,
     div({ class: "tribe-side-actions wiki-version-actions" },
@@ -308,7 +309,7 @@ exports.wikiPageView = async (page, params = {}) => {
     page.isOwner && tribeId
       ? form({ method: "POST", action: `/wiki/delete/${encodeURIComponent(page.id)}` }, input({ type: "hidden", name: "tribeId", value: tribeId }), button({ type: "submit", class: "delete-btn" }, i18n.wikiDelete))
       : null
-  ]);
+  ], page.author);
   let diffBlock = null;
   if (diffVersion) {
     const idx = page.versions.findIndex(v => v.key === diffVersion.key);

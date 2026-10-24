@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -163,7 +163,7 @@ const renderFileForm = (filter, fileId, fileToEdit, params = {}) => {
       br(),
       ...renderLicenseSelect(fileToEdit?.license, i18n),
       ...(clearnetAllowed ? [renderClearnetSelector(filter === "edit" ? !!fileToEdit?.clearnet : false, i18n), br()] : []),
-      button({ type: "submit" }, filter === "edit" ? i18n.fileUpdateButton : i18n.fileCreateButton)
+      button({ type: "submit" }, filter === "edit" ? i18n.save : i18n.fileCreateButton)
     )
   );
 };
@@ -173,6 +173,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (!Array.isArray(censusM)) return true;
   if (mode === "top") return censusM.length > 0;
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
@@ -207,6 +208,7 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.fileFilterFavorites).toUpperCase()
@@ -305,7 +307,7 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
       title ? h2({ class: "tribe-card-title" }, title) : null,
       clearnetAllowed && isAuthor ? renderClearnetSwitch('files', fileObj.rootId || fileObj.key, isClearnet) : null
     ),
-    renderDetailShare(fileObj.key, href, fileObj.title),
+    renderDetailShare(fileObj.key, href, fileObj.title, null, null, null, fileObj.author),
     tagsNode,
   );
 
@@ -372,6 +374,7 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.fileFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.fileFilterFavorites).toUpperCase()

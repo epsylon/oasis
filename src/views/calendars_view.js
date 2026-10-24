@@ -1,6 +1,6 @@
 const { div, h2, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
 const { renderMapEmbed } = require("./maps_view")
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -18,11 +18,11 @@ const renderNoteText = (text) => renderStyledText(String(text || ""))
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
+    ["all", "recent", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/calendars" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" },
-          i18n[`calendarFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
+          (RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`calendarFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
       )
     ),
     ]),
@@ -39,7 +39,7 @@ const renderStatus = (cal) => {
 
 const renderCalendarStatusChip = (cal) => {
   const isClosed = !!cal.isClosed
-  const variant = isClosed ? "closed" : "mutuals"
+  const variant = isClosed ? "hidden" : "mutuals"
   const icon = isClosed ? "\u2717" : "\u2713"
   const label = isClosed ? (i18n.calendarStatusClosed || "CLOSED") : (i18n.calendarStatusOpen || "OPEN")
   return renderStateChip(variant, icon, label)
@@ -54,7 +54,7 @@ const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
     renderLifespanChip(cal.lifetime, i18n),
     !origin && cal.clearnet === true && clearnetEligible(cal) ? renderReachChip(true, i18n, calClearnetHref(cal)) : null,
     cal.subscriptionIn === true
-      ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+      ? renderStateChip("transport", "✉", i18n.subscriptionOn)
       : (cal.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
   return div({ class: "tribe-card" },
@@ -168,7 +168,7 @@ const renderCreateForm = (calendarToEdit, params) => {
           ]
         : null,
       showClearnet ? renderClearnetSelector(draft.clearnet === true || String(draft.clearnet || "") === "1", i18n) : null,
-      button({ type: "submit", class: "create-button" }, isEdit ? (i18n.calendarUpdate || "Edit") : (i18n.calendarCreate || "Create Calendar"))
+      button({ type: "submit", class: "create-button" }, isEdit ? i18n.save : (i18n.calendarCreate || "Create Calendar"))
     )
   )
 }
@@ -285,7 +285,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     renderLifespanChip(calendar.lifetime, i18n),
     canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? calClearnetHref(calendar) : null) : null,
     (isAuthor || isParticipant)
-      ? renderStateChip(subscriptionIn ? "mutuals" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff)
+      ? renderStateChip(subscriptionIn ? "transport" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff)
       : null
   ].filter(Boolean)
   const subscriptionOpts = (calendar.subscription && (isAuthor || isParticipant)) ? { target: calendar.rootId || calendar.key, scope: "calendars", subscribed: calendar.subscription.subscribed === true, count: calendar.subscription.count, isOwner: isAuthor, returnTo: shareUrl } : null
@@ -307,7 +307,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, calendar.title || "\u2014")
     ),
-    renderDetailShare(calendar.rootId, shareUrl, calendar.title, subscriptionOpts),
+    renderDetailShare(calendar.rootId, shareUrl, calendar.title, subscriptionOpts, null, null, calendar.author),
     isAuthor && canClearnet ? renderClearnetSwitch("calendars", calendar.rootId, isClearnet) : null,
     tags
   )

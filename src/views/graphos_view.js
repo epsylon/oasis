@@ -80,7 +80,7 @@ const buildGraphSvg = (me, peers, links = []) => {
   const meName = escText(me.name);
   const center = `<g class="graphos-node graphos-node-me">`
     + `<title>${meName}</title>`
-    + `<a href="/graphos" class="graphos-node-link">`
+    + `<a href="/graphos?filter=MINE" class="graphos-node-link">`
     + `<circle cx="${cx}" cy="${cy}" r="${(meR + 5).toFixed(2)}" class="graphos-node-circle graphos-node-circle-online graphos-me-online-ring" />`
     + `<circle cx="${cx}" cy="${cy}" r="${meR}" class="graphos-node-circle graphos-node-circle-me" />`
     + `</a>`
@@ -112,6 +112,168 @@ const zoomableGraph = (id, svg, stats = []) => [
   )
 ];
 
+const GRAPHOS_MODES = ['MINE', 'ALL', 'FEDERATION'];
+const renderGraphosModes = (filter) => div({ class: 'mode-buttons stats-mode-row' },
+  GRAPHOS_MODES.map(m =>
+    form({ method: 'GET', action: '/graphos' },
+      input({ type: 'hidden', name: 'filter', value: m }),
+      button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, String(m === 'FEDERATION' ? i18n.graphosFederation : m === 'MINE' ? i18n.graphosMine : i18n[m + 'Button']).toUpperCase())
+    )
+  )
+);
+
+const shortLabel = (name, max = 14) => {
+  const t = String(name || '');
+  return t.length > max ? t.slice(0, max - 1) + '…' : t;
+};
+
+const seedOf = (key) => {
+  let h = 2166136261;
+  for (const ch of String(key)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+  return h;
+};
+
+const meshLayout = (nodes, links, meKey) => {
+  const N = nodes.length;
+  const STEP = 240;
+  const idx = new Map(nodes.map((n, i) => [n.key, i]));
+  const maxLevel = Math.max(1, ...nodes.map(n => Number(n.level) || 0));
+  const target = nodes.map(n => n.key === meKey ? 0 : STEP * Math.max(1, Number(n.level) || 1));
+  const xs = new Float64Array(N);
+  const ys = new Float64Array(N);
+  nodes.forEach((n, i) => {
+    const h = seedOf(n.key);
+    const angle = (h % 3600) / 3600 * TAU;
+    const r = n.key === meKey ? 0 : target[i] * (0.85 + ((h >>> 12) % 300) / 1000);
+    xs[i] = Math.cos(angle) * r;
+    ys[i] = Math.sin(angle) * r;
+  });
+  const edges = links.filter(l => idx.has(l.a) && idx.has(l.b)).map(l => [idx.get(l.a), idx.get(l.b)]);
+  const area = Math.pow(STEP * (maxLevel + 1) * 2, 2);
+  const k = Math.sqrt(area / Math.max(1, N)) * 0.9;
+  const meIdx = idx.has(meKey) ? idx.get(meKey) : -1;
+  const ITER = 260;
+  let temp = STEP;
+  const dx = new Float64Array(N);
+  const dy = new Float64Array(N);
+  for (let it = 0; it < ITER; it++) {
+    dx.fill(0); dy.fill(0);
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        let ddx = xs[i] - xs[j], ddy = ys[i] - ys[j];
+        let d2 = ddx * ddx + ddy * ddy;
+        if (d2 < 0.01) { ddx = 0.1; ddy = 0.1; d2 = 0.02; }
+        const f = (k * k) / d2;
+        dx[i] += ddx * f; dy[i] += ddy * f;
+        dx[j] -= ddx * f; dy[j] -= ddy * f;
+      }
+    }
+    for (const [a, b] of edges) {
+      const ddx = xs[a] - xs[b], ddy = ys[a] - ys[b];
+      const d = Math.sqrt(ddx * ddx + ddy * ddy) || 0.1;
+      const f = d / k;
+      dx[a] -= ddx * f; dy[a] -= ddy * f;
+      dx[b] += ddx * f; dy[b] += ddy * f;
+    }
+    for (let i = 0; i < N; i++) {
+      if (i === meIdx) continue;
+      const r = Math.sqrt(xs[i] * xs[i] + ys[i] * ys[i]) || 0.1;
+      const pull = (target[i] - r) * 0.9;
+      dx[i] += (xs[i] / r) * pull * k / STEP * 6;
+      dy[i] += (ys[i] / r) * pull * k / STEP * 6;
+      const disp = Math.sqrt(dx[i] * dx[i] + dy[i] * dy[i]) || 0.1;
+      const move = Math.min(disp, temp);
+      xs[i] += (dx[i] / disp) * move;
+      ys[i] += (dy[i] / disp) * move;
+    }
+    if (meIdx >= 0) { xs[meIdx] = 0; ys[meIdx] = 0; }
+    temp = Math.max(2, temp * 0.985);
+  }
+  const maxDegree = Math.max(1, ...nodes.map(n => Number(n.degree) || 0));
+  const radius = (n) => {
+    const r = 5 + 19 * Math.sqrt((Number(n.degree) || 0) / maxDegree);
+    return n.key === meKey ? Math.max(14, r) : r;
+  };
+  for (let pass = 0; pass < 40; pass++) {
+    let moved = false;
+    for (let i = 0; i < N; i++) {
+      for (let j = i + 1; j < N; j++) {
+        const ddx = xs[j] - xs[i], ddy = ys[j] - ys[i];
+        const d = Math.sqrt(ddx * ddx + ddy * ddy) || 0.1;
+        const min = radius(nodes[i]) + radius(nodes[j]) + 26;
+        if (d >= min) continue;
+        const push = (min - d) / 2;
+        const ux = ddx / d, uy = ddy / d;
+        if (i !== meIdx) { xs[i] -= ux * push; ys[i] -= uy * push; }
+        if (j !== meIdx) { xs[j] += ux * push; ys[j] += uy * push; }
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return { xs, ys, radius };
+};
+
+const buildNetworkSvg = (nodes, links, meKey) => {
+  const PAD = 90;
+  const { xs, ys, radius } = meshLayout(nodes, links, meKey);
+  let extent = 300;
+  for (let i = 0; i < nodes.length; i++) extent = Math.max(extent, Math.abs(xs[i]), Math.abs(ys[i]));
+  const W = Math.round(2 * (extent + PAD));
+  const H = W;
+  const cx = W / 2;
+  const cy = H / 2;
+  const pos = new Map(nodes.map((n, i) => [n.key, { x: cx + xs[i], y: cy + ys[i] }]));
+  const placed = [];
+  const labelled = new Set();
+  const boxOf = (n) => {
+    const P = pos.get(n.key);
+    const w = shortLabel(n.name).length * 10 + 6;
+    const top = P.y + radius(n) + 2;
+    return { x1: P.x - w / 2, x2: P.x + w / 2, y1: top, y2: top + 20 };
+  };
+  const clashes = (b) => placed.some(o => b.x1 < o.x2 && b.x2 > o.x1 && b.y1 < o.y2 && b.y2 > o.y1);
+  const me = nodes.find(n => n.key === meKey);
+  for (const n of [me, ...nodes.filter(x => x.key !== meKey).sort((a, b) => (b.degree || 0) - (a.degree || 0))].filter(Boolean)) {
+    if (labelled.size >= 60) break;
+    const b = boxOf(n);
+    if (n.key !== meKey && clashes(b)) continue;
+    placed.push(b);
+    labelled.add(n.key);
+  }
+  const line = (l, cls) => {
+    const A = pos.get(l.a), B = pos.get(l.b);
+    return `<line x1="${A.x.toFixed(2)}" y1="${A.y.toFixed(2)}" x2="${B.x.toFixed(2)}" y2="${B.y.toFixed(2)}" class="${cls}" />`;
+  };
+  const shown = links.filter(l => pos.has(l.a) && pos.has(l.b));
+  const isMine = (l) => l.a === meKey || l.b === meKey;
+  const edges = shown.filter(l => !isMine(l)).map(l => line(l, `graphos-net-link ${l.mutual ? 'graphos-net-mutual' : 'graphos-net-oneway'}`)).join('')
+    + shown.filter(isMine).map(l => line(l, `graphos-net-link graphos-net-mine${l.mutual ? '' : ' graphos-net-oneway'}`)).join('');
+  const circles = nodes.map(node => {
+    const P = pos.get(node.key);
+    const rr = radius(node);
+    const xs0 = P.x.toFixed(2);
+    const ys0 = P.y.toFixed(2);
+    const enc = escAttr(encodeURIComponent(node.key));
+    const href = node.kind === 'me' ? '/graphos?filter=MINE' : `/graphos?center=${enc}`;
+    const fill = node.replicated && (node.kind === 'reach' || node.kind === 'outside') ? 'replicated' : node.kind;
+    const bothRing = node.replicated && node.kind === 'supported';
+    const showLabel = labelled.has(node.key);
+    const cls = `graphos-net-label${node.kind === 'me' ? ' graphos-node-label-me' : ''}`;
+    return `<g class="graphos-node graphos-node-${node.kind}">`
+      + `<title>${escText(node.name)} (${node.degree || 0})</title>`
+      + `<a href="${href}" class="graphos-node-link">`
+      + (bothRing ? `<circle cx="${xs0}" cy="${ys0}" r="${(rr + 4).toFixed(2)}" class="graphos-net-replicated-ring" />` : '')
+      + `<circle cx="${xs0}" cy="${ys0}" r="${rr.toFixed(2)}" class="graphos-node-circle graphos-node-circle-${fill}" />`
+      + `</a>`
+      + (showLabel ? `<a href="/author/${enc}" class="graphos-node-link"><text x="${xs0}" y="${(P.y + rr + 16).toFixed(2)}" text-anchor="middle" class="${cls}">${escText(shortLabel(node.name))}</text></a>` : '')
+      + `</g>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" class="graphos-svg">`
+    + edges + circles
+    + `</svg>`;
+};
+
 const kpi = (label, value) => span({ class: 'graphos-legend-item graphos-kpi' },
   span({ class: 'stats-kpi-label' }, String(label).toUpperCase()),
   span({ class: 'stats-kpi-value' }, String(value))
@@ -123,12 +285,9 @@ const legendItem = (kind, label) =>
     span(label)
   );
 
-exports.graphosView = ({ filter, me, peers, links = [], kpis, focus = null, focusId = null, shown = null, total = null }) => {
+exports.graphosView = ({ filter, me, peers, links = [], kpis, focus = null, focusId = null }) => {
   const title = i18n.graphos || 'Graphos';
   const description = i18n.graphosDescription || 'Interactive map of the network around you.';
-  const modes = ['ALL', 'MINE', 'FEDERATION'];
-  const capped = Number.isFinite(shown) && Number.isFinite(total) && total > shown;
-
   return template(
     title,
     section(
@@ -139,6 +298,7 @@ exports.graphosView = ({ filter, me, peers, links = [], kpis, focus = null, focu
       focus
         ? [
             form({ method: 'GET', action: '/graphos', class: 'graphos-backbar' },
+              input({ type: 'hidden', name: 'filter', value: 'MINE' }),
               button({ type: 'submit', class: 'filter-btn' }, i18n.graphosBackToMine || '← My network')
             ),
             div({ class: 'graphos-focus-bar' },
@@ -146,28 +306,18 @@ exports.graphosView = ({ filter, me, peers, links = [], kpis, focus = null, focu
               a({ class: 'user-link', href: `/author/${encodeURIComponent(focusId || '')}` }, `@${focus}`)
             )
           ]
-        : div({ class: 'mode-buttons stats-mode-row' },
-            modes.map(m =>
-              form({ method: 'GET', action: '/graphos' },
-                input({ type: 'hidden', name: 'filter', value: m }),
-                button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, String(m === 'FEDERATION' ? i18n.graphosFederation : i18n[m + 'Button']).toUpperCase())
-              )
-            )
-          ),
-      capped
-        ? p({ class: 'graphos-cap-note' }, `${i18n.graphosShowing || 'Showing'} ${shown} / ${total}`)
-        : null,
+        : renderGraphosModes(filter),
       ...zoomableGraph('graphos-zoom', buildGraphSvg(me, peers, links), [
         kpi(i18n.graphosTotalNodes || 'Total nodes', kpis.total),
         kpi(i18n.onlinePlural || i18n.online || 'Online', kpis.online),
-        filter !== 'MINE' ? kpi(i18n.discovered || 'Discovered', kpis.discovered) : null,
-        filter !== 'MINE' ? kpi(i18n.unknown || 'Unknown', kpis.unknown) : null
+        kpi(i18n.discovered || 'Discovered', kpis.discovered),
+        kpi(i18n.unknown || 'Unknown', kpis.unknown)
       ]),
       div({ class: 'graphos-legend' },
         legendItem('me', i18n.graphosYou || 'You'),
         legendItem('online', i18n.onlinePlural || i18n.online || 'Online'),
-        filter !== 'MINE' ? legendItem('discovered', i18n.discovered || 'Discovered') : null,
-        filter !== 'MINE' ? legendItem('unknown', i18n.unknown || 'Unknown') : null,
+        legendItem('discovered', i18n.discovered || 'Discovered'),
+        legendItem('unknown', i18n.unknown || 'Unknown'),
         span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-mutual' }), span(i18n.graphosFedMutual)),
         span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-oneway' }), span(i18n.graphosFedOneWay))
       )
@@ -260,14 +410,7 @@ exports.graphosFederationView = ({ myName, rows = [], links = [], ownVersion = '
         h2(title),
         p(i18n.graphosDescription || '')
       ),
-      div({ class: 'mode-buttons stats-mode-row' },
-        ['ALL', 'MINE', 'FEDERATION'].map(m =>
-          form({ method: 'GET', action: '/graphos' },
-            input({ type: 'hidden', name: 'filter', value: m }),
-            button({ type: 'submit', class: m === 'FEDERATION' ? 'filter-btn active' : 'filter-btn' }, String(m === 'FEDERATION' ? i18n.graphosFederation : i18n[m + 'Button']).toUpperCase())
-          )
-        )
-      ),
+      renderGraphosModes('FEDERATION'),
       ...(sorted.length ? zoomableGraph('graphos-fed-zoom', buildFederationSvg(myName || '', sorted, links, ownVersion), [
         kpi(i18n.graphosFedPubs, sorted.length),
         kpi(i18n.peerStateConnected, count(r => r.state === 'connected')),
@@ -277,14 +420,18 @@ exports.graphosFederationView = ({ myName, rows = [], links = [], ownVersion = '
         kpi(i18n.graphosFedLinks, links.filter(l => l.mutual).length),
         kpi(i18n.graphosFedIsolated, count(r => r.isolated))
       ]) : [p(i18n.graphosFedEmpty)]),
-      div({ class: 'graphos-legend' },
-        legendItem('me', i18n.graphosYou || 'You'),
-        span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-connected' }), span(i18n.peerStateConnected)),
-        span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-available' }), span(i18n.peerStateStaged)),
-        span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-unreachable' }), span(i18n.graphosFedUnreachable)),
-        span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-outdated' }), span(i18n.peerOutdated)),
-        span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-mutual' }), span(i18n.graphosFedMutual)),
-        span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-oneway' }), span(i18n.graphosFedOneWay))
+      div({ class: 'graphos-legend-rows' },
+        div({ class: 'graphos-legend' },
+          legendItem('me', i18n.graphosYou || 'You'),
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-connected' }), span(i18n.peerStateConnected)),
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-available' }), span(i18n.peerStateStaged)),
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-unreachable' }), span(i18n.graphosFedUnreachable)),
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-fed-dot-outdated' }), span(i18n.peerOutdated))
+        ),
+        div({ class: 'graphos-legend graphos-legend-lines' },
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-mutual' }), span(i18n.graphosFedMutual)),
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-oneway' }), span(i18n.graphosFedOneWay))
+        )
       ),
       sorted.length ? table({ class: 'block-info-table graphos-fed-table' },
         tr(
@@ -304,6 +451,45 @@ exports.graphosFederationView = ({ myName, rows = [], links = [], ownVersion = '
           td({ 'data-label': i18n.graphosFedInhabitants }, row.known ? String(row.inhabitants) : '—')
         ))
       ) : null
+    )
+  );
+};
+
+exports.graphosNetworkView = ({ filter = 'ALL', nodes = [], links = [], kpis = {}, meKey = '', hops = 2 }) => {
+  const title = i18n.graphos || 'Graphos';
+  return template(
+    title,
+    section(
+      div({ class: 'tags-header module-header-line' },
+        h2(title),
+        p(i18n.graphosDescription || '')
+      ),
+      renderGraphosModes(filter),
+      ...zoomableGraph('graphos-net-zoom', buildNetworkSvg(nodes, links, meKey), [
+        kpi(i18n.graphosTotalNodes || 'Total nodes', kpis.total || 0),
+        kpi(i18n.graphosLegendSupported, kpis.supported || 0),
+        kpi(i18n.graphosLegendReplicated, kpis.replicated || 0),
+        kpi(i18n.settingsReplicationHopsLabel, kpis.reach || 0),
+        kpi(i18n.graphosFedPubs, kpis.pubs || 0),
+        kpi(i18n.graphosFedMutual, kpis.mutual || 0),
+        kpi(i18n.graphosFedOneWay, kpis.oneway || 0)
+      ]),
+      div({ class: 'graphos-legend-rows' },
+        div({ class: 'graphos-legend' },
+          legendItem('me', i18n.graphosYou || 'You'),
+          legendItem('supported', i18n.graphosLegendSupported),
+          legendItem('replicated', i18n.graphosLegendReplicated),
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-dot graphos-legend-both' }), span(i18n.graphosLegendBoth)),
+          legendItem('reach', `${i18n.graphosLegendInHops} (${hops})`),
+          legendItem('pub', i18n.graphosFedPubs),
+          filter === 'ALL' ? legendItem('outside', i18n.graphosLegendOutside) : null
+        ),
+        div({ class: 'graphos-legend graphos-legend-lines' },
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-net-line-mine' }), span(i18n.graphosYourLinks)),
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-mutual' }), span(i18n.graphosFedMutual)),
+          span({ class: 'graphos-legend-item' }, span({ class: 'graphos-legend-line graphos-fed-line-oneway' }), span(i18n.graphosFedOneWay))
+        )
+      )
     )
   );
 };

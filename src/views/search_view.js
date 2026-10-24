@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe, table, br, td, tr, th, a, span } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, userLink, renderCardTop, renderShareButton, renderCommentsPill, renderOpinionsPill, renderCardMetaRow, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel, renderPdfDocument } = require('./main_views');
+const { template, i18n, userLink, renderCardTop, renderShareButton, renderCommentsPill, renderOpinionsPill, renderCardMetaRow, renderModuleStats, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel, renderPdfDocument, renderSupportButton, hereAt } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -18,7 +18,10 @@ const industryStatusLabel = (status) => {
 };
 
 
-const renderSearchForm = ({ action, query = "", queryName = "query", hidden = [] } = {}) => {
+const SEARCH_SCOPES = ["", "mine", "supported", "replicated"];
+const searchScopeLabel = (scope) => String(scope === "mine" ? i18n.searchScopeMine : scope === "supported" ? i18n.searchScopeSupported : scope === "replicated" ? i18n.searchScopeReplicated : i18n.allButton).toUpperCase();
+
+const renderSearchForm = ({ action, query = "", queryName = "query", hidden = [], withScope = false, scope = "" } = {}) => {
   const searchInput = input({ id: "search_query", name: queryName, required: false, type: "search", value: query, placeholder: i18n.searchPlaceholder });
   searchInput.setAttribute("minlength", 3);
   const resultCount = currentPerPage();
@@ -49,6 +52,12 @@ const renderSearchForm = ({ action, query = "", queryName = "query", hidden = []
           td({ class: 'card-label' }, label({ for: "search_query" }, i18n.searchQueryLabel || "Query")),
           td(searchInput)
         ),
+        withScope ? tr(
+          td({ class: 'card-label' }, label({ for: "search_scope" }, i18n.searchScopeLabel)),
+          td(select({ id: "search_scope", name: "scope", class: "input-select search-select" },
+            SEARCH_SCOPES.map(sc => option({ value: sc, ...(String(scope || "") === sc ? { selected: true } : {}) }, searchScopeLabel(sc)))
+          ))
+        ) : null,
         tr(
           td({ class: 'card-label' }, label({ for: "results-per-page" }, i18n.searchPerPageLabel || "Results per page")),
           td(resultsPerPageSelect)
@@ -62,7 +71,7 @@ const renderSearchForm = ({ action, query = "", queryName = "query", hidden = []
 };
 exports.renderSearchForm = renderSearchForm;
 
-const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, resultCounts = null, spreadMap = null, favIndex = null }) => {
+const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = [], hashtag = null, results = {}, resultCounts = null, spreadMap = null, favIndex = null, scope = "" }) => {
 
   const contentTypes = [
     "post", "about", "curriculum", "tribe", "market", "transfer", "feed", "votes",
@@ -633,7 +642,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     ? resultCounts
     : Object.fromEntries(Object.entries(results).map(([t, msgs]) => [t, Array.isArray(msgs) ? msgs.length : 0]));
   const totalResults = Object.values(counts).reduce((n, c) => n + (Number(c) || 0), 0);
-  const searchBase = `/search?query=${encodeURIComponent(hashtag ? `#${hashtag}` : String(query || ''))}`;
+  const searchBase = `/search?query=${encodeURIComponent(hashtag ? `#${hashtag}` : String(query || ''))}${scope ? `&scope=${encodeURIComponent(scope)}` : ''}`;
   const resultStats = renderModuleStats(totalResults,
     Object.entries(counts)
       .map(([t, count]) => ({ label: typeLabel(t), count: Number(count) || 0, href: `${searchBase}&type=${encodeURIComponent(t)}`, active: types.includes(t) }))
@@ -678,6 +687,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
               author: msg.value.author,
               reportTitle: shareTitle,
               spread: CONTENT_SPREADABLE.has(content.type) ? ((spreadMap instanceof Map && spreadMap.get(contentId)) || null) : undefined,
+              replicated: msg.isReplicated === true,
               ...(CONTENT_TORRENTABLE.has(content.type) && typeof content.url === 'string' && content.url.startsWith('&')
                 ? { torrentFrom: { blobId: content.url, name: content.title || content.fileName || '' } }
                 : {}),
@@ -688,7 +698,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
             div({ class: 'card-section search-card-body' },
               contentHtml
             ),
-            renderCardMetaRow(renderOpinionsPill(contentId, viewHref), renderCommentsPill(contentId, viewHref), renderShareButton(contentId, viewHref, shareTitle))
+            renderCardMetaRow(renderOpinionsPill(contentId, viewHref), renderCommentsPill(contentId, viewHref), renderShareButton(contentId, viewHref, shareTitle), renderSupportButton(msg.value.author, null, hereAt(contentId)))
           ]);
         })
       )
@@ -704,7 +714,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
         h2(i18n.searchTitle),
         p(hashtag ? i18n.hashtagDescription : i18n.searchDescriptionLabel)
       ),
-      renderSearchForm({ action: "/search", query })
+      renderSearchForm({ action: "/search", query, withScope: true, scope })
     ),
     section(
       resultStats ? div({ class: 'filters activity-filter-chips activity-toolbar-row search-stats-row' }, resultStats) : null,

@@ -297,6 +297,19 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
       return poll;
     },
 
+    async getPollsByIds(ids = [], viewerId = null) {
+      const out = new Map();
+      const wanted = [...new Set([].concat(ids).filter(Boolean).map(String))];
+      if (!wanted.length) return out;
+      const { list, idx } = await collect(viewerId);
+      const byRoot = new Map(list.map(p => [p.id, p]));
+      for (const id of wanted) {
+        const poll = byRoot.get(idx.rootOf(id)) || list.find(p => p.tipId === id);
+        if (poll && !poll.undecryptable) out.set(id, poll);
+      }
+      return out;
+    },
+
     async resolveRootId(id) {
       const { idx } = await collect();
       return idx.rootOf(id);

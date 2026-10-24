@@ -124,11 +124,13 @@ module.exports = ({ cooler, scheduler = null }) => {
       let votesMap;
       let voters;
       let totalVotes;
+      let choices = {};
       if (tally) {
         votesMap = Object.assign({}, tally.votes || {});
         for (const o of options) if (!(o in votesMap)) votesMap[o] = 0;
         voters = tally.voters.slice();
         totalVotes = tally.totalVotes;
+        choices = Object.assign({}, tally.choices || {});
       } else {
         votesMap = Object.assign({}, lc.votes || {});
         for (const o of options) if (!(o in votesMap)) votesMap[o] = 0;
@@ -139,6 +141,7 @@ module.exports = ({ cooler, scheduler = null }) => {
           if (voterSet.has(cv.author)) continue;
           if (!options.includes(cv.choice)) continue;
           voterSet.add(cv.author); voters.push(cv.author);
+          choices[cv.author] = cv.choice;
           votesMap[cv.choice] = (votesMap[cv.choice] || 0) + 1;
           totalVotes += 1;
         }
@@ -160,6 +163,7 @@ module.exports = ({ cooler, scheduler = null }) => {
         rootId: root,
         votes: votesMap,
         voters,
+        choices,
         totalVotes,
         opinions,
         opinions_inhabitants: opInh,

@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views")
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderEncryptedChip } = require("./clearnet_view")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
@@ -199,6 +199,7 @@ const marketChipFor = (filter, list) => (mode) => {
   if (!Array.isArray(list)) return true;
   if (mode === "recent") return list.length > 0;
   if (mode === "mine") return list.some((e) => String(e.seller) === String(userId));
+  if (mode === "supported" || mode === "replicated") return hasRelation(mode, list);
   if (mode === "exchange") return list.some((e) => e.item_type === "exchange" && e.status === "FOR SALE");
   if (mode === "auctions") return list.some((e) => e.item_type === "auction" && e.status === "FOR SALE");
   if (mode === "mybids") return list.some(isMyBidItem);
@@ -227,6 +228,12 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
       break
     case "mine":
       filtered = list.filter((e) => e.seller === userId)
+      break
+    case "supported":
+      filtered = list.filter((e) => e.isSupported)
+      break
+    case "replicated":
+      filtered = list.filter((e) => e.isReplicated)
       break
     case "exchange":
       filtered = list.filter((e) => e.item_type === "exchange" && e.status === "FOR SALE")
@@ -302,6 +309,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
           ...(marketChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase())] : []),
           ...(marketChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, marketChipVisible),
           ...(marketChipVisible("exchange") ? [button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterItems).toUpperCase())] : []),
           ...(marketChipVisible("auctions") ? [button({ type: "submit", name: "filter", value: "auctions", class: filter === "auctions" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAuctions).toUpperCase())] : []),
           ...(marketChipVisible("mybids") ? [button({ type: "submit", name: "filter", value: "mybids", class: filter === "mybids" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMyBids).toUpperCase())] : []),
@@ -461,7 +469,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               }),
               br(),br(),
               ...(reach === "PUBLIC" ? [renderClearnetSelector(itemEdit.clearnet === true || String(itemEdit.clearnet || "") === "1", i18n), br()] : []),
-              button({ type: "submit" }, filter === "edit" ? i18n.marketUpdateButton : i18n.marketCreateButton)
+              button({ type: "submit" }, filter === "edit" ? i18n.save : i18n.marketCreateButton)
             )
           )
         : div(
@@ -476,9 +484,9 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       date: item.createdAt,
                       chips: [
                         String(item.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
-                        renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
+                        renderStateChip("whole", "", String(item.item_type || "").toUpperCase()),
                         item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
-                        item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
+                        item.includesShipping ? renderStateChip("whole", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
                         item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
                         renderLifespanChip(item.lifetime, i18n),
                         item.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref("market", item.title, item.id)) : null
@@ -533,6 +541,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
           ...(marketChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase())] : []),
           ...(marketChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, marketChipVisible),
           ...(marketChipVisible("exchange") ? [button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterItems).toUpperCase())] : []),
           ...(marketChipVisible("auctions") ? [button({ type: "submit", name: "filter", value: "auctions", class: filter === "auctions" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAuctions).toUpperCase())] : []),
           ...(marketChipVisible("mybids") ? [button({ type: "submit", name: "filter", value: "mybids", class: filter === "mybids" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMyBids).toUpperCase())] : []),
@@ -551,9 +560,9 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         const chips = [
           renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("market", item.title, item.id) : null),
           isHidden ? renderVisibilityChip("HIDDEN", i18n) : null,
-          renderStateChip("encrypted", "", String(item.item_type || "").toUpperCase()),
+          renderStateChip("whole", "", String(item.item_type || "").toUpperCase()),
           item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
-          item.includesShipping ? renderStateChip("mutuals", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
+          item.includesShipping ? renderStateChip("whole", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
           item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
           renderLifespanChip(item.lifetime, i18n),
           renderEcoTax(item.msgSize, item.id)
@@ -596,7 +605,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
               const statusText = cur === "SOLD" ? i18n.marketFilterSold : cur === "DISCARDED" ? i18n.marketFilterDiscarded : i18n.marketFilterForSale
               return div({ class: "tribe-side-actions housing-status-row" },
                 span({ class: "card-label" }, `${i18n.statusLabel}: `),
-                renderStateChip(cur === "FOR SALE" ? "mutuals" : cur === "SOLD" ? "whole" : "closed", cur === "FOR SALE" ? "👁" : cur === "SOLD" ? "✓" : "✗", statusText),
+                renderStateChip(cur === "FOR SALE" ? "mutuals" : cur === "SOLD" ? "hidden" : "closed", cur === "FOR SALE" ? "👁" : cur === "SOLD" ? "✓" : "✗", statusText),
                 ...marketActions
               )
             })()
@@ -610,7 +619,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           ),
           renderStarRating(item.opinions, Array.isArray(item.opinions_inhabitants) ? item.opinions_inhabitants.length : 0),
           String(item.seller) === String(userId) ? renderClearnetSwitch("market", item.rootId || item.id, isClearnet) : null,
-          renderDetailShare(item.id, `/market/${encodeURIComponent(item.id)}`, item.title),
+          renderDetailShare(item.id, `/market/${encodeURIComponent(item.id)}`, item.title, null, null, null, item.seller || item.author),
           tagsNode,
           statusRow,
           visibilityRow

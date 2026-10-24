@@ -1,9 +1,9 @@
 const { form, button, div, h2, p, section, table, thead, tr, th, td, a, tbody, input } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderModuleStats, paged } = require('./main_views');
+const { template, i18n, renderModuleStats, paged, relationFilterLabel } = require('./main_views');
 
 const getFilteredTags = (filter, tags) => {
   const filteredTags = Array.isArray(tags) ? [...tags] : [];
-  if (filter === 'top') return filteredTags.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  if (filter === 'top' || filter === 'supported' || filter === 'replicated') return filteredTags.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   if (filter === 'mine') return filteredTags.sort((a, b) => (b.mine || 0) - (a.mine || 0) || a.name.localeCompare(b.name));
   if (filter === 'recent') return filteredTags.sort((a, b) => (b.lastTs || 0) - (a.lastTs || 0));
   return filteredTags.sort((a, b) => a.name.localeCompare(b.name));
@@ -60,6 +60,8 @@ exports.tagsView = async (tags, filter, search = '') => {
           button({ type: 'submit', name: 'filter', value: 'all', class: filter === 'all' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterAll).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'recent', class: filter === 'recent' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterRecent).toUpperCase()),
           button({ type: 'submit', name: 'filter', value: 'mine', class: filter === 'mine' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterMine).toUpperCase()),
+          button({ type: 'submit', name: 'filter', value: 'supported', class: filter === 'supported' ? 'filter-btn active' : 'filter-btn' }, relationFilterLabel('supported')),
+          button({ type: 'submit', name: 'filter', value: 'replicated', class: filter === 'replicated' ? 'filter-btn active' : 'filter-btn' }, relationFilterLabel('replicated')),
           button({ type: 'submit', name: 'filter', value: 'cloud', class: filter === 'cloud' ? 'filter-btn active' : 'filter-btn' }, String(i18n.tagsFilterCloud).toUpperCase())
         )
       ),

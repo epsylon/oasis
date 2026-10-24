@@ -1,10 +1,10 @@
-const pull = require('../server/node_modules/pull-stream');
 const fs = require('fs');
 const path = require('path');
 const ssbDirOf = () => require('../server/ssb_config').path;
 const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
-const { readTyped, CONTENT_TYPES } = require('./typed_log');
+const { readTyped, readContentWindow, CONTENT_TYPES, logTip } = require('./typed_log');
+const { bucketEvents } = require('./banking_model');
 const { isComment } = require('./comments_model');
 const { versionGroups, versionEntry } = require('../backend/dedupe');
 const opinionCategories = require('../backend/opinion_categories');
@@ -66,7 +66,7 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
   };
 
   const types = [
-    'bookmark','event','task','votes','report','feed','project','industry','industryBlueprint',
+    'bookmark','event','task','votes','poll','report','feed','project','industry','industryBlueprint',
     'image','torrent','file','audio','video','document','transfer','post','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
     'pad','padEntry','room','roomMember','wikiPage','emergency','emergencyConfirm','emergencyUpdate','mailingList','logisticsRoute','logisticsRating','podcast','podcastEpisode','podcastPlay','campaign','campaignSignature','campaignUpdate','gameScore','calendar','calendarDate','calendarNote','log',
@@ -608,7 +608,7 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
 
     const totalsTs = allMsgs.map(m => m.value.timestamp || 0).filter(Boolean).sort((a, b) => a - b);
     const networkSpanDays = totalsTs.length >= 2 ? (totalsTs[totalsTs.length - 1] - totalsTs[0]) / 86400000 : 0;
-    const networkMsgsPerDay = networkSpanDays > 0 ? (allMsgs.length / networkSpanDays) : 0;
+    const networkMsgsPerDay = totalsTs.length ? (allMsgs.length / Math.max(1, networkSpanDays)) : 0;
 
     const addrMap = readAddrMap();
     const myAddress = addrMap[userId] || null;
@@ -690,6 +690,43 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
     return stats;
   };
 
-  return { getStats };
+  let chainCache = null;
+  const CHAIN_CACHE_MS = 60000;
+  const chainEvents = async (ssbClient) => {
+    const tip = await logTip(ssbClient).catch(() => null);
+    const limit = Number(getConfig().ssbLogStream?.limit) || 1000;
+    const cacheKey = `${tip}|${limit}`;
+    if (chainCache && chainCache.limit === limit && (chainCache.key === cacheKey || Date.now() - chainCache.at < CHAIN_CACHE_MS)) return chainCache.events;
+    const msgs = await readContentWindow(ssbClient, limit).catch(() => []);
+    const events = msgs
+      .filter(m => m && m.value && Number(m.value.timestamp) > 0)
+      .map(m => ({
+        ts: Number(m.value.timestamp),
+        author: m.value.author,
+        tomb: !!(m.value.content && typeof m.value.content === 'object' && m.value.content.type === 'tombstone'),
+        count: 1,
+        bytes: Buffer.byteLength(JSON.stringify(m.value), 'utf8')
+      }))
+      .sort((a, b) => a.ts - b.ts);
+    if (tip) chainCache = { key: cacheKey, limit, at: Date.now(), events };
+    return events;
+  };
+
+  const chainSeries = async (filter = 'ALL', range = 'today', explicit = false) => {
+    const ssbClient = await openSsb();
+    const all = await chainEvents(ssbClient);
+    const events = filter === 'MINE' ? all.filter(e => e.author === ssbClient.id) : filter === 'TOMBSTONE' ? all.filter(e => e.tomb) : all;
+    const usage = bucketEvents(events, range, explicit, ['count']);
+    const sizes = bucketEvents(events, range, explicit, ['bytes']);
+    const first = sizes.points.length ? sizes.points[0].ts : Infinity;
+    let running = events.reduce((acc, e) => e.ts < first ? acc + e.bytes : acc, 0);
+    const growth = { ...sizes, points: sizes.points.map(pt => { running += pt.bytes; return { ts: pt.ts, mb: Number((running / 1048576).toFixed(4)) }; }) };
+    const firstUse = usage.points.length ? usage.points[0].ts : Infinity;
+    let count = events.reduce((acc, e) => e.ts < firstUse ? acc + 1 : acc, 0);
+    const evolution = { ...usage, points: usage.points.map(pt => { count += pt.count; return { ts: pt.ts, total: count }; }) };
+    return { usage, growth, evolution };
+  };
+
+  return { getStats, chainSeries };
 };
 

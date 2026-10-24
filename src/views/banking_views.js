@@ -176,11 +176,11 @@ const renderChartBlock = (id, title, svg) =>
     )
   );
 
-const renderRangedChart = (id, title, filterName, range, hasAnyData, svg) => {
+const renderRangedChart = (id, title, filterName, range, hasAnyData, svg, base = "/banking") => {
   if (!hasAnyData) return null;
   return div({ class: "bank-eco-chart-block", id: `${id}-block` },
     h2({ class: "bank-eco-chart-title" }, title),
-    renderRangeTabs(filterName, range, `${id}-block`),
+    renderRangeTabs(filterName, range, `${id}-block`, base),
     svg ? a({ href: `#${id}`, id: `${id}-src`, class: "bank-eco-chart-zoom-link", title: i18n.bankChartZoomHint }, div({ class: "bank-eco-chart-canvas", [RAW_HTML]: svg })) : p({ class: "bank-chart-empty-note" }, i18n.bankChartNoDataYet),
     svg ? div({ id, class: "lightbox bank-eco-chart-lightbox" }, a({ href: `#${id}-src`, class: "lightbox-close" }, "\u00d7"), div({ class: "bank-eco-chart-canvas-zoom", [RAW_HTML]: svg })) : null
   );
@@ -241,9 +241,9 @@ const renderUbiCharts = (charts) => {
 
 const RANGES = ["today", "week", "month", "year", "5y", "all"];
 const rangeLabel = (r) => ({ today: i18n.bankRangeToday, week: i18n.bankRangeWeek, month: i18n.bankRangeMonth, year: i18n.bankRangeYear, "5y": i18n.bankRangeFiveYears, all: i18n.bankRangeAll })[r] || r;
-const renderRangeTabs = (filter, current, anchor) =>
+const renderRangeTabs = (filter, current, anchor, base = "/banking") =>
   div({ class: "bank-range-tabs" },
-    ...RANGES.map(r => a({ href: `/banking?filter=${filter}&range=${r}#${anchor}`, class: r === current ? "activity-chip active" : "activity-chip" }, String(rangeLabel(r)).toUpperCase()))
+    ...RANGES.map(r => a({ href: `${base}?filter=${encodeURIComponent(filter)}&range=${r}#${anchor}`, class: r === current ? "activity-chip active" : "activity-chip" }, String(rangeLabel(r)).toUpperCase()))
   );
 
 const renderValueChart = (history, range, hasAnyData) => {
@@ -902,4 +902,4 @@ const renderEpochView = (epoch, allocations, userId = "", data = {}) => {
   );
 };
 
-module.exports = { renderBankingView, renderSingleAllocationView, renderEpochView, bankingFlashText: flashText };
+module.exports = { renderBankingView, renderSingleAllocationView, renderEpochView, bankingFlashText: flashText, buildSeriesChartSvg, renderRangedChart, bucketLabel, bucketXLabels };

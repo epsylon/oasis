@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -52,10 +52,10 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "top", "products", "prices", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
+    ["all", "recent", "mine", "supported", "replicated", "top", "products", "prices", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/shops" },
         input({ type: "hidden", name: "filter", value: f }),
-        button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`shopFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
+        button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, (RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`shopFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
       )
     ),
     ...((currentFilter === "purchases" || !modesAvail || modesAvail.purchases !== false) ? [form({ method: "GET", action: "/shops/purchases" },
@@ -79,12 +79,12 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
       date: shop.createdAt,
       chips: [
         shop.visibility === "CLOSED"
-          ? renderStateChip("closed", "✗", i18n.shopClosed)
+          ? renderStateChip("hidden", "✗", i18n.shopClosed)
           : renderStateChip("mutuals", "✓", i18n.shopOpen),
         renderLifespanChip(shop.lifetime, i18n),
         shop.clearnet === true && clearnetEligible(shop) ? renderReachChip(true, i18n, clearnetItemHref('shops', shop.title, shop.key)) : null,
         shop.subscriptionIn === true
-          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
           : (shop.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
       ],
       spread: params.spreadMap && params.spreadMap.get(shop.key) || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined
@@ -194,7 +194,7 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       input({ type: "text", name: "tags", placeholder: i18n.shopTagsPlaceholder || "Enter tags separated by commas", value: Array.isArray(shop.tags) ? shop.tags.join(", ") : (shop.tags || "") }), br,
       showClearnet ? renderClearnetSelector(shop.clearnet === true || String(shop.clearnet || "") === "1", i18n) : null,
       br(),
-      button({ type: "submit" }, isEdit ? i18n.shopUpdate : i18n.shopCreate)
+      button({ type: "submit" }, isEdit ? i18n.save : i18n.shopCreate)
     )
   )
 }
@@ -228,7 +228,7 @@ const renderProductForm = (shopId, product = {}, isEdit = false, returnTo = "", 
         br(),
         br(),
       ]),
-      button({ type: "submit" }, isEdit ? i18n.shopUpdate : i18n.shopProductAdd)
+      button({ type: "submit" }, isEdit ? i18n.save : i18n.shopProductAdd)
     )
   )
 }
@@ -297,14 +297,14 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       date: shop.createdAt,
       chips: [
         shop.visibility === "CLOSED"
-          ? renderStateChip("closed", "✗", i18n.shopClosed)
+          ? renderStateChip("hidden", "✗", i18n.shopClosed)
           : renderStateChip("mutuals", "✓", i18n.shopOpen),
         shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
         renderLifespanChip(shop.lifetime, i18n),
         renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('shops', shop.title, shop.key) : null),
         shop.subscription
           ? ((isAuthor || shop.subscription.subscribed === true)
-              ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+              ? renderStateChip("transport", "✉", i18n.subscriptionOn)
               : renderStateChip("closed", "✉", i18n.subscriptionOff))
           : null
       ],
@@ -315,7 +315,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
     ),
     isAuthor && canClearnet ? renderClearnetSwitch('shops', shop.rootId || shop.key, isClearnet) : null,
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    renderDetailShare(shop.key, `/shops/${encodeURIComponent(shop.key)}`, shop.title, subscriptionOpts),
+    renderDetailShare(shop.key, `/shops/${encodeURIComponent(shop.key)}`, shop.title, subscriptionOpts, null, null, shop.author),
     shop.description ? p({ class: "tribe-side-description" }, ...renderStyledText(shop.description)) : null,
     table({ class: "tribe-info-table" },
       shop.location ? tr(
@@ -426,7 +426,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
       h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled)
     ),
     renderStarRating(product.opinions, safeArr(product.opinions_inhabitants).length),
-    renderDetailShare(product.key, `/shops/product/${encodeURIComponent(product.key)}`, product.title)
+    renderDetailShare(product.key, `/shops/product/${encodeURIComponent(product.key)}`, product.title, null, null, null, product.author)
   )
 
   const canBuy = !isAuthor && stock > 0
@@ -498,7 +498,7 @@ exports.editProductView = async (product, shopId, params = {}) => {
   )
 }
 
-const ORDER_STATUS_VARIANT = { PENDING: "whole", ACCEPTED: "mutuals", REJECTED: "closed", PAID: "mutuals", SHIPPED: "hidden", RECEIVED: "mutuals" }
+const ORDER_STATUS_VARIANT = { PENDING: "pending", ACCEPTED: "mutuals", REJECTED: "closed", PAID: "mutuals", SHIPPED: "pending", RECEIVED: "mutuals" }
 const orderStatusChip = (st) => {
   const s = String(st || "PENDING").toUpperCase()
   const labels = {

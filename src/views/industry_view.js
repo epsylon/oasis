@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -30,6 +30,8 @@ const FILTERS = [
   { key: "ALL", i18n: "industryFilterAll", title: "industryAllTitle" },
   { key: "RECENT", i18n: "industryFilterRecent", title: "industryRecentTitle" },
   { key: "MINE", i18n: "industryFilterMine", title: "industryMineTitle" },
+  { key: "SUPPORTED", i18n: "filterSupported", title: "industryAllTitle" },
+  { key: "REPLICATED", i18n: "filterReplicated", title: "industryAllTitle" },
   { key: "ACTIVE", i18n: "industryFilterActive", title: "industryActiveTitle" },
   { key: "PAUSED", i18n: "industryFilterPaused", title: "industryPausedTitle" },
   { key: "DISSOLVED", i18n: "industryFilterDissolved", title: "industryDissolvedTitle" },
@@ -77,9 +79,9 @@ const policyLabel = (key) => i18n[`industryPolicy_${key}`] || key
 const renderStatusChip = (status) => {
   const s = String(status || "ACTIVE").toUpperCase()
   const map = {
-    ACTIVE: ["whole", "🟢", i18n.industryStatusActive || "ACTIVE"],
-    PAUSED: ["half", "⏸", i18n.industryStatusPaused || "PAUSED"],
-    DISSOLVED: ["tombstoned", "⚰", i18n.industryStatusDissolved || "DISSOLVED"]
+    ACTIVE: ["mutuals", "🟢", i18n.industryStatusActive || "ACTIVE"],
+    PAUSED: ["pending", "⏸", i18n.industryStatusPaused || "PAUSED"],
+    DISSOLVED: ["hidden", "⚰", i18n.industryStatusDissolved || "DISSOLVED"]
   }
   const [variant, icon, text] = map[s] || map.ACTIVE
   return renderStateChip(variant, icon, text)
@@ -117,11 +119,11 @@ const renderFacilityList = exports.renderFacilityList = (facilities, filter, spr
       const chips = [
         renderStatusChip(fc.status),
         renderStateChip("whole", "🏭", sectorLabel(fc.sector)),
-        renderStateChip("half", "⚖", policyLabel(fc.membershipPolicy)),
-        isMember ? renderStateChip("whole", "★", i18n.industryMemberBadge || "MEMBER") : null,
+        renderStateChip("whole", "⚖", policyLabel(fc.membershipPolicy)),
+        isMember ? renderStateChip("transport", "★", i18n.industryMemberBadge || "MEMBER") : null,
         renderLifespanChip(fc.lifetime, i18n),
         fc.subscriptionIn === true
-          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
           : (fc.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
       ].filter(Boolean)
       return div({ class: "trending-card tribes-card industry-card" + (isOwn ? " own-content" : "") },
@@ -206,7 +208,7 @@ const renderFacilityForm = (facility, mode, spreadWarning = null) => {
       br(),
       input({ type: "number", name: "laborRate", min: "0", step: "0.01", value: fc.laborRate != null ? fc.laborRate : 0 }),
       br(),
-      button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Update facility") : (i18n.industryCreateButton || "Create facility"))
+      button({ type: "submit" }, isEdit ? i18n.save : (i18n.industryCreateButton || "Create facility"))
     )
   )
 }
@@ -219,8 +221,8 @@ const renderGlobalBlueprints = (blueprints, spreadMap = new Map()) => {
       renderCardTop(bp.id, "/industry/blueprint/" + encodeURIComponent(bp.id), {
         date: bp.createdAt,
         chips: [
-          renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
-          renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase())
+          renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
+          renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase())
         ],
         spread: spreadMap.get(bp.id) || null, author: bp.author, reportTitle: bp.name
       }),
@@ -275,8 +277,8 @@ const renderBuildCard = (b, opts = {}) => {
   const chips = [
     renderBuildStatusChip(b.status),
     ...((b.blueprintKind && opts.withBlueprintChips !== false) ? [
-      renderStateChip("half", b.blueprintKind === "digital" ? "💾" : "📦", i18n["industryKind_" + b.blueprintKind] || b.blueprintKind),
-      renderStateChip("half", "⚖", String(b.blueprintLicense || "copyleft").toUpperCase())
+      renderStateChip("whole", b.blueprintKind === "digital" ? "💾" : "📦", i18n["industryKind_" + b.blueprintKind] || b.blueprintKind),
+      renderStateChip("license", "⚖", String(b.blueprintLicense || "copyleft").toUpperCase())
     ] : [])
   ]
   const card = div({ class: "industry-blueprint-card" + (b.proposer === userId ? " own-content" : "") },
@@ -323,6 +325,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
     const m = x.key
     if (m === f) return true
     if (m === "MINE") return censusI.some(fc => String(fc.steward) === String(userId) || safeArr(fc.members).includes(userId))
+    if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusI)
     if (m === "ACTIVE" || m === "PAUSED" || m === "DISSOLVED") return censusI.some(fc => String(fc.status || "ACTIVE").toUpperCase() === m)
     if (m === "MEMBER") return censusI.some(fc => safeArr(fc.members).includes(userId))
     if (m === "RECENT") return censusI.length > 0
@@ -519,8 +522,8 @@ const renderBlueprintsSection = (fc, blueprints, isMember, spreadMap = new Map()
       renderCardTop(bp.id, `/industry/blueprint/${encodeURIComponent(bp.id)}`, {
         date: bp.createdAt,
         chips: [
-          renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
-          renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase())
+          renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
+          renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase())
         ],
         spread: spreadMap.get(bp.id) || null, author: bp.author, reportTitle: bp.name
       }),
@@ -566,7 +569,7 @@ const renderBlueprintForm = (fc, bp, mode, spreadWarning = null) => {
       br(), textarea({ name: "materialsText", rows: "3", placeholder: i18n.industryMaterialsPlaceholder || "solar-panel:2:120\nbattery:1:80\nkit:1:15" }, materialsText), br(),
       label(i18n.industryLaborHours || "Labor hours"),
       br(), input({ type: "number", name: "laborHours", min: "0", step: "0.01", value: bp.laborHours != null ? bp.laborHours : "" }), br(),
-      button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Edit") : (i18n.industryCreateBlueprintButton || "Create blueprint"))
+      button({ type: "submit" }, isEdit ? i18n.save : (i18n.industryCreateBlueprintButton || "Create blueprint"))
     )
   )
 }
@@ -591,7 +594,7 @@ const renderBuildForm = (fc, blueprints, build, mode, spreadWarning = null) => {
       br(), input({ type: "date", name: "endDate", required: true, value: b.endDate || "", min: today }), br(),
       label(i18n.industryBuildNotes || "Notes"),
       br(), textarea({ name: "notes", rows: "3" }, safeText(b.notes)), br(),
-      button({ type: "submit" }, isEdit ? (i18n.industryUpdateButton || "Edit") : (i18n.industryProposeBuildButton || "Propose build"))
+      button({ type: "submit" }, isEdit ? i18n.save : (i18n.industryProposeBuildButton || "Propose build"))
     )
   )
 }
@@ -614,7 +617,7 @@ const renderFacilityJobsSection = (fc, jobs) => {
   const rows = list.map((j) => li(
     a({ href: `/jobs/${encodeURIComponent(j.id || j.key)}` }, safeText(j.title) || (i18n.jobsTitle || "Job")),
     j.salary ? span({ class: "industry-hint" }, ` · ${j.salary} ECO · `) : span({ class: "industry-hint" }, " · "),
-    renderStateChip(String(j.status || "OPEN").toUpperCase() === "OPEN" ? "whole" : "tombstoned", "", String(j.status || "OPEN").toUpperCase())
+    renderStateChip(String(j.status || "OPEN").toUpperCase() === "OPEN" ? "mutuals" : "hidden", "", String(j.status || "OPEN").toUpperCase())
   ))
   return div({ class: "industry-section" },
     h2(i18n.industryJobs || "Jobs"),
@@ -628,12 +631,12 @@ const renderFacilityChips = (fc) => {
   const isOwner = String(fc.steward || fc.author) === String(userId)
   return [
     renderStateChip("whole", "🏭", sectorLabel(fc.sector)),
-    renderStateChip("half", "⚖", policyLabel(fc.membershipPolicy)),
+    renderStateChip("whole", "⚖", policyLabel(fc.membershipPolicy)),
     renderLifespanChip(fc.lifetime, i18n),
     renderEcoTax(fc.msgSize, fc.id || fc.key),
     (isSteward || isMember)
       ? ((isOwner || (fc.subscription && fc.subscription.subscribed === true))
-          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
           : renderStateChip("closed", "✉", i18n.subscriptionOff))
       : null
   ].filter(Boolean)
@@ -654,7 +657,7 @@ const renderFacilitySide = (fc, returnTo, params = {}, cardTop = null, subscript
     cardTop,
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/${encodeURIComponent(fc.id)}` }, safeText(fc.name) || (i18n.industryTitle || "Industry")))),
     fc.image ? renderMediaBlob(fc.image, { class: "tribe-detail-image" }) : null,
-    renderDetailShare(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, fc.name, subscriptionOpts),
+    renderDetailShare(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, fc.name, subscriptionOpts, null, null, fc.author),
     fc.description ? p({ class: "tribe-side-description" }, ...renderStyledText(safeText(fc.description))) : null,
     table({ class: "tribe-info-table" },
       tr(td({ class: "tribe-info-label" }, i18n.industryLaborRate || "Labor rate"), td({ class: "tribe-info-value", colspan: "3" }, `${fc.laborRate || 0} ECO/h`)),
@@ -768,8 +771,8 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
         renderCardTop(bp.id, returnTo, { arrow: false,
           date: bp.createdAt,
           chips: [
-            renderStateChip("half", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
-            renderStateChip("half", "⚖", String(bp.license || "copyleft").toUpperCase())
+            renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
+            renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase())
           ],
           bylineExtra: [renderEditedChip(bp.id, bp.rootId)],
           spread: params.spreads || null, author: bp.author, reportTitle: bp.name || bp.title
@@ -777,7 +780,7 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
         p({ class: "industry-facility-line" }, span({ class: "industry-meta-label" }, `${i18n.industryFacility || "Facility"}: `), a({ href: facilityHref }, safeText(bp.facilityName))),
         h2(safeText(bp.name)),
         bp.image ? div({ class: "shop-detail-media" }, renderMediaBlob(bp.image, { class: "post-image" })) : null,
-        renderDetailShare(bp.rootId || bp.id, returnTo, bp.name || bp.title),
+        renderDetailShare(bp.rootId || bp.id, returnTo, bp.name || bp.title, null, null, null, bp.author),
         bp.description ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(bp.description))) : null,
         renderBlueprintLaborHours(bp),
         safeArr(bp.materials).length ? div({ class: "industry-materials" }, ul({ class: "industry-materials-list" }, bp.materials.map(m => li(`${m.qty || 0} × ${safeText(m.item)}${m.price != null ? ` = ${m.price} ECO` : ""}`)))) : null,
@@ -955,7 +958,7 @@ exports.singleBuildView = async (build, params = {}) => {
       div({ class: "shop-detail" },
         renderCardTop(b.id, returnTo, { arrow: false, date: b.createdAt, chips: [renderBuildStatusChip(status)], spread: params.spreads || null, author: b.proposer, reportTitle: b.title }),
         b.image ? div({ class: "shop-detail-media" }, renderMediaBlob(b.image, { class: "post-image" })) : null,
-        renderDetailShare(b.id, returnTo, b.title),
+        renderDetailShare(b.id, returnTo, b.title, null, null, null, b.author),
         h2(safeText(b.title) || (i18n.industryBuild || "Build")),
       div({ class: "industry-meta" },
         b.blueprintName ? p(span({ class: "industry-meta-label" }, `${i18n.industryBlueprint || "Blueprint"}: `), safeText(b.blueprintName)) : null,

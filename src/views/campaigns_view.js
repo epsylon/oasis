@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -9,20 +9,20 @@ const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SIGNED", "TOP"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "SIGNED", "TOP"];
 const STATUSES = ["OPEN", "ACHIEVED", "CLOSED"];
 const CATEGORIES = ["ENVIRONMENT", "RIGHTS", "HEALTH", "EDUCATION", "INFRASTRUCTURE", "CULTURE", "ECONOMY", "OTHER"];
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
-const filterLabel = (f) => String(i18n[`campaignFilter${cap(f)}`] || f).toUpperCase();
+const filterLabel = (f) => RELATION_FILTERS.includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`campaignFilter${cap(f)}`] || f).toUpperCase();
 const statusLabel = (s) => String(i18n[`campaignStatus${cap(s)}`] || s).toUpperCase();
 const catLabel = (c) => String(i18n[`campaignCategory${cap(c)}`] || c).toUpperCase();
 const campaignHref = (cp) => `/campaigns/${encodeURIComponent(cp.id)}`;
 const fmt = (d) => moment(d).format("YYYY/MM/DD HH:mm");
 
-const statusChip = (cp) => renderStateChip(cp.closed ? "closed" : "mutuals", cp.closed ? "✗" : "✓", statusLabel(cp.closed ? "CLOSED" : "OPEN"));
+const statusChip = (cp) => renderStateChip(cp.closed ? "hidden" : "mutuals", cp.closed ? "✗" : "✓", statusLabel(cp.closed ? "CLOSED" : "OPEN"));
 const outcomeChip = (cp) => cp.closed ? renderStateChip(cp.achieved ? "mutuals" : "closed", cp.achieved ? "✓" : "✗", cp.achieved ? statusLabel("ACHIEVED") : String(i18n.campaignStatusUnachieved || "UNACHIEVED").toUpperCase()) : null;
-const categoryChip = (cp) => renderStateChip("neutral", "", catLabel(cp.category));
+const categoryChip = (cp) => renderStateChip("whole", "", catLabel(cp.category));
 const clearnetEligible = (cp) => String(cp.status || "OPEN").toUpperCase() !== "CLOSED" && !cp.tribeId && !cp.encrypted;
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
@@ -45,6 +45,7 @@ const campaignChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(c => String(c.author) === String(userId));
+  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
   if (mode === "SIGNED") return census.some(c => Array.isArray(c.signers) && c.signers.includes(userId));
   if (mode === "RECENT") return census.length > 0;
   if (mode === "TOP") return census.some(c => c.signatureCount > 0);
@@ -104,7 +105,7 @@ const renderForm = (cp) =>
       label(i18n.campaignTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.campaignTagsPlaceholder, value: cp ? cp.tags.join(", ") : "" }), br(), br(),
       ...(!cp || clearnetEligible(cp) ? [renderClearnetSelector(!!cp && cp.clearnet === true, i18n), br()] : []),
-      button({ type: "submit", class: "create-button" }, cp ? i18n.campaignUpdate : i18n.campaignCreate)
+      button({ type: "submit", class: "create-button" }, cp ? i18n.save : i18n.campaignCreate)
     )
   );
 
@@ -152,7 +153,7 @@ const renderSignatures = (cp) =>
 
 const renderUpdate = (cp, u, href, editing) =>
   div({ class: "campaign-update", id: `update-${encodeURIComponent(u.id)}` },
-    renderCardTop(null, null, { author: u.author, date: u.createdAt, chips: [u.edited ? renderStateChip("neutral", "", i18n.campaignUpdateEdited) : null] }),
+    renderCardTop(null, null, { author: u.author, date: u.createdAt, chips: [u.edited ? renderStateChip("whole", "", i18n.campaignUpdateEdited) : null] }),
     cp.isOwner
       ? div({ class: "emergency-update-head campaign-update-head" },
           div({ class: "tribe-side-actions emergency-update-actions" },
@@ -165,7 +166,7 @@ const renderUpdate = (cp, u, href, editing) =>
       ? form({ method: "POST", action: `/campaigns/updates/${encodeURIComponent(u.id)}/edit`, enctype: "multipart/form-data", class: "campaign-update-form" },
           textarea({ name: "text", rows: 3, required: true, autofocus: true }, u.text), br(),
           input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
-          button({ type: "submit", class: "create-button" }, i18n.campaignUpdate)
+          button({ type: "submit", class: "create-button" }, i18n.save)
         )
       : div({ class: "campaign-update-text" }, ...renderStyledText(u.text))
   );
@@ -206,7 +207,7 @@ exports.singleCampaignView = async (cp, params = {}) => {
     renderCardTop(cp.id, href, { arrow: false,
       date: cp.createdAt,
       chips: [
-        statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.proposalId ? renderStateChip("neutral", "⚖", String(i18n.campaignElevated).toUpperCase()) : null,
+        statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.proposalId ? renderStateChip("whole", "⚖", String(i18n.campaignElevated).toUpperCase()) : null,
         renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("campaigns", cp.title, cp.id) : null)
       ],
       bylineExtra: [renderEditedChip(cp.tipId, cp.rootId)],
@@ -214,7 +215,7 @@ exports.singleCampaignView = async (cp, params = {}) => {
     }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, cp.title)),
     cp.isOwner && canClearnet ? renderClearnetSwitch("campaigns", cp.rootId || cp.id, isClearnet) : null,
-    renderDetailShare(cp.id, href, cp.title, subscriptionOpts),
+    renderDetailShare(cp.id, href, cp.title, subscriptionOpts, null, null, cp.author),
     renderTags(cp.tags),
     statusRow
   );
@@ -238,6 +239,7 @@ exports.singleCampaignView = async (cp, params = {}) => {
       ? div({ class: "card-section campaign-sign" },
           h3(i18n.campaignSignTitle),
           form({ method: "POST", action: `/campaigns/sign/${encodeURIComponent(cp.id)}`, class: "campaign-sign-form" },
+            input({ type: 'hidden', name: 'returnTo', value: hereAt(cp.id) || '' }),
             textarea({ name: "text", rows: 3, maxlength: "500", placeholder: i18n.campaignSignPlaceholder }), br(), br(),
             button({ type: "submit", class: "create-button" }, i18n.campaignSign)
           )
@@ -245,7 +247,7 @@ exports.singleCampaignView = async (cp, params = {}) => {
       : null,
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     div({ class: "campaign-signed" },
-      cp.signed ? renderStateChip("mutuals", "✓", i18n.campaignSigned) : renderStateChip("closed", "✗", i18n.campaignNotSigned)
+      cp.signed ? renderStateChip("transport", "✓", i18n.campaignSigned) : renderStateChip("closed", "✗", i18n.campaignNotSigned)
     ),
     cp.canElevate
       ? div({ class: "tribe-side-actions campaign-elevate" }, form({ method: "POST", action: `/campaigns/elevate/${encodeURIComponent(cp.id)}` }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.campaignElevate).toUpperCase())))

@@ -1,24 +1,24 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { TEXT_CAP } = require('../backend/long_text');
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel } = require("./main_views");
 const { renderStyledText } = require("../backend/renderStyledText");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUBSCRIBED"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "SUBSCRIBED"];
 const TYPE_FILTERS = ["OPEN", "CLOSED"];
 const STATUS_FILTERS = ["ACTIVE", "ARCHIVED"];
 const HISTORY_MODES = ["DATE", "THREADS", "INHABITANTS"];
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
-const baseLabel = (f) => String(i18n[`mailingFilter${cap(f)}`] || f).toUpperCase();
+const baseLabel = (f) => RELATION_FILTERS.includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`mailingFilter${cap(f)}`] || f).toUpperCase();
 const typeLabel = (t) => String(i18n[`mailingType${cap(t)}`] || t).toUpperCase();
 const statusLabel = (s) => String(i18n[`mailingStatus${cap(s)}`] || s).toUpperCase();
 const historyLabel = (m) => String(i18n[`mailingHistory${cap(m)}`] || m).toUpperCase();
 
 const listHref = (list) => `/mailing/${encodeURIComponent(list.id)}`;
 
-const statusChip = (list) => renderStateChip(list.status === "ACTIVE" ? "mutuals" : "closed", list.status === "ACTIVE" ? "✓" : "✗", statusLabel(list.status));
+const statusChip = (list) => renderStateChip(list.status === "ACTIVE" ? "mutuals" : "hidden", list.status === "ACTIVE" ? "✓" : "✗", statusLabel(list.status));
 const countsLine = (list) => span({ class: "card-label activity-update-counts mailing-counts" }, `👥: ${list.participantCount || 0} · 💬 ${list.messageCount || 0}`);
 
 const subscribeForm = (list, returnTo) => {
@@ -49,6 +49,7 @@ const mailingChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(l => String(l.author) === String(userId));
+  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
   if (mode === "SUBSCRIBED") return census.some(l => l.isMember && String(l.author) !== String(userId));
   if (mode === "RECENT") return census.length > 0;
   if (mode === "OPEN") return census.some(l => !l.closed);
@@ -65,7 +66,7 @@ const renderArchiveItem = (list, params = {}) =>
       chips: [
         renderOpenClosedChip(list.listType, { statusChipOPEN: typeLabel("OPEN"), statusChipCLOSED: typeLabel("CLOSED") }),
         statusChip(list),
-        list.isMember && !list.isOwner ? renderStateChip("mutuals", "✉", i18n.subscriptionOn) : null
+        list.isMember && !list.isOwner ? renderStateChip("transport", "✉", i18n.subscriptionOn) : null
       ],
       author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: (params.spreadMap && params.spreadMap.get(list.id)) || null, deleteAction: String(list.author) === String(userId) ? contentDeleteAction("mailingList", list.id) : null
     }),
@@ -118,7 +119,7 @@ const renderForm = (list) =>
         : null,
       label(i18n.mailingTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.mailingTagsPlaceholder, value: list ? list.tags.join(", ") : "" }), br(), br(),
-      button({ type: "submit", class: "create-button" }, list ? i18n.mailingUpdate : i18n.mailingCreate)
+      button({ type: "submit", class: "create-button" }, list ? i18n.save : i18n.mailingCreate)
     )
   );
 
@@ -258,7 +259,7 @@ exports.singleMailingView = async (list, params = {}) => {
   const side = div({ class: "tribe-side" },
     renderCardTop(list.id, href, { arrow: false, date: list.createdAt, chips: [renderOpenClosedChip(list.listType, { statusChipOPEN: typeLabel("OPEN"), statusChipCLOSED: typeLabel("CLOSED") }), statusChip(list)], author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null, editAction: isAuthor ? `/mailing?filter=edit&id=${encodeURIComponent(list.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("mailingList", list.id) : null }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, list.title)),
-    renderDetailShare(list.id, href, list.title),
+    renderDetailShare(list.id, href, list.title, null, null, null, list.author),
     list.description ? p({ class: "tribe-side-description" }, ...renderStyledText(list.description)) : null,
     div({ class: "tribe-card-members" },
       span({ class: "tribe-members-count" }, `${i18n.mailingSubscribers}: ${list.participantCount || 0}`)

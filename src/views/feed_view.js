@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, paged, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, hasRelation, renderRelationFilters, RELATION_FILTERS, relationFilterLabel, hereAt } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -41,7 +41,7 @@ const generateFilterButtons = (filters, currentFilter, action, extra = {}) => {
       { method: "GET", action },
       input({ type: "hidden", name: "filter", value: mode }),
       ...hiddenInputs(extra),
-      button({ type: "submit", class: cur === mode ? "filter-btn active" : "filter-btn" }, String(i18n[mode + "Button"] || mode).toUpperCase())
+      button({ type: "submit", class: cur === mode ? "filter-btn active" : "filter-btn" }, RELATION_FILTERS.includes(mode.toLowerCase()) ? relationFilterLabel(mode.toLowerCase()) : String(i18n[mode + "Button"] || mode).toUpperCase())
     )
   );
 };
@@ -155,6 +155,7 @@ const renderFeedCard = exports.renderFeedCard = (feed, spreadMap = null, opts = 
                 canRefeed
                     ? form(
                         { method: "POST", action: refeedAction },
+                        input({ type: "hidden", name: "returnTo", value: hereAt(feed.key) || "" }),
                         button({ class: alreadyRefeeded ? "refeed-btn active" : "refeed-btn", type: "submit", title: i18n.refeedButton, "aria-label": i18n.refeedButton, ...(alreadyRefeeded ? { disabled: true } : {}) }, "▲")
                     )
                     : null
@@ -199,6 +200,7 @@ const feedChipFor = (filter, censusF) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusF)) return true;
   if (mode === "MINE") return censusF.some((f) => String(f && f.value && f.value.author) === String(config.keys.id));
+  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), censusF);
   if (mode === "RECENT") return censusF.length > 0;
   return true;
 };
@@ -240,7 +242,7 @@ exports.feedView = (feeds, opts = "ALL") => {
     successBanner,
     div(
       { class: "mode-buttons-row" },
-      ...(emptyMod ? [] : generateFilterButtons(["ALL", "RECENT", "MINE", "TOP"].filter(feedChip), filter, "/feed", extra)),
+      ...(emptyMod ? [] : generateFilterButtons(["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "TOP"].filter(feedChip), filter, "/feed", extra)),
       form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button filter-btn" }, i18n.createFeedTitle || "Create Feed"))
     ),
     emptyMod ? null : div(
@@ -318,6 +320,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
           button({ type: "submit", name: "filter", value: "ALL", class: "filter-btn" }, i18n.ALLButton || "ALL"),
           ...(feedChip("RECENT") ? [button({ type: "submit", name: "filter", value: "RECENT", class: "filter-btn" }, i18n.RECENTButton || "RECENT")] : []),
           ...(feedChip("MINE") ? [button({ type: "submit", name: "filter", value: "MINE", class: "filter-btn" }, i18n.MINEButton || "MINE")] : []),
+          ...renderRelationFilters("", feedChip, { upper: true }),
           button({ type: "submit", name: "filter", value: "TOP", class: "filter-btn" }, i18n.TOPButton || "TOP"),
           form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button" }, i18n.createFeedTitle || "Create Feed"))
         )
@@ -354,7 +357,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
                   tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
                 )
               : null,
-            renderDetailShare(feed.key, feedHref, safeText),
+            renderDetailShare(feed.key, feedHref, safeText, null, null, null, feed.value && feed.value.author),
             authorId && String(authorId) === String(me) ? renderClearnetSwitch("feed", feed.rootId || feed.key, isClearnet) : null
           )
         )

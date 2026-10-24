@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderCardTop, renderShareButton, renderCardMetaRow, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged } = require("./main_views");
+const { template, i18n, renderCardTop, renderShareButton, renderCardMetaRow, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, renderSupportButton, hereAt } = require("./main_views");
 const { getViewDetailsAction, commentHref, commentLabel } = require("./activity_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -47,7 +47,7 @@ const renderMentionCard = (item, readKeys, params = {}) => {
         )
       )
     ),
-    renderCardMetaRow(renderShareButton(item.id, href, item.title || item.text))
+    renderCardMetaRow(renderShareButton(item.id, href, item.title || item.text), renderSupportButton(item.author, null, hereAt(item.id)))
   );
 };
 

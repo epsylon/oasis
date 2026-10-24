@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, video: videoHyperaxe, table, tr, td } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, renderStateChip, renderCardTop, renderCardByline, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderEngagement, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderStateChip, renderCardTop, renderCardByline, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel } = require("./main_views");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -11,17 +11,17 @@ const userId = config.keys.id;
 const CATEGORIES = ["WEATHER", "INFRASTRUCTURE", "HEALTH", "SECURITY", "LOST", "NEIGHBORHOOD"];
 const SEVERITIES = ["UNVERIFIED", "LOW", "MEDIUM", "HIGH"];
 const STATUSES = ["ACTIVE", "RESOLVED", "EXPIRED"];
-const BASE_FILTERS = ["ALL", "RECENT", "MINE"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED"];
 const EXPIRES = ["1d", "3d", "7d", "30d"];
 
 const catLabel = (c) => String(i18n[`emergencyCategory${c.charAt(0) + c.slice(1).toLowerCase()}`] || c).toUpperCase();
 const sevLabel = (s) => String(i18n[`emergencySeverity${s.charAt(0) + s.slice(1).toLowerCase()}`] || s).toUpperCase();
 const statusLabel = (s) => String(i18n[`emergencyStatus${s.charAt(0) + s.slice(1).toLowerCase()}`] || s).toUpperCase();
-const baseLabel = (f) => String(i18n[`emergencyFilter${f.charAt(0) + f.slice(1).toLowerCase()}`] || f).toUpperCase();
+const baseLabel = (f) => RELATION_FILTERS.includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`emergencyFilter${f.charAt(0) + f.slice(1).toLowerCase()}`] || f).toUpperCase();
 
 const severityChip = (emergency) => span({ class: `emergency-severity emergency-severity-${String(emergency.severity || "UNVERIFIED").toLowerCase()}` }, `${sevLabel(emergency.severity)} · ${emergency.confirmationCount || 0}`);
-const statusChip = (emergency) => renderStateChip(emergency.status === "ACTIVE" ? "mutuals" : "closed", "", statusLabel(emergency.status));
-const categoryChip = (emergency) => renderStateChip("neutral", "", catLabel(emergency.category));
+const statusChip = (emergency) => renderStateChip(emergency.status === "ACTIVE" ? "mutuals" : "hidden", "", statusLabel(emergency.status));
+const categoryChip = (emergency) => renderStateChip("whole", "", catLabel(emergency.category));
 const clearnetEligible = (emergency) => String(emergency.status || "ACTIVE").toUpperCase() === "ACTIVE" && !emergency.tribeId && !emergency.encrypted;
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
@@ -45,6 +45,7 @@ const renderEmergencyCard = (emergency, params = {}) =>
 const chipVisible = (mode, filter, census) => {
   if (mode === filter || mode === "ALL") return true;
   if (mode === "MINE") return census.some(al => String(al.author) === String(userId));
+  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
   if (mode === "RECENT") return census.length > 0;
   if (STATUSES.includes(mode)) return census.some(al => al.status === mode);
   if (SEVERITIES.includes(mode)) return census.some(al => al.severity === mode);
@@ -93,7 +94,7 @@ const renderForm = (emergency, params = {}) =>
       label(i18n.emergencyTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.emergencyTagsPlaceholder, value: emergency ? emergency.tags.join(", ") : "" }), br(), br(),
       ...(!emergency || clearnetEligible(emergency) ? [renderClearnetSelector(!!emergency && emergency.clearnet === true, i18n), br()] : []),
-      button({ type: "submit", class: "create-button" }, emergency ? i18n.emergencyUpdate : i18n.emergencyCreate)
+      button({ type: "submit", class: "create-button" }, emergency ? i18n.save : i18n.emergencyCreate)
     )
   );
 
@@ -159,7 +160,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
   const side = div({ class: "tribe-side" },
     renderCardTop(emergency.id, href, { arrow: false, date: emergency.createdAt, chips: [severityChip(emergency), statusChip(emergency), categoryChip(emergency), renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("emergencies", emergency.title, emergency.id) : null)], author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: params.spread || null, returnTo: href, subscription: subscriptionOpts, editAction, deleteAction: isAuthor ? contentDeleteAction("emergency", emergency.id) : undefined }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, emergency.title)),
-    renderDetailShare(emergency.id, href, emergency.title, subscriptionOpts),
+    renderDetailShare(emergency.id, href, emergency.title, subscriptionOpts, null, null, emergency.author),
     isAuthor && canClearnet ? renderClearnetSwitch("emergencies", emergency.rootId || emergency.id, isClearnet) : null,
     renderTags(emergency.tags),
     statusRow
@@ -193,8 +194,8 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
             return div({ class: "emergency-update", id: `update-${encodeURIComponent(u.id)}` },
               div({ class: "emergency-update-head" },
               renderCardByline({ author: u.author, date: u.createdAt, chips: [
-                renderStateChip(u.confirmationCount > 0 ? "mutuals" : "neutral", "✓", `${i18n.emergencyConfirmations} · ${u.confirmationCount || 0}`),
-                u.edited ? renderStateChip("neutral", "", i18n.emergencyUpdateEdited) : null
+                renderStateChip(u.confirmationCount > 0 ? "mutuals" : "whole", "✓", `${i18n.emergencyConfirmations} · ${u.confirmationCount || 0}`),
+                u.edited ? renderStateChip("whole", "", i18n.emergencyUpdateEdited) : null
               ] }),
               div({ class: "tribe-side-actions emergency-update-actions" },
                 !mineUpdate && !confirmedUpdate && emergency.status === "ACTIVE"
@@ -213,7 +214,7 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
                 ? form({ method: "POST", action: `/emergencies/updates/${encodeURIComponent(u.id)}/edit`, enctype: "multipart/form-data", class: "emergency-update-form" },
                     textarea({ name: "text", rows: 3, required: true, autofocus: true }, u.text), br(),
                     input({ type: "file", name: "blob", accept: "image/*,video/*,audio/*,application/pdf,.torrent" }), br(), br(),
-                    button({ type: "submit", class: "create-button" }, i18n.emergencyUpdate)
+                    button({ type: "submit", class: "create-button" }, i18n.save)
                   )
                 : div({ class: "emergency-update-text" }, ...renderStyledText(u.text))
             );

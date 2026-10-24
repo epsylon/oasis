@@ -34,7 +34,7 @@ Private, hidden, closed, invite-only, paid or tribe content can never be CLEARNE
 
 Modules with a CLEARNET choice: audios, videos, images, documents, files, torrents, bookmarks, blogs, feed, wiki, podcasts, market, shops, school, jobs, events, projects, rooms, maps, calendars, emergencies, campaigns and housing. Some of them only when the item is open to everyone: rooms (OPEN rooms), maps (open maps, with the markers of every contributor), calendars (open), emergencies (active), campaigns (open) and housing (public).
 
-Content of a **public tribe** has its own reach level, chosen by its members: TRIBE, OASIS or CLEARNET. What they open to the CLEARNET is served on the tribe's page under `/c/tribe/…` and listed in the HUB with the public tribes. Private tribes never appear.
+Content of a **public tribe** has its own reach level, chosen by its members: TRIBE, OASIS or CLEARNET. CLEARNET is only offered for the kinds of content that also have it outside tribes. What they open to the CLEARNET is served on the tribe's page under `/c/tribe/…` and listed in the HUB with the public tribes. Private tribes never appear.
 
 Public pages show what the author published, never what other inhabitants added to it: confirmations, signatures, requests, attendees, votes and comments stay inside Oasis.
 

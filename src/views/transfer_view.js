@@ -1,6 +1,6 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { getConfig } = require('../configs/config-manager.js');
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -87,9 +87,9 @@ const formatBlockSize = (bytes) => {
 const renderTransferStatusChip = (status) => {
   const up = String(status || "").toUpperCase()
   const variant =
-    up === "CLOSED" ? "mutuals" :
+    up === "CLOSED" ? "hidden" :
     up === "DISCARDED" ? "closed" :
-    "whole"
+    "pending"
   const icon = up === "CLOSED" ? "✓" : up === "DISCARDED" ? "✗" : "↻"
   return renderStateChip(variant, icon, i18n[statusKey(up)] || up)
 }
@@ -107,7 +107,7 @@ const transferTitle = (t) => {
 }
 
 const renderTransferCategoryChip = (cat) =>
-  renderStateChip("encrypted", "", categoryLabel(cat))
+  renderStateChip("whole", "", categoryLabel(cat))
 
 const generateTransferCard = (transfer, filter, params = {}) => {
   const confirmedBy = safeArr(transfer.confirmedBy)
@@ -122,7 +122,7 @@ const generateTransferCard = (transfer, filter, params = {}) => {
 
   const chips = [
     renderTransferStatusChip(transfer.status),
-    isUbi ? renderStateChip("mutuals", "", "UBI") : null,
+    isUbi ? renderStateChip("whole", "", "UBI") : null,
     isExpired ? renderStateChip("closed", "⏰", i18n.transfersExpiredBadge) : null,
     renderLifespanChip(transfer.lifetime, i18n)
   ].filter(Boolean)
@@ -160,6 +160,7 @@ const trChipFor = (normalizedFilter, censusT) => (mode) => {
   if (!Array.isArray(censusT)) return true;
   const stT = (t) => String(t.status || "").toUpperCase()
   if (mode === "mine") return censusT.some(t => t.from === userId || t.to === userId)
+  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusT)
   if (mode === "recent") return censusT.length > 0
   if (mode === "mine-pending") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "UNCONFIRMED")
   if (mode === "mine-confirmed") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "CLOSED")
@@ -192,6 +193,8 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
   let filtered =
     normalizedFilter === "recent"      ? list.filter(t => (Date.parse(t.createdAt || "") || 0) >= Date.now() - 86400000) :
     normalizedFilter === "mine"        ? list.filter(t => t.from === userId || t.to === userId) :
+    normalizedFilter === "supported"   ? list.filter(t => t.isSupported) :
+    normalizedFilter === "replicated"  ? list.filter(t => t.isReplicated) :
     normalizedFilter === "mine-pending" ? list.filter(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "UNCONFIRMED") :
     normalizedFilter === "mine-confirmed" ? list.filter(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "CLOSED") :
     normalizedFilter === "ubi"         ? list.filter(t => safeArr(t.tags).some(tag => String(tag).toUpperCase() === "UBI")) :
@@ -263,6 +266,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
           ...(trChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: normalizedFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterRecent).toUpperCase())] : []),
           ...(trChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(normalizedFilter, trChip),
           ...(trChip("ubi") ? [button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUBI).toUpperCase())] : []),
           ...(trChip("economic") ? [button({ type: "submit", name: "filter", value: "economic", class: normalizedFilter === "economic" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterEconomic || (i18n.transfersCategoryEconomic || "ECONOMIC"))] : []),
           ...(trChip("time") ? [button({ type: "submit", name: "filter", value: "time", class: normalizedFilter === "time" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTime || (i18n.transfersCategoryTime || "TIME"))] : []),
@@ -352,7 +356,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
               input({ type: "text", name: "tags", value: safeArr(transferToEdit.tags).join(", ") }),
               br(),
               br(),
-              button({ type: "submit" }, normalizedFilter === "edit" ? i18n.transfersUpdateButton : i18n.transfersCreateButton)
+              button({ type: "submit" }, normalizedFilter === "edit" ? i18n.save : i18n.transfersCreateButton)
             )
           )
         : section(
@@ -410,7 +414,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
   const otherParty = transfer.from === userId ? transfer.to : transfer.from
   const chips = [
     renderTransferStatusChip(transfer.status),
-    isUbi ? renderStateChip("mutuals", "", "UBI") : null,
+    isUbi ? renderStateChip("whole", "", "UBI") : null,
     isExpired ? renderStateChip("closed", "⏰", i18n.transfersExpiredBadge) : null,
     renderLifespanChip(transfer.lifetime, i18n)
   ].filter(Boolean)
@@ -479,7 +483,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, transferTitle(transfer))
     ),
-    renderDetailShare(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, transfer.concept),
+    renderDetailShare(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, transfer.concept, null, null, null, transfer.from),
     tagsNode
   )
 
@@ -510,6 +514,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
           ...(trChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: normalizedFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterRecent).toUpperCase())] : []),
           ...(trChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(normalizedFilter, trChip),
           ...(trChip("ubi") ? [button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUBI).toUpperCase())] : []),
           ...(trChip("economic") ? [button({ type: "submit", name: "filter", value: "economic", class: normalizedFilter === "economic" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterEconomic || (i18n.transfersCategoryEconomic || "ECONOMIC"))] : []),
           ...(trChip("time") ? [button({ type: "submit", name: "filter", value: "time", class: normalizedFilter === "time" ? "filter-btn active" : "filter-btn" }, i18n.transfersFilterTime || (i18n.transfersCategoryTime || "TIME"))] : []),

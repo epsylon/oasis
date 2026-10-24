@@ -94,12 +94,14 @@ const buildVoteResults = (messages) => {
     const votes = {};
     for (const o of options) votes[o] = 0;
     const voters = [];
+    const choices = {};
     for (const b of [...latest.values()].sort((a, b) => a.ts - b.ts || a.seq - b.seq)) {
       votes[b.choice] = (votes[b.choice] || 0) + 1;
       voters.push(b.author);
+      choices[b.author] = b.choice;
     }
 
-    const result = { votes, voters, totalVotes: voters.length, creator, rootId: root, deadline, options };
+    const result = { votes, voters, choices, totalVotes: voters.length, creator, rootId: root, deadline, options };
     for (const k of keys) results.set(k, result);
   }
 
@@ -110,7 +112,7 @@ const buildVoteTally = (messages) => {
   const shared = new Map();
   const tallyByKey = new Map();
   for (const [k, r] of buildVoteResults(messages)) {
-    if (!shared.has(r)) shared.set(r, { votes: r.votes, voters: r.voters, totalVotes: r.totalVotes });
+    if (!shared.has(r)) shared.set(r, { votes: r.votes, voters: r.voters, choices: r.choices, totalVotes: r.totalVotes });
     tallyByKey.set(k, shared.get(r));
   }
   return tallyByKey;

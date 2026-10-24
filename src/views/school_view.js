@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
@@ -51,10 +51,10 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "top", "applied", "open", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
+    ["all", "recent", "mine", "supported", "replicated", "top", "applied", "open", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/school" },
         input({ type: "hidden", name: "filter", value: f }),
-        button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`schoolFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
+        button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, (RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`schoolFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
       )
     ),
     ]),
@@ -66,20 +66,20 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
 
 const renderPriceChip = (course) =>
   isFree(course)
-    ? renderStateChip("mutuals", "✓", i18n.schoolFree)
+    ? renderStateChip("whole", "✓", i18n.schoolFree)
     : span({ class: "price-chip" }, `${Number(course.price).toFixed(2)} ECO`)
 
 const renderCourseChips = (course, subscription = null) =>
   div({ class: "card-chips-row" },
     course.visibility === "INVITE" ? renderStateChip("whole", "\uD83D\uDD11", i18n.chatStatusInviteOnly) : null,
     course.status === "CLOSED"
-      ? renderStateChip("closed", "✗", i18n.schoolClosed)
-      : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
+      ? renderStateChip("hidden", "✗", i18n.schoolClosed)
+      : renderStateChip("pending", "✓", i18n.schoolOngoing),
     renderPriceChip(course),
     course.clearnet === true && clearnetEligible(course) ? renderReachChip(true, i18n, clearnetItemHref('school', course.title, course.id)) : null,
     subscription
       ? (subscription.in
-          ? renderStateChip("mutuals", "\u2709", i18n.subscriptionOn)
+          ? renderStateChip("transport", "\u2709", i18n.subscriptionOn)
           : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
       : null
   )
@@ -402,14 +402,14 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       chips: [
         course.visibility === "INVITE" ? renderStateChip("whole", "\uD83D\uDD11", i18n.chatStatusInviteOnly) : null,
         course.status === "CLOSED"
-          ? renderStateChip("closed", "✗", i18n.schoolClosed)
-          : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
+          ? renderStateChip("hidden", "✗", i18n.schoolClosed)
+          : renderStateChip("pending", "✓", i18n.schoolOngoing),
         renderPriceChip(course),
         renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('school', course.title, course.id) : null),
         courseApproved ? renderStateChip("mutuals", "🎓", i18n.schoolApproved) : null,
         params.subscription && (isTeacher || isStudent)
           ? ((isTeacher || params.subscription.subscribed === true)
-              ? renderStateChip("mutuals", "\u2709", i18n.subscriptionOn)
+              ? renderStateChip("transport", "\u2709", i18n.subscriptionOn)
               : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
           : null
       ],
@@ -429,7 +429,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
     isTeacher && canClearnet ? renderClearnetSwitch('school', course.rootId || course.id, isClearnet) : null,
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    renderDetailShare(course.id, returnTo, course.title, subscriptionOpts),
+    renderDetailShare(course.id, returnTo, course.title, subscriptionOpts, null, null, course.author),
     course.description ? p({ class: "tribe-side-description" }, ...renderStyledText(course.description)) : null,
     course.startDate
       ? table({ class: "tribe-info-table" },
@@ -459,7 +459,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       ? (myPending
           ? div({ class: "school-pending-block" },
               div({ class: "tribe-side-actions school-pending-row" },
-                renderStateChip("closed", "⧖", i18n.schoolPendingPayment)
+                renderStateChip("pending", "⧖", i18n.schoolPendingPayment)
               ),
               myPending.transferId
                 ? div({ class: "doc-export-actions" },
@@ -522,8 +522,8 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       ? div({ class: "tribe-side-actions shop-visibility-row" },
           span({ class: "card-label" }, `${i18n.schoolStatus}: `),
           course.status === "CLOSED"
-            ? renderStateChip("closed", "✗", i18n.schoolClosed)
-            : renderStateChip("mutuals", "✓", i18n.schoolOngoing),
+            ? renderStateChip("hidden", "✗", i18n.schoolClosed)
+            : renderStateChip("pending", "✓", i18n.schoolOngoing),
           form({ method: "POST", action: `/school/status/${encodeURIComponent(course.id)}`, class: "inline-form" },
             input({ type: "hidden", name: "returnTo", value: returnTo }),
             input({ type: "hidden", name: "status", value: course.status === "CLOSED" ? "ONGOING" : "CLOSED" }),
@@ -827,7 +827,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
     }),
     h2({ class: "tribe-card-title" }, a({ href: courseUrl }, course.title)),
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    renderDetailShare(lesson.id, lessonUrl, lesson.title || course.title),
+    renderDetailShare(lesson.id, lessonUrl, lesson.title || course.title, null, null, null, lesson.author || course.author),
     lesson.unit || lesson.sessionDate
       ? table({ class: "tribe-info-table" },
           lesson.unit ? tr(
@@ -865,7 +865,7 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
             input({ type: "number", name: "order", min: "0", step: "1", value: lesson.order != null ? String(lesson.order) : "" }), br(), br(),
             label(i18n.schoolSessionDate), br,
             input({ type: "datetime-local", name: "sessionDate", min: moment().format("YYYY-MM-DDTHH:mm"), value: lesson.sessionDate ? moment(lesson.sessionDate).format("YYYY-MM-DDTHH:mm") : "" }), br(), br(),
-            button({ type: "submit" }, i18n.chatUpdate)
+            button({ type: "submit" }, i18n.save)
           )
         )
       : div({ class: "school-lesson" },

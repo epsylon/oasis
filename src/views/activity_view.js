@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, paged, userLink, userLinkLabel, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref } = require('./main_views');
+const { template, herePath, i18n, paged, userLink, userLinkLabel, renderSupportButton, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref, RELATION_FILTERS, relationFilterLabel } = require('./main_views');
 const opinionCategories = require('../backend/opinion_categories');
 const { roomNumberOf } = require('../models/phone_number');
 
@@ -19,7 +19,8 @@ const OPINION_ROUTES = {
 };
 const moment = require("../server/node_modules/moment");
 const { renderStyledText, escapeHtml, safeExternalHref } = require('../backend/renderStyledText');
-const { letterOf } = require('./polls_view');
+const { renderPollInline, renderVotedChip, renderPollResultsField } = require('./polls_view');
+const { renderVoteInline, renderVoteVotedChip, renderVoteResultsField } = require('./vote_view');
 const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const { renderZoomableImage } = require('./gallery_view');
@@ -244,7 +245,7 @@ const tribeOpenedKey = (action) => {
 };
 const openedIn = (action, filter) => !!action && action.type === 'tribeOpened' && TRIBE_OPENED_FILTER[tribeOpenedKey(action)] === filter;
 
-const renderTribeOpenedCard = (action, date, authorName) => {
+const renderTribeOpenedCard = (action, date, authorName, following = null, returnTo = null) => {
   const c = action.content || {};
   const origin = c.tribeOrigin || {};
   const key = tribeOpenedKey(action);
@@ -273,9 +274,11 @@ const renderTribeOpenedCard = (action, date, authorName) => {
       media,
       bookmarkHref ? a({ href: bookmarkHref, target: '_blank', rel: 'noopener noreferrer' }, c.url) : null
     ),
-    origin.href ? renderCardMetaRow(renderShareButton(safeMsgId(action.id || action.key), origin.href, c.title || '')) : null
+    origin.href ? renderCardMetaRow(renderShareButton(safeMsgId(action.id || action.key), origin.href, c.title || ''), renderSupportButton(action.author, following, returnTo)) : null
   );
 };
+
+const cardAnchorOf = (action) => `act-${String((action && (action.id || action.key)) || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 24)}`;
 
 function renderActionCards(actions, userId, allActions, spreadMap = new Map(), extras = {}) {
   const all = Array.isArray(allActions) ? allActions : actions;
@@ -372,10 +375,12 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
   }
 
-  const cards = items.map(action => {
+  const baseExtras = extras;
+  const renderCardFor = (action, anchor) => {
+    const extras = { ...baseExtras, returnTo: `${String(baseExtras.returnTo || herePath() || '/activity').split('#')[0]}#${anchor}` };
     const date = action.ts ? moment(action.ts).format("YYYY/MM/DD HH:mm") : "";
     const type = action.type || 'unknown';
-    if (type === 'tribeOpened') return renderTribeOpenedCard(action, date, (action.authorNames && action.authorNames[action.author]) || getProfile(action.author).name);
+    if (type === 'tribeOpened') return renderTribeOpenedCard(action, date, (action.authorNames && action.authorNames[action.author]) || getProfile(action.author).name, extras.following, extras.returnTo);
     let skip = false;
     let headerText;
     if (type.startsWith('parliament')) {
@@ -416,58 +421,21 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     const cardBody = [];
 
     if (type === 'votes') {
-      const { question, deadline, status, votes, totalVotes } = content;
-
-      const votesList = votes && typeof votes === 'object'
-        ? Object.entries(votes).map(([option, count]) => ({ option, count }))
-        : [];
-      const voteOptionLabel = (opt) => { const k = String(opt).split('_').map((x) => x.charAt(0) + x.slice(1).toLowerCase()).join(''); return i18n['voteOption' + k] || i18n['vote' + k] || opt; };
-
-      const voteOutcome = (() => {
-        const totalNum = Number(totalVotes || 0);
-        const noResult = { text: i18n.voteNoQuorum || 'NO QUORUM', tone: 'none' };
-        if (totalNum < 2) return noResult;
-        const entries = Object.entries(votes || {}).filter(([o]) => o !== 'FOLLOW_MAJORITY');
-        const maxCount = entries.reduce((m, [, c]) => Math.max(m, Number(c) || 0), 0);
-        const top = entries.filter(([, c]) => (Number(c) || 0) === maxCount);
-        if (maxCount === 0 || top.length > 1) return noResult;
-        const w = top[0][0];
-        return { text: voteOptionLabel(w), tone: w === 'YES' ? 'yes' : w === 'NO' ? 'no' : 'none' };
-      })();
+      const { question, deadline, votes, totalVotes } = content;
+      const voteState = action.vote && typeof action.vote === 'object'
+        ? action.vote
+        : { id: action.id, options: Object.keys(votes || {}), votes: votes || {}, totalVotes: Number(totalVotes) || 0, status: content.status, readOnly: true };
 
       cardBody.push(
         div({ class: 'card-section votes' },
-          div(
-            { class: 'card-field' },
-            span({ class: 'card-label' }, i18n.question + ':'),
-            span({ class: 'card-value' }, question)
+          div({ class: 'card-field' },
+            span({ class: 'card-value' }, voteState.question || question || '')
           ),
-          div(
-            { class: 'card-field' },
+          deadline ? div({ class: 'card-field' },
             span({ class: 'card-label' }, i18n.deadline + ':'),
-            span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : '')
-          ),
-          div(
-            { class: 'card-field' },
-            span({ class: 'card-label' }, i18n.voteTotalVotes + ':'),
-            span({ class: 'card-value' }, totalVotes)
-          ),
-          div(
-            { class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.voteResults || 'Results') + ':'),
-            span({ class: `card-value vote-outcome vote-outcome-${voteOutcome.tone}` }, voteOutcome.text)
-          ),
-          process.env.OASIS_MOBILE === '1'
-            ? table({ class: 'block-info-table vote-results-table' },
-                ...votesList.map(({ option, count }) => tr(
-                  td({ class: 'card-label' }, voteOptionLabel(option)),
-                  td({ class: 'card-value' }, String(count))
-                ))
-              )
-            : table(
-                tr(...votesList.map(({ option }) => th(voteOptionLabel(option)))),
-                tr(...votesList.map(({ count }) => td(count)))
-              )
+            span({ class: 'card-value' }, moment(voteState.deadline || deadline).format("YYYY/MM/DD HH:mm"))
+          ) : null,
+          renderVoteInline(voteState, extras.returnTo || '/activity', 'va', { voteBeforeVoters: true, afterVoters: [renderVoteResultsField(voteState)] })
         )
       );
     }
@@ -889,7 +857,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                         : ''
                 )
             ),
-            renderCardMetaRow(renderShareButton(threadId, baseHref, titleText))
+            renderCardMetaRow(renderShareButton(threadId, baseHref, titleText), renderSupportButton(action.author, extras.following, extras.returnTo))
         );
     }
 
@@ -960,7 +928,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                     })()
                 )
             ),
-            renderCardMetaRow(renderShareButton(chatRoot, href, chatTitle))
+            renderCardMetaRow(renderShareButton(chatRoot, href, chatTitle), renderSupportButton(action.author, extras.following, extras.returnTo))
         );
     }
 
@@ -1429,35 +1397,24 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'poll') {
-      const options = Array.isArray(content.options) ? content.options : [];
-      const counts = (action.pollCounts && typeof action.pollCounts === 'object') ? action.pollCounts : {};
-      const voters = Number(action.pollVoters) || 0;
-      const pctOf = (opt) => (voters > 0 ? Math.round(((counts[opt] || 0) / voters) * 100) : 0);
-      const step = (opt) => Math.round(pctOf(opt) / 5) * 5;
+      const poll = action.poll && typeof action.poll === 'object'
+        ? action.poll
+        : {
+            id: action.id,
+            question: content.question || '',
+            options: Array.isArray(content.options) ? content.options : [],
+            counts: (action.pollCounts && typeof action.pollCounts === 'object') ? action.pollCounts : {},
+            totalVoters: Number(action.pollVoters) || 0,
+            myChoices: [],
+            readOnly: true,
+            multiple: content.multiple === true
+          };
       cardBody.push(
         div({ class: 'card-section poll' },
           div({ class: 'card-field' },
-            span({ class: 'card-value' }, content.question || '')
+            span({ class: 'card-value' }, poll.question || content.question || '')
           ),
-          options.length
-            ? table({ class: 'poll-results' },
-                ...options.map((opt, i) =>
-                  tr(
-                    td({ class: 'poll-result-option' }, `${letterOf(i)})`),
-                    td({ class: 'poll-result-bar' },
-                      div({ class: 'poll-bar' },
-                        div({ class: `poll-bar-fill poll-bar-fill-${step(opt)} poll-hue-${i % 8}` })
-                      )
-                    ),
-                    td({ class: 'poll-result-count' }, `${counts[opt] || 0} (${pctOf(opt)}%)`)
-                  )
-                )
-              )
-            : null,
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, `${i18n.pollVoters}: `),
-            span({ class: 'card-value' }, String(voters))
-          )
+          renderPollInline(poll, extras.returnTo || '/activity', 'pa', { voteBeforeVoters: true, afterVoters: poll.undecryptable ? null : [renderPollResultsField(poll)] })
         )
       );
     }
@@ -1530,7 +1487,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           div(
             p({ [RAW_HTML]: sanitizeHtml(msgHtml) })
           ),
-          renderEngagement(safeMsgId(action.tipId || action.id), null, null, { href: `/projects/${encodeURIComponent(action.tipId || action.id)}`, title: title || '' })
+          renderEngagement(safeMsgId(action.tipId || action.id), null, null, { href: `/projects/${encodeURIComponent(action.tipId || action.id)}`, title: title || '', author: action.author })
         );
       }
 
@@ -1879,7 +1836,9 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         chips: [div({ class: 'card-chips-row' },
           span({ class: 'pm-exposition-chip pm-exposition-whole' },
             span({ class: 'pm-exposition-text' }, String(headerText || type || '').replace(/^\[|\]$/g, ''))
-          )
+          ),
+          type === 'poll' ? renderVotedChip(action.poll) : null,
+          type === 'votes' && action.vote ? renderVoteVotedChip(action.vote) : null
         )],
         author: bylineAuthorId,
         contact: type === 'about',
@@ -1895,11 +1854,12 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       ...cardBody,
       (() => {
         const shareNode = detailHref ? renderShareButton(msgId, detailHref, (content && (content.title || content.question || content.concept || content.name)) || '') : null;
+        const supportNode = renderSupportButton(bylineAuthorId, extras.following, extras.returnTo);
         const commentTotal = typeof action.commentCount === 'number' ? action.commentCount : commentCountFor([action.id, action.rootId, action.key, msgId]);
         const commentsHref = !detailHref ? '' : commentOf(action) ? detailHref : commentsOpenHref(detailHref, commentTotal);
         const commentsNode = type !== 'about' ? renderCommentsSummary(commentsHref, commentTotal) : null;
         const routeFn = OPINION_TYPES.has(type) ? OPINION_ROUTES[type] : null;
-        if (!routeFn) return renderCardMetaRow(type !== 'about' && detailHref ? renderOpinionsPill(msgId, detailHref) : null, commentsNode, shareNode);
+        if (!routeFn) return renderCardMetaRow(type !== 'about' && detailHref ? renderOpinionsPill(msgId, detailHref) : null, commentsNode, shareNode, supportNode);
         const ops = (action.value?.content?.opinions) || (action.content?.opinions) || {};
         const opsTotal = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
         const votingNode = details({ class: 'opinions-voting-collapse' },
@@ -1909,14 +1869,21 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           div({ class: 'voting-buttons' },
             opinionCategories.map(cat =>
               form({ method: 'POST', action: `${routeFn(action.id)}/${cat}` },
+                input({ type: 'hidden', name: 'returnTo', value: extras.returnTo || '/activity' }),
                 button({ class: 'vote-btn' }, `${String(i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat).toUpperCase()} [${ops[cat] || 0}]`)
               )
             )
           )
         );
-        return [renderVotesSummary(ops), renderCardMetaRow(votingNode, commentsNode, shareNode)];
+        return [renderVotesSummary(ops), renderCardMetaRow(votingNode, commentsNode, shareNode, supportNode)];
       })()
     );
+  };
+  const cards = items.map(action => {
+    const anchor = cardAnchorOf(action);
+    const node = renderCardFor(action, anchor);
+    if (node && typeof node.setAttribute === 'function') node.setAttribute('id', anchor);
+    return node;
   });
 
   const filteredCards = cards.filter(Boolean);
@@ -2096,6 +2063,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'all',       label: i18n.allButton },
     { type: 'recent',    label: i18n.typeRecent },
     { type: 'mine',      label: i18n.mineButton },
+    { type: 'supported', label: i18n.filterSupported },
+    { type: 'replicated', label: i18n.filterReplicated },
     { type: 'top',       label: i18n.typeTop },
     { type: 'inhabitants', label: i18n.typeInhabitants },
     { type: 'tribe',     label: i18n.typeTribe },
@@ -2136,7 +2105,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'video',     label: i18n.typeVideo }
   ];
 
-  const FILTER_META = new Set(['all', 'mine', 'recent']);
+  const FILTER_META = new Set(['all', 'mine', 'supported', 'replicated', 'recent']);
   const ALLOWED_TYPES = new Set(['tribeOpened']);
   for (const { type } of activityTypes) {
     if (FILTER_META.has(type)) continue;
@@ -2149,6 +2118,9 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   let filteredActions;
   if (filter === 'mine') {
     filteredActions = actions.filter(action => action.author === userId && action.type !== 'tombstone');
+  } else if (filter === 'supported' || filter === 'replicated') {
+    const flag = filter === 'supported' ? 'isSupported' : 'isReplicated';
+    filteredActions = actions.filter(action => action[flag] && action.type !== 'tombstone');
   } else if (filter === 'recent') {
     const now = Date.now();
     filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
@@ -2267,32 +2239,70 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   }
 
   const MODULE_SUB_FILTERS = {
-    audio:   { url: '/audios',     filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
-    video:   { url: '/videos',     filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
-    image:   { url: '/images',     filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
-    document:{ url: '/documents',  filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
-    bookmark:{ url: '/bookmarks',  filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
-    torrent: { url: '/torrents',   filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
-    file: { url: '/files',   filters: ['all', 'recent', 'mine', 'top', 'favorites'] },
-    map:     { url: '/maps',       filters: ['all', 'recent', 'mine'] },
-    forum:   { url: '/forum',      filters: ['all', 'recent', 'mine', 'top'] },
-    event:   { url: '/events',     filters: ['all', 'recent', 'mine', 'top'] },
-    task:    { url: '/tasks',      filters: ['all', 'mine', 'assigned', 'open', 'closed'] },
-    votes:   { url: '/votes',      filters: ['all', 'recent', 'mine', 'top'] },
-    transfer:{ url: '/transfers',  filters: ['all', 'mine', 'pending', 'unconfirmed', 'closed'] },
-    market:  { url: '/market',     filters: ['all', 'mine', 'exchange', 'auctions', 'for sale', 'sold'] },
-    shop:    { url: '/shops',      filters: ['all', 'recent', 'mine'] },
-    job:     { url: '/jobs',       filters: ['ALL', 'MINE', 'REMOTE', 'PRESENCIAL', 'OPEN', 'CLOSED'] },
-    project: { url: '/projects',   filters: ['all', 'mine', 'active', 'completed'] },
-    industry:{ url: '/industry',   filters: ['ALL', 'MINE', 'ACTIVE', 'PAUSED', 'DISSOLVED', 'BLUEPRINTS', 'BUILDS', 'MEMBER', 'RULES'] },
-    chat:    { url: '/chats',      filters: ['all', 'mine'] },
-    pad:     { url: '/pads',       filters: ['all', 'mine'] },
-    calendar:{ url: '/calendars',  filters: ['all', 'mine'] },
-    report:  { url: '/reports',    filters: ['all', 'recent', 'mine'] },
+    audio:   { url: '/audios',     filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
+    video:   { url: '/videos',     filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
+    image:   { url: '/images',     filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
+    document:{ url: '/documents',  filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
+    bookmark:{ url: '/bookmarks',  filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
+    torrent: { url: '/torrents',   filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
+    file: { url: '/files',   filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
+    map:     { url: '/maps',       filters: ['all', 'recent', 'mine', 'supported', 'replicated'] },
+    forum:   { url: '/forum',      filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top'] },
+    event:   { url: '/events',     filters: ['all', 'recent', 'mine', 'supported', 'replicated'] },
+    task:    { url: '/tasks',      filters: ['all', 'mine', 'supported', 'replicated', 'assigned', 'open', 'closed'] },
+    votes:   { url: '/votes',      filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'open', 'closed'] },
+    transfer:{ url: '/transfers',  filters: ['all', 'mine', 'supported', 'replicated', 'pending', 'unconfirmed', 'closed'] },
+    market:  { url: '/market',     filters: ['all', 'mine', 'supported', 'replicated', 'exchange', 'auctions', 'for sale', 'sold'] },
+    shop:    { url: '/shops',      filters: ['all', 'recent', 'mine', 'supported', 'replicated'] },
+    job:     { url: '/jobs',       filters: ['ALL', 'MINE', 'SUPPORTED', 'REPLICATED', 'REMOTE', 'PRESENCIAL', 'OPEN', 'CLOSED'] },
+    project: { url: '/projects',   filters: ['all', 'mine', 'supported', 'replicated', 'active', 'completed'] },
+    industry:{ url: '/industry',   filters: ['ALL', 'MINE', 'SUPPORTED', 'REPLICATED', 'ACTIVE', 'PAUSED', 'DISSOLVED', 'BLUEPRINTS', 'BUILDS', 'MEMBER', 'RULES'] },
+    chat:    { url: '/chats',      filters: ['all', 'mine', 'supported', 'replicated'] },
+    pad:     { url: '/pads',       filters: ['all', 'mine', 'supported', 'replicated'] },
+    calendar:{ url: '/calendars',  filters: ['all', 'mine', 'supported', 'replicated'] },
+    report:  { url: '/reports',    filters: ['all', 'recent', 'mine', 'supported', 'replicated'] },
     curriculum:{ url: '/cv',       filters: ['view', 'edit'] }
   };
 
+  const SUB_LABEL_PREFIX = { audio: 'audioFilter', video: 'videoFilter', image: 'imageFilter', document: 'documentFilter', bookmark: 'bookmarkFilter', torrent: 'torrentFilter', file: 'fileFilter', map: 'mapFilter', forum: 'forumFilter', event: 'eventFilter', task: 'taskFilter', votes: 'voteFilter', transfer: 'transfersFilter', market: 'marketFilter', shop: 'shopFilter', job: 'jobsFilter', project: 'projectFilter', industry: 'industryFilter', chat: 'chatFilter', pad: 'padFilter', calendar: 'calendarFilter', report: 'reportsFilter' };
+  const SUB_LABEL_KEY = { 'market:exchange': 'marketFilterItems' };
+  const subLabel = (f) => {
+    const m = String(f).toLowerCase();
+    if (RELATION_FILTERS.includes(m)) return relationFilterLabel(m);
+    const key = SUB_LABEL_KEY[`${filter}:${m}`] || `${SUB_LABEL_PREFIX[filter] || ''}${m.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')}`;
+    return String(i18n[key] || f).toUpperCase();
+  };
+  const subItems = (() => {
+    const kinds = new Set(filter === 'votes' ? ['votes'] : (GROUP_SUBTYPES[filter] || [filter]));
+    return actions.filter(a2 => kinds.has(a2.type) && !commentOf(a2));
+  })();
+  const subHas = (f) => {
+    const m = String(f).toLowerCase();
+    const cOf = (a2) => a2.value?.content || a2.content || {};
+    const st = (a2) => String(cOf(a2).status || '').toUpperCase();
+    const favIndex = extras.favIndex instanceof Map ? extras.favIndex : null;
+    switch (m) {
+      case 'all': case 'view': case 'edit': case 'rules': return true;
+      case 'recent': return subItems.some(a2 => a2.ts && Date.now() - a2.ts < 86400000);
+      case 'mine': return subItems.some(a2 => a2.author === userId);
+      case 'supported': return subItems.some(a2 => a2.isSupported);
+      case 'replicated': return subItems.some(a2 => a2.isReplicated);
+      case 'top': return subItems.length > 0;
+      case 'favorites': return !!favIndex && subItems.some(a2 => [a2.id, a2.rootId, a2.key].some(k => k && favIndex.has(String(k))));
+      case 'assigned': return subItems.some(a2 => (Array.isArray(cOf(a2).assignees) ? cOf(a2).assignees : []).includes(userId));
+      case 'pending': return subItems.some(a2 => st(a2) === 'UNCONFIRMED' && cOf(a2).to === userId);
+      case 'unconfirmed': return subItems.some(a2 => st(a2) === 'UNCONFIRMED');
+      case 'exchange': return subItems.some(a2 => cOf(a2).item_type === 'exchange' && st(a2) === 'FOR SALE');
+      case 'auctions': return subItems.some(a2 => cOf(a2).item_type === 'auction' && st(a2) === 'FOR SALE');
+      case 'remote': case 'presencial': return subItems.some(a2 => String(cOf(a2).location || '').toUpperCase() === m.toUpperCase());
+      case 'blueprints': return subItems.some(a2 => a2.type === 'industryBlueprint');
+      case 'builds': return subItems.some(a2 => a2.type === 'industryBuild');
+      case 'member': return subItems.some(a2 => (Array.isArray(cOf(a2).members) ? cOf(a2).members : []).includes(userId) || cOf(a2).steward === userId);
+      default: return subItems.some(a2 => st(a2) === m.toUpperCase());
+    }
+  };
   const sub = MODULE_SUB_FILTERS[filter];
+  const subFilters = sub ? sub.filters.filter(subHas) : [];
   const emptyAct = actions.length === 0 && !qs;
 
   let html = template(
@@ -2305,7 +2315,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
       emptyAct ? null : div({ class: 'activity-filter-chips' },
         (() => {
           const ORDER = [
-            'all', 'recent', 'mine', 'top',
+            'all', 'recent', 'mine', 'supported', 'replicated', 'top',
             'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts', 'emergency',
             'votes', 'event', 'calendar', 'task', 'report', 'campaign',
             'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'logistics',
@@ -2317,7 +2327,10 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
           const presentActionTypes = new Set(actions.map(a2 => a2.type));
           const metaKeep = new Set(['all', 'mine', 'recent', 'top']);
           const hasContentFor = (type) =>
-            metaKeep.has(type) || (GROUP_SUBTYPES[type] || [type]).some(t2 => presentActionTypes.has(t2));
+            metaKeep.has(type)
+            || (type === 'supported' ? (filter === type || actions.some(a2 => a2.isSupported))
+              : type === 'replicated' ? (filter === type || actions.some(a2 => a2.isReplicated))
+              : (GROUP_SUBTYPES[type] || [type]).some(t2 => presentActionTypes.has(t2)));
           const ordered = ORDER.map(type => byType.get(type)).filter(Boolean)
             .concat(activityTypes.filter(t => !placed.has(t.type)))
             .filter(({ type }) => hasContentFor(type));
@@ -2331,8 +2344,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
       ),
       emptyAct ? null : div({ class: 'activity-filter-chips activity-toolbar-row' },
         renderModuleStats(filteredActions.length, [], null, { showInhabitants: true, showTribes: true }),
-        sub ? span({ class: 'activity-subchip-label' }, '\u21b3') : '',
-        sub ? sub.filters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'activity-chip' }, String(f).toUpperCase())) : '',
+        subFilters.length ? span({ class: 'activity-subchip-label' }, '\u21b3') : '',
+        subFilters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'activity-chip' }, subLabel(f))),
         form({ method: 'GET', action: '/activity', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: qs, placeholder: i18n.activitySearchPlaceholder, class: 'filter-box__input' }),

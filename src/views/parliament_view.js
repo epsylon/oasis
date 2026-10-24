@@ -1,14 +1,14 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, ul, li, img } = require('../server/node_modules/hyperaxe');
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, paged, renderEngagement, renderCardTop } = require('./main_views');
+const { template, i18n, userLink, paged, renderEngagement, renderCardTop, hereAt } = require('./main_views');
 const { renderStyledText } = require('../backend/renderStyledText');
 const { renderCommentsSection } = require('./comments_view');
 
 const commentsBlock = (comments, item, returnTo, title) => {
   const root = item && item.rootId;
   const commentsNode = root && comments instanceof Map ? renderCommentsSection({ action: `/parliament/comments/${encodeURIComponent(root)}`, comments: comments.get(root) || [], returnTo }) : null;
-  return renderEngagement(root || (item && item.id), null, commentsNode, { href: returnTo, title });
+  return renderEngagement(root || (item && item.id), null, commentsNode, { href: returnTo, title, author: item && (item.author || item.proposer) });
 };
 
 const parliamentTop = (item, href, date) => renderCardTop(null, href, { author: item.proposer, date: date || item.createdAt });
@@ -431,7 +431,7 @@ const CandidaturesTable = (candidatures) => {
       td({ class: 'nowrap', 'data-label': i18n.parliamentThMethod }, c.method),
       td({ 'data-label': i18n.parliamentThKarma }, c.targetType === 'inhabitant' ? String(c.karma || 0) : '-'),
       td({ 'data-label': i18n.parliamentThSupports }, span({ class: 'candidature-votes-count' }, String(c.votes || 0))),
-      td({ 'data-label': '' }, form({ method: 'POST', action: `/parliament/candidatures/${encodeURIComponent(c.id)}/vote` }, button({ class: 'vote-btn' }, i18n.parliamentVoteBtn)))
+      td({ 'data-label': '' }, form({ method: 'POST', action: `/parliament/candidatures/${encodeURIComponent(c.id)}/vote` }, input({ type: 'hidden', name: 'returnTo', value: hereAt(c.id) || '' }), button({ class: 'vote-btn' }, i18n.parliamentVoteBtn)))
     );
   });
   return div(

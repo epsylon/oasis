@@ -16,10 +16,15 @@ const isLocalPath = (value) => {
 
 const SHARED_RETURN_PAGES = ['/activity', '/agenda', '/search', '/trending', '/favorites', '/opinions', '/mentions', '/melody', '/author', '/inhabitant', '/tribe'];
 const isSharedReturnPage = (rt) => SHARED_RETURN_PAGES.some(p => rt === p || (rt.startsWith(p) && /^[?#/]/.test(rt.slice(p.length))));
+const pathOnly = (value) => String(value || '').split('#')[0].split('?')[0];
+const comesBackHere = (ctx, rt) => {
+  const ref = refererPath(ctx?.request?.header?.referer, ctx?.host);
+  return !!ref && pathOnly(ref) === pathOnly(rt);
+};
 const safeReturnTo = (ctx, fallback, allowedPrefixes) => {
   const rt = ctx?.request?.body?.returnTo || ctx?.query?.returnTo;
   if (!isLocalPath(rt)) return fallback;
-  if (isSharedReturnPage(rt)) return rt;
+  if (isSharedReturnPage(rt) || comesBackHere(ctx, rt)) return rt;
   return Array.isArray(allowedPrefixes) && allowedPrefixes.some(p => rt.startsWith(p)) ? rt : fallback;
 };
 
@@ -36,6 +41,8 @@ const refererPath = (referer, host) => {
 };
 
 const safeRefererRedirect = (ctx, fallback = '/') => {
+  const rt = ctx?.request?.body?.returnTo || ctx?.query?.returnTo;
+  if (isLocalPath(rt) && (isSharedReturnPage(rt) || comesBackHere(ctx, rt))) { ctx.redirect(rt); return; }
   const target = refererPath(ctx.request.header.referer, ctx.host);
   ctx.redirect(target || fallback);
 };

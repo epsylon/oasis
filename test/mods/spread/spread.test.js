@@ -359,3 +359,44 @@ describe('spread: what the button says', (t) => {
     ok(many.includes(`title="${String(i18n.spreadContent)}"`), 'the tooltip stays the same whoever spread it');
   });
 });
+
+describe('spreads.ownTargets', (t) => {
+  t('keeps only what I replicate, never what others replicate', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const one = await A.use('audios').createAudio('[a](&b.sha256)', [], 'one', 'd', '');
+    const two = await A.use('audios').createAudio('[a](&c.sha256)', [], 'two', 'd', '');
+    B.setActor();
+    await publishSpread(await B.cooler.open(), one.key);
+    A.setActor();
+    await publishVoteBranch(await A.cooler.open(), two.key);
+    const mine = await mainModelsFactory({ cooler: A.cooler, isPublic: false }).spreads.ownTargets();
+    ok(mine.has(two.key), 'a replica made with the old vote form counts');
+    ok(!mine.has(one.key), 'what somebody else replicates is not mine');
+    B.setActor();
+    const theirs = await mainModelsFactory({ cooler: B.cooler, isPublic: false }).spreads.ownTargets();
+    ok(theirs.has(one.key) && !theirs.has(two.key), 'each inhabitant sees their own replicas');
+  });
+
+  t('a replica I withdrew is no longer listed', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const audio = await A.use('audios').createAudio('[a](&b.sha256)', [], 'T', 'd', '');
+    const ssb = await A.cooler.open();
+    const spreadMsg = await publishSpread(ssb, audio.key);
+    ok((await mainModelsFactory({ cooler: A.cooler, isPublic: false }).spreads.ownTargets()).has(audio.key));
+    await new Promise((res, rej) => ssb.publish({ type: 'tombstone', target: spreadMsg.key, deletedAt: new Date().toISOString(), author: ssb.id }, (e) => e ? rej(e) : res()));
+    ok(!(await mainModelsFactory({ cooler: A.cooler, isPublic: false }).spreads.ownTargets()).has(audio.key));
+  });
+
+  t('replicating and withdrawing from this node refreshes the list at once', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const audio = await A.use('audios').createAudio('[a](&b.sha256)', [], 'T', 'd', '');
+    const main = mainModelsFactory({ cooler: A.cooler, isPublic: false });
+    ok(!(await main.spreads.ownTargets()).has(audio.key));
+    const spreadMsg = await publishSpread(await A.cooler.open(), audio.key);
+    main.spreads.noteOwnSpread(audio.key, spreadMsg.key);
+    ok((await main.spreads.ownTargets()).has(audio.key), 'listed right after replicating');
+    main.spreads.noteOwnTombstone(spreadMsg.key);
+    ok(!(await main.spreads.ownTargets()).has(audio.key), 'gone right after withdrawing');
+  });
+});

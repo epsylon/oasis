@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, br, input, table, tr, th, td, video: videoHyperaxe, audio: audioHyperaxe, span, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderCardTop, renderShareButton, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderCommentsSummary, commentsOpenHref, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument } = require('./main_views');
+const { template, i18n, renderCardTop, renderShareButton, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderCommentsSummary, commentsOpenHref, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument, hasRelation, RELATION_FILTERS, relationFilterLabel, renderSupportButton, hereAt } = require('./main_views');
 const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
@@ -19,7 +19,7 @@ const filterButton = (mode, currentFilter) =>
     input({ type: 'hidden', name: 'filter', value: mode }),
     button(
       { type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' },
-      String(i18n[mode + 'Button'] || typeLabel(mode)).toUpperCase()
+      RELATION_FILTERS.includes(mode.toLowerCase()) ? relationFilterLabel(mode.toLowerCase()) : String(i18n[mode + 'Button'] || typeLabel(mode)).toUpperCase()
     )
   );
 
@@ -302,7 +302,8 @@ const renderTrendingCard = (item, votes, categories, seenTitles, spreadMap = new
         )
       ),
       renderCommentsSummary(commentsOpenHref(detailHref, commentTotal), commentTotal),
-      renderShareButton(item.key, detailHref, shareTitle)
+      renderShareButton(item.key, detailHref, shareTitle),
+      renderSupportButton(item.value && item.value.author, null, hereAt(item.key))
     )
   );
 };
@@ -311,7 +312,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   const seenDocumentTitles = new Set();
   const title = i18n.trendingTitle;
 
-  const baseFilters = ['ALL', 'RECENT', 'MINE', 'TOP'];
+  const baseFilters = ['ALL', 'RECENT', 'MINE', 'SUPPORTED', 'REPLICATED', 'TOP'];
   const contentFilters = [
     ['votes', 'event', 'task', 'report'],
     ['feed', 'post', 'project', 'industry', 'shopProduct', 'transfer'],
@@ -327,9 +328,12 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
   const censusItems = Array.isArray(allItems) ? allItems : filteredItems;
   const presentTypes = new Set(censusItems.map(item => (item.value?.content || item.content || {}).type).filter(Boolean));
   const emptyTrend = censusItems.length === 0 && !String(q || '').trim();
+  const shownBase = baseFilters.filter(mode => !RELATION_FILTERS.includes(mode.toLowerCase()) || mode === filter || hasRelation(mode.toLowerCase(), censusItems));
 
   if (filter === 'MINE') {
     filteredItems = filteredItems.filter(item => item.value.author === userId);
+  } else if (filter === 'SUPPORTED' || filter === 'REPLICATED') {
+    filteredItems = filteredItems.filter(item => filter === 'SUPPORTED' ? item.isSupported : item.isReplicated);
   } else if (filter === 'RECENT') {
     const now = Date.now();
     filteredItems = filteredItems.filter(item => now - item.value.timestamp < 24 * 60 * 60 * 1000);
@@ -381,7 +385,7 @@ exports.trendingView = (items, filter, categories = opinionCategories, spreadMap
       header,
       emptyTrend ? null : div(
         { class: 'mode-buttons' },
-        div({ class: 'column' }, baseFilters.map(mode => filterButton(mode, filter))),
+        div({ class: 'column' }, shownBase.map(mode => filterButton(mode, filter))),
         ...contentFilters.map(row => {
           const visible = row.filter(mode => presentTypes.has(mode) || (mode === 'votes' && presentTypes.has('poll')));
           return visible.length ? div({ class: 'column' }, visible.map(mode => filterButton(mode, filter))) : null;

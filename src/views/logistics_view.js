@@ -1,5 +1,5 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views");
+const { template, i18n, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -7,7 +7,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "BOOKED", "HISTORY", "TOP"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "BOOKED", "HISTORY", "TOP"];
 const KIND_FILTERS = ["TRIPS", "SHIPMENTS"];
 const MODE_FILTERS = ["OFFERS", "REQUESTS"];
 const DATE_FILTERS = ["UPCOMING", "PAST", "CLOSED"];
@@ -18,7 +18,7 @@ const RECURRENCES = ["NONE", "DAILY", "WEEKLY", "MONTHLY"];
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const lbl = (prefix, v) => String(i18n[`logistics${prefix}${cap(v)}`] || v).toUpperCase();
-const filterLabel = (f) => lbl("Filter", f);
+const filterLabel = (f) => RELATION_FILTERS.includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : lbl("Filter", f);
 const kindLabel = (k) => lbl("Kind", k);
 const modeLabel = (m) => lbl("Mode", m);
 const statusLabel = (s) => lbl("Status", s);
@@ -36,10 +36,10 @@ const priceText = (route) => {
   return priceLabel("FREE");
 };
 
-const kindChip = (route) => renderStateChip("neutral", route.kind === "TRIP" ? "🚗" : "📦", kindLabel(route.kind));
-const modeChip = (route) => renderStateChip(route.mode === "OFFER" ? "mutuals" : "whole", "", modeLabel(route.mode));
-const statusChip = (route) => renderStateChip(route.status === "OPEN" ? "mutuals" : (route.status === "PAST" ? "whole" : "closed"), route.status === "OPEN" ? "✓" : (route.status === "CLOSED" ? "✗" : ""), statusLabel(route.status));
-const priceChip = (route) => renderStateChip("neutral", "", priceText(route));
+const kindChip = (route) => renderStateChip("whole", route.kind === "TRIP" ? "🚗" : "📦", kindLabel(route.kind));
+const modeChip = (route) => renderStateChip("whole", "", modeLabel(route.mode));
+const statusChip = (route) => renderStateChip(route.status === "OPEN" ? "mutuals" : "hidden", route.status === "OPEN" ? "✓" : (route.status === "CLOSED" ? "✗" : ""), statusLabel(route.status));
+const priceChip = (route) => renderStateChip("whole", "", priceText(route));
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
   ? div({ class: "card-tags" }, ...tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`)))
@@ -69,6 +69,7 @@ const logisticsChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(r => String(r.author) === String(userId));
+  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
   if (mode === "BOOKED") return census.some(r => !!r.myBooking);
   if (mode === "RECENT") return census.length > 0;
   if (mode === "HISTORY") return census.some(r => r.closed && r.participated);
@@ -192,7 +193,7 @@ const renderForm = (route, params = {}) => {
       input({ type: "text", name: "orderRef", maxlength: "200", placeholder: i18n.logisticsOrderRefPlaceholder, value: route ? route.orderRef : "" }), br(),
       label(i18n.logisticsTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.logisticsTagsPlaceholder, value: route ? route.tags.join(", ") : "" }), br(), br(),
-      button({ type: "submit", class: "create-button" }, route ? i18n.logisticsUpdate : i18n.logisticsCreate)
+      button({ type: "submit", class: "create-button" }, route ? i18n.save : i18n.logisticsCreate)
     )
   );
 };
@@ -237,7 +238,7 @@ exports.logisticsView = async (routes, filter = "ALL", params = {}) => {
   );
 };
 
-const bookingStatusChip = (b) => renderStateChip(b.status === "CONFIRMED" || b.status === "DELIVERED" ? "mutuals" : (b.status === "PENDING" ? "whole" : "closed"), "", bookingLabel(b.status));
+const bookingStatusChip = (b) => renderStateChip(b.status === "CONFIRMED" || b.status === "DELIVERED" ? "mutuals" : (b.status === "PENDING" ? "pending" : "closed"), "", bookingLabel(b.status));
 
 const bookingStatusForm = (route, b, status, cls, text) =>
   form({ method: "POST", action: `/logistics/booking/${encodeURIComponent(b.id)}/status` },
@@ -248,7 +249,7 @@ const bookingStatusForm = (route, b, status, cls, text) =>
 
 const renderBooking = (route, b) =>
   div({ class: "logistics-booking" },
-    renderCardTop(null, null, { author: b.booker, date: b.createdAt, chips: [bookingStatusChip(b), route.kind === "TRIP" ? renderStateChip("neutral", "💺", String(b.seats)) : null] }),
+    renderCardTop(null, null, { author: b.booker, date: b.createdAt, chips: [bookingStatusChip(b), route.kind === "TRIP" ? renderStateChip("whole", "💺", String(b.seats)) : null] }),
     div({ class: "emergency-update-head logistics-booking-head" },
       div({ class: "tribe-side-actions emergency-update-actions" },
         route.isOwner && b.status === "PENDING" ? bookingStatusForm(route, b, "CONFIRMED", "tribe-action-btn", i18n.logisticsConfirm) : null,
@@ -285,7 +286,7 @@ const renderRatings = (route) =>
     h3(i18n.logisticsRatingsTitle),
     route.ratings.length
       ? div({ class: "logistics-ratings-list" }, ...route.ratings.map(r => div({ class: "logistics-rating" },
-          renderCardTop(null, null, { author: r.author, date: r.createdAt, chips: [renderStateChip("neutral", "", stars(r.score))] }),
+          renderCardTop(null, null, { author: r.author, date: r.createdAt, chips: [renderStateChip("whole", "", stars(r.score))] }),
           r.text ? p(r.text) : null
         )))
       : p(route.closed ? i18n.logisticsNoRatings : i18n.logisticsRatingsWhenClosed),
@@ -319,7 +320,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
   const side = div({ class: "tribe-side" },
     renderCardTop(route.id, href, { arrow: false, date: route.createdAt, chips: [kindChip(route), modeChip(route), statusChip(route), priceChip(route)], bylineExtra: [renderEditedChip(route.tipId, route.rootId)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, editAction: route.isOwner ? `/logistics?filter=edit&id=${encodeURIComponent(route.id)}` : undefined, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title)),
-    renderDetailShare(route.id, href, route.title),
+    renderDetailShare(route.id, href, route.title, null, null, null, route.author),
     renderTags(route.tags),
     statusRow
   );

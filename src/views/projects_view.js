@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -28,6 +28,8 @@ const FILTERS = [
   { key: "ALL", i18n: "projectFilterAll", title: "projectAllTitle" },
   { key: "RECENT", i18n: "projectFilterRecent", title: "projectRecentTitle" },
   { key: "MINE", i18n: "projectFilterMine", title: "projectMineTitle" },
+  { key: "SUPPORTED", i18n: "filterSupported", title: "projectAllTitle" },
+  { key: "REPLICATED", i18n: "filterReplicated", title: "projectAllTitle" },
   { key: "APPLIED", i18n: "projectFilterApplied", title: "projectAppliedTitle" },
   { key: "ACTIVE", i18n: "projectFilterActive", title: "projectActiveTitle" },
   { key: "PAUSED", i18n: "projectFilterPaused", title: "projectPausedTitle" },
@@ -378,8 +380,8 @@ const renderProjectStatusChip = (status) => {
   const s = String(status || "ACTIVE").toUpperCase()
   const variant =
     s === "ACTIVE" ? "mutuals" :
-    s === "PAUSED" ? "whole" :
-    s === "COMPLETED" ? "encrypted" :
+    s === "PAUSED" ? "pending" :
+    s === "COMPLETED" ? "hidden" :
     s === "CANCELLED" ? "closed" :
     "whole"
   const localized = i18n["projectStatus" + s] || s
@@ -408,7 +410,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
         renderLifespanChip(pr.lifetime, i18n),
         pr.clearnet === true && clearnetEligible(pr) ? renderReachChip(true, i18n, clearnetItemHref('projects', pr.title, pr.id || pr.key)) : null,
         pr.subscriptionIn === true
-          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
           : (pr.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
       ].filter(Boolean)
 
@@ -525,6 +527,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
     if (m === f) return true;
     if (m === "TOP") return censusP.length > 0;
     if (m === "MINE") return censusP.some(pr => String(pr.author) === String(userId));
+    if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusP);
     if (m === "APPLIED") return censusP.some(pr => String(pr.author) !== String(userId) && [pr.members, pr.participants, pr.applicants].some(l => Array.isArray(l) && l.includes(userId)));
     if (m === "ACTIVE" || m === "PAUSED" || m === "COMPLETED") return censusP.some(pr => String(pr.status || "ACTIVE").toUpperCase() === m);
     if (m === "FOLLOWING") return censusP.some(pr => Array.isArray(pr.followers) && pr.followers.includes(userId));
@@ -592,13 +595,13 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
 
   const chips = [
     renderProjectStatusChip(pr.status),
-    isFollower ? renderStateChip("whole", "★", i18n.projectFollowing || "FOLLOWING") : null,
+    isFollower ? renderStateChip("transport", "★", i18n.projectFollowing || "FOLLOWING") : null,
     renderLifespanChip(pr.lifetime, i18n),
     renderEcoTax(pr.msgSize, pr.id || pr.key),
     renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('projects', pr.title, pr.id || pr.key) : null),
     pr.subscription
       ? ((isAuthor || pr.subscription.subscribed === true)
-          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
           : renderStateChip("closed", "✉", i18n.subscriptionOff))
       : null
   ].filter(Boolean)
@@ -645,7 +648,7 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
     ),
     isAuthor && canClearnet ? renderClearnetSwitch('projects', pr.rootId || pr.id || pr.key, isClearnet) : null,
     pr.image ? renderMediaBlob(pr.image, { class: "tribe-detail-image" }) : null,
-    renderDetailShare(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, pr.title, subscriptionOpts),
+    renderDetailShare(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, pr.title, subscriptionOpts, null, null, pr.author),
     renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
     goal > 0 ? renderProgressBlock(i18n.projectFunding + ":", `${fundingPct}%`, fundingPct, 100) : null,
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null

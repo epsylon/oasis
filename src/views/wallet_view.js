@@ -9,12 +9,12 @@ const TX_CATEGORY_CHIPS = {
     send: ["whole", "\u2B06"],
     generate: ["mutuals", "\u2713"],
     stake: ["mutuals", "\u2713"],
-    immature: ["lifespan", "\u23F3"],
+    immature: ["pending", "\u23F3"],
     orphan: ["closed", "\u2717"]
 };
 const renderTxCategory = (category) => {
     const key = String(category || "").toLowerCase();
-    const [variant, icon] = TX_CATEGORY_CHIPS[key] || ["encrypted", ""];
+    const [variant, icon] = TX_CATEGORY_CHIPS[key] || ["whole", ""];
     return renderStateChip(variant, icon, (key || "-").toUpperCase());
 };
 

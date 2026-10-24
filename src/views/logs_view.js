@@ -183,7 +183,7 @@ const renderEditForm = (entry) => {
       textarea({ name: "text", rows: "8", required: true }, entry.text || ''),
       input({ type: "hidden", name: "label", value: entry.label || '' }),
       br(), br(),
-      button({ type: "submit", class: "create-button" }, i18n.logsUpdateButton || 'Edit')
+      button({ type: "submit", class: "create-button" }, i18n.save)
     )
   );
 };

@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
 const { renderEncryptedChip } = require("./clearnet_view")
-const { renderResults, renderBallot, outcomeOf } = require("./polls_view")
+const { renderPollInline, outcomeOf } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -49,10 +49,10 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && modesAvail[f] !== false)).map(f =>
+    ["all", "recent", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/chats" },
         input({ type: "hidden", name: "filter", value: f }),
-        button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, i18n[`chatFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase())
+        button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, (RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`chatFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
       )
     ),
     ]),
@@ -64,7 +64,7 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
 
 const renderChatStatusChip = (status) => {
   const s = String(status || "OPEN").toUpperCase()
-  const variant = s === "CLOSED" ? "closed" : s === "INVITE-ONLY" ? "whole" : "mutuals"
+  const variant = s === "CLOSED" ? "hidden" : s === "INVITE-ONLY" ? "whole" : "mutuals"
   const icon = s === "CLOSED" ? "\u2717" : s === "INVITE-ONLY" ? "\uD83D\uDD11" : "\u2713"
   const label = s === "CLOSED" ? i18n.chatStatusClosed
     : s === "INVITE-ONLY" ? i18n.chatStatusInviteOnly
@@ -78,7 +78,7 @@ const renderChatCard = exports.renderChatCard = (chat, filter, params = {}) => {
     renderEncryptedChip(i18n),
     renderLifespanChip(chat.lifetime, i18n),
     chat.subscriptionIn === true
-      ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+      ? renderStateChip("transport", "✉", i18n.subscriptionOn)
       : (chat.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
   ].filter(Boolean)
   const href = `/chats/${encodeURIComponent(chat.key)}`
@@ -143,7 +143,7 @@ const renderChatForm = (filter, chat = {}, params = {}) => {
       ), br(), br(),
       span(i18n.shopTags || "Tags"), br(),
       input({ type: "text", name: "tags", placeholder: i18n.chatTagsPlaceholder, value: safeArr(chat.tags).join(", ") }), br(), br(),
-      button({ type: "submit" }, isEdit ? i18n.chatUpdate : i18n.chatCreate)
+      button({ type: "submit" }, isEdit ? i18n.save : i18n.chatCreate)
     )
   )
 }
@@ -188,34 +188,38 @@ const renderChatPoll = (poll, chat) => {
       span({ class: "chat-poll-tag" }, i18n.pollInChat),
       poll.anonymous ? span({ class: "chat-poll-tag" }, i18n.pollAnonymous) : null,
       poll.multiple ? span({ class: "chat-poll-tag" }, i18n.pollMultiple) : null,
-      poll.status === "CLOSED" ? span({ class: "chat-poll-tag" }, i18n.pollStatusClosed) : null
+      poll.status === "CLOSED" ? span({ class: "chat-poll-tag" }, i18n.pollStatusClosed) : null,
+      poll.hasVoted ? renderStateChip("transport", "", String(i18n.pollVotedChip).toUpperCase()) : null
     ),
     poll.undecryptable
       ? p({ class: "chat-poll-question" }, i18n.chatAccessDenied)
       : [
           p({ class: "chat-poll-question" }, poll.question),
-          showResults ? renderResults(poll) : null,
           (() => {
             const canClose = String(poll.author) === String(userId) && poll.status === "OPEN";
+            const canVote = poll.status !== "CLOSED" && !poll.hasVoted;
             const closeFormId = `poll-close-${String(poll.id).replace(/[^a-zA-Z0-9]/g, "")}`;
-            const ballot = renderBallot(poll, `/chats/${encodeURIComponent(chat.key)}`, "/polls",
-              canClose ? [button({ type: "submit", form: closeFormId, class: "danger-btn" }, i18n.pollCloseButton)] : null);
-            return div({ class: "chat-poll-actions" },
-              ballot,
+            return [
+              div({ class: "chat-poll-actions" },
+                renderPollInline(poll, `/chats/${encodeURIComponent(chat.key)}`, "pchat", {
+                  showCounts: showResults,
+                  extra: canClose && canVote ? [button({ type: "submit", form: closeFormId, class: "danger-btn" }, i18n.pollCloseButton)] : null
+                })
+              ),
+              showResults
+                ? div({ class: "chat-poll-meta" },
+                    span({ class: "card-label" }, `${i18n.pollOutcome}: `),
+                    span({ class: "card-value" }, outcomeOf(poll))
+                  )
+                : null,
               canClose
                 ? form({ id: closeFormId, method: "POST", action: `/polls/close/${encodeURIComponent(poll.id)}`, class: "chat-poll-close-form" },
                     input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}` }),
-                    ballot ? null : button({ type: "submit", class: "danger-btn" }, i18n.pollCloseButton)
+                    canVote ? null : button({ type: "submit", class: "danger-btn" }, i18n.pollCloseButton)
                   )
                 : null
-            );
-          })(),
-          div({ class: "chat-poll-meta" },
-            span({ class: "card-label" }, `${i18n.pollVoters}: `),
-            span({ class: "card-value" }, String(poll.totalVoters)),
-            span({ class: "card-label" }, ` · ${i18n.pollOutcome}: `),
-            span({ class: "card-value" }, outcomeOf(poll))
-          )
+            ];
+          })()
         ],
     span({ class: "chat-bubble-time" }, moment(poll.createdAt).format("HH:mm"))
     )
@@ -392,7 +396,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
     renderLifespanChip(chat.lifetime, i18n),
     chat.subscription && chatShares
       ? ((isAuthor || chat.subscription.subscribed === true)
-          ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
           : renderStateChip("closed", "✉", i18n.subscriptionOff))
       : null
   ].filter(Boolean)

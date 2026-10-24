@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -77,11 +77,11 @@ const renderReportCommentsSection = (reportId, comments = []) => {
 const renderReportStatusChip = (status) => {
   const s = normalizeStatus(status);
   const variant =
-    s === "OPEN" ? "whole" :
-    s === "UNDER_REVIEW" ? "lifespan-orange" :
-    s === "RESOLVED" ? "mutuals" :
+    s === "OPEN" ? "mutuals" :
+    s === "UNDER_REVIEW" ? "pending" :
+    s === "RESOLVED" ? "hidden" :
     s === "INVALID" ? "closed" :
-    s === "CLOSED" ? "closed" :
+    s === "CLOSED" ? "hidden" :
     "whole";
   const localized =
     s === "OPEN" ? i18n.reportsStatusOpen :
@@ -155,6 +155,7 @@ const reportChipFor = (filter, censusReports) => (mode) => {
   if (!Array.isArray(censusReports)) return true;
   if (mode === "top") return censusReports.length > 0;
   if (mode === "mine") return censusReports.some((r) => r.author === userId);
+  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusReports);
   if (mode === "recent") return censusReports.length > 0;
   if (mode === "confirmed") return censusReports.some((r) => Array.isArray(r.confirmations) && r.confirmations.includes(userId));
   if (CATEGORY_BY_FILTER[mode]) return censusReports.some((r) => normU(r.category) === CATEGORY_BY_FILTER[mode]);
@@ -172,6 +173,8 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
   const confirmationsOf = (r) => (Array.isArray(r.confirmations) ? r.confirmations.length : 0);
   if (filter === "mine") {
     filtered = filtered.filter((r) => r.author === userId);
+  } else if (filter === "supported" || filter === "replicated") {
+    filtered = filtered.filter((r) => filter === "supported" ? r.isSupported : r.isReplicated);
   } else if (filter === "recent") {
     filtered = filtered.filter((r) => new Date(r.createdAt).getTime() >= dayAgoReports);
   } else if (filter === "confirmed") {
@@ -230,6 +233,8 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
           ...chipBtn("all", i18n.reportsFilterAll),
           ...chipBtn("recent", i18n.reportsFilterRecent),
           ...chipBtn("mine", i18n.reportsFilterMine),
+          ...chipBtn("supported", i18n.filterSupported),
+          ...chipBtn("replicated", i18n.filterReplicated),
           ...chipBtn("top", i18n.reportsFilterTop),
           ...chipBtn("features", i18n.reportsFilterFeatures),
           ...chipBtn("bugs", i18n.reportsFilterBugs),
@@ -349,7 +354,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                     ),
                     br(),
                     br(),
-                    button({ type: "submit" }, i18n.reportsUpdateButton)
+                    button({ type: "submit" }, i18n.save)
                   )
                 ]
           )
@@ -376,6 +381,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
 
   const sideActions = [];
   if (!isAuthor && !confirmations.includes(userId)) sideActions.push(form({ method: "POST", action: `/reports/confirm/${encodeURIComponent(report.id)}` },
+    input({ type: 'hidden', name: 'returnTo', value: hereAt(report.id) || '' }),
     button({ type: "submit", class: "tribe-action-btn" }, i18n.reportsConfirmButton)
   ));
   const tagsNode = report.tags && report.tags.length
@@ -397,7 +403,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   const statusRow = isAuthor
     ? div({ class: "tribe-side-actions housing-status-row" },
         span({ class: "card-label" }, `${i18n.reportsStatus}: `),
-        renderStateChip(normalizeStatus(report.status) === "RESOLVED" ? "mutuals" : "whole", "◆", String(report.status || "OPEN").toUpperCase()),
+        renderStateChip(normalizeStatus(report.status) === "RESOLVED" ? "hidden" : "mutuals", "◆", String(report.status || "OPEN").toUpperCase()),
         renderReportStatusSetter(report)
       )
     : null;
@@ -407,7 +413,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, report.title)
     ),
-    renderDetailShare(report.id, `/reports/${encodeURIComponent(report.id)}`, report.title),
+    renderDetailShare(report.id, `/reports/${encodeURIComponent(report.id)}`, report.title, null, null, null, report.author),
     tagsNode,
     statusRow
   );
@@ -444,6 +450,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
           button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
           ...(reportChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: btnClass("recent") }, String(i18n.reportsFilterRecent).toUpperCase())] : []),
           ...(reportChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, reportChip),
           button({ type: "submit", name: "filter", value: "top", class: btnClass("top") }, String(i18n.reportsFilterTop).toUpperCase()),
           ...(reportChip("features") ? [button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, String(i18n.reportsFilterFeatures).toUpperCase())] : []),
           ...(reportChip("bugs") ? [button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, String(i18n.reportsFilterBugs).toUpperCase())] : []),

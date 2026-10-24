@@ -176,3 +176,21 @@ describe('tags: versions republished by other inhabitants', (t) => {
     notOk(find(all, 'bilbytag'));
   });
 });
+
+describe('tags: scope of the content counted', (t) => {
+  t('mine, supported and replicated only count the tags of that content', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    B.setActor();
+    await B.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000300.sha256)', ['wombattag'], 'B', '', '');
+    C.setActor();
+    const fromC = await C.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000301.sha256)', ['numbattag'], 'C', '', '');
+    A.setActor();
+    await A.use('audios').createAudio('[a](&aud00000000000000000000000000000000000000000000302.sha256)', ['quokkatag'], 'A', '', '');
+    const names = async (opts) => (await A.use('tags').listTags('all', '', opts)).map(x => x.name.toLowerCase()).filter(n => n.endsWith('battag') || n === 'quokkatag').sort().join(',');
+    eq(await names({ scope: 'mine' }), 'quokkatag');
+    eq(await names({ scope: 'supported', following: new Set([B.keypair.id]) }), 'wombattag');
+    eq(await names({ scope: 'replicated', replicated: new Set([fromC.key]) }), 'numbattag');
+    eq(await names({ scope: 'supported' }), '', 'nobody supported, nothing counted');
+    eq(await names({}), 'numbattag,quokkatag,wombattag');
+  });
+});

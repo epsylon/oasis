@@ -43,7 +43,7 @@ const timeChip = (value, fmt = "YYYY/MM/DD HH:mm") => value ? p({ class: "time-c
 const metaLine = (text) => text && String(text).trim() ? p({ class: "job-meta-line" }, String(text)) : null;
 const priceChip = (text) => text ? div({ class: "price-chip" }, text) : null;
 const countLine = (labelText, value) => div({ class: "tribe-card-members" }, span({ class: "tribe-members-count" }, `${labelText}: ${value}`));
-const statusKind = (status) => String(status || "").toUpperCase() === "CLOSED" ? "closed" : "mutuals";
+const statusKind = (status) => String(status || "").toUpperCase() === "CLOSED" ? "hidden" : "mutuals";
 
 const renderAgendaItem = (item, userId, filter, extras = {}) => {
   const author = item.seller || item.organizer || item.from || item.author || '';
@@ -66,7 +66,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
   ));
 
   if (item.type === 'market') {
-    chips.push(chip(item.item_type), chip(item.status, statusKind(item.status)), chip(`${i18n.marketItemStock}: ${item.stock}`), item.includesShipping ? chip(i18n.marketItemIncludesShipping, 'mutuals', '✓') : null);
+    chips.push(chip(item.item_type), chip(item.status, statusKind(item.status)), chip(`${i18n.marketItemStock}: ${item.stock}`), item.includesShipping ? chip(i18n.marketItemIncludesShipping, 'whole', '✓') : null);
     if (String(item.item_type || '').toLowerCase() === 'auction') {
       const bids = Array.isArray(item.auctions_poll) ? item.auctions_poll.map(bid => parseFloat(String(bid).split(':')[1])).filter(n => !isNaN(n)) : [];
       const maxBid = bids.length ? Math.max(...bids) : 0;
@@ -100,17 +100,17 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
   }
 
   if (item.type === 'project') {
-    chips.push(chip(item.status || i18n.noStatus, statusKind(item.status)), chip(`${item.progress || 0}%`, 'mutuals'));
+    chips.push(chip(item.status || i18n.noStatus, statusKind(item.status)), chip(`${item.progress || 0}%`, 'whole'));
     body.push(priceChip(`${item.pledged || 0} / ${item.goal} ECO`), item.deadline ? timeChip(item.deadline) : metaLine(i18n.noDeadline));
   }
 
   if (item.type === 'calendar') {
-    chips.push(chip(item.isClosed ? (i18n.calendarStatusClosed || 'CLOSED') : (i18n.calendarStatusOpen || 'OPEN'), item.isClosed ? 'closed' : 'mutuals'));
+    chips.push(chip(item.isClosed ? (i18n.calendarStatusClosed || 'CLOSED') : (i18n.calendarStatusOpen || 'OPEN'), item.isClosed ? 'hidden' : 'mutuals'));
     body.push(timeChip(item.deadline), countLine(i18n.calendarParticipantsLabel || 'Participants', Array.isArray(item.participants) ? item.participants.length : 0));
   }
 
   if (item.type === 'campaign') {
-    chips.push(chip(`${i18n.campaignSignaturesLabel}: ${item.signatureCount || 0} / ${item.goal || 0}`, 'mutuals', '✍'));
+    chips.push(chip(`${i18n.campaignSignaturesLabel}: ${item.signatureCount || 0} / ${item.goal || 0}`, 'whole', '✍'));
     body.push(timeChip(item.deadline));
   }
 
@@ -124,7 +124,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     const requestCount = Number(item.requestCount) || 0;
     chips.push(chip(i18n["housingType" + String(item.housing_type || '').toUpperCase()] || item.housing_type),
       chip(String(item.status || '').toUpperCase() === 'CLOSED' ? i18n.housingStatusCLOSED : i18n.housingStatusOPEN, statusKind(item.status)),
-      isOwner ? chip(`${i18n.housingRequests}: ${requestCount}`) : chip(i18n.housingRequestedBadge || 'REQUESTED', 'mutuals', '✓'));
+      isOwner ? chip(`${i18n.housingRequests}: ${requestCount}`) : chip(i18n.housingRequestedBadge || 'REQUESTED', 'transport', '✓'));
     body.push(metaLine(item.place), priceChip(String(item.housing_type) === 'couchsurfing' ? (i18n.housingFree || 'FREE') : `${item.price} ECO`), timeChip(item.availableFrom, 'YYYY/MM/DD'));
   }
 

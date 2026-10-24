@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderLicenseSelect, renderLicenseChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -152,7 +152,7 @@ const renderTorrentForm = (filter, torrentId, torrentToEdit, params = {}) => {
       br(),
       ...renderLicenseSelect(torrentToEdit?.license, i18n),
       ...(clearnetAllowed ? [renderClearnetSelector(filter === "edit" ? !!torrentToEdit?.clearnet : false, i18n), br()] : []),
-      button({ type: "submit" }, filter === "edit" ? i18n.torrentUpdateButton : i18n.torrentCreateButton)
+      button({ type: "submit" }, filter === "edit" ? i18n.save : i18n.torrentCreateButton)
     )
   );
 };
@@ -231,6 +231,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (!Array.isArray(censusM)) return true;
   if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
+  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.some((x) => x.isFavorite);
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
@@ -265,6 +266,7 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.torrentFilterFavorites).toUpperCase()
@@ -365,7 +367,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
       title ? h2({ class: "tribe-card-title" }, title) : null,
       clearnetAllowed && isAuthor ? renderClearnetSwitch('torrents', torrentObj.rootId || torrentObj.key, isClearnet) : null
     ),
-    renderDetailShare(torrentObj.key, href, torrentObj.title),
+    renderDetailShare(torrentObj.key, href, torrentObj.title, null, null, null, torrentObj.author),
     tagsNode,
   );
 
@@ -420,6 +422,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterRecent).toUpperCase())] : []),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.torrentFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(
             { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
             String(i18n.torrentFilterFavorites).toUpperCase()

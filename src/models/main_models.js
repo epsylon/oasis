@@ -632,6 +632,12 @@ models.friend = {
     const mine = graph[ssb.id] || {};
     return new Set(Object.keys(mine).filter(feed => Math.round(mine[feed]) === -1));
   },
+  followingIds: async () => {
+    const ssb = await cooler.open();
+    const graph = await new Promise((resolve) => ssb.friends.graph((err, g) => resolve(err || !g ? {} : g)));
+    const mine = graph[ssb.id] || {};
+    return new Set(Object.keys(mine).filter(feed => Math.round(mine[feed]) === 1));
+  },
   setRelationship: async ({ feedId, following, blocking }) => {
     if (following && blocking) {
       throw new Error("Cannot follow and block at the same time");
@@ -1972,15 +1978,47 @@ models.lifetime = (() => {
 
 const ownSpreadsByTarget = new Map();
 const ownTombstoned = new Set();
+let ownTargetsCache = null;
+let ownTargetsLoading = null;
 models.spreads = {
   noteOwnSpread: (target, key) => {
     if (!target || !key) return;
     const set = ownSpreadsByTarget.get(target) || new Set();
     set.add(key);
     ownSpreadsByTarget.set(target, set);
+    ownTargetsCache = null;
   },
   noteOwnTombstone: (key) => {
     if (key) ownTombstoned.add(key);
+    ownTargetsCache = null;
+  },
+  ownTargets: async () => {
+    if (ownTargetsCache && Date.now() - ownTargetsCache.at < 30000) return ownTargetsCache.set;
+    if (ownTargetsLoading) return ownTargetsLoading;
+    ownTargetsLoading = (async () => {
+      const ssb = await cooler.open();
+      const msgs = await new Promise((resolve) => {
+        pull(ssb.createUserStream({ id: ssb.id, private: !isPublic }), pull.collect((err, arr) => resolve(err ? [] : (arr || []))));
+      });
+      const targetOf = new Map();
+      const tombstoned = new Set();
+      for (const m of msgs) {
+        const c = m && m.value && m.value.content;
+        if (!c || typeof c !== 'object') continue;
+        if (c.type === 'spread' && typeof c.link === 'string') targetOf.set(m.key, c.link);
+        else if (c.type === 'vote' && c.vote && typeof c.vote.link === 'string' && Number(c.vote.value) === 1) {
+          const br = Array.isArray(c.branch) ? c.branch : (typeof c.branch === 'string' ? [c.branch] : []);
+          if (br.includes(c.vote.link)) targetOf.set(m.key, c.vote.link);
+        } else if (c.type === 'tombstone' && typeof c.target === 'string') tombstoned.add(c.target);
+      }
+      for (const [target, keys] of ownSpreadsByTarget) for (const k of keys) targetOf.set(k, target);
+      for (const k of ownTombstoned) tombstoned.add(k);
+      const set = new Set();
+      for (const [k, target] of targetOf) if (!tombstoned.has(k)) set.add(target);
+      ownTargetsCache = { at: Date.now(), set };
+      return set;
+    })().finally(() => { ownTargetsLoading = null; });
+    return ownTargetsLoading;
   },
   getCachedActiveOwnSpreadKey: (target) => {
     if (!target) return null;

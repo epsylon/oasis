@@ -82,6 +82,34 @@ describe('pm: inbox read, archive and bot classification', (t) => {
     eq(pm.botOf({ subject: 'Task Reminder: water plants' }), 'reminders');
     eq(pm.botOf({ subject: 'x', meta: { type: 'project-pledge' } }), 'projects');
     eq(pm.botOf({ subject: 'Hello there' }), null);
+    eq(pm.botOf({ subject: 'SOCIAL_SUPPORTED' }), 'social', 'a new supporter is a SocialBot notice, which can be muted like the rest');
+  });
+
+  t('SocialBot only announces inhabitants who start supporting you after it has seen the current ones', () => {
+    const policy = require('../../../src/backend/pm_policy');
+    const first = policy.newSupporters(new Set(['@a', '@b']), null);
+    eq(first.announce.length, 0, 'the first look only remembers who already supports you');
+    const second = policy.newSupporters(new Set(['@a', '@b', '@c']), first.state);
+    eq(second.announce.join(','), '@c', 'a new supporter is announced');
+    const third = policy.newSupporters(new Set(['@a', '@c']), second.state);
+    eq(third.announce.length, 0, 'someone who stops supporting is not announced');
+    const fourth = policy.newSupporters(new Set(['@a', '@b', '@c']), third.state);
+    eq(fourth.announce.length, 0, 'nor again when they come back, so there is no spam');
+  });
+
+  t('SocialBot stays quiet about old follows that arrive late and spreads a burst over several rounds', () => {
+    const policy = require('../../../src/backend/pm_policy');
+    const base = policy.newSupporters(new Set(['@a']), null, null, 1000);
+    const dates = new Map([['@old', 500], ['@new', 2000]]);
+    const late = policy.newSupporters(new Set(['@a', '@old', '@new', '@unknown']), base.state, dates);
+    eq(late.announce.join(','), '@new', 'only a follow made after the first look is announced');
+    ok(late.state.ids.includes('@old'), 'an old follow replicated later is remembered without a notice');
+    ok(!late.state.ids.includes('@unknown'), 'a follow whose date is not known yet waits for the next round');
+    const many = new Set(['@a', ...Array.from({ length: 25 }, (_, i) => `@n${i}`)]);
+    const first = policy.newSupporters(many, base.state);
+    eq(first.announce.length, policy.SUPPORTERS_PER_ROUND, 'one round announces at most its share');
+    const next = policy.newSupporters(many, first.state);
+    eq(next.announce.length, 25 - policy.SUPPORTERS_PER_ROUND, 'the rest come in the next round instead of being lost');
   });
 
   t('muted bots come from the config and default to none', () => {

@@ -1,14 +1,14 @@
 const { div, h2, h3, p, section, button, form, a, input, img, label, select, option, br, textarea, h1, span, nav, ul, li, video, audio, table, tr, td, thead, tbody, th } = require("../server/node_modules/hyperaxe");
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged, CLEARNET_HUB_CSS, renderPdfDocument, renderDetailShare } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderModeChip, renderInviteQrCard, renderContentActions, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, contentDeleteAction, clearnetSlugFor, renderEngagement, renderOpinionsVoting, renderVotesSummary, paged, CLEARNET_HUB_CSS, renderPdfDocument, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt } = require('./main_views');
 const { renderTribeWikiSection } = require('./wiki_view');
 const { renderEncryptedChip: renderTribeEncryptedChip, renderLicenseSelect, renderReachChip, renderClearnetPage, escapeHtml, renderRichText, blobUrl: cnBlobUrl, paginateClearnet, renderClearnetPager, CLEARNET_PAGER_CSS, renderClearnetPdfFrame, CLEARNET_PDF_CSS } = require('./clearnet_view');
 const { renderPollCard } = require('./polls_view');
 const { renderFeedCard } = require('./feed_view');
 const { renderEventItem } = require('./event_view');
 const { renderTaskItem, renderTaskAssignAction, renderTaskStatusRow } = require('./task_view');
-const { renderVoteListItem, renderVoteOptionsBlock } = require('./vote_view');
+const { renderVoteListItem, renderVoteInline, renderVoteVotedChip, renderVoteResultsField } = require('./vote_view');
 const { renderImageList } = require('./image_view');
 const { renderAudioList } = require('./audio_view');
 const { renderVideoList } = require('./video_view');
@@ -31,6 +31,8 @@ const isLarpHouseTribe = (t) => Array.isArray(t && t.tags) && t.tags.some(x => S
 const isTribeMember = (t) => !!t && (t.author === userId || (Array.isArray(t.members) && t.members.includes(userId)));
 
 const REACH_LEVELS = ['tribe', 'oasis', 'clearnet'];
+const { CLEARNET_CONTENT_TYPES } = require('../models/tribes_content_model');
+const reachesClearnet = (contentType) => CLEARNET_CONTENT_TYPES.includes(contentType);
 const REACH_CONTENT_TYPES = new Set(['event', 'task', 'votation', 'forum', 'forum-reply', 'media', 'feed']);
 const reachLevelOf = (item) => REACH_LEVELS.includes(item && item.reach) ? item.reach : 'tribe';
 const tribeReachTribeLabel = () => String(i18n.tribeReachTribe || 'TRIBE').toUpperCase();
@@ -47,16 +49,16 @@ const renderTribeReachSwitch = (tribe, item, returnTo) => {
     input({ type: 'hidden', name: 'returnTo', value: returnTo }),
     levelBtn('tribe', tribeReachTribeLabel()),
     levelBtn('oasis', 'OASIS'),
-    levelBtn('clearnet', 'CLEARNET')
+    reachesClearnet(item.contentType) ? levelBtn('clearnet', 'CLEARNET') : null
   );
 };
 
-const renderTribeReachSelector = () =>
+const renderTribeReachSelector = (contentType) =>
   div({ class: 'clearnet-choice' },
     div({ class: 'clearnet-choice-options' },
       label({ class: 'clearnet-choice-option' }, input({ type: 'radio', name: 'reach', value: 'tribe', checked: true }), renderTribeReachChip('tribe')),
       label({ class: 'clearnet-choice-option' }, input({ type: 'radio', name: 'reach', value: 'oasis' }), renderTribeReachChip('oasis')),
-      label({ class: 'clearnet-choice-option' }, input({ type: 'radio', name: 'reach', value: 'clearnet' }), renderTribeReachChip('clearnet'))
+      reachesClearnet(contentType) ? label({ class: 'clearnet-choice-option' }, input({ type: 'radio', name: 'reach', value: 'clearnet' }), renderTribeReachChip('clearnet')) : null
     ),
     p({ class: 'tribe-meta-label' }, i18n.tribeReachNotice)
   );
@@ -197,6 +199,8 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     return (
       filter === 'all' ? visible(t) && isMainTribe(t) :
       filter === 'mine' ? t.author === userId :
+      filter === 'supported' ? visible(t) && !!t.isSupported :
+      filter === 'replicated' ? visible(t) && !!t.isReplicated :
       filter === 'membership' ? t.members.includes(userId) :
       filter === 'subtribes' ? visible(t) && !!t.parentTribeId :
       filter === 'recent' ? visible(t) && isMainTribe(t) && ((typeof t.createdAt === 'string' ? Date.parse(t.createdAt) : t.createdAt) >= now - MS_PER_DAY ) :
@@ -232,6 +236,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
     if (m === filter || m === 'all') return true;
     if (m === 'top' || m === 'gallery') return tribes.length > 0;
     if (m === 'mine') return tribes.some(t => t.author === userId);
+    if (m === 'supported' || m === 'replicated') return hasRelation(m, tribes.filter(visible));
     if (m === 'membership') return tribes.some(t => Array.isArray(t.members) && t.members.includes(userId));
     if (m === 'subtribes') return tribes.some(t => !!t.parentTribeId);
     if (m === 'recent') return tribes.length > 0;
@@ -250,11 +255,11 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
 
   const modeButtons = div({ class: 'tribe-mode-buttons' },
     ...(emptyMod ? [] : [
-    ['all','recent','mine','membership','subtribes','top','gallery'].filter(tribeChip).map(f =>
+    ['all','recent','mine','supported','replicated','membership','subtribes','top','gallery'].filter(tribeChip).map(f =>
     form({ method: 'GET', action: '/tribes' },
       input({ type: 'hidden', name: 'filter', value: f }),
       button({ type: 'submit', class: filter === f ? 'filter-btn active' : 'filter-btn' },
-        i18n[`tribeFilter${f.charAt(0).toUpperCase()+f.slice(1)}`]
+        RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`tribeFilter${f.charAt(0).toUpperCase()+f.slice(1)}`]
         )
       )
     ),
@@ -313,7 +318,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
       option({ value: 'open', selected: tribeToEdit.inviteMode === 'open' ? 'selected' : undefined }, i18n.tribeOpen)
     ),
     br(), br(),
-    button({ type: 'submit' }, isEdit ? i18n.tribeUpdateButton : i18n.tribeCreateButton)
+    button({ type: 'submit' }, isEdit ? i18n.save : i18n.tribeCreateButton)
     )
   ) : null;
 
@@ -335,7 +340,7 @@ exports.tribesView = async (tribes, filter, tribeId, query = {}, allTribes = nul
           renderModeChip(t.inviteMode, i18n),
           renderLifespanChip(t.lifetime, i18n),
           t.subscriptionIn === true
-            ? renderStateChip('mutuals', '\u2709', i18n.subscriptionOn)
+            ? renderStateChip('transport', '\u2709', i18n.subscriptionOn)
             : (t.subscriptionIn === false ? renderStateChip('closed', '\u2709', i18n.subscriptionOff) : null)
         ],
         author: t.author, reportTitle: t.title, deleteAction: isOwn && !isLarpHouseTribe(t) ? contentDeleteAction('tribe', t.id) : undefined
@@ -616,7 +621,7 @@ const renderTribeSearchSection = (tribe, sectionData, query) => {
   }
   const stats = renderModuleStats(results.length, [...typeCounts].map(([label, count]) => ({ label, count })).sort((x, y) => y.count - x.count || x.label.localeCompare(y.label)));
   return div({ class: 'tribe-content-list' },
-    renderSearchForm({ action: tribeUrl, query: sq, queryName: 'q', hidden: [['section', 'search']] }),
+    renderSearchForm({ action: tribeUrl, query: sq, queryName: 'q', hidden: [['section', 'search']], withScope: true, scope: (sectionData && sectionData.scope) || '' }),
     sq.length > 0 && sq.length < 2 ? p(i18n.tribeSearchMinChars) : null,
     sq.length >= 2 ? div(
       stats ? div({ class: 'filters activity-filter-chips activity-toolbar-row search-stats-row' }, stats) : null,
@@ -722,7 +727,7 @@ const matchesTribeQuery = (item, q) => {
     .some(v => String(v || '').toLowerCase().includes(needle));
 };
 const sortRecentFirst = (items) => [...items].sort((a, b) => tsOf(b) - tsOf(a));
-const BASE_MODES = { recent: isRecentItem, mine: isMineItem, all: () => true, top: () => true };
+const BASE_MODES = { recent: isRecentItem, mine: isMineItem, supported: it => !!it.isSupported, replicated: it => !!it.isReplicated, all: () => true, top: () => true };
 const applyTribeFilter = (items, filter, q, modes = BASE_MODES, score = engagementScore) => {
   const pred = modes[filter] || modes.all || (() => true);
   const kept = asList(items).filter(it => pred(it) && matchesTribeQuery(it, q));
@@ -740,7 +745,7 @@ const renderTribeModeChips = (tribe, sectionKey, { modes = [], filter = 'all', l
       form({ method: 'GET', action: tribeUrlOf(tribe) },
         input({ type: 'hidden', name: 'section', value: sectionKey }),
         input({ type: 'hidden', name: 'filter', value: m }),
-        button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, String(labelOf(m) || m).toUpperCase())
+        button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, RELATION_FILTERS.includes(String(m).toLowerCase()) ? relationFilterLabel(String(m).toLowerCase()) : String(labelOf(m) || m).toUpperCase())
       )
     )),
     create
@@ -799,7 +804,7 @@ const tribeTypeChip = (text) => span({ class: 'pm-exposition-chip pm-exposition-
 const forumCategoryChip = (item) => item.category ? span({ class: 'forum-category' }, `[${forumCatLabel(item.category)}]`) : null;
 
 const tribeEngagement = (tribe, item, member, returnTo, withShare = true) => {
-  const share = withShare ? { href: tribeItemHref(tribe, item), title: item.title || item.description } : null;
+  const share = withShare ? { href: tribeItemHref(tribe, item), title: item.title || item.description, author: item.author } : null;
   if (member) {
     return renderEngagement(item.id, renderOpinionsVoting(null, item.id, item.opinions, returnTo, item.opinions_inhabitants,
       (id, category) => `${tribeUrlOf(tribe)}/content/${encodeURIComponent(id)}/opinion/${category}`), null, share);
@@ -815,13 +820,13 @@ const toFeedShape = (m) => ({
 const renderFeedComposeForm = (tribe) =>
   form({ method: 'POST', action: `${tribeUrlOf(tribe)}/message` },
     textarea({ name: 'message', required: true, minlength: '1', maxlength: String(MAX_MESSAGE_LENGTH), rows: '4', cols: 50, placeholder: i18n.feedPlaceholder }),
-    tribe.reachAllowed ? renderTribeReachSelector() : null,
+    tribe.reachAllowed ? renderTribeReachSelector('feed') : null,
     div({ class: 'feed-compose-actions' },
       button({ type: 'submit', class: 'create-button' }, i18n.createFeedButton || 'Send Feed!')
     )
   );
 
-const FEED_MODES = ['ALL', 'RECENT', 'MINE', 'TOP'];
+const FEED_MODES = ['ALL', 'RECENT', 'MINE', 'SUPPORTED', 'REPLICATED', 'TOP'];
 const renderFeedTribeView = (feedItems, tribe, query = {}) => {
   const feed = asList(feedItems);
   const member = isTribeMember(tribe);
@@ -830,7 +835,7 @@ const renderFeedTribeView = (feedItems, tribe, query = {}) => {
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
   const emptyMod = !isCreate && moduleIsEmpty(feed, filter, 'ALL', q);
-  const visible = tribeChipVisible(feed, filter, { RECENT: isRecentItem, MINE: isMineItem, ALL: () => true, TOP: () => true });
+  const visible = tribeChipVisible(feed, filter, { RECENT: isRecentItem, MINE: isMineItem, SUPPORTED: it => !!it.isSupported, REPLICATED: it => !!it.isReplicated, ALL: () => true, TOP: () => true });
   const chips = renderTribeModeChips(tribe, 'feed', { modes: FEED_MODES, filter: isCreate ? 'CREATE' : filter, labelOf: m => i18n[`${m}Button`], visible, emptyMod, create: member ? { label: i18n.createFeedTitle || 'Create Feed' } : null });
   if (isCreate) return div({ class: 'tribe-content-list' }, chips, renderFeedComposeForm(tribe));
   const items = applyTribeFilter(feed, filter.toLowerCase(), q, BASE_MODES, it => Number(it.refeeds || 0));
@@ -864,7 +869,7 @@ const EVENT_MODES = {
   year: e => moment(e.date).isBetween(moment(), moment().add(1, 'year'), null, '[]'),
   archived: e => tribeStatusOf(e) === 'CLOSED'
 };
-const EVENT_MODE_LIST = ['all', 'recent', 'mine', 'today', 'week', 'month', 'year', 'archived'];
+const EVENT_MODE_LIST = ['all', 'recent', 'mine', 'supported', 'replicated', 'today', 'week', 'month', 'year', 'archived'];
 
 const renderTribeEventCard = (tribe, e, member, returnTo) => {
   const tribeUrl = tribeUrlOf(tribe);
@@ -880,6 +885,7 @@ const renderTribeEventCard = (tribe, e, member, returnTo) => {
       member && isOpen
         ? div({ class: 'tribe-side-actions' },
             form({ method: 'POST', action: `${tribeUrl}/events/attend/${encodeURIComponent(e.id)}` },
+              input({ type: 'hidden', name: 'returnTo', value: hereAt(e.id) || '' }),
               button({ type: 'submit', class: 'tribe-action-btn' }, attending ? i18n.tribeEventUnattend : i18n.tribeEventAttend)
             )
           )
@@ -911,7 +917,7 @@ const renderEventsSection = (tribe, items, query = {}) => {
           input({ type: 'date', name: 'date', id: 'date', required: true, min: today }), br(), br(),
           label(i18n.eventLocationLabel), br(),
           input({ type: 'text', name: 'location', id: 'location' }), br(), br(),
-          tribe.reachAllowed ? renderTribeReachSelector() : null,
+          tribe.reachAllowed ? renderTribeReachSelector('event') : null,
           button({ type: 'submit' }, i18n.eventCreateButton)
         )
       )
@@ -935,7 +941,7 @@ const TASK_MODES = {
   closed: t => tribeStatusOf(t) === 'CLOSED',
   ...Object.fromEntries(TASK_PRIORITIES.map(pr => [`priority-${pr.toLowerCase()}`, t => String(t.priority || '').toUpperCase() === pr]))
 };
-const TASK_MODE_LIST = ['all', 'recent', 'mine', 'assigned', 'open', 'in-progress', 'closed', ...TASK_PRIORITIES.map(pr => `priority-${pr.toLowerCase()}`)];
+const TASK_MODE_LIST = ['all', 'recent', 'mine', 'supported', 'replicated', 'assigned', 'open', 'in-progress', 'closed', ...TASK_PRIORITIES.map(pr => `priority-${pr.toLowerCase()}`)];
 const taskModeLabel = (m) => {
   if (m === 'in-progress') return i18n.taskFilterInProgress;
   if (m === 'priority-critical') return i18n.tribePriorityCritical;
@@ -986,7 +992,7 @@ const renderTasksSection = (tribe, items, query = {}) => {
           ), br(), br(),
           label(i18n.tribeTaskDeadline), br(),
           input({ type: 'date', name: 'deadline', id: 'deadline', min: today }), br(), br(),
-          tribe.reachAllowed ? renderTribeReachSelector() : null,
+          tribe.reachAllowed ? renderTribeReachSelector('task') : null,
           button({ type: 'submit' }, i18n.taskCreateButton)
         )
       )
@@ -1010,21 +1016,25 @@ const toVoteShape = (v) => {
   return { ...v, question: v.title, createdBy: v.author, options, votes: counts, totalVotes };
 };
 const VOTE_MODES = openClosedModes(v => tribeStatusOf(v) === 'CLOSED');
-const VOTE_MODE_LIST = ['all', 'recent', 'mine', 'open', 'closed'];
+const VOTE_MODE_LIST = ['all', 'recent', 'mine', 'supported', 'replicated', 'open', 'closed'];
 
 const renderTribeVotationCard = (tribe, v, member, returnTo) => {
   const tribeUrl = tribeUrlOf(tribe);
   const shaped = toVoteShape(v);
   const isOpen = tribeStatusOf(v) === 'OPEN';
   const hasVoted = Object.values(v.votes || {}).some(arr => asList(arr).includes(userId));
+  const myEntry = Object.entries(v.votes || {}).find(([, arr]) => asList(arr).includes(userId));
+  const myChoice = myEntry ? shaped.options[Number(myEntry[0])] : null;
+  const voteState = { ...shaped, status: isOpen ? 'OPEN' : 'CLOSED', voters: hasVoted ? [userId] : [], choices: myChoice ? { [userId]: myChoice } : {}, readOnly: !member };
   return renderVoteListItem(shaped, shaped.options, 'all', null, {
     href: null,
     headerActions: tribeCardActions(tribe, v, member, v.title),
     extraChips: [tribeReachChipFor(tribe, v)],
+    votedChip: renderVoteVotedChip(voteState, { creatorCanVote: true }),
+    inline: renderVoteInline(voteState, hereAt(v.id) || returnTo, 'tv', { action: `${tribeUrl}/votations/${encodeURIComponent(v.id)}/vote`, inputName: 'optionIndex', optionValue: (opt, i) => i, creatorCanVote: true, voteBeforeVoters: true, afterVoters: [renderVoteResultsField(shaped, shaped.options)] }),
     bodyExtra: [
       tribeDescription(v.description),
       renderTribeReachControls(tribe, v, returnTo),
-      ...renderVoteOptionsBlock(shaped, shaped.options, `${tribeUrl}/votations/${encodeURIComponent(v.id)}/vote`, returnTo, member && isOpen && !hasVoted),
       member && isMineItem(v) && isOpen
         ? div({ class: 'tribe-side-actions' },
             form({ method: 'POST', action: `${tribeUrl}/votations/close/${encodeURIComponent(v.id)}` },
@@ -1062,7 +1072,7 @@ const renderVotationsSection = (tribe, items, query = {}) => {
           input({ type: 'text', name: 'option2', placeholder: `${i18n.tribeVotationOptionPlaceholder} 2`, required: true }), br(),
           input({ type: 'text', name: 'option3', placeholder: `${i18n.tribeVotationOptionPlaceholder} 3` }), br(),
           input({ type: 'text', name: 'option4', placeholder: `${i18n.tribeVotationOptionPlaceholder} 4` }), br(), br(),
-          tribe.reachAllowed ? renderTribeReachSelector() : null,
+          tribe.reachAllowed ? renderTribeReachSelector('votation') : null,
           button({ type: 'submit' }, i18n.voteCreateButton)
         )
       )
@@ -1078,11 +1088,11 @@ const renderVotationsSection = (tribe, items, query = {}) => {
 };
 
 const POLL_MODES = {
-  RECENT: isRecentItem, MINE: isMineItem, ALL: () => true, TOP: () => true,
+  RECENT: isRecentItem, MINE: isMineItem, SUPPORTED: pl => !!pl.isSupported, REPLICATED: pl => !!pl.isReplicated, ALL: () => true, TOP: () => true,
   VOTED: pl => !!pl.hasVoted || asList(pl.myChoices).length > 0,
   OPEN: pl => tribeStatusOf(pl) === 'OPEN', CLOSED: pl => tribeStatusOf(pl) === 'CLOSED'
 };
-const POLL_MODE_LIST = ['ALL', 'RECENT', 'MINE', 'TOP', 'VOTED', 'OPEN', 'CLOSED'];
+const POLL_MODE_LIST = ['ALL', 'RECENT', 'MINE', 'SUPPORTED', 'REPLICATED', 'TOP', 'VOTED', 'OPEN', 'CLOSED'];
 const pollModeLabel = (m) => i18n[`pollFilter${capFirst(m.toLowerCase())}`];
 
 const renderTribePollsSection = (tribe, items, query = {}) => {
@@ -1123,7 +1133,7 @@ const renderTribePollsSection = (tribe, items, query = {}) => {
   return div({ class: 'tribe-content-list' },
     chips,
     emptyMod ? null : renderTribeSearchRow(tribe, 'polls', filter, q, openClosedStats(list, pl => tribeStatusOf(pl) === 'CLOSED', i18n.pollStatusOpen, i18n.pollStatusClosed), i18n.pollSearchPlaceholder),
-    list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(pl => renderPollCard(pl, filter, null))) : renderTribeEmpty(i18n.pollsNoItems)
+    list.length ? div({ class: 'jobs-grid' }, ...paged(list).map(pl => renderPollCard(member ? pl : { ...pl, readOnly: true }, filter, null, "/polls", sectionHref(tribe, 'polls', { filter, q })))) : renderTribeEmpty(i18n.pollsNoItems)
   );
 };
 
@@ -1219,7 +1229,7 @@ const renderForumSection = (tribe, items, query = {}) => {
   const present = new Set(threads.map(t => t.category).filter(Boolean));
   const visible = (m) => FORUM_CATEGORIES.includes(m) ? (present.has(m) || m === filter) : tribeChipVisible(threads, filter, modes)(m);
   const labelOf = (m) => FORUM_CATEGORIES.includes(m) ? forumCatLabel(m) : i18n[`forumFilter${capFirst(m)}`];
-  const chips = renderTribeModeChips(tribe, 'forum', { modes: ['all', 'recent', 'mine', 'top', ...FORUM_CATEGORIES], filter: isCreate ? 'create' : filter, labelOf, visible, emptyMod, create: member ? { label: i18n.forumCreateButton } : null });
+  const chips = renderTribeModeChips(tribe, 'forum', { modes: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', ...FORUM_CATEGORIES], filter: isCreate ? 'create' : filter, labelOf, visible, emptyMod, create: member ? { label: i18n.forumCreateButton } : null });
 
   if (isCreate) {
     return div({ class: 'tribe-content-list' }, chips,
@@ -1231,7 +1241,7 @@ const renderForumSection = (tribe, items, query = {}) => {
           input({ type: 'text', name: 'title', maxlength: '100', required: true, placeholder: i18n.forumTitlePlaceholder }), br(), br(),
           label(i18n.forumMessageLabel), br(),
           textarea({ maxlength: String(TEXT_CAP), name: 'description', required: true, rows: '4', placeholder: i18n.forumMessagePlaceholder }), br(), br(),
-          tribe.reachAllowed ? renderTribeReachSelector() : null,
+          tribe.reachAllowed ? renderTribeReachSelector('forum') : null,
           button({ type: 'submit' }, i18n.forumCreateButton)
         )
       )
@@ -1289,7 +1299,7 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
   const isCreate = query.action === 'create' && member;
   const tribeUrl = tribeUrlOf(tribe);
   const emptyMod = !isCreate && moduleIsEmpty(media, filter, 'all', q);
-  const chips = renderTribeModeChips(tribe, cfg.key, { modes: ['all', 'recent', 'mine', 'top'], filter: isCreate ? 'create' : filter, labelOf: m => i18n[`${cfg.filter}${capFirst(m)}`], visible: tribeChipVisible(media, filter, BASE_MODES), emptyMod, create: member ? { label: i18n[cfg.create] } : null });
+  const chips = renderTribeModeChips(tribe, cfg.key, { modes: ['all', 'recent', 'mine', 'supported', 'replicated', 'top'], filter: isCreate ? 'create' : filter, labelOf: m => i18n[`${cfg.filter}${capFirst(m)}`], visible: tribeChipVisible(media, filter, BASE_MODES), emptyMod, create: member ? { label: i18n[cfg.create] } : null });
 
   if (isCreate) {
     const common = [
@@ -1305,7 +1315,7 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
           input({ type: 'text', name: 'title', id: 'title', maxlength: '100', required: true }), br(), br(),
           label(i18n.bookmarkDescriptionLabel), br(),
           textarea({ maxlength: String(TEXT_CAP), name: 'description', id: 'description', rows: '4', placeholder: i18n.bookmarkDescriptionPlaceholder }, ''), br(),
-          tribe.reachAllowed ? renderTribeReachSelector() : null, br(),
+          tribe.reachAllowed ? renderTribeReachSelector('media') : null, br(),
           button({ type: 'submit' }, i18n[cfg.create])
         )
       : form({ method: 'POST', action: `${tribeUrl}/media/upload`, enctype: 'multipart/form-data' },
@@ -1317,7 +1327,7 @@ const renderTribeMediaTypeSection = (tribe, items, query = {}, mediaType) => {
           label(i18n[cfg.descLabel]), br(),
           textarea({ maxlength: String(TEXT_CAP), name: 'description', id: 'description', rows: '4' }, ''), br(),
           ...renderLicenseSelect('', i18n), br(),
-          tribe.reachAllowed ? renderTribeReachSelector() : null, br(),
+          tribe.reachAllowed ? renderTribeReachSelector('media') : null, br(),
           button({ type: 'submit' }, i18n[cfg.create])
         );
     return div({ class: 'tribe-content-list' }, chips, div({ class: `div-center ${cfg.formClass}` }, formNode));
@@ -1346,7 +1356,7 @@ const renderStandaloneSection = (tribe, sectionKey, items, query, cfg) => {
   const filter = String(query.filter || 'all').toLowerCase();
   const q = String(query.q || '').trim();
   const modes = cfg.modes || BASE_MODES;
-  const modeList = cfg.modeList || ['all', 'recent', 'mine'];
+  const modeList = cfg.modeList || ['all', 'recent', 'mine', 'supported', 'replicated'];
   const emptyMod = moduleIsEmpty(list, filter, 'all', q);
   const chips = renderTribeModeChips(tribe, sectionKey, {
     modes: modeList, filter, labelOf: cfg.labelOf, visible: tribeChipVisible(list, filter, modes), emptyMod,
@@ -1409,7 +1419,7 @@ const closedByFlag = (it) => !!it.isClosed || String(it.status || '').toUpperCas
 const renderTribePadsSection = (tribe, pads, query = {}) =>
   renderStandaloneSection(tribe, 'pads', pads, query, {
     title: i18n.tribeSectionPads || 'PADS', description: i18n.padsDescription, createAction: '/pads', createLabel: i18n.tribePadCreate || 'Create Pad',
-    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'open', 'closed'],
+    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'supported', 'replicated', 'open', 'closed'],
     labelOf: m => i18n[`padFilter${capFirst(m)}`], placeholder: i18n.padSearchPlaceholder, empty: i18n.tribePadsEmpty || i18n.padsNoItems,
     stats: (list) => renderModuleStatsBy(list, pd => pd.isClosed ? 'CLOSED' : String(pd.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.padStatusOpen }, { value: 'INVITE-ONLY', label: i18n.padStatusInviteOnly }, { value: 'CLOSED', label: i18n.padStatusClosed }]),
     render: (list) => div({ class: 'tribe-grid pads-grid' }, ...list.map(pd => renderPadCard(pd, 'all', null)))
@@ -1418,7 +1428,7 @@ const renderTribePadsSection = (tribe, pads, query = {}) =>
 const renderTribeChatsSection = (tribe, chats, query = {}) =>
   renderStandaloneSection(tribe, 'chats', chats, query, {
     title: i18n.tribeSectionChats || 'CHATS', description: i18n.modulesChatsDescription, createAction: '/chats', createLabel: i18n.tribeChatCreate || 'Create Chat',
-    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'open', 'closed'],
+    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'supported', 'replicated', 'open', 'closed'],
     labelOf: m => i18n[`chatFilter${capFirst(m)}`], placeholder: i18n.chatSearchPlaceholder, empty: i18n.tribeChatsEmpty || i18n.chatNoItems,
     stats: (list) => renderModuleStatsBy(list, c => String(c.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.chatStatusOpen }, { value: 'INVITE-ONLY', label: i18n.chatStatusInviteOnly }, { value: 'CLOSED', label: i18n.chatStatusClosed }]),
     render: (list) => div({ class: 'tribe-grid' }, ...list.map(c => renderChatCard(c, 'all', { q: query.q || '' })))
@@ -1427,7 +1437,7 @@ const renderTribeChatsSection = (tribe, chats, query = {}) =>
 const renderTribeCalendarsSection = (tribe, calendars, query = {}) =>
   renderStandaloneSection(tribe, 'calendars', calendars, query, {
     title: i18n.tribeSectionCalendars || 'CALENDARS', description: i18n.calendarsDescription, createAction: '/calendars', createLabel: i18n.tribeCalendarCreate || 'Create Calendar',
-    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'open', 'closed'],
+    modes: openClosedModes(closedByFlag), modeList: ['all', 'recent', 'mine', 'supported', 'replicated', 'open', 'closed'],
     labelOf: m => i18n[`calendarFilter${capFirst(m)}`], placeholder: i18n.calendarSearchPlaceholder, empty: i18n.tribeCalendarsEmpty || i18n.calendarsNoItems,
     stats: (list) => openClosedStats(list, closedByFlag, i18n.calendarStatusOpen, i18n.calendarStatusClosed),
     render: (list) => {
@@ -1446,11 +1456,11 @@ const renderTribeWikiSectionPage = (tribe, pages, query = {}) => {
   const toolbar = div({ class: 'tribe-content-list' },
     div({ class: 'mode-buttons-row' },
       ...(emptyMod ? [] : [
-        ...['all', 'recent', 'mine'].filter(tribeChipVisible(list, filter, BASE_MODES)).map(m =>
+        ...['all', 'recent', 'mine', 'supported', 'replicated'].filter(tribeChipVisible(list, filter, BASE_MODES)).map(m =>
           form({ method: 'GET', action: tribeUrlOf(tribe) },
             input({ type: 'hidden', name: 'section', value: 'wiki' }),
             input({ type: 'hidden', name: 'filter', value: m }),
-            button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, String(i18n[`wikiFilter${capFirst(m)}`] || m).toUpperCase())
+            button({ type: 'submit', class: filter === m ? 'filter-btn active' : 'filter-btn' }, RELATION_FILTERS.includes(m) ? relationFilterLabel(m) : String(i18n[`wikiFilter${capFirst(m)}`] || m).toUpperCase())
           )),
         form({ method: 'GET', action: '/wiki' },
           input({ type: 'hidden', name: 'filter', value: 'changes' }),
@@ -1485,7 +1495,7 @@ const renderTribeRoomsSectionPage = (tribe, sectionData, query = {}) => {
   const shown = applyTribeFilter(rooms, filter, q, modes, () => 0);
   const toolbar = div({ class: 'tribe-content-list' },
     renderTribeModeChips(tribe, 'rooms', {
-      modes: ['all', 'recent', 'mine', 'live', 'open', 'closed'], filter, labelOf: m => i18n[`roomFilter${capFirst(m)}`], visible: tribeChipVisible(rooms, filter, modes), emptyMod,
+      modes: ['all', 'recent', 'mine', 'supported', 'replicated', 'live', 'open', 'closed'], filter, labelOf: m => i18n[`roomFilter${capFirst(m)}`], visible: tribeChipVisible(rooms, filter, modes), emptyMod,
       create: member ? { action: '/rooms', hidden: { filter: 'create', tribeId: tribe.id }, label: i18n.tribeRoomCreate } : null
     }),
     emptyMod ? null : renderTribeSearchRow(tribe, 'rooms', filter, q, roomStatsBy(shown), i18n.roomSearchPlaceholder)
@@ -1664,7 +1674,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
             )
           )
         : null,
-    renderDetailShare(tribe.id, tribeHref, tribe.title, subscriptionOpts),
+    renderDetailShare(tribe.id, tribeHref, tribe.title, subscriptionOpts, null, null, tribe.author),
       div({ class: 'shop-title-row' },
         h2({ class: 'tribe-card-title' }, tribe.title)
       ),
@@ -1822,7 +1832,6 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
     const chips = [
       it.status ? (statusI18n()[it.status] || it.status) : '',
       it.date ? `${i18n.tribeEventDate || 'Date'}: ${it.date}` : '',
-      it.deadline ? `${i18n.tribeTaskDeadline || 'Deadline'}: ${it.deadline}` : '',
       it.location ? `${i18n.tribeEventLocation || 'Location'}: ${it.location}` : ''
     ].filter(Boolean).map(chip).join('');
     const details = [
@@ -1830,13 +1839,6 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
       ...(it.contentType === 'map' && Array.isArray(it.markers) ? it.markers.map(mk => `📍 ${Number(mk.lat).toFixed(4)}, ${Number(mk.lng).toFixed(4)}${mk.label ? ` · ${mk.label}` : ''}`) : []),
       ...(it.contentType === 'calendar' && Array.isArray(it.dates) ? it.dates.map(d => `📅 ${day(d.date)}${d.label ? ` · ${d.label}` : ''}`) : [])
     ].filter(Boolean).map(chip).join('');
-    const options = it.contentType === 'votation' && Array.isArray(it.options) && it.options.length
-      ? `<ul class="cn-tribe-options">${it.options.map(o => `<li>${escapeHtml(String(o))}</li>`).join('')}</ul>`
-      : '';
-    const replies = it.contentType === 'forum' && Array.isArray(it.replies) ? it.replies : [];
-    const repliesHtml = replies.length
-      ? `<div class="cn-tribe-replies"><div class="cn-tribe-meta">${escapeHtml(String(i18n.forumMessages || i18n.tribeForumReplies || 'MESSAGES').toUpperCase())}: ${replies.length}</div>${replies.map(r => `<div class="cn-tribe-reply"><div class="cn-tribe-reply-meta">${escapeHtml(who(r.author))}${day(r.createdAt) ? ` · ${escapeHtml(day(r.createdAt))}` : ''}</div><p>${renderRichText(r.description || '')}</p></div>`).join('')}</div>`
-      : '';
     const text = it.description && it.description !== url ? renderRichText(it.description) : '';
     const pdfFrames = (Array.isArray(it.pdfs) ? it.pdfs : []).map(p => renderClearnetPdfFrame(cnBlobUrl(p.blob), p.name)).join('');
     const when = day(it.createdAt);
@@ -1849,8 +1851,6 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
       ${pdfFrames}
       ${bookmark}
       ${details ? `<div class="cn-hub-details">${details}</div>` : ''}
-      ${options}
-      ${repliesHtml}
     </div>`;
   };
   const extraCss = `
@@ -1865,11 +1865,6 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
 .cn-tribe-title{color:var(--fg);font-size:18px;font-weight:700;margin:8px 0;word-break:break-word}
 .cn-tribe-text{color:var(--fg-soft);line-height:1.5;margin:8px 0;word-break:break-word}
 .cn-tribe-link{display:inline-block;margin:8px 0;padding:6px 12px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;color:var(--fg);word-break:break-all}
-.cn-tribe-options{margin:8px 0;padding-left:20px;color:var(--fg-soft)}
-.cn-tribe-replies{margin-top:12px;border-top:1px solid var(--border);padding-top:8px}
-.cn-tribe-reply{border-left:2px solid var(--border);padding:4px 0 4px 12px;margin:8px 0}
-.cn-tribe-reply-meta{color:var(--fg-dim);font-size:12px;word-break:break-all}
-.cn-tribe-reply p{margin:4px 0 0 0;color:var(--fg-soft);line-height:1.5;word-break:break-word}
 .cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
 ` + CLEARNET_HUB_CSS + CLEARNET_PAGER_CSS;
   const body = `
@@ -2039,6 +2034,7 @@ const candidaturesBlock = (tribe, candidatures, alreadyPublishedThisGlobalCycle)
             ` — ${c.method || 'DEMOCRACY'} — ${c.votes || 0} ${i18n.votes || 'votes'}`,
             ' ',
             form({ method: 'POST', action: `/tribe/${encodeURIComponent(tribe.id)}/governance/candidature/vote`, class: 'inline-form' },
+              input({ type: 'hidden', name: 'returnTo', value: hereAt(null) || '' }),
               input({ type: 'hidden', name: 'candidatureId', value: c.id }),
               button({ type: 'submit', class: 'tribe-action-btn' }, i18n.vote || 'Vote')
             )

@@ -194,7 +194,7 @@ const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, retu
   }
   const parts = [
     total && !compact ? span({ class: 'card-label' }, `${i18n.subscriptionTitle} (${total})${isOwner ? '' : ':'}`) : null,
-    compact && isOwner && total ? renderStateChip('mutuals', '🔔', `${i18n.subscriptionTitle}${countSuffix}`) : null,
+    compact && isOwner && total ? renderStateChip('transport', '🔔', `${i18n.subscriptionTitle}${countSuffix}`) : null,
     span({ class: 'subscription-actions' },
       isOwner
         ? null
@@ -247,7 +247,7 @@ const renderVisibilityChip = (visibility, i18nObj) => {
 
 const renderPrivacyChip = (isPrivate, i18nObj) =>
   isPrivate
-    ? renderStateChip("closed", "🔒", (i18nObj && i18nObj.privacyPrivate) || "PRIVATE")
+    ? renderStateChip("hidden", "🔒", (i18nObj && i18nObj.privacyPrivate) || "PRIVATE")
     : renderStateChip("mutuals", "🌐", (i18nObj && i18nObj.privacyPublic) || "PUBLIC");
 
 const renderModeChip = (mode, i18nObj) => {
@@ -394,14 +394,15 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
   const myId = (config.keys && config.keys.id) ? config.keys.id : '';
   const linkBtn = blockId && viewHref && o.share !== false ? renderLinkBox(blockId, viewHref, o.reportTitle) : null;
 
+  const backTo = o.returnTo || hereAt(blockId);
   const pinBtn = o.favKind && blockId
     ? form({ method: 'POST', action: `/${o.favKind}/favorites/${o.isFavorite ? 'remove' : 'add'}/${encodeURIComponent(blockId)}`, class: 'content-action-form' },
-        o.returnTo ? input({ type: 'hidden', name: 'returnTo', value: o.returnTo }) : null,
+        backTo ? input({ type: 'hidden', name: 'returnTo', value: backTo }) : null,
         button({ type: 'submit', class: o.isFavorite ? 'btn-singleview btn-pin-on' : 'btn-singleview', title: o.isFavorite ? i18n.favoriteRemove : i18n.favoriteAdd }, renderIcon('pin'))
       )
     : null;
 
-  const spreadBtn = o.spread !== undefined && blockId && !(o.author && String(o.author) === String(myId)) ? renderSpreadButton(blockId, o.spread, o.spreadTitle || null) : null;
+  const spreadBtn = o.spread !== undefined && blockId && !(o.author && String(o.author) === String(myId)) ? renderSpreadButton(blockId, o.spread, o.spreadTitle || null, true, backTo) : null;
 
   const torrentBtn = (() => {
     const src = o.torrentFrom && typeof o.torrentFrom === 'object' ? o.torrentFrom : null;
@@ -518,21 +519,37 @@ const renderCardByline = (opts = {}) => {
   const when = opts.date ? moment(opts.date) : null;
   const time = when && when.isValid() ? span({ class: 'card-byline-time', title: when.format('YYYY/MM/DD HH:mm') }, when.fromNow()) : null;
   const chipNodes = [].concat(opts.chips || []).filter(Boolean);
+  const extraChips = [].concat(opts.extraChips || []).filter(Boolean);
   const isChipsRow = (n) => !!n && String(n.class || n.className || '').split(/\s+/).includes('card-chips-row');
-  const chipsRow = !chipNodes.length ? null : (chipNodes.length === 1 && isChipsRow(chipNodes[0]) ? chipNodes[0] : div({ class: 'card-chips-row' }, ...chipNodes));
+  let chipsRow = null;
+  if (chipNodes.length === 1 && isChipsRow(chipNodes[0]) && typeof chipNodes[0].appendChild === 'function') {
+    chipsRow = chipNodes[0];
+    for (const c of extraChips) chipsRow.appendChild(c);
+  } else if (chipNodes.length || extraChips.length) {
+    chipsRow = div({ class: 'card-chips-row' }, ...chipNodes, ...extraChips);
+  }
   const extra = [].concat(opts.bylineExtra || [], chipsRow).filter(Boolean);
   if (!author && !time && !extra.length) return span();
   return div({ class: 'card-byline' },
-    author ? a({ href: `/author/${encodeURIComponent(author)}`, class: 'card-byline-avatar' }, img({ src: avatarSrc(author), alt: '' })) : null,
-    author ? userLink(author, opts.authorName) : null,
-    time,
+    span({ class: 'card-byline-who' },
+      author ? a({ href: `/author/${encodeURIComponent(author)}`, class: 'card-byline-avatar' }, img({ src: avatarSrc(author), alt: '' })) : null,
+      author ? userLink(author, opts.authorName) : null,
+      time
+    ),
     ...extra
   );
 };
+const relationSets = () => { const st = listScope(); return st && st.relationSets ? st.relationSets : null; };
 const renderCardTop = (msgId, viewHref, opts = {}) => {
   const o = (opts && typeof opts === 'object') ? opts : {};
-  return div({ class: 'card-header activity-card-header card-top' },
-    renderCardByline(o),
+  const rs = relationSets();
+  const cardAuthor = typeof o.bylineAuthor === 'string' && o.bylineAuthor.startsWith('@') ? o.bylineAuthor : o.author;
+  const supportedChip = renderSupportedChip(cardAuthor, rs && rs.following);
+  const replicating = (o.spread && o.spread.alreadySpread === true) || o.replicated === true || !!(rs && rs.replicated && typeof msgId === 'string' && rs.replicated.has(msgId));
+  const spreadingChip = replicating ? renderStateChip('transport', '', String(i18n.spreadingChip || '').toUpperCase()) : null;
+  const anchor = anchorFor(msgId);
+  return div({ class: 'card-header activity-card-header card-top', ...(anchor ? { id: anchor } : {}) },
+    renderCardByline({ ...o, extraChips: [].concat(o.extraChips || [], supportedChip, spreadingChip).filter(Boolean) }),
     renderContentActions(msgId, viewHref, { ...o, share: false, menu: true })
   );
 };
@@ -593,13 +610,14 @@ const renderShareButton = (blockId, viewHref, title) => {
 exports.renderCardByline = renderCardByline;
 exports.renderCardTop = renderCardTop;
 exports.renderShareButton = renderShareButton;
-const renderDetailShare = (blockId, viewHref, title, subscription = null, lead = null, tail = null) => {
+const renderDetailShare = (blockId, viewHref, title, subscription = null, lead = null, tail = null, author = null) => {
   const share = renderShareButton(blockId, viewHref, title);
   const subNodes = subscription ? renderSubscriptionBox({ ...subscription, inline: true }) : null;
   const sub = Array.isArray(subNodes) && subNodes.length ? span({ class: 'detail-share-sub' }, ...subNodes) : null;
   const tailNodes = [].concat(tail || []).filter(Boolean);
   const tailNode = tailNodes.length ? span({ class: 'detail-share-tail' }, ...tailNodes) : null;
-  return share || sub || lead || tailNode ? div({ class: 'detail-share' }, lead, share, sub, tailNode) : null;
+  const support = author ? renderSupportButton(author, null, hereAt(blockId)) : null;
+  return share || sub || lead || tailNode ? div({ class: 'detail-share' }, lead, share, sub, tailNode, support) : null;
 };
 exports.renderDetailShare = renderDetailShare;
 const renderScheduledChip = (publishAt) => publishAt
@@ -805,6 +823,21 @@ const renderMobileCounters = () => {
 const LIST_PAGE_SIZE = 50;
 const LIST_PAGE_SIZES = ['10', '50', '100', 'all'];
 const listScope = () => { try { return require('../models/typed_log').requestScope.getStore() || null; } catch (_) { return null; } };
+const anchorFor = (id) => (typeof id === 'string' && id) ? `c-${id.replace(/[^A-Za-z0-9]/g, '').slice(0, 24)}` : null;
+const herePath = () => {
+  const st = listScope();
+  if (!st || typeof st.path !== 'string' || (st.method && st.method !== 'GET')) return null;
+  return `${st.path}${st.query ? `?${st.query}` : ''}`;
+};
+const hereAt = (id) => {
+  const base = herePath();
+  if (!base) return null;
+  const anchor = anchorFor(id);
+  return anchor ? `${base}#${anchor}` : base;
+};
+exports.anchorFor = anchorFor;
+exports.hereAt = hereAt;
+exports.herePath = herePath;
 const escapeFormAttr = (s) => String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escapeFormText = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -984,7 +1017,7 @@ const renderVotesSummary = (opinions = {}) => {
 };
 exports.renderVotesSummary = renderVotesSummary;
 
-const renderSpreadButton = (msgKey, opts, title = null, showCount = true) => {
+const renderSpreadButton = (msgKey, opts, title = null, showCount = true, returnTo = null) => {
   if (!msgKey || typeof msgKey !== 'string' || !msgKey.startsWith('%') || !/\.sha256$/.test(msgKey)) return null;
   const o = (opts && typeof opts === 'object') ? opts : {};
   const voters = Array.isArray(o.voters) ? o.voters : [];
@@ -992,6 +1025,7 @@ const renderSpreadButton = (msgKey, opts, title = null, showCount = true) => {
   const alreadySpread = o.alreadySpread === true;
   return form(
     { method: 'POST', action: `/spread/${encodeURIComponent(msgKey)}`, class: 'spread-form' },
+    returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
     button(
       { type: 'submit', class: alreadySpread ? 'btn-singleview btn-spread-on' : 'btn-singleview', title: title || i18n.spreadContent },
       renderIcon('spread'), showCount ? span({ class: 'btn-count' }, String(count)) : null
@@ -1064,7 +1098,7 @@ const opinionCategoriesList = require('../backend/opinion_categories');
 const renderEngagement = (id, opinionsNode, commentsNode, share = null) => {
   const autoOpinions = !opinionsNode && share && share.opinions !== false ? renderOpinionsPill([id, share.rootId], share.href) : null;
   const autoComments = !commentsNode && share && share.comments !== false ? renderCommentsPill(id, share.href) : null;
-  const parts = [opinionsNode || autoOpinions, commentsNode || autoComments, share ? renderShareButton(id, share.href, share.title) : null].filter(Boolean);
+  const parts = [opinionsNode || autoOpinions, commentsNode || autoComments, share ? renderShareButton(id, share.href, share.title) : null, share && share.author ? renderSupportButton(share.author, null, hereAt(id)) : null].filter(Boolean);
   if (!parts.length) return null;
   return div({ class: 'card-engage' }, ...parts);
 };
@@ -1104,6 +1138,43 @@ const moduleIsEmpty = (items, filter, defaultFilter = 'all', q = '') =>
   !String(q || '').trim();
 exports.moduleIsEmpty = moduleIsEmpty;
 
+const supportableAuthor = (author) => {
+  const me = (config.keys && config.keys.id) ? config.keys.id : '';
+  if (typeof author !== 'string' || !author.startsWith('@') || author === me) return false;
+  return !(sharedState.isPubId && sharedState.isPubId(author));
+};
+const renderSupportButton = (author, following, returnTo = null) => {
+  if (!supportableAuthor(author)) return null;
+  const backTo = returnTo || herePath();
+  const known = following instanceof Set ? following : (relationSets() && relationSets().following);
+  if (known instanceof Set && known.has(author)) return null;
+  return form({ method: 'POST', action: `/follow/${encodeURIComponent(author)}`, class: 'support-form' },
+    backTo ? input({ type: 'hidden', name: 'returnTo', value: backTo }) : null,
+    button({ type: 'submit', class: 'support-pill', title: i18n.follow },
+      span({ class: 'support-pill-icon' }, '\u2665\uFE0E'),
+      span({ class: 'support-pill-label' }, i18n.follow)
+    )
+  );
+};
+const renderSupportedChip = (author, following) =>
+  supportableAuthor(author) && following instanceof Set && following.has(author)
+    ? renderStateChip('transport', '', String(i18n.supportedChip || '').toUpperCase())
+    : null;
+exports.renderSupportedChip = renderSupportedChip;
+const RELATION_FILTERS = ['supported', 'replicated'];
+const hasRelation = (mode, list) => Array.isArray(list) && list.some(x => x && (mode === 'supported' ? x.isSupported : x.isReplicated));
+const relationFilterLabel = (mode) => String(mode === 'supported' ? i18n.filterSupported : i18n.filterReplicated).toUpperCase();
+const renderRelationFilters = (current, visible, opts = {}) => RELATION_FILTERS
+  .map(mode => ({ mode, value: opts.upper ? mode.toUpperCase() : mode }))
+  .filter(({ value }) => String(current) === value || !visible || visible(value))
+  .map(({ mode, value }) => opts.href
+    ? a({ href: opts.href(value), class: String(current) === value ? (opts.activeClass || 'filter-btn active') : (opts.linkClass || 'filter-btn') }, relationFilterLabel(mode))
+    : button({ type: 'submit', name: opts.name || 'filter', value, class: String(current) === value ? 'filter-btn active' : 'filter-btn' }, relationFilterLabel(mode)));
+exports.RELATION_FILTERS = RELATION_FILTERS;
+exports.hasRelation = hasRelation;
+exports.relationFilterLabel = relationFilterLabel;
+exports.renderRelationFilters = renderRelationFilters;
+exports.renderSupportButton = renderSupportButton;
 const renderCardMetaRow = (...nodes) => {
   const flat = nodes.flat(Infinity).filter(Boolean);
   if (!flat.length) return null;
@@ -1220,6 +1291,7 @@ const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters, pathFor 
   const myId = (config.keys && config.keys.id) ? config.keys.id : '';
   const alreadyVoted = Array.isArray(voters) && myId ? voters.includes(myId) : false;
   const actionFor = (category) => typeof pathFor === 'function' ? pathFor(id, category) : `${basePath}/${encodeURIComponent(id)}/${category}`;
+  const backTo = returnTo || hereAt(id);
   const votingDetails = details({ class: 'opinions-voting-collapse' },
     summary({ class: total > 0 ? 'opinions-summary engage-on' : 'opinions-summary' },
       span({ class: 'opinions-summary-icon' }, 'ꔍ'),
@@ -1227,7 +1299,7 @@ const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters, pathFor 
     div({ class: 'voting-buttons' },
       opinionCategoriesList.map((category) =>
         form({ method: 'POST', action: actionFor(category) },
-          returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
+          backTo ? input({ type: 'hidden', name: 'returnTo', value: backTo }) : null,
           button({ class: alreadyVoted ? 'vote-btn disabled' : 'vote-btn', type: 'submit', ...(alreadyVoted ? { disabled: true } : {}) },
             `${String(i18n['vote' + category.charAt(0).toUpperCase() + category.slice(1)] || category).toUpperCase()} [${ops[category] || 0}]`)
         )
@@ -3299,7 +3371,8 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
             isPrivate || isRoot || isFork
                 ? null
                 : a({ href: url.subtopic, class: "comments-summary-link" }, span(i18n.subtopic)),
-            renderShareButton(msg.key, url.link, cardTitle)
+            renderShareButton(msg.key, url.link, cardTitle),
+            renderSupportButton(msg.value && msg.value.author, null, hereAt(msg.key))
         )
     );
 
@@ -3464,7 +3537,7 @@ exports.editProfileView = ({ name, description, visibilityPrefs = {}, feedId = '
           {
             type: "submit",
           },
-          i18n.submit
+          i18n.save
         )
       )
     )
@@ -4253,7 +4326,7 @@ const renderMessage = (msg) => {
       div({ class: 'card-section' },
         p({ class: 'post-text' }, ...renderStyledText(mentionsText || '[No content]'))
       ),
-      renderEngagement(msg.key, null, null, { href: visitUrl, title: mentionsText })
+      renderEngagement(msg.key, null, null, { href: visitUrl, title: mentionsText, author: msg.value && msg.value.author })
     )
   );
 };
@@ -4266,7 +4339,7 @@ const inboxBotLabel = (bot) => ({
   blogs: i18n.pmBotBlogs, jobs: i18n.pmBotJobs, projects: i18n.pmBotProjects, market: i18n.pmBotMarket, shops: i18n.pmBotShops,
   political: i18n.pmBotPolitical, banking: i18n.pmBotBanking, school: i18n.pmBotSchool, industry: i18n.pmBotIndustry,
   housing: i18n.pmBotHousing, wiki: i18n.pmBotWiki, emergencies: i18n.pmBotEmergencies, podcasts: i18n.pmBotPodcasts,
-  campaigns: i18n.pmBotCampaigns, logistics: i18n.pmBotLogistics, reminders: i18n.privateReminders
+  campaigns: i18n.pmBotCampaigns, logistics: i18n.pmBotLogistics, social: i18n.pmBotSocial, reminders: i18n.privateReminders
 })[bot] || bot;
 exports.INBOX_BOT_ORDER = INBOX_BOT_ORDER;
 exports.inboxBotLabel = inboxBotLabel;
@@ -4300,6 +4373,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   }
   const isNotification = m => !!inboxBotOf(m?.value?.content)
   const isSelfNotice = m => isSent(m) && isToUser(m) && isNotification(m)
+  const botSenderByKey = new Map(messages.filter(isSelfNotice).map(m => [String(m.key), inboxBotLabel(inboxBotOf(m.value.content))]))
   const isArchived = m => archivedKeys.has(String(m?.key))
   const toUserKeys = new Set(messages.filter(isToUser).map(m => String(m.key)))
   const isUnreadKey = (key) => toUserKeys.has(String(key)) && !readKeys.has(String(key)) && !archivedKeys.has(String(key))
@@ -4341,7 +4415,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     return table({ class: 'pm-info-table' },
       tr(
         td({ class: 'card-label' }, i18n.pmFromLabel || 'From:'),
-        td({ class: 'card-value' }, linkAuthor(from))
+        td({ class: 'card-value' }, botSenderByKey.has(String(msgKey)) ? span({ class: 'pm-bot-sender' }, botSenderByKey.get(String(msgKey))) : linkAuthor(from))
       ),
       tr(
         td({ class: 'card-label' }, i18n.privateDate || 'Date'),
@@ -4585,6 +4659,25 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
         href ? a({ class: 'project-link', href }, `"${projectTitle}"`) : `"${projectTitle}"`
       ),
       actions({ key, replyId: from, subjectRaw: projectTitle, text })
+    )
+  }
+
+  function SocialSupportCard({ sentAt, from, toLinks, text, key, msgSize }) {
+    const titleH = i18n.inboxSocialSupportedTitle || 'New supporter'
+    const m = String(text || '').match(/\]\(\/author\/([^)\s]+)\)/)
+    let supporter = from
+    if (m) { try { supporter = decodeURIComponent(m[1]) } catch (_) {} }
+    return div(
+      { class: 'pm-card social-support-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: titleH, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `\u2665 ${i18n.pmBotSocial || 'SocialBot'} · `, titleLink(`/author/${encodeURIComponent(supporter)}`, titleH)),
+      p(
+        i18n.pmInhabitantWithId, ' ',
+        userLink(supporter),
+        ' ',
+        i18n.pmHasSupportedYou || 'has started supporting you'
+      ),
+      actions({ key, replyId: supporter, subjectRaw: titleH, text })
     )
   }
 
@@ -5004,6 +5097,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             }
             if (subjectU === 'PROJECT_FOLLOWED' || subjectU === 'PROJECT_UNFOLLOWED') {
               return ProjectFollowCard({ type: subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU === 'SOCIAL_SUPPORTED') {
+              return SocialSupportCard({ sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'MARKET_SOLD') {
               return MarketSoldCard({ sentAt, from: fromResolved, toLinks, subject: subjectRaw, text, key: msg.key, msgSize, variant: 'market' })

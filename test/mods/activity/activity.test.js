@@ -485,3 +485,25 @@ describe('activity: versions republished by other inhabitants', (t) => {
     eq(list[0].author, A.keypair.id);
   });
 });
+
+describe('activity: an inhabitant who updates the profile', (t) => {
+  t('shows once per 24 hours with the latest profile, keeping the last picture, and ignores aliases set by others', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); A.setActor();
+    const ssb = await A.cooler.open();
+    const pub = (c) => new Promise((res, rej) => ssb.publish(c, (e, m) => e ? rej(e) : res(m)));
+    const id = A.keypair.id;
+    const img = '&' + 'i'.repeat(43) + '=.sha256';
+    await pub({ type: 'about', about: id, name: 'Ana', description: 'hola', image: img });
+    await pub({ type: 'about', about: id, name: 'Ana', description: 'hola de nuevo' });
+    await pub({ type: 'about', about: id, name: 'Ana2', description: 'otra' });
+    B.setActor();
+    const ssbB = await B.cooler.open();
+    await new Promise((res, rej) => ssbB.publish({ type: 'about', about: id, name: 'Ana (alias)' }, (e, m) => e ? rej(e) : res(m)));
+    A.setActor();
+    const abouts = (await A.use('activity').listFeed('all')).filter(a => a.type === 'about' && (a.content.about || a.author) === id);
+    eq(abouts.length, 1, 'a single card for the inhabitant');
+    eq(abouts[0].content.name, 'Ana2', 'with the latest name');
+    eq(abouts[0].content.image, img, 'and the last picture they published');
+    eq(abouts[0].author, id, 'from their own profile, not from an alias');
+  });
+});

@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, video: videoHyperaxe, audio: audioHyperaxe, input, table, tr, th, td, br, span, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderCardTop, renderShareButton, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderCommentsSummary, commentsOpenHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument } = require('./main_views');
+const { template, i18n, userLink, renderCardTop, renderShareButton, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderCommentsSummary, commentsOpenHref, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged, renderPdfDocument, hasRelation, RELATION_FILTERS, relationFilterLabel, renderSupportButton, hereAt } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText, renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
@@ -9,7 +9,7 @@ const opinionCategories = require('../backend/opinion_categories');
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 
 
-const opinionFilterLabel = (mode) =>
+const opinionFilterLabel = (mode) => RELATION_FILTERS.includes(mode.toLowerCase()) ? relationFilterLabel(mode.toLowerCase()) :
   String(i18n[mode + 'Button'] || i18n['vote' + mode.charAt(0).toUpperCase() + mode.slice(1)] || mode).toUpperCase();
 
 const detailHref = (type, key) => {
@@ -381,8 +381,8 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
     });
 
   const title = i18n.opinionsTitle;
-  const baseFilters = ['ALL', 'RECENT', 'MINE', 'TOP'];
   const emptyOps = (Array.isArray(allItems) ? allItems : items).length === 0 && !String(q || '').trim();
+  const baseFilters = ['ALL', 'RECENT', 'MINE', 'SUPPORTED', 'REPLICATED', 'TOP'].filter(mode => !RELATION_FILTERS.includes(mode.toLowerCase()) || mode === filter || hasRelation(mode.toLowerCase(), Array.isArray(allItems) ? allItems : items));
 
   const seenDocs = new Set();
   const shownItems = items.filter(item => {
@@ -441,13 +441,15 @@ exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems =
                   return button({ class: 'vote-btn', type: 'button' }, label);
                 }
                 return form({ method: 'POST', action: `/opinions/${encodeURIComponent(key)}/${cat}` },
+                  input({ type: 'hidden', name: 'returnTo', value: hereAt(key) || '' }),
                   button({ class: 'vote-btn' }, label)
                 );
               })
             )
           ),
           renderCommentsSummary(commentsOpenHref(detailHref(c.type, key), commentTotal), commentTotal),
-          renderShareButton(key, detailHref(c.type, key), shareTitle)
+          renderShareButton(key, detailHref(c.type, key), shareTitle),
+          renderSupportButton(item.value && item.value.author, null, hereAt(key))
         )
       );
     })

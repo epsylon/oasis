@@ -5,7 +5,7 @@ const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/r
 
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
@@ -177,6 +177,7 @@ const renderFilters = (filter, q, emptyMod = false, chip = null, search = null) 
       button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterAll).toUpperCase()),
       ...(!chip || chip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterRecent).toUpperCase())] : []),
       ...(!chip || chip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterMine).toUpperCase())] : []),
+      ...renderRelationFilters(filter, chip),
       ...(!chip || chip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterFavorites).toUpperCase())] : []),
       ]),
       button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.mapCreateButton)),
@@ -277,7 +278,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         div({ class: "map-form-map-slot" },
           renderMap(pickerMarkers, null, 0, { view, id: "map", nav, pickForm: formId, pickAction: stepAction })),
         showClearnet ? renderClearnetSelector(clearnetOn, i18n) : null,
-        button({ type: "submit", class: "create-button" }, isEdit ? i18n.mapUpdateButton : i18n.mapCreateButton)));
+        button({ type: "submit", class: "create-button" }, isEdit ? i18n.save : i18n.mapCreateButton)));
 };
 
 const MARKER_FORM_ID = "add-marker-form";
@@ -462,6 +463,7 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
   const mapsChip = (mode) => {
     if (mode === filter) return true;
     if (mode === "mine") return censusMp.some((x) => String(x.author) === String(userId));
+    if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusMp);
     if (mode === "recent") return censusMp.length > 0;
     if (mode === "favorites") return censusMp.some((x) => x.isFavorite);
     return true;
@@ -544,7 +546,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       h2({ class: "tribe-card-title" }, mapObj.title || i18n.mapAllSectionTitle)
     ),
     canClearnet && String(mapObj.author) === String(userId) ? renderClearnetSwitch("maps", mapObj.rootId || mapObj.key, isClearnet) : null,
-    renderDetailShare(mapObj.rootId || mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, mapObj.title),
+    renderDetailShare(mapObj.rootId || mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, mapObj.title, null, null, null, mapObj.author),
     renderTags(mapObj.tags)
   );
 

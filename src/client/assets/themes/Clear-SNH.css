@@ -415,3 +415,20 @@ button.tribe-action-btn { background: transparent !important; border: 1px solid 
 .pdf-viewer-full {
   background-color: #F9F9F9;
 }
+.support-pill { color: #007BFF !important; }
+.poll-vote-btn { background: #FF6F00 !important; color: #FFFFFF !important; border: 1px solid #FF6F00 !important; }
+.poll-vote-btn:hover { background: #FF8F00 !important; color: #FFFFFF !important; border-color: #FF8F00 !important; }
+:where(:is(div, li):has(> .card-top):not(.tribe-side)) div { background-color: transparent; border: 0; }
+div .header-content { width: 100%; }
+::-webkit-scrollbar { width: 10px; }
+.post-preview .image-container { max-width: 100%; overflow: hidden; display: block; margin: 0 auto; }
+.card-section { border:none; padding: 10px 0 0 16px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 0px; margin-top: 8px; padding-top: 0px; border: none; }
+.card-body { margin-top: 0; margin-bottom: 4; padding: 0; }
+.card-tags { margin: 5px 0 3px 0; display: flex; flex-wrap: wrap; gap: 9px; }
+header { background-color: #FFFFFF; }
+.sidebar-left, .sidebar-right { background-color: #FFFFFF; border: 1px solid #DDDDDD; }
+nav ul li a:hover { color: #FF6F00; text-decoration: underline; }
+.article img { border: 3px solid #FF6F00; }
+.oasis-footer-center a { color: #FF6F00; }
+.oasis-footer-center a:hover { color: #FF8F00; }

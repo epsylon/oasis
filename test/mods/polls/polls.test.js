@@ -236,8 +236,10 @@ describe('polls: rendering', (t) => {
 
     const list = String(await pollsView([poll], 'ALL', { spreadMap: new Map() }));
     ok(list.includes('Where do we meet?'), 'the question is on the card');
-    notOk(list.includes('type="radio"'), 'the reduced card keeps no ballot in the listing');
-    notOk(list.includes('poll-bar-fill-75'), 'nor the results');
+    ok(list.includes('type="radio"'), 'the card lets you vote from the listing');
+    ok(list.includes('A) Plaza') && list.includes('B) Park'), 'each option shows its text next to its letter');
+    ok(list.includes('poll-bar-fill-75'), 'with the results bars');
+    ok(list.indexOf('poll-ballot-actions') < list.indexOf('poll-inline-voters'), 'the vote button comes before the voters count');
     notOk(list.includes('>false<'), 'no falsy value leaked into the html');
 
     const single = String(await singlePollView(poll, [], {}));
@@ -376,7 +378,9 @@ describe('polls: what you see once you have voted', (t) => {
 
     const list = String(await pollsView([base], 'ALL', {}));
     ok(list.includes('Where?'), 'the listing shows the question');
-    notOk(list.includes('type="radio"'), 'but the ballot only lives in the detail view');
+    ok(list.includes('type="radio"'), 'the listing card also carries the ballot');
+    const votedList = String(await pollsView([{ ...base, hasVoted: true, myChoices: ['Plaza'] }], 'ALL', {}));
+    notOk(votedList.includes('type="radio"'), 'once voted the card has no ballot nor vote button');
 
     const open = String(await singlePollView(base, [], {}));
     ok(open.includes('type="radio"'), 'before voting there is a ballot');

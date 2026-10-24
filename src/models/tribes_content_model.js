@@ -14,6 +14,8 @@ const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 const EXPOSURE_TYPE = 'tribeExposure';
 const REACH_LEVELS = ['tribe', 'oasis', 'clearnet'];
 const REACH_RANK = { tribe: 0, oasis: 1, clearnet: 2 };
+const CLEARNET_CONTENT_TYPES = ['event', 'media', 'feed', 'calendar', 'map', 'wiki'];
+const reachFor = (contentType, level) => level === 'clearnet' && !CLEARNET_CONTENT_TYPES.includes(contentType) ? 'oasis' : level;
 const SNAPSHOT_FIELDS = ['contentType', 'title', 'description', 'status', 'date', 'location', 'price', 'salary', 'priority', 'options', 'category', 'tags', 'image', 'mediaType', 'license', 'url', 'deadline', 'goal', 'dates', 'lat', 'lng', 'markers', 'createdAt', 'updatedAt'];
 const snapshotOf = (item, replies = []) => {
   const out = {};
@@ -380,10 +382,12 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
     },
 
     reachLevels: REACH_LEVELS,
+    reachFor,
 
     async publishExposure(item, level, replies = []) {
       if (!REACH_LEVELS.includes(level)) throw new Error('Invalid level');
       if (!item || !item.rootId) throw new Error('Content not found');
+      level = reachFor(item.contentType, level);
       const client = await openSsb();
       const publish = (c) => new Promise((resolve, reject) => client.publish(c, (err, r) => err ? reject(err) : resolve(r)));
       const content = {
@@ -446,7 +450,7 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
         }
         if (!chosen) continue;
         const priv = await isPrivate(chosen.c.tribeId);
-        const level = !ignorePrivacy && priv ? 'tribe' : chosen.c.level;
+        const level = !ignorePrivacy && priv ? 'tribe' : reachFor(chosen.c.contentType, chosen.c.level);
         state.set(origin, { origin, tribeId: chosen.c.tribeId, contentType: chosen.c.contentType, level, item: level === 'tribe' || !chosen.c.item ? null : longText.resolveField(chosen.c.item, 'description', chosen.by, lookup), by: chosen.by, ts: chosen.ts });
       }
       return state;
@@ -489,3 +493,5 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
     }
   };
 };
+
+module.exports.CLEARNET_CONTENT_TYPES = CLEARNET_CONTENT_TYPES;

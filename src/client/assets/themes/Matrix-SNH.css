@@ -418,3 +418,22 @@ nav, .sidebar-left nav, .sidebar-right nav, .sidebar-left ul, .sidebar-right ul 
 .oasis-pager-info { color: #008800; }
 .oasis-pager-btn { background: #0a0a0a; color: #00CC00; border: 1px solid #00FF00; }
 .oasis-pager-btn:hover, .oasis-pager-btn.active { border-color: #00FF00; color: #00FF00; }
+.support-pill { color: #00FF00 !important; }
+.poll-vote-btn { background: #00FF00 !important; color: #000000 !important; border: 1px solid #00FF00 !important; }
+.poll-vote-btn:hover { background: #000000 !important; color: #00FF00 !important; border-color: #00FF00 !important; }
+:where(:is(div, li):has(> .card-top):not(.tribe-side)) div { background-color: transparent; border: 0; }
+div .header-content { width: 100%; }
+::-webkit-scrollbar { width: 10px; }
+.post-preview .image-container { max-width: 100%; overflow: hidden; display: block; margin: 0 auto; }
+.card-section { border:none; padding: 10px 0 0 16px; }
+.card-header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 0px; margin-top: 8px; padding-top: 0px; border: none; }
+.card-body { margin-top: 0; margin-bottom: 4; padding: 0; }
+.card-tags { margin: 5px 0 3px 0; display: flex; flex-wrap: wrap; gap: 9px; }
+.card-field { display: flex; align-items: baseline; padding: 0; margin-bottom: 0; border: none; background: none; }
+div { background-color: #050F05; border: 1px solid #003300; }
+a:hover { color: #CCFFCC; }
+nav ul li a:hover { color: #CCFFCC; text-decoration: underline; }
+footer a:hover { background-color: #003300; color: #CCFFCC; }
+.article img { border: 3px solid #00FF00; }
+.oasis-footer-center a { color: #00FF00; }
+.oasis-footer-center a:hover { color: #CCFFCC; }

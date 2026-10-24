@@ -133,6 +133,11 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
       }
 
       const viewerId = ssbClient.id;
+      const scope = String(opts.scope || 'all');
+      const inScope = (author, keys) => scope === 'mine' ? String(author || '') === String(viewerId)
+        : scope === 'supported' ? !!(opts.following instanceof Set && opts.following.has(String(author || '')))
+        : scope === 'replicated' ? !!(opts.replicated instanceof Set && keys.some(k => k && opts.replicated.has(k)))
+        : true;
       const viewerVisibleTribeIds = new Set();
       if (tribesModel) {
         const visibleTribes = await tribesModel.listTribesForViewer(viewerId).catch(() => []);
@@ -154,7 +159,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
         if (c.type === 'shop' && c.visibility === 'CLOSED') return false;
         if (c.type === 'housing' && String(c.visibility || '').toUpperCase() === 'HIDDEN' && c.author !== viewerId) return false;
         if (c.type === 'poll' && c.chatId) return false;
-        return true;
+        return inScope(msg?.value?.author, [msg.key, vg.rootOf(msg.key)]);
       });
 
       filtered = dedupeKeepLatest(filtered);
@@ -193,6 +198,7 @@ module.exports = ({ cooler, padsModel, tribesModel }) => {
           if (hiddenIds && (hiddenIds.has(pad.id) || hiddenIds.has(pad.key) || hiddenIds.has(pad.rootId))) continue;
           if (pad.status === 'INVITE-ONLY' && pad.author !== viewerId && !(Array.isArray(pad.members) && pad.members.includes(viewerId))) continue;
           if (!Array.isArray(pad.tags)) continue;
+          if (!inScope(pad.author, [pad.id, pad.key, pad.rootId])) continue;
           const uniquePadTags = new Set(pad.tags.map(tagKey).filter(Boolean));
           for (const k of uniquePadTags) {
             const display = normalizeTag(pad.tags.find(t => tagKey(t) === k) || k) || k;

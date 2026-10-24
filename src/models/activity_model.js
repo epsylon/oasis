@@ -714,6 +714,8 @@ module.exports = ({ cooler, cryptoModel, tribesModel, padsModel, industryModel, 
       const REPEAT_WINDOW_MS = 10 * 60 * 1000;
       const perAuthorUnique = new Set();
       const byKey = new Map();
+      const aboutsByTarget = new Map();
+      const ABOUT_WINDOW_MS = 24 * 60 * 60 * 1000;
       const norm = s => String(s || '').trim().toLowerCase();
 
       for (const a of deduped) {
@@ -733,24 +735,10 @@ module.exports = ({ cooler, cryptoModel, tribesModel, padsModel, industryModel, 
           const prev = byKey.get(key);
           if (!prev || effTs > prev.__effTs) byKey.set(key, { ...a, __effTs: effTs });
         } else if (a.type === 'about') {
-          const target = c.about || a.author;
-          if (String(target) !== String(a.author)) {
-            byKey.set(`id:${a.id}`, { ...a, __effTs: effTs });
-            continue;
-          }
-          const key = `about:${target}`;
-          const prev = byKey.get(key);
-          const prevContent = prev && (prev.content || {});
-          const prevHasImage = !!(prevContent && prevContent.image);
-          const newHasImage = !!c.image;
-
-          if (!prev) {
-            byKey.set(key, { ...a, __effTs: effTs, __hasImage: newHasImage });
-          } else if (!prevHasImage && newHasImage) {
-            byKey.set(key, { ...a, __effTs: effTs, __hasImage: newHasImage });
-          } else if (prevHasImage === newHasImage && effTs > prev.__effTs) {
-            byKey.set(key, { ...a, __effTs: effTs, __hasImage: newHasImage });
-          }
+          const target = String(c.about || a.author);
+          const list = aboutsByTarget.get(target) || [];
+          list.push({ a, effTs, own: target === String(a.author) });
+          aboutsByTarget.set(target, list);
         } else if (textTypes.has(a.type)) {
           const t = norm(c.text);
           const key = t ? `${a.type}:${a.author}:${typeof c.root === 'string' ? c.root : ''}:${t}` : null;
@@ -777,6 +765,27 @@ module.exports = ({ cooler, cryptoModel, tribesModel, padsModel, industryModel, 
         } else {
           const key = `id:${a.id}`;
           byKey.set(key, { ...a, __effTs: effTs });
+        }
+      }
+
+      for (const [target, list] of aboutsByTarget) {
+        list.sort((x, y) => y.effTs - x.effTs);
+        const groups = [];
+        for (const item of list) {
+          const g = groups[groups.length - 1];
+          if (g && g.anchor - item.effTs <= ABOUT_WINDOW_MS) g.items.push(item);
+          else groups.push({ anchor: item.effTs, items: [item] });
+        }
+        const ownByTime = list.filter(x => x.own);
+        for (const g of groups) {
+          const own = g.items.filter(x => x.own);
+          const pick = own[0] || g.items[0];
+          let content = pick.a.content || {};
+          if (pick.own && !content.image) {
+            const withImage = ownByTime.find(x => x.effTs <= pick.effTs && x.a.content && x.a.content.image);
+            if (withImage) content = { ...content, image: withImage.a.content.image };
+          }
+          byKey.set(`about:${target}:${g.anchor}`, { ...pick.a, content, __effTs: pick.effTs });
         }
       }
 

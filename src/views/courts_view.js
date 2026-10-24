@@ -46,7 +46,7 @@ const caseTitle = (title) => CASE_TITLE_PRESETS.reduce((acc, t) => acc.split(t).
 const statusLabel = (status) => String(i18n[`courtsStatus${String(status || '').toUpperCase()}`] || status || '').toUpperCase();
 const caseHref = (c) => `/courts/cases/${encodeURIComponent(c.id)}`;
 const caseTop = (c, chips = [CourtsE2EChip()]) => renderCardTop(null, caseHref(c), { author: c.accuser, date: c.createdAt || c.openedAt, chips });
-const caseShare = (c) => renderEngagement(c.id, null, null, { href: caseHref(c), title: caseTitle(c.title) });
+const caseShare = (c) => renderEngagement(c.id, null, null, { href: caseHref(c), title: caseTitle(c.title), author: c.accuser });
 
 const FILTERS = [
   { value: 'cases', key: 'courtsFilterCases' },

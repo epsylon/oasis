@@ -100,7 +100,7 @@ exports.createCVView = async (cv = {}, editMode = false) => {
             ), br()
           ], "availability"),
 
-          button({ type: "submit" }, editMode ? i18n.cvUpdateButton : i18n.cvCreateButton)
+          button({ type: "submit" }, editMode ? i18n.save : i18n.cvCreateButton)
         )
       )
     )

@@ -395,3 +395,34 @@ describe('views: a tribe feed opened to everyone can be refeeded from the feed',
     ok(html.includes(`action="/feed/refeed/${encodeURIComponent(id)}"`), 'and the button posts to the feed route');
   });
 });
+
+describe('views: supporting an inhabitant from a card', (t) => {
+  t('the support button is offered for others; once supported it gives way to a chip, and never shows for yourself', () => {
+    const mv = require('../../../src/views/main_views');
+    const config = require('../../../src/server/ssb_config');
+    const me = (config.keys && config.keys.id) || '@' + 'a'.repeat(43) + '=.ed25519';
+    const other = '@' + 'b'.repeat(43) + '=.ed25519';
+    const html = (n) => (n && n.outerHTML) || '';
+    const off = html(mv.renderSupportButton(other, new Set()));
+    ok(off.includes(`action="/follow/${encodeURIComponent(other)}"`), 'not supported yet: the button follows');
+    eq(mv.renderSupportedChip(other, new Set()), null, 'and there is no chip');
+    eq(mv.renderSupportButton(other, new Set([other])), null, 'already supported: no button');
+    ok(html(mv.renderSupportedChip(other, new Set([other]))).includes(String(mv.i18n.supportedChip).toUpperCase()), 'but a Supported chip');
+    eq(mv.renderSupportButton(me, new Set()), null, 'no button on your own cards');
+    eq(mv.renderSupportedChip(me, new Set([me])), null, 'nor a chip');
+  });
+});
+
+describe('views: SocialBot notices in the inbox', (t) => {
+  t('a local notice of a new supporter comes from SocialBot, is addressed to you and names who supports you', async () => {
+    const mv = require('../../../src/views/main_views');
+    const config = require('../../../src/server/ssb_config');
+    const me = (config.keys && config.keys.id) || '@' + 'a'.repeat(43) + '=.ed25519';
+    const supporter = '@' + 'c'.repeat(43) + '=.ed25519';
+    const msg = { key: '%' + 's'.repeat(43) + '=.sha256', timestamp: Date.now(), value: { author: me, timestamp: Date.now(), content: { type: 'post', private: true, from: me, to: [me], subject: 'SOCIAL_SUPPORTED', text: `[@Ana](/author/${encodeURIComponent(supporter)}) has started supporting you`, sentAt: new Date().toISOString() } } };
+    const html = String(await mv.privateView({ messages: [msg], readKeys: [], archivedKeys: [], mutedBots: [] }, undefined));
+    ok(html.includes('social-support-notification'), 'it is shown as a SocialBot card');
+    ok(html.includes(`<span class="pm-bot-sender">${mv.i18n.pmBotSocial}</span>`), 'the sender is SocialBot');
+    ok(html.includes(`/author/${encodeURIComponent(supporter)}`), 'and it links the new supporter');
+  });
+});

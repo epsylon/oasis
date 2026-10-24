@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -89,6 +89,7 @@ const renderEventAttendAction = (e, isAttending, returnTo) => {
   }
   return form(
     { method: "POST", action: `/events/attend/${encodeURIComponent(e.id)}` },
+    input({ type: 'hidden', name: 'returnTo', value: hereAt(e.id) || '' }),
     input({ type: "hidden", name: "returnTo", value: returnTo }),
     button({ type: "submit", class: "filter-btn" }, attendanceLabel(isAttending))
   );
@@ -121,11 +122,11 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo, opts =
     renderPrivacyChip(isPrivate, i18n),
     renderEventStatusChip(e.status),
     e.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
-    isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
+    isAttending ? renderStateChip("transport", "★", i18n.eventAttended) : null,
     renderLifespanChip(e.lifetime, i18n),
     !origin && e.clearnet === true && clearnetEligible(e) ? renderReachChip(true, i18n, clearnetItemHref('events', e.title, e.id)) : null,
     origin ? null : e.subscriptionIn === true
-      ? renderStateChip("mutuals", "✉", i18n.subscriptionOn)
+      ? renderStateChip("transport", "✉", i18n.subscriptionOn)
       : (e.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null),
     origin ? renderTribeOriginChip(origin) : null,
     ...(Array.isArray(opts.extraChips) ? opts.extraChips : [])
@@ -175,6 +176,7 @@ const eventChipFor = (currentFilter, censusEvents) => (mode) => {
   if (!Array.isArray(censusEvents)) return true;
   const pubE = (e) => normalizePrivacy(e.isPublic) === "public";
   if (mode === "mine") return censusEvents.some((e) => e.organizer === userId);
+  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusEvents);
   if (mode === "recent") return censusEvents.length > 0;
   if (mode === "today") return censusEvents.some((e) => pubE(e) && moment(e.date).isSame(moment(), "day"));
   if (mode === "week") return censusEvents.some((e) => pubE(e) && moment(e.date).isBetween(moment(), moment().add(7, "days"), null, "[]"));
@@ -212,6 +214,8 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
     filtered = visible.filter((e) => normalizePrivacy(e.isPublic) === "public" && (Date.parse(e.createdAt || "") || 0) >= Date.now() - 86400000);
   } else if (currentFilter === "mine") {
     filtered = visible.filter((e) => e.organizer === userId);
+  } else if (currentFilter === "supported" || currentFilter === "replicated") {
+    filtered = visible.filter((e) => currentFilter === "supported" ? e.isSupported : e.isReplicated);
   } else if (currentFilter === "today") {
     filtered = visible.filter((e) => normalizePrivacy(e.isPublic) === "public" && moment(e.date).isSame(moment(), "day"));
   } else if (currentFilter === "week") {
@@ -258,6 +262,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
           button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
           ...(eventChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterRecent).toUpperCase())] : []),
           ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
+          ...renderRelationFilters(currentFilter, eventChipVisible),
           ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),
           ...(eventChipVisible("week") ? [button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase())] : []),
           ...(eventChipVisible("month") ? [button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase())] : []),
@@ -396,7 +401,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 br()
               ] : []),
               showClearnet ? renderClearnetSelector(formData.clearnet === true || String(formData.clearnet || "") === "1", i18n) : null,
-              button({ type: "submit" }, currentFilter === "edit" ? i18n.eventUpdateButton : i18n.eventCreateButton)
+              button({ type: "submit" }, currentFilter === "edit" ? i18n.save : i18n.eventCreateButton)
             )
           )
         : filtered.length > 0
@@ -425,6 +430,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
       ...(eventChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterRecent).toUpperCase())] : []),
       ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
+      ...renderRelationFilters(currentFilter, eventChipVisible),
       ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),
       ...(eventChipVisible("week") ? [button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase())] : []),
       ...(eventChipVisible("month") ? [button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase())] : []),
@@ -456,11 +462,11 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     renderPrivacyChip(isPrivate, i18n),
     renderEventStatusChip(event.status),
     isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('events', event.title, event.id) : null),
-    isAttending ? renderStateChip("whole", "★", i18n.eventAttended) : null,
+    isAttending ? renderStateChip("transport", "★", i18n.eventAttended) : null,
     renderLifespanChip(event.lifetime, i18n),
     renderEcoTax(event.msgSize, event.id),
     (event.subscription && sharesEvent)
-      ? renderStateChip(eventSubIn ? "mutuals" : "closed", "✉", eventSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
+      ? renderStateChip(eventSubIn ? "transport" : "closed", "✉", eventSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
       : null
   ].filter(Boolean);
 
@@ -510,7 +516,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, event.title)
     ),
-    renderDetailShare(event.id, returnToSelf, event.title, subscriptionOpts),
+    renderDetailShare(event.id, returnToSelf, event.title, subscriptionOpts, null, null, event.organizer || event.author),
     isOrganizer && canClearnet ? renderClearnetSwitch('events', event.rootId || event.id, isClearnet) : null,
     tagsNode
   );

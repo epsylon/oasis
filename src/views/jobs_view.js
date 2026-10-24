@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -29,6 +29,8 @@ const FILTERS = [
   { key: "ALL", i18n: "jobsFilterAll", title: "jobsAllTitle" },
   { key: "RECENT", i18n: "jobsFilterRecent", title: "jobsRecentTitle" },
   { key: "MINE", i18n: "jobsFilterMine", title: "jobsMineTitle" },
+  { key: "SUPPORTED", i18n: "filterSupported", title: "jobsAllTitle" },
+  { key: "REPLICATED", i18n: "filterReplicated", title: "jobsAllTitle" },
   { key: "TOP", i18n: "jobsFilterTop", title: "jobsTopTitle" },
   { key: "APPLIED", i18n: "jobsFilterApplied", title: "jobsAppliedTitle" },
   { key: "REMOTE", i18n: "jobsFilterRemote", title: "jobsRemoteTitle" },
@@ -125,7 +127,7 @@ const renderJobStatusChip = (status) => {
 }
 
 const renderJobAppliedChip = () =>
-  renderStateChip("whole", "★", i18n.jobsAppliedBadge)
+  renderStateChip("transport", "★", i18n.jobsAppliedBadge)
 
 const renderJobHiddenChip = () =>
   renderVisibilityChip("HIDDEN", i18n)
@@ -204,6 +206,7 @@ const jobChipFor = (filter, censusJ, params = {}) => (x) => {
   if (m === filter) return true;
   if (m === "TOP") return censusJ.length > 0;
   if (m === "MINE") return censusJ.some(j => String(j.author) === String(userId));
+  if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusJ);
   if (m === "RECENT") return censusJ.length > 0;
   if (m === "APPLIED") return censusJ.some(j => safeArr(j.subscribers).includes(userId));
   if (m === "REMOTE") return censusJ.some(j => String(j.location || "").toLowerCase() === "remote");
@@ -665,7 +668,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
       h2({ class: "tribe-card-title" }, safeText(job.title) || i18n.jobsTitle)
     ),
     isAuthor && canClearnet ? renderClearnetSwitch('jobs', job.rootId || job.id, isClearnet) : null,
-    renderDetailShare(job.rootId || job.id, `/jobs/${encodeURIComponent(job.id)}`, job.title),
+    renderDetailShare(job.rootId || job.id, `/jobs/${encodeURIComponent(job.id)}`, job.title, null, null, null, job.author),
     tagsNode,
     renderJobStatusRow(job, returnTo),
     visibilityRow

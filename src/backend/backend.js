@@ -1183,7 +1183,7 @@ const getOpenTribeItems = async () => {
 const tribeItemsFor = async (contentType, mediaType = null) => (await getOpenTribeItems().catch(() => [])).filter(x => x.contentType === contentType && (!mediaType || x.mediaType === mediaType));
 const openTribeListFor = async (contentType, filter, q, fields) => {
   const f = String(filter || 'all').toLowerCase();
-  if (!['all', 'recent', 'mine'].includes(f)) return [];
+  if (!['all', 'recent', 'mine', 'supported', 'replicated'].includes(f)) return [];
   const uid = getViewerId();
   const list = (await tribeItemsFor(contentType)).filter(t => (f !== 'mine' || t.author === uid) && (f !== 'recent' || (Date.parse(t.createdAt) || Number(t._ts) || 0) >= Date.now() - 86400000));
   return applyTextSearch(list.map(SNAPSHOT_SHAPES[contentType]), q, fields);
@@ -2967,6 +2967,43 @@ const mentionsAllowed = async (list) => {
   }
   return out;
 };
+const RELATION_FILTERS = new Set(['supported', 'replicated']);
+const relationFilterOf = (f) => { const s = String(f || '').toLowerCase(); return RELATION_FILTERS.has(s) ? s : null; };
+const viewerOnlyFilter = (f) => String(f || '').toLowerCase() === 'favorites' || !!relationFilterOf(f);
+const listFilterFor = (f, all = 'all') => viewerOnlyFilter(f) ? all : f;
+const RELATION_WAIT_MS = 2000;
+const relationView = async () => {
+  const store = require('../models/typed_log').requestScope.getStore();
+  if (store && store.relationView) return store.relationView;
+  const load = (async () => {
+    const following = await friend.followingIds().catch(() => new Set());
+    for (const id of following) if (sharedState.isPubId && sharedState.isPubId(id)) following.delete(id);
+    return { following, replicated: await spreads.ownTargets().catch(() => new Set()) };
+  })();
+  let timer = null;
+  const pending = Promise.race([load, new Promise((resolve) => { timer = setTimeout(() => resolve({ following: new Set(), replicated: new Set() }), RELATION_WAIT_MS); })]).finally(() => clearTimeout(timer));
+  if (store) store.relationView = pending;
+  return pending;
+};
+const relationKeysOf = (it) => [it.key, it.id, it.rootId, it.tipId, it.threadId, it.chatRoot].filter(k => typeof k === 'string' && k.startsWith('%'));
+const relationAuthorOf = (item) => {
+  if (!item || typeof item !== 'object') return null;
+  if (item.value && item.value.author) return item.value.author;
+  const field = OWN_ITEM_FIELDS.find(f => typeof item[f] === 'string' && item[f].startsWith('@'));
+  return field ? item[field] : extractItemAuthor(item);
+};
+const markRelations = async (items, authorOf = relationAuthorOf) => {
+  if (!Array.isArray(items) || !items.length) return items;
+  const r = await relationView();
+  return items.map(it => (it && typeof it === 'object')
+    ? { ...it, isSupported: r.following.has(authorOf(it)), isReplicated: relationKeysOf(it).some(k => r.replicated.has(k)) }
+    : it);
+};
+const byRelation = (items, filter) => {
+  const rf = relationFilterOf(filter);
+  if (!rf || !Array.isArray(items)) return items;
+  return items.filter(it => it && (rf === 'supported' ? it.isSupported : it.isReplicated));
+};
 const applyListFilters = async (items, ctx, opts = {}) => {
   if (!Array.isArray(items)) return items;
   const viewer = getViewerId();
@@ -2983,6 +3020,7 @@ const applyListFilters = async (items, ctx, opts = {}) => {
   }
   out = await applyWishScope(out, opts);
   out = await markFavorites(out, ctx);
+  out = byRelation(await markRelations(out, opts.authorOf), opts.relation === undefined ? (ctx && ctx.query && ctx.query.filter) : opts.relation);
   const clearnetKind = CLEARNET_PATH_KIND[String((ctx && ctx.path) || '').split('/')[1]];
   if (clearnetKind) await annotateClearnet(clearnetKind, out);
   return out;
@@ -3030,11 +3068,13 @@ const censusOf = async (key, fn, fresh = false) => {
 const shopModesAvailFor = async (hasPurchases) => {
   const fav = await contentFavorites.getFavoriteSet('shops').catch(() => new Set());
   const me = getViewerId();
-  const census = (await censusOf('shops', () => shopsModel.listAll({ filter: 'all', q: '', sort: 'recent', viewerId: me })).catch(() => []))
-    .map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
+  const census = await markRelations((await censusOf('shops', () => shopsModel.listAll({ filter: 'all', q: '', sort: 'recent', viewerId: me })).catch(() => []))
+    .map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) })));
   const hasProducts = (await censusOf('products', () => shopsModel.listAllProducts({ filter: 'all' })).catch(() => [])).length > 0;
   return {
     mine: census.some(x => String(x.author) === String(me)),
+    supported: census.some(x => x.isSupported),
+    replicated: census.some(x => x.isReplicated),
     recent: census.length > 0,
     favorites: census.some(x => x.isFavorite),
     top: census.some(x => Object.values(x.opinions || {}).reduce((sum, n) => sum + (Number(n) || 0), 0) > 0),
@@ -3047,6 +3087,8 @@ const shopModesAvailFor = async (hasPurchases) => {
 const schoolModesFromCensus = (census, me) => {
   return {
     mine: census.some(c2 => String(c2.author) === String(me)),
+    supported: census.some(c2 => c2.isSupported),
+    replicated: census.some(c2 => c2.isReplicated),
     recent: census.length > 0,
     applied: census.some(c2 => Array.isArray(c2.students) && c2.students.includes(me)),
     open: census.some(c2 => String(c2.status || 'ONGOING').toUpperCase() !== 'CLOSED' && c2.visibility !== 'INVITE'),
@@ -3057,11 +3099,13 @@ const schoolModesAvailFor = async () => {
   const me = getViewerId();
   const fav = await contentFavorites.getFavoriteSet('school').catch(() => new Set());
   const census = (await censusOf('school', () => schoolModel.listCourses('all', me, { q: '', sort: 'recent' })).catch(() => [])).map(c2 => ({ ...c2, isFavorite: fav.has(String(c2.rootId || c2.id)) }));
-  return schoolModesFromCensus(census, me);
+  return schoolModesFromCensus(await markRelations(census), me);
 };
 const chatModesFromCensus = (census, me) => {
   return {
     mine: census.some(c => String(c.author) === String(me) || (Array.isArray(c.members) && c.members.includes(me))),
+    supported: census.some(c => c.isSupported),
+    replicated: census.some(c => c.isReplicated),
     recent: census.length > 0,
     favorites: census.some(c => c.isFavorite),
     open: census.some(c => String(c.status || 'OPEN').toUpperCase() === 'OPEN'),
@@ -3072,11 +3116,13 @@ const chatModesAvailFor = async () => {
   const me = getViewerId();
   const fav = await contentFavorites.getFavoriteSet('chats').catch(() => new Set());
   const census = (await censusOf('chats', () => chatsModel.listAll({ filter: 'all', q: '', viewerId: me })).catch(() => [])).filter(x => !x.tribeId).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
-  return chatModesFromCensus(census, me);
+  return chatModesFromCensus(await markRelations(census), me);
 };
 const padModesFromCensus = (census, me) => {
   return {
     mine: census.some(x => String(x.author) === String(me)),
+    supported: census.some(x => x.isSupported),
+    replicated: census.some(x => x.isReplicated),
     recent: census.length > 0,
     open: census.some(x => !x.isClosed && String(x.status || 'OPEN').toUpperCase() === 'OPEN'),
     closed: census.some(x => x.isClosed || String(x.status || '').toUpperCase() === 'CLOSED')
@@ -3086,7 +3132,7 @@ const padModesAvailFor = async () => {
   const me = getViewerId();
   const fav = await contentFavorites.getFavoriteSet('pads').catch(() => new Set());
   const census = (await censusOf('pads', () => padsModel.listAll({ filter: 'all', viewerId: me })).catch(() => [])).filter(p2 => !p2.tribeId).map(p2 => ({ ...p2, isFavorite: fav.has(String(p2.rootId)) }));
-  return padModesFromCensus(census, me);
+  return padModesFromCensus(await markRelations(census), me);
 };
 const ROOM_ERRORS = ['full', 'unreachable', 'busy', 'unavailable', 'refused', 'invalid', 'access', 'closed'];
 const roomsCensus = async (fresh = false) => {
@@ -3216,6 +3262,8 @@ const syncRoomBanner = async () => {
 const calModesFromCensus = (census, me) => {
   return {
     mine: census.some(x => String(x.author) === String(me)),
+    supported: census.some(x => x.isSupported),
+    replicated: census.some(x => x.isReplicated),
     recent: census.length > 0,
     favorites: census.some(x => x.isFavorite),
     open: census.some(x => !x.isClosed && String(x.status || 'OPEN').toUpperCase() === 'OPEN'),
@@ -3226,7 +3274,7 @@ const calModesAvailFor = async () => {
   const me = getViewerId();
   const fav = await contentFavorites.getFavoriteSet('calendars').catch(() => new Set());
   const census = (await censusOf('calendars', () => calendarsModel.listAll({ filter: 'all', viewerId: me })).catch(() => [])).filter(c2 => !c2.tribeId).map(c2 => ({ ...c2, isFavorite: fav.has(String(c2.rootId)) }));
-  return calModesFromCensus(census, me);
+  return calModesFromCensus(await markRelations(census), me);
 };
 
 const enrichItemLifetime = async (item, opts = {}) => {
@@ -4852,7 +4900,7 @@ const { devTreeView, devFileView, devSearchView, devMapView } = require("../view
 const { welcomeView } = require("../views/welcome_view");
 const { opinionsView } = require("../views/opinions_view");
 const { peersView } = require("../views/peers_view");
-const { graphosView, graphosFederationView } = require("../views/graphos_view");
+const { graphosView, graphosFederationView, graphosNetworkView } = require("../views/graphos_view");
 const { larpListView, larpHouseView, larpTestView, larpTestResultView } = require("../views/larp_view");
 const { searchView } = require("../views/search_view");
 const { transferView, singleTransferView } = require("../views/transfer_view");
@@ -5104,6 +5152,7 @@ router
     sharedState.setInhabitantCount(inhabitants);
     try { stats.ecoTaxStats = await bankingModel.calculateEcoTaxStats(); } catch (_) { stats.ecoTaxStats = null; }
     try { stats.userEcoinTax = await bankingModel.getUserEcoinTax(getViewerId()); } catch (_) { stats.userEcoinTax = 0; }
+    stats.chain = String(filter).toUpperCase() === 'MINE' ? null : await statsModel.chainSeries(String(filter).toUpperCase(), String(ctx.query.range || 'today'), !!ctx.query.range).catch(() => null);
     ctx.body = statsView(stats, filter);
   })
   .get("/modules", async (ctx) => {
@@ -5153,9 +5202,10 @@ router
       return;
     }
     const fav = await contentFavorites.getFavoriteSet('school').catch(() => new Set());
-    let courses = await schoolModel.listCourses(filter === 'favorites' ? 'all' : filter, getViewerId(), { q, sort });
+    let courses = await schoolModel.listCourses(listFilterFor(filter), getViewerId(), { q, sort });
     courses = courses.map(c => ({ ...c, isFavorite: fav.has(String(c.rootId || c.id)) }));
     if (filter === 'favorites') courses = courses.filter(c => c.isFavorite);
+    courses = byRelation(await markRelations(courses), filter);
     let subscriptions = null;
     try {
       const { counts, mine } = await subscriptionsModel.subscriberCounts(courses.map(c => c.rootId || c.id));
@@ -5165,7 +5215,7 @@ router
       ? courses
       : (await censusOf('school', () => schoolModel.listCourses('all', getViewerId(), { q: '', sort })).catch(() => []))
           .map(c2 => ({ ...c2, isFavorite: fav.has(String(c2.rootId || c2.id)) }));
-    const schoolModesAvail = schoolModesFromCensus(schoolCensus, getViewerId());
+    const schoolModesAvail = schoolModesFromCensus(await markRelations(schoolCensus), getViewerId());
     const scopedCourses = await applyWishScope(courses);
     await annotateClearnet('school', scopedCourses);
     ctx.body = await schoolView(scopedCourses, filter, null, { q, sort, subscriptions, modesAvail: schoolModesAvail, spreadMap: await spreads.forMessages(pageOf(ctx, scopedCourses).map(c => c && c.id)).catch(() => new Map()), viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId() });
@@ -5558,7 +5608,7 @@ router
     const searchActive = Object.values(search).some(v => String(v || '').trim().length > 0);
     let filter = query.filter || 'all';
     if (searchActive && String(filter).toLowerCase() === 'recent') filter = 'all';
-    const blockchainData = await blockchainModel.listBlockchain(filter, userId, search);
+    const blockchainData = byRelation(await markRelations(await blockchainModel.listBlockchain(relationFilterOf(filter) ? 'all' : filter, userId, search)), filter);
     const effPrivateChainIds = await buildEffectivePrivateChainIds();
     for (const block of blockchainData) {
       block.restricted = isBlockRestricted(block, effPrivateChainIds);
@@ -5593,7 +5643,7 @@ router
     }
     const censusBlocks = String(filter).toLowerCase() === 'all' && !searchActive
       ? blockchainData
-      : (await censusOf('blocks', () => blockchainModel.listBlockchain('all', userId, {})).catch(() => [])) || [];
+      : await markRelations((await censusOf('blocks', () => blockchainModel.listBlockchain('all', userId, {})).catch(() => [])) || []);
     ctx.body = renderBlockchainView(blockchainData, filter, userId, search, { inspect, censusBlocks });
   })
   .get('/blockexplorer/block/:id', async (ctx) => {
@@ -5684,7 +5734,8 @@ router
     const toTs = ctx.query.to ? new Date(ctx.query.to).getTime() : null;
     const query = ctx.query.query || '';
     const types = [].concat(ctx.query.type || []).map(String).filter(Boolean);
-    if (!query) return ctx.body = await searchView({ messages: [], query, types });
+    const scope = ['mine', 'supported', 'replicated'].includes(String(ctx.query.scope || '')) ? String(ctx.query.scope) : '';
+    if (!query) return ctx.body = await searchView({ messages: [], query, types, scope });
     const userId = getViewerId();
     const allTribes = await tribesModel.listAll();
     const anonTribeIds = new Set(allTribes.filter(t => t.isAnonymous === true).map(t => t.id));
@@ -5726,6 +5777,29 @@ router
     const mutualCache = wishMutuals ? makeCtxMutualCache() : null;
     const lanKeys = wishOnlyLan ? new Set([...(await refreshLanPeers()), userId]) : null;
     const accessSets = await getViewerTribeAccessSets(userId);
+    const rel = await relationView();
+    const ssbScope = await cooler.open();
+    const contentOf = (key) => new Promise((resolve) => ssbScope.get(key, (err, v) => resolve(!err && v && v.content && typeof v.content === 'object' ? v.content : null)));
+    const versionKeysMemo = new Map();
+    const versionKeysOf = (m) => {
+      if (!versionKeysMemo.has(m.key)) versionKeysMemo.set(m.key, (async () => {
+        const keys = [m.key];
+        let c = m.value?.content;
+        while (c && typeof c.replaces === 'string' && !keys.includes(c.replaces) && keys.length < 50) {
+          keys.push(c.replaces);
+          c = await contentOf(c.replaces);
+        }
+        return keys;
+      })());
+      return versionKeysMemo.get(m.key);
+    };
+    const inScope = async (m) => {
+      const a = m.value?.author || m.value?.content?.author;
+      if (scope === 'mine') return a === userId;
+      if (scope === 'supported') return rel.following.has(a);
+      if (scope === 'replicated') return (await versionKeysOf(m)).some(k => rel.replicated.has(k));
+      return true;
+    };
     const finalResults = {};
     for (const [type, msgs] of Object.entries(results)) {
       const privacyFiltered = applySearchPrivacy(msgs).filter(msg => {
@@ -5750,6 +5824,11 @@ router
         });
       }
       if (cfgNow.wish === 'local') after = after.filter(m => (m.value?.author || m.value?.content?.author) === userId);
+      if (scope) after = (await Promise.all(after.map(async m => (await inScope(m)) ? m : null))).filter(Boolean);
+      await Promise.all(after.map(async (m) => {
+        m.isSupported = rel.following.has(m.value?.author || m.value?.content?.author);
+        m.isReplicated = (await versionKeysOf(m)).some(k => rel.replicated.has(k));
+      }));
       const mapped = after.map(msg => (!msg.value?.content) ? {} : { ...msg, content: msg.value.content, author: msg.value.content.author || 'Unknown' });
       let scoped = mapped;
       if (Number.isFinite(fromTs)) scoped = scoped.filter(m => (m.value?.timestamp || m.timestamp || 0) >= fromTs);
@@ -5764,15 +5843,15 @@ router
     }
     const resultCounts = Object.fromEntries(Object.entries(finalResults).map(([t, msgs]) => [t, msgs.length]));
     const shownResults = types.length ? Object.fromEntries(Object.entries(finalResults).filter(([t]) => types.includes(t))) : finalResults;
-    ctx.body = await searchView({ results: shownResults, resultCounts, query, types, ...(await searchExtras(shownResults, ctx)) });
+    ctx.body = await searchView({ results: shownResults, resultCounts, query, types, scope, ...(await searchExtras(shownResults, ctx)) });
   })
   .get("/images", async (ctx) => {
     if (!checkMod(ctx, 'imagesMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
     const viewerPrefs = await about.visibilityPrefs(getViewerId()).catch(() => null);
-    const items = await imagesModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort, viewerId: getViewerId() });
+    const items = await imagesModel.listAll({ filter: listFilterFor(filter), q, sort, viewerId: getViewerId() });
     const tribeOpen = (await tribeItemsFor('media', 'image')).map(t => ({ ...t, url: (String(t.image || '').match(/&[^)\s]+\.sha256/) || [''])[0] }));
-    const tribeShown = ['recent', 'mine', 'all', 'gallery'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'tags', 'author']) : [];
+    const tribeShown = ['recent', 'mine', 'supported', 'replicated', 'all', 'gallery'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'tags', 'author']) : [];
     const fav = await contentFavorites.getFavoriteSet('images');
     let enriched = [...items, ...tribeShown].sort((a, b) => sort === 'top' ? 0 : sort === 'oldest' ? new Date(a.createdAt) - new Date(b.createdAt) : new Date(b.createdAt) - new Date(a.createdAt)).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
@@ -5780,7 +5859,7 @@ router
     await enrichWithComments(enriched, 'key');
     const spreadMap = await spreads.forMessages(pageOf(ctx, enriched).map(x => x && x.key));
     await warmAuthorNames(pageOf(ctx, enriched));
-    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await censusOf(`images:${sort}`, () => imagesModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMedia = (String(filter) === 'all' && !q) ? enriched : await markRelations((await censusOf(`images:${sort}`, () => imagesModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) })));
     ctx.body = await imageView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, spreadMap });
   })
   .get("/images/edit/:id", async (ctx) => {
@@ -5799,7 +5878,7 @@ router
     const imgAuthorPrefs = await about.visibilityPrefs(img.author).catch(() => null);
     await enrichItemLifetime(img, { key: img.key });
     const singleFav = await contentFavorites.getFavoriteSet('images');
-    const singleCensus = (await censusOf(`images:${String(ctx.query.sort || 'recent')}`, () => imagesModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: (singleFav).has(String(x2.rootId || x2.key)) }));
+    const singleCensus = await markRelations((await censusOf(`images:${String(ctx.query.sort || 'recent')}`, () => imagesModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: (singleFav).has(String(x2.rootId || x2.key)) })));
     if (img) img.clearnet = await clearnetPublic('images', img).catch(() => false);
     ctx.body = await singleImageView({ ...img, isFavorite: fav.has(String(img.rootId || img.key)), commentCount: comments.length }, filter, comments, { censusList: singleCensus, q, sort, returnTo: safeReturnTo(ctx, `/images?filter=${encodeURIComponent(filter)}`, ['/images']), spreads: await spreads.forMessage(img.key), authorPrefs: imgAuthorPrefs, mapData: await resolveMapUrl(img.mapUrl) });
   })
@@ -5807,7 +5886,7 @@ router
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '', lat, lng, zoom, tribeId, title, description, markerLabel, tags, mapType, clearnet, pick, view, place } = ctx.query;
     const uid = getViewerId();
-    const items = await mapsModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, viewerId: uid });
+    const items = await mapsModel.listAll({ filter: listFilterFor(filter), q, viewerId: uid });
     const fav = await contentFavorites.getFavoriteSet('maps');
     let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
@@ -5815,7 +5894,7 @@ router
     enriched = await applyListFilters(enriched, ctx);
     try { enriched = await lifetime.enrichAndFilter(enriched, { getKey: (x) => x.rootId || x.key }); } catch (_) {}
     const spreadMap = await spreads.forMessages(pageOf(ctx, enriched).map(x => x && (x.key || x.id)));
-    const censusMaps = (String(filter) === 'all' && !q) ? enriched : (await censusOf('maps', () => mapsModel.listAll({ filter: 'all', q: '', viewerId: uid })).catch(() => [])).filter(x2 => !x2.tribeId).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMaps = (String(filter) === 'all' && !q) ? enriched : await markRelations((await censusOf('maps', () => mapsModel.listAll({ filter: 'all', q: '', viewerId: uid })).catch(() => [])).filter(x2 => !x2.tribeId).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) })));
     try {
       ctx.body = await mapsView(enriched, filter, null, { censusList: censusMaps, q, lat, lng, zoom, pick, view, place, title, description, markerLabel, tags, mapType, clearnet, ...(tribeId ? { tribeId } : {}), spreadMap });
     } catch (e) {
@@ -5874,9 +5953,9 @@ router
     if (!checkMod(ctx, 'audiosMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
     const viewerPrefs = await about.visibilityPrefs(getViewerId()).catch(() => null);
-    const items = await audiosModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort, viewerId: getViewerId() });
+    const items = await audiosModel.listAll({ filter: listFilterFor(filter), q, sort, viewerId: getViewerId() });
     const tribeOpen = (await tribeItemsFor('media', 'audio')).map(t => ({ ...t, url: (String(t.image || '').match(/&[^)\s]+\.sha256/) || [''])[0] }));
-    const tribeShown = ['recent', 'mine', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'tags', 'author']) : [];
+    const tribeShown = ['recent', 'mine', 'supported', 'replicated', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'tags', 'author']) : [];
     const fav = await contentFavorites.getFavoriteSet('audios');
     let enriched = [...items, ...tribeShown].sort((a, b) => sort === 'top' ? 0 : sort === 'oldest' ? new Date(a.createdAt) - new Date(b.createdAt) : new Date(b.createdAt) - new Date(a.createdAt)).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
@@ -5884,7 +5963,7 @@ router
     await enrichWithComments(enriched, 'key');
     const spreadMap = await spreads.forMessages(pageOf(ctx, enriched).map(x => x && x.key));
     await warmAuthorNames(pageOf(ctx, enriched));
-    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await censusOf(`audios:${sort}`, () => audiosModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMedia = (String(filter) === 'all' && !q) ? enriched : await markRelations((await censusOf(`audios:${sort}`, () => audiosModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) })));
     ctx.body = await audioView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, spreadMap });
   })
   .get("/audios/edit/:id", async (ctx) => {
@@ -5903,7 +5982,7 @@ router
     const audioAuthorPrefs = await about.visibilityPrefs(audio.author).catch(() => null);
     await enrichItemLifetime(audio, { key: audio.key });
     const singleFav = await contentFavorites.getFavoriteSet('audios');
-    const singleCensus = (await censusOf(`audios:${String(ctx.query.sort || 'recent')}`, () => audiosModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: (singleFav).has(String(x2.rootId || x2.key)) }));
+    const singleCensus = await markRelations((await censusOf(`audios:${String(ctx.query.sort || 'recent')}`, () => audiosModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: (singleFav).has(String(x2.rootId || x2.key)) })));
     if (audio) audio.clearnet = await clearnetPublic('audios', audio).catch(() => false);
     ctx.body = await singleAudioView({ ...audio, isFavorite: fav.has(String(audio.rootId || audio.key)), commentCount: comments.length }, filter, comments, { censusList: singleCensus, q, sort, returnTo: safeReturnTo(ctx, `/audios?filter=${encodeURIComponent(filter)}`, ['/audios']), spreads: await spreads.forMessage(audio.key), authorPrefs: audioAuthorPrefs, mapData: await resolveMapUrl(audio.mapUrl) });
   })
@@ -5920,9 +5999,9 @@ router
       ctx.body = await torrentsView([], 'downloads', null, { censusList: [], q, sort, viewerPrefs, downloads, isPublic: !!config.public });
       return;
     }
-    const items = await torrentsModel.listAll({ filter: filter === 'favorites' || filter === 'downloads' ? 'all' : filter, q, sort, viewerId: getViewerId() });
+    const items = await torrentsModel.listAll({ filter: viewerOnlyFilter(filter) || filter === 'downloads' ? 'all' : filter, q, sort, viewerId: getViewerId() });
     const tribeOpen = (await tribeItemsFor('media', 'torrent')).map(t => ({ ...t, url: (String(t.image || '').match(/&[^)\s]+\.sha256/) || [''])[0], size: 0, source: '' }));
-    const tribeShown = ['recent', 'mine', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'tags', 'author']) : [];
+    const tribeShown = ['recent', 'mine', 'supported', 'replicated', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'tags', 'author']) : [];
     const fav = await contentFavorites.getFavoriteSet('torrents');
     let enriched = [...items.filter(x => !x.tribeId), ...tribeShown].sort((a, b) => sort === 'top' ? 0 : sort === 'oldest' ? new Date(a.createdAt) - new Date(b.createdAt) : new Date(b.createdAt) - new Date(a.createdAt)).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
@@ -5931,7 +6010,7 @@ router
     const spreadMap = await spreads.forMessages((bySeeds ? enriched : pageOf(ctx, enriched)).map(x => x && x.key));
     if (bySeeds) enriched = sortBySeeds(enriched, spreadMap);
     await warmAuthorNames(pageOf(ctx, enriched));
-    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await censusOf(`torrents:${sort}`, () => torrentsModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).filter(x2 => !x2.tribeId).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMedia = (String(filter) === 'all' && !q) ? enriched : await markRelations((await censusOf(`torrents:${sort}`, () => torrentsModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).filter(x2 => !x2.tribeId).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) })));
     ctx.body = await torrentsView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, ...(tribeId ? { tribeId } : {}), spreadMap, fromBlob, fromName, fromSize, isPublic: !!config.public });
   })
   .get("/torrents/edit/:id", async (ctx) => {
@@ -5982,7 +6061,7 @@ router
     if (!checkMod(ctx, 'filesMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '', sort = 'recent', tribeId = '' } = ctx.query;
     const viewerPrefs = await about.visibilityPrefs(getViewerId()).catch(() => null);
-    const items = await filesModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort, viewerId: getViewerId() });
+    const items = await filesModel.listAll({ filter: listFilterFor(filter), q, sort, viewerId: getViewerId() });
     const fav = await contentFavorites.getFavoriteSet('files');
     let enriched = items.filter(x => !x.tribeId).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
@@ -5991,7 +6070,7 @@ router
     const spreadMap = await spreads.forMessages((bySeeds ? enriched : pageOf(ctx, enriched)).map(x => x && x.key));
     if (bySeeds) enriched = sortBySeeds(enriched, spreadMap);
     await warmAuthorNames(pageOf(ctx, enriched));
-    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await censusOf(`files:${sort}`, () => filesModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).filter(x2 => !x2.tribeId).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMedia = (String(filter) === 'all' && !q) ? enriched : await markRelations((await censusOf(`files:${sort}`, () => filesModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).filter(x2 => !x2.tribeId).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) })));
     ctx.body = await filesView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, ...(tribeId ? { tribeId } : {}), spreadMap, isPublic: !!config.public, nextcloud: !config.public && getConfig().modules.fediverseMod === 'on' && !!nextcloudModel.getAccount() });
   })
   .get("/files/:fileId/get", async (ctx) => {
@@ -6000,17 +6079,7 @@ router
     if (!file || !file.url) { ctx.redirect('/files'); return; }
     const name = file.fileName || file.title || 'download';
     if (file.cipher) { await sendDecryptedBlob(ctx, file.cipher, name, file.mime); return; }
-    const direct = `/blob/${encodeURIComponent(file.url)}?download=1&name=${encodeURIComponent(name)}`;
-    if (config.public || getConfig().modules?.torrentsMod !== 'on' || await torrentDownloads.hasLocal(file.url)) { ctx.redirect(direct); return; }
-    confirmPage(ctx, { message: require('../views/main_views').i18n.confirmDownloadText, action: `/files/${encodeURIComponent(ctx.params.fileId)}/fetch`, backHref: `/files/${encodeURIComponent(ctx.params.fileId)}` });
-  })
-  .post("/files/:fileId/fetch", koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'filesMod')) { ctx.redirect('/modules'); return; }
-    const file = await filesModel.getFileById(ctx.params.fileId, getViewerId()).catch(() => null);
-    if (!file || !file.url || file.cipher || config.public || getConfig().modules?.torrentsMod !== 'on') { ctx.redirect(`/files/${encodeURIComponent(ctx.params.fileId)}`); return; }
-    const name = file.fileName || file.title || 'download';
-    try { torrentDownloads.start({ blobId: file.url, size: file.size, name, torrentKey: file.torrentKey || '' }); } catch (_) {}
-    ctx.redirect('/torrents?filter=downloads');
+    ctx.redirect(`/blob/${encodeURIComponent(file.url)}?download=1&name=${encodeURIComponent(name)}`);
   })
   .get("/files/edit/:id", async (ctx) => {
     if (!checkMod(ctx, 'filesMod')) { ctx.redirect('/modules'); return; }
@@ -6028,7 +6097,7 @@ router
     const comments = await commentsFor(file.key);
     const fileAuthorPrefs = await about.visibilityPrefs(file.author).catch(() => null);
     await enrichItemLifetime(file, { key: file.key });
-    const singleCensus = (await censusOf(`files:${String(ctx.query.sort || 'recent')}`, () => filesModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const singleCensus = await markRelations((await censusOf(`files:${String(ctx.query.sort || 'recent')}`, () => filesModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) })));
     if (file) file.clearnet = await clearnetPublic('files', file).catch(() => false);
     ctx.body = await singleFileView({ ...file, isFavorite: fav.has(String(file.rootId || file.key)), commentCount: comments.length }, filter, comments, { censusList: singleCensus, q, sort, returnTo: safeReturnTo(ctx, `/files?filter=${encodeURIComponent(filter)}`, ['/files']), authorPrefs: fileAuthorPrefs, spreads: await spreads.forMessage(file.key).catch(() => null), isPublic: !!config.public });
   })
@@ -6042,7 +6111,7 @@ router
     const torrentAuthorPrefs = await about.visibilityPrefs(torrent.author).catch(() => null);
     await enrichItemLifetime(torrent, { key: torrent.key });
     const singleFav = await contentFavorites.getFavoriteSet('torrents');
-    const singleCensus = (await censusOf(`torrents:${String(ctx.query.sort || 'recent')}`, () => torrentsModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: (singleFav).has(String(x2.rootId || x2.key)) }));
+    const singleCensus = await markRelations((await censusOf(`torrents:${String(ctx.query.sort || 'recent')}`, () => torrentsModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: (singleFav).has(String(x2.rootId || x2.key)) })));
     if (torrent) torrent.clearnet = await clearnetPublic('torrents', torrent).catch(() => false);
     const torrentInfo = await torrentInfoOf(torrent);
     ctx.body = await singleTorrentView({ ...torrent, isFavorite: fav.has(String(torrent.rootId || torrent.key)), commentCount: comments.length }, filter, comments, { torrentInfo, censusList: singleCensus, q, sort, returnTo: safeReturnTo(ctx, `/torrents?filter=${encodeURIComponent(filter)}`, ['/torrents']), spreads: await spreads.forMessage(torrent.key), authorPrefs: torrentAuthorPrefs , download: torrent.source ? torrentDownloads.get(torrent.source) : null, hasLocal: torrent.source ? await torrentDownloads.hasLocal(torrent.source) : false, isPublic: !!config.public });
@@ -6051,9 +6120,9 @@ router
     if (!checkMod(ctx, 'videosMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
     const viewerPrefs = await about.visibilityPrefs(getViewerId()).catch(() => null);
-    const items = await videosModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort, viewerId: getViewerId() });
+    const items = await videosModel.listAll({ filter: listFilterFor(filter), q, sort, viewerId: getViewerId() });
     const tribeOpen = (await tribeItemsFor('media', 'video')).map(t => ({ ...t, url: (String(t.image || '').match(/&[^)\s]+\.sha256/) || [''])[0] }));
-    const tribeShown = ['recent', 'mine', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'tags', 'author']) : [];
+    const tribeShown = ['recent', 'mine', 'supported', 'replicated', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'tags', 'author']) : [];
     const fav = await contentFavorites.getFavoriteSet('videos');
     let enriched = [...items, ...tribeShown].sort((a, b) => sort === 'top' ? 0 : sort === 'oldest' ? new Date(a.createdAt) - new Date(b.createdAt) : new Date(b.createdAt) - new Date(a.createdAt)).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
@@ -6061,7 +6130,7 @@ router
     await enrichWithComments(enriched, 'key');
     const spreadMap = await spreads.forMessages(pageOf(ctx, enriched).map(x => x && x.key));
     await warmAuthorNames(pageOf(ctx, enriched));
-    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await censusOf(`videos:${sort}`, () => videosModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMedia = (String(filter) === 'all' && !q) ? enriched : await markRelations((await censusOf(`videos:${sort}`, () => videosModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) })));
     ctx.body = await videoView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, spreadMap });
   })
   .get("/videos/edit/:id", async (ctx) => {
@@ -6080,7 +6149,7 @@ router
     const videoAuthorPrefs = await about.visibilityPrefs(video.author).catch(() => null);
     await enrichItemLifetime(video, { key: video.key });
     const singleFav = await contentFavorites.getFavoriteSet('videos');
-    const singleCensus = (await censusOf(`videos:${String(ctx.query.sort || 'recent')}`, () => videosModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: (singleFav).has(String(x2.rootId || x2.key)) }));
+    const singleCensus = await markRelations((await censusOf(`videos:${String(ctx.query.sort || 'recent')}`, () => videosModel.listAll({ filter: 'all', q: '', sort: String(ctx.query.sort || 'recent'), viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: (singleFav).has(String(x2.rootId || x2.key)) })));
     if (video) video.clearnet = await clearnetPublic('videos', video).catch(() => false);
     ctx.body = await singleVideoView({ ...video, isFavorite: fav.has(String(video.rootId || video.key)), commentCount: comments.length }, filter, comments, { censusList: singleCensus, q, sort, returnTo: safeReturnTo(ctx, `/videos?filter=${encodeURIComponent(filter)}`, ['/videos']), spreads: await spreads.forMessage(video.key), authorPrefs: videoAuthorPrefs, mapData: await resolveMapUrl(video.mapUrl) });
   })
@@ -6088,9 +6157,9 @@ router
     if (!checkMod(ctx, 'docsMod')) { ctx.redirect('/modules'); return; }
     const { filter = 'all', q = '', sort = 'recent' } = ctx.query;
     const viewerPrefs = await about.visibilityPrefs(getViewerId()).catch(() => null);
-    const items = await documentsModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort });
+    const items = await documentsModel.listAll({ filter: listFilterFor(filter), q, sort });
     const tribeOpen = (await tribeItemsFor('media', 'document')).map(t => ({ ...t, url: (String(t.image || '').match(/&[^)\s]+\.sha256/) || [''])[0] }));
-    const tribeShown = ['recent', 'mine', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'url', 'tags', 'author']) : [];
+    const tribeShown = ['recent', 'mine', 'supported', 'replicated', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === getViewerId()) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['title', 'description', 'url', 'tags', 'author']) : [];
     const fav = await contentFavorites.getFavoriteSet('documents');
     let enriched = [...items, ...tribeShown].sort((a, b) => sort === 'top' ? 0 : sort === 'oldest' ? new Date(a.createdAt) - new Date(b.createdAt) : new Date(b.createdAt) - new Date(a.createdAt)).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
@@ -6098,7 +6167,7 @@ router
     await enrichWithComments(enriched, 'rootId');
     const spreadMap = await spreads.forMessages(pageOf(ctx, enriched).map(x => x && x.key));
     await warmAuthorNames(pageOf(ctx, enriched));
-    const censusMedia = (String(filter) === 'all' && !q) ? enriched : (await censusOf(`documents:${sort}`, () => documentsModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) }));
+    const censusMedia = (String(filter) === 'all' && !q) ? enriched : await markRelations((await censusOf(`documents:${sort}`, () => documentsModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).concat(tribeOpen).map(x2 => ({ ...x2, isFavorite: fav.has(String(x2.rootId || x2.key)) })));
     ctx.body = await documentView(enriched, filter, null, { censusList: censusMedia, q, sort, viewerPrefs, spreadMap });
   })
   .get("/documents/edit/:id", async (ctx) => {
@@ -6118,7 +6187,7 @@ router
     const docAuthorPrefs = await about.visibilityPrefs(document.author).catch(() => null);
     await enrichItemLifetime(document, { key: document.key });
     const singleFav = fav;
-    const singleCensus = (await censusOf(`documents:${sort}`, () => documentsModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: singleFav.has(String(x2.rootId || x2.key)) }));
+    const singleCensus = await markRelations((await censusOf(`documents:${sort}`, () => documentsModel.listAll({ filter: 'all', q: '', sort, viewerId: getViewerId() })).catch(() => [])).map(x2 => ({ ...x2, isFavorite: singleFav.has(String(x2.rootId || x2.key)) })));
     if (document) document.clearnet = await clearnetPublic('documents', document).catch(() => false);
     ctx.body = await singleDocumentView(withCount(document, comments), filter, comments, {
       censusList: singleCensus,
@@ -6454,7 +6523,9 @@ router
   .get('/tags', async ctx => {
     const filter = qf(ctx, 'top'), search = String(ctx.query.search || '').trim();
     const hvTags = await hiddenView();
-    const tags = await tagsModel.listTags(filter, search, { hiddenAuthors: hvTags.authors, hiddenIds: hvTags.ids });
+    const scope = relationFilterOf(filter);
+    const rel = scope ? await relationView() : null;
+    const tags = await tagsModel.listTags(scope ? 'top' : filter, search, { hiddenAuthors: hvTags.authors, hiddenIds: hvTags.ids, scope: scope || 'all', following: rel && rel.following, replicated: rel && rel.replicated });
     ctx.body = await tagsView(tags, filter, search);
   })
   .get('/emergencies', async ctx => {
@@ -6464,7 +6535,7 @@ router
     const uid = getViewerId();
     const favEmergencies = await contentFavorites.getFavoriteSet('emergencies');
     const decorate = (list) => list.map(x => ({ ...x, isFavorite: favEmergencies.has(String(x.id)) }));
-    const censusList = decorate(await censusOf('emergencies', () => emergenciesModel.listAll({ filter: 'all', q: '', viewerId: uid }), filter === 'ALL' && !q).catch(() => []));
+    const censusList = await markRelations(decorate(await censusOf('emergencies', () => emergenciesModel.listAll({ filter: 'all', q: '', viewerId: uid }), filter === 'ALL' && !q).catch(() => [])));
     if (filter === 'CREATE') { ctx.body = await emergenciesView([], 'CREATE', { q, censusList }); return; }
     if (filter === 'EDIT') {
       const emergency = await emergenciesModel.getEmergencyById(String(ctx.query.id || ''));
@@ -6473,7 +6544,7 @@ router
       ctx.body = await emergenciesView([], 'EDIT', { q, censusList, emergency });
       return;
     }
-    const emergencies = (filter === 'ALL' && !q) ? censusList : decorate(await emergenciesModel.listAll({ filter, q, viewerId: uid }));
+    const emergencies = byRelation((filter === 'ALL' && !q) ? censusList : await markRelations(decorate(await emergenciesModel.listAll({ filter: relationFilterOf(filter) ? 'all' : filter, q, viewerId: uid }))), filter);
     const shownList = await applyWishScope(emergencies);
     const spreadMap = await spreads.forMessages(pageOf(ctx, shownList).map(x => x && x.id));
     await warmAuthorNames(pageOf(ctx, shownList));
@@ -6502,7 +6573,7 @@ router
     const uid = getViewerId();
     const favLists = await contentFavorites.getFavoriteSet('mailing');
     const decorate = (list) => list.map(x => ({ ...x, isFavorite: favLists.has(String(x.id)) }));
-    const censusList = decorate(await censusOf('mailing', () => mailingModel.listAll({ filter: 'all', q: '' }), filter === 'ALL' && !q).catch(() => []));
+    const censusList = await markRelations(decorate(await censusOf('mailing', () => mailingModel.listAll({ filter: 'all', q: '' }), filter === 'ALL' && !q).catch(() => [])));
     if (filter === 'CREATE') { ctx.body = await mailingView([], 'CREATE', { q, censusList }); return; }
     if (filter === 'EDIT') {
       const list = await mailingModel.getListById(String(ctx.query.id || ''));
@@ -6510,7 +6581,7 @@ router
       ctx.body = await mailingView([], 'EDIT', { q, censusList, list });
       return;
     }
-    const lists = (filter === 'ALL' && !q) ? censusList : decorate(await mailingModel.listAll({ filter, q }));
+    const lists = byRelation((filter === 'ALL' && !q) ? censusList : await markRelations(decorate(await mailingModel.listAll({ filter: relationFilterOf(filter) ? 'all' : filter, q }))), filter);
     const shownList = await applyWishScope(lists);
     const spreadMap = await spreads.forMessages(pageOf(ctx, shownList.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0))).map(x => x && x.id).filter(id => typeof id === 'string' && id.startsWith('%')));
     await warmAuthorNames(pageOf(ctx, shownList.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0))));
@@ -6543,7 +6614,7 @@ router
     const uid = getViewerId();
     const favs = await contentFavorites.getFavoriteSet('logistics');
     const decorate = (list) => list.map(x => ({ ...x, isFavorite: favs.has(String(x.id)) }));
-    const censusList = decorate(await censusOf('logistics', () => logisticsModel.listAll({ filter: 'all' }), filter === 'ALL' && !q && !zone).catch(() => []));
+    const censusList = await markRelations(decorate(await censusOf('logistics', () => logisticsModel.listAll({ filter: 'all' }), filter === 'ALL' && !q && !zone).catch(() => [])));
     const zones = logisticsModel.zonesOf(censusList);
     if (filter === 'CREATE') { ctx.body = await logisticsView([], 'CREATE', { q, censusList, zones, kind: String(ctx.query.kind || '') }); return; }
     if (filter === 'EDIT') {
@@ -6552,7 +6623,7 @@ router
       ctx.body = await logisticsView([], 'EDIT', { q, censusList, zones, route });
       return;
     }
-    const routes = (filter === 'ALL' && !q && !zone) ? censusList : decorate(await logisticsModel.listAll({ filter, q, zone }));
+    const routes = byRelation((filter === 'ALL' && !q && !zone) ? censusList : await markRelations(decorate(await logisticsModel.listAll({ filter: relationFilterOf(filter) ? 'all' : filter, q, zone }))), filter);
     const shownList = await applyWishScope(routes);
     const spreadMap = await spreads.forMessages(pageOf(ctx, shownList).map(x => x && x.id));
     await warmAuthorNames(pageOf(ctx, shownList));
@@ -6587,7 +6658,7 @@ router
     }
     const spreadOf = (id) => { const s = allSpreads.get(id); return s && Number(s.count) > 0 ? Number(s.count) : 0; };
     const decorate = (list) => list.map(c => ({ ...c, isFavorite: favs.has(String(c.id)), spreadCount: spreadOf(c.id) + c.episodes.reduce((sum, e) => sum + spreadOf(e.id), 0) }));
-    const censusList = decorate(all);
+    const censusList = await markRelations(decorate(all));
     if (filter === 'CREATE') { ctx.body = await podcastsView([], 'CREATE', { q, censusList }); return; }
     if (filter === 'EDIT') {
       const channel = await podcastsModel.getChannelById(String(ctx.query.id || ''));
@@ -6600,7 +6671,7 @@ router
     const sort = ['recent', 'oldest', 'top'].includes(String(ctx.query.sort || '')) ? String(ctx.query.sort) : 'recent';
     if (filter === 'TOP') channels = censusList.filter(c => c.opinionCount > 0 || c.spreadCount > 0).sort((a, b) => b.spreadCount - a.spreadCount || b.opinionCount - a.opinionCount);
     else if (filter === 'FAVORITES') channels = censusList.filter(c => c.isFavorite);
-    else channels = (filter === 'ALL' && !q) ? censusList : decorate(await podcastsModel.listAll({ filter, q }));
+    else channels = byRelation((filter === 'ALL' && !q) ? censusList : await markRelations(decorate(await podcastsModel.listAll({ filter: relationFilterOf(filter) ? 'all' : filter, q }))), filter);
     if (filter !== 'TOP' && filter !== 'VIEWERS' && sort !== 'recent') {
       channels = channels.slice().sort(sort === 'oldest'
         ? (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
@@ -6648,7 +6719,7 @@ router
     const uid = getViewerId();
     const favs = await contentFavorites.getFavoriteSet('campaigns');
     const decorate = (list) => list.map(x => ({ ...x, isFavorite: favs.has(String(x.id)) }));
-    const censusList = decorate(await censusOf('campaigns', () => campaignsModel.listAll({ filter: 'all', viewerId: uid }), filter === 'ALL' && !q).catch(() => []));
+    const censusList = await markRelations(decorate(await censusOf('campaigns', () => campaignsModel.listAll({ filter: 'all', viewerId: uid }), filter === 'ALL' && !q).catch(() => [])));
     if (filter === 'CREATE') { ctx.body = await campaignsView([], 'CREATE', { q, censusList }); return; }
     if (filter === 'EDIT') {
       const campaign = await campaignsModel.getCampaignById(String(ctx.query.id || ''), uid);
@@ -6657,7 +6728,7 @@ router
       ctx.body = await campaignsView([], 'EDIT', { q, censusList, campaign });
       return;
     }
-    const campaigns = (filter === 'ALL' && !q) ? censusList : decorate(await campaignsModel.listAll({ filter, q, viewerId: uid }));
+    const campaigns = byRelation((filter === 'ALL' && !q) ? censusList : await markRelations(decorate(await campaignsModel.listAll({ filter: relationFilterOf(filter) ? 'all' : filter, q, viewerId: uid }))), filter);
     const shownList = await applyWishScope(campaigns);
     const spreadMap = await spreads.forMessages(pageOf(ctx, shownList).map(x => x && x.id));
     await warmAuthorNames(pageOf(ctx, shownList));
@@ -6708,7 +6779,7 @@ router
     const reportIds = new Set(reports.map(r => r.id));
     reports = reports.concat((await tribeItemsFor('report')).filter(t => !reportIds.has(t.id)).map(t => ({ id: t.id, rootId: t.id, title: t.title || '', description: t.description || '', category: String(t.category || '').toUpperCase(), status: String(t.status || 'OPEN').toUpperCase(), severity: String(t.priority || 'low').toLowerCase(), confirmations: [], tags: Array.isArray(t.tags) ? t.tags.filter(Boolean) : [], images: [], author: t.author || '', createdAt: t.createdAt || new Date(Number(t._ts) || 0).toISOString(), opinions: {}, opinions_inhabitants: [], tribeOrigin: t.tribeOrigin })));
     reports = applyTextSearch(reports, q, ['title', 'description', 'category', 'tags']);
-    reports = await applyListFilters(reports, ctx);
+    reports = await applyListFilters(reports, ctx, { relation: null });
     try { reports = await lifetime.enrichAndFilter(reports); } catch (_) {}
     const pageItems = await renderedPage(async () => reportView(reports, filter, null, ctx.query.category || '', { spreadMap: new Map(), q, prefillTitle: ctx.query.title || '', prefillDescription: ctx.query.description || '' }));
     await enrichMsgSize(pageItems);
@@ -6725,7 +6796,7 @@ router
     const comments = await commentsFor(reportId);
     await enrichMsgSize([report]);
     await enrichItemLifetime(report);
-    const singleCensus = await censusOf('reports', () => reportsModel.listAll()).catch(() => []);
+    const singleCensus = await markRelations(await censusOf('reports', () => reportsModel.listAll()).catch(() => []));
     ctx.body = await singleReportView(await withFavorite(withCount(report, comments), 'reports'), filter, comments, { censusList: singleCensus, spreads: await spreads.forMessage(report.id).catch(() => null) });
   })
   .get('/trending', async (ctx) => {
@@ -6743,7 +6814,7 @@ router
     }
     const allTrending = String(filter).toUpperCase() === 'ALL' && !q
       ? filtered
-      : ((await trendingModel.listTrending('ALL').catch(() => ({}))).filtered || []);
+      : await markRelations((await trendingModel.listTrending('ALL').catch(() => ({}))).filtered || []);
     const favIndex = await contentFavorites.getFavoriteIndex().catch(() => new Map());
     const pageItems = await renderedPage(async () => trendingView(filtered, filter, trendingModel.categories, new Map(), q, allTrending, { favIndex }));
     const spreadMap = await spreads.forMessages(pageItems.map(it => it && it.key)).catch(() => new Map());
@@ -6979,7 +7050,7 @@ router
     const uid = getViewerId();
     const filter = qf(ctx), search = ctx.query.search || '';
     let tribes = await tribesModel.listTribesForViewer(uid);
-    tribes = dedupeLarpHouseTribes(tribes);
+    tribes = await markRelations(dedupeLarpHouseTribes(tribes));
     try {
       if (tribes.some(t => (Array.isArray(t.tags) ? t.tags : []).some(x => String(x).startsWith('larp-')))) {
         const houses = await larpModel.listHousesWithCounts().catch(() => []);
@@ -7274,7 +7345,10 @@ router
       if (Number.isFinite(fromTs)) results = results.filter(item => tsOfItem(item) >= fromTs);
       if (Number.isFinite(toTs)) results = results.filter(item => tsOfItem(item) <= toTs);
       if (byInhabitant) results = results.filter(item => String(item.author || '') === byInhabitant);
-      sectionData = { query: ctx.query.q || '', results };
+      const scope = ['mine', 'supported', 'replicated'].includes(String(ctx.query.scope || '')) ? String(ctx.query.scope) : '';
+      if (scope === 'mine') results = results.filter(item => String(item.author || '') === uid);
+      else if (scope) results = byRelation(await markRelations(results), scope);
+      sectionData = { query: ctx.query.q || '', results, scope };
     } else if (section === 'overview') {
       const events = await listByTribeAllChain(tribe.id, 'event').catch(() => []);
       const tasks = await listByTribeAllChain(tribe.id, 'task').catch(() => []);
@@ -7319,6 +7393,11 @@ router
       }));
       return items;
     };
+    if (Array.isArray(sectionData)) {
+      sectionData = await markRelations(sectionData);
+    } else if (sectionData && typeof sectionData === 'object') {
+      for (const k of ['activities', 'items', 'results', 'events', 'tasks', 'feed', 'rooms']) if (Array.isArray(sectionData[k])) sectionData[k] = await markRelations(sectionData[k]);
+    }
     if (Array.isArray(sectionData)) {
       await resolveItemMentions(sectionData);
     } else if (sectionData && typeof sectionData === 'object') {
@@ -7409,7 +7488,7 @@ router
         allActions.push({ type: 'tribeOpened', id: t.id, author: t.author, ts: Number(t._ts) || Date.parse(t.updatedAt || t.createdAt || '') || 0, content: { ...t, type: 'tribeOpened' } });
       }
     } catch (_) {}
-    allActions = await applyListFilters(allActions, ctx);
+    allActions = await applyListFilters(allActions, ctx, { relation: null });
     const favIndex = await contentFavorites.getFavoriteIndex().catch(() => new Map());
     await attachCommentMeta(allActions);
     await commentsModel.annotate(allActions).catch(() => null);
@@ -7423,6 +7502,23 @@ router
     }
     const pageActions = (allActions || []).filter(a => a && pageKeys.has(a.id));
     if (!q.trim()) await settleActions(pageActions);
+    const pagePolls = pageActions.filter(a => a && a.type === 'poll' && a.id);
+    if (pagePolls.length) {
+      const pollMap = await pollsModel.getPollsByIds(pagePolls.map(a => a.id), userId).catch(() => new Map());
+      for (const a of pagePolls) if (pollMap.has(a.id)) a.poll = pollMap.get(a.id);
+    }
+    const pageVotes = pageActions.filter(a => a && a.type === 'votes' && a.id);
+    if (pageVotes.length) {
+      const voteById = new Map();
+      for (const v of await votesModel.listAll('all').catch(() => [])) {
+        if (v && v.id) voteById.set(v.id, v);
+        if (v && v.rootId) voteById.set(v.rootId, v);
+      }
+      for (const a of pageVotes) {
+        const v = voteById.get(a.id) || voteById.get(a.rootId) || voteById.get(a.tipId);
+        if (v) a.vote = v;
+      }
+    }
     const spreadMap = new Map();
     const SPREADABLE = new Set(['post','audio','video','image','document','torrent','file','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','room','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse']);
     const targets = pageActions.filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && SPREADABLE.has(a.type));
@@ -7460,7 +7556,8 @@ router
         }
       }
     } catch (_) {}
-    ctx.body = activityView(allActions, filter, userId, q, { spreadMap, favIndex, returnTo });
+    const following = await friend.followingIds().catch(() => new Set());
+    ctx.body = activityView(allActions, filter, userId, q, { spreadMap, favIndex, returnTo, following });
   })
   .get("/profile", async (ctx) => {
     const myFeedId = await meta.myFeedId(), gt = Number(ctx.request.query.gt || -1), lt = Number(ctx.request.query.lt || -1);
@@ -7998,16 +8095,12 @@ router
       try { if (ssbForLan.lan && typeof ssbForLan.lan.stop === 'function') ssbForLan.lan.stop(); } catch (_) {}
       try { if (ssbForLan.lan && typeof ssbForLan.lan.start === 'function') ssbForLan.lan.start(); } catch (_) {}
     } catch (_) {}
-    const asked = String(ctx.query?.filter || 'ALL').toUpperCase();
+    const asked = String(ctx.query?.filter || 'MINE').toUpperCase();
     if (asked === 'FEDERATION') {
       ctx.body = await graphosFederationView(await federationState());
       return;
     }
-    const filter = asked === 'MINE' ? 'MINE' : 'ALL';
-    const onlinePeers = await meta.onlinePeers();
-    const { discoveredPeers, unknownPeers } = filter === 'MINE'
-      ? { discoveredPeers: [], unknownPeers: [] }
-      : await meta.discovered();
+    const filter = asked === 'ALL' ? 'ALL' : 'MINE';
     const ssb = await require('../client/gui')({ offline: require('../server/ssb_config').offline }).open();
     const myId = ssb.id;
     const shortId = (key) => {
@@ -8041,51 +8134,68 @@ router
       focusPeers.push({ key: myId, name: await resolveName(myId), kind: 'me' });
       const focusMe = { key: centerRaw, name: await resolveName(centerRaw), kind: 'online' };
       const kpis = { total: followedAll.length, online: 0, discovered: followedAll.length, unknown: 0 };
-      ctx.body = await graphosView({ filter, me: focusMe, peers: focusPeers, links: graphLinks(graph, focusPeers.map(p => p.key)), kpis, focus: String(focusMe.name || centerRaw).replace(/^@/, ''), focusId: centerRaw, shown: followedIds.length, total: followedAll.length });
+      ctx.body = await graphosView({ filter, me: focusMe, peers: focusPeers, links: graphLinks(graph, focusPeers.map(p => p.key)), kpis, focus: String(focusMe.name || centerRaw).replace(/^@/, ''), focusId: centerRaw });
       return;
     }
 
-    const keysOf = (entries) => {
-      const s = new Set();
-      for (const [, data] of entries) if (data && data.key) s.add(data.key);
-      return s;
-    };
-    const onlineKeys = keysOf(onlinePeers);
-    const unknownKeys = keysOf(unknownPeers);
-    const seen = new Set([myId]);
-    const nodes = [];
-    const addFrom = (entries) => {
-      for (const [, data] of entries) {
-        if (!data || !data.key || seen.has(data.key)) continue;
-        seen.add(data.key);
-        const isOnline = onlineKeys.has(data.key);
-        const cat = unknownKeys.has(data.key) ? 'unknown' : 'discovered';
-        nodes.push({ key: data.key, isOnline, cat, kind: isOnline ? 'online' : cat });
+    {
+      const GRAPHOS_NET_MAX = 300;
+      const graph = await new Promise((res) => {
+        try { ssb.friends.graph((err, g) => res(err ? {} : (g || {}))); } catch (_) { res({}); }
+      });
+      const hv = await hiddenView();
+      const known = (k) => FEED_RE.test(k) && !hv.authors.has(k);
+      const follows = (x, y) => !!(graph[x] && graph[x][y] >= 0);
+      const degree = new Map();
+      let mutual = 0, oneway = 0;
+      for (const [from, rel] of Object.entries(graph)) {
+        if (!known(from)) continue;
+        for (const [to, w] of Object.entries(rel || {})) {
+          if (!(w >= 0) || to === from || !known(to)) continue;
+          degree.set(from, (degree.get(from) || 0) + 1);
+          degree.set(to, (degree.get(to) || 0) + 1);
+          if (!follows(to, from)) oneway++;
+          else if (from < to) mutual++;
+        }
       }
-    };
-    addFrom(onlinePeers);
-    addFrom(discoveredPeers);
-    addFrom(unknownPeers);
-    const shownNodes = nodes.slice(0, GRAPHOS_MAX_NODES);
-    const peers = await Promise.all(shownNodes.map(async (p) => ({
-      key: p.key,
-      name: await resolveName(p.key),
-      kind: p.kind
-    })));
-    const me = { key: myId, name: await resolveName(myId), kind: 'online' };
-    const fullGraph = await new Promise((res) => {
-      try { ssb.friends.graph((err, g) => res(err ? {} : (g || {}))); } catch (_) { res({}); }
-    });
-    const discoveredCount = nodes.filter(n => n.cat === 'discovered').length;
-    const unknownCount = nodes.filter(n => n.cat === 'unknown').length;
-    const onlineCount = nodes.filter(n => n.isOnline).length;
-    const kpis = {
-      total: discoveredCount + unknownCount,
-      online: onlineCount,
-      discovered: discoveredCount,
-      unknown: unknownCount
-    };
-    ctx.body = await graphosView({ filter, me, peers, links: graphLinks(fullGraph, peers.map(p => p.key)), kpis, shown: peers.length, total: nodes.length });
+      if (!degree.has(myId)) degree.set(myId, 0);
+      const hops = Number(require('../configs/config-manager').readServerConfig()?.friends?.hops) || 2;
+      const dist = new Map([[myId, 0]]);
+      const queue = [myId];
+      while (queue.length) {
+        const cur = queue.shift();
+        for (const [to, w] of Object.entries(graph[cur] || {})) {
+          if (!(w >= 0) || !known(to) || dist.has(to)) continue;
+          dist.set(to, dist.get(cur) + 1);
+          queue.push(to);
+        }
+      }
+      const isPub = (k) => !!(sharedState.isPubId && sharedState.isPubId(k));
+      const relSets = await relationView();
+      const replicatedAuthors = new Set((await Promise.all([...relSets.replicated].map(key => new Promise((resolve) => {
+        try { ssb.get(key, (err, v) => resolve(!err && v && v.author ? v.author : null)); } catch (_) { resolve(null); }
+      })))).filter(Boolean));
+      const levelOf = (k) => {
+        const d = dist.get(k);
+        if (d === 0 || d === 1) return d;
+        return d !== undefined && d <= hops ? d : Math.max(hops, 1) + 1;
+      };
+      const kindOf = (k) => k === myId ? 'me' : isPub(k) ? 'pub' : dist.get(k) === 1 ? 'supported' : (dist.has(k) && dist.get(k) <= hops) ? 'reach' : 'outside';
+      const inScope = (k) => filter === 'ALL' || (dist.has(k) && dist.get(k) <= hops);
+      const ranked = [...degree.keys()].filter(inScope).sort((x, y) => levelOf(x) - levelOf(y) || degree.get(y) - degree.get(x) || x.localeCompare(y));
+      const nodes = await Promise.all(ranked.slice(0, GRAPHOS_NET_MAX).map(async (key) => ({ key, degree: degree.get(key), level: levelOf(key), kind: kindOf(key), replicated: key !== myId && replicatedAuthors.has(key), name: await resolveName(key) })));
+      const allKeys = [...degree.keys()].filter(inScope);
+      const kpis = {
+        total: degree.size,
+        supported: allKeys.filter(k => kindOf(k) === 'supported').length,
+        replicated: allKeys.filter(k => k !== myId && replicatedAuthors.has(k)).length,
+        reach: allKeys.filter(k => k !== myId && dist.has(k) && dist.get(k) <= hops).length,
+        pubs: allKeys.filter(k => kindOf(k) === 'pub').length,
+        mutual,
+        oneway
+      };
+      ctx.body = await graphosNetworkView({ filter, nodes, links: graphLinks(graph, nodes.map(n => n.key)), kpis, meKey: myId, hops });
+    }
   })
   .get("/larp", async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
@@ -8310,7 +8420,7 @@ router
     }
     const allOpinions = String(filter).toUpperCase() === 'ALL' && !q
       ? opinions
-      : await opinionsModel.listOpinions('ALL').catch(() => []);
+      : await markRelations(await opinionsModel.listOpinions('ALL').catch(() => []));
     const favIndex = await contentFavorites.getFavoriteIndex().catch(() => new Map());
     const pageItems = await renderedPage(async () => opinionsView(opinions, filter, new Map(), q, allOpinions, { favIndex }));
     const spreadMap = await spreads.forMessages(pageItems.map(it => it && it.key)).catch(() => new Map());
@@ -8327,8 +8437,8 @@ router
     const tribeRefeeds = await feedModel.refeedsFor(tribeOpenItems.map(t => t.key)).catch(() => new Map());
     const tribeOpen = tribeOpenItems.map(t => ({ key: t.key, rootId: t.rootId, value: { author: t.author, timestamp: Date.parse(t.createdAt) || t._ts || 0, content: { type: 'feed', text: String(t.description || '').trim(), author: t.author, createdAt: t.createdAt, tags: (String(t.description || '').match(/#[A-Za-z0-9_]{1,32}/g) || []).map(x => x.slice(1).toLowerCase()), ...(tribeRefeeds.get(t.key) || { refeeds: 0, refeeds_inhabitants: [] }) } }, tribeOrigin: t.tribeOrigin })).filter(f => f.value.content.text);
     const tribeTerms = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const tribeShown = ['RECENT', 'TODAY', 'MINE', 'ALL'].includes(filter) ? tribeOpen.filter(f => (filter !== 'MINE' || f.value.author === getViewerId()) && (!['RECENT', 'TODAY'].includes(filter) || Date.now() - f.value.timestamp < 86400000) && tribeTerms.every(term => f.value.content.text.toLowerCase().includes(term)) && (!tag.trim() || f.value.content.tags.includes(tag.trim().toLowerCase()))) : [];
-    let feeds = (await feedModel.listFeeds({ filter, q, tag })).concat(tribeShown).sort((a, b) => filter === 'TOP' ? 0 : (b.value?.timestamp || 0) - (a.value?.timestamp || 0));
+    const tribeShown = ['RECENT', 'TODAY', 'MINE', 'SUPPORTED', 'REPLICATED', 'ALL'].includes(filter) ? tribeOpen.filter(f => (filter !== 'MINE' || f.value.author === getViewerId()) && (!['RECENT', 'TODAY'].includes(filter) || Date.now() - f.value.timestamp < 86400000) && tribeTerms.every(term => f.value.content.text.toLowerCase().includes(term)) && (!tag.trim() || f.value.content.tags.includes(tag.trim().toLowerCase()))) : [];
+    let feeds = (await feedModel.listFeeds({ filter: relationFilterOf(filter) ? 'ALL' : filter, q, tag })).concat(tribeShown).sort((a, b) => filter === 'TOP' ? 0 : (b.value?.timestamp || 0) - (a.value?.timestamp || 0));
     feeds = await applyListFilters(feeds, ctx);
     const uxFeed = getConfig().ux?.current === 'feed';
     let trendingTags = [];
@@ -8348,7 +8458,7 @@ router
         activeUsers = await Promise.all(ids.map(async (id) => ({ id, avatarUrl: getAvatarUrl(await about.image(id).catch(() => null)) })));
       } catch (_) {}
     }
-    const censusFeeds = (String(filter || 'ALL').toUpperCase() === 'ALL' && !q && !tag) ? feeds : (await censusOf('feeds', () => feedModel.listFeeds({ filter: 'ALL', q: '', tag: '' })).catch(() => [])).concat(tribeOpen);
+    const censusFeeds = (String(filter || 'ALL').toUpperCase() === 'ALL' && !q && !tag) ? feeds : await markRelations((await censusOf('feeds', () => feedModel.listFeeds({ filter: 'ALL', q: '', tag: '' })).catch(() => [])).concat(tribeOpen));
     await annotateClearnet('feed', feeds);
     const pageItems = await renderedPage(async () => feedView(feeds, { filter, q, tag, msg, workspace: uxFeed, trendingTags, activeUsers, spreadMap: new Map(), censusList: censusFeeds, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId(), mastodon: fediverseModel.hasAccount() }));
     const feedSpreadMap = await spreads.forMessages(pageItems.map(f => f && f.key)).catch(() => new Map());
@@ -8365,7 +8475,7 @@ router
     const feed = await feedModel.getFeedById(ctx.params.feedId);
     if (!feed) { ctx.redirect('/feed'); return; }
     const comments = await dropHidden(await feedModel.getComments(ctx.params.feedId).catch(() => []));
-    const singleCensus = await censusOf('feeds', () => feedModel.listFeeds({ filter: 'ALL', q: '', tag: '' })).catch(() => []);
+    const singleCensus = await markRelations(await censusOf('feeds', () => feedModel.listFeeds({ filter: 'ALL', q: '', tag: '' })).catch(() => []));
     if (feed) feed.clearnet = await clearnetPublic('feed', feed).catch(() => false);
     ctx.body = singleFeedView(feed, comments, { censusList: singleCensus, spreads: await spreads.forMessage(feed.key).catch(() => null) });
   })
@@ -8726,13 +8836,13 @@ router
       return;
     }
     const fav = await contentFavorites.getFavoriteSet('polls');
-    let polls = await pollsModel.listAll(filter, { q, favorites: [...fav] });
+    let polls = await pollsModel.listAll(relationFilterOf(filter) ? 'ALL' : filter, { q, favorites: [...fav] });
     polls = polls.map(p => ({ ...p, isFavorite: fav.has(String(p.id)) }));
     polls = await applyListFilters(polls, ctx);
     try { polls = await lifetime.enrichAndFilter(polls, { getKey: (x) => x.id }); } catch (_) {}
     const spreadMap = await spreads.forMessages(pageOf(ctx, polls).map(p => p.id)).catch(() => new Map());
     await warmAuthorNames(pageOf(ctx, polls));
-    const pollCensus = (String(filter).toUpperCase() === 'ALL' && !q) ? polls : await censusOf('polls', () => pollsModel.listAll('ALL', { q: '', favorites: [...fav] })).catch(() => []);
+    const pollCensus = (String(filter).toUpperCase() === 'ALL' && !q) ? polls : await markRelations(await censusOf('polls', () => pollsModel.listAll('ALL', { q: '', favorites: [...fav] })).catch(() => []));
     ctx.body = await pollsView(polls, filter, { q, spreadMap, censusList: pollCensus });
   })
   .get('/polls/:pollId', async ctx => {
@@ -8815,7 +8925,7 @@ router
     try { await pollsModel.vote(ctx.params.id, choices); }
     catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return; }
     try { activityModel.invalidateCache(); } catch (_) {}
-    ctx.redirect(safeReturnTo(ctx, `/polls/${encodeURIComponent(ctx.params.id)}`, ['/polls', '/chats', '/tribe']));
+    ctx.redirect(safeReturnTo(ctx, `/polls/${encodeURIComponent(ctx.params.id)}`, ['/polls', '/chats', '/tribe', '/activity']));
   })
   .post('/polls/close/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'pollsMod')) { ctx.redirect('/modules'); return; }
@@ -8858,11 +8968,11 @@ router
       return;
     }
     const fav = await contentFavorites.getFavoriteSet('blogs');
-    let blogs = await blogModel.listAll(filter, { q, favorites: [...fav] });
+    let blogs = await blogModel.listAll(relationFilterOf(filter) ? 'ALL' : filter, { q, favorites: [...fav] });
     blogs = await applyListFilters(blogs, ctx);
     const spreadMap = await spreads.forMessages(pageOf(ctx, blogs).map(b => b && b.id)).catch(() => new Map());
     await warmAuthorNames(pageOf(ctx, blogs));
-    const blogCensus = (String(filter).toUpperCase() === 'ALL' && !q) ? blogs : await censusOf('blogs', () => blogModel.listAll('ALL', { q: '', favorites: [...fav] })).catch(() => []);
+    const blogCensus = (String(filter).toUpperCase() === 'ALL' && !q) ? blogs : await markRelations(await censusOf('blogs', () => blogModel.listAll('ALL', { q: '', favorites: [...fav] })).catch(() => []));
     ctx.body = await blogView(blogs, filter, { q, spreadMap, censusList: blogCensus, viewerPrefs: await about.visibilityPrefs(getViewerId()).catch(() => null), viewerId: getViewerId() });
   })
   .get('/blogs/:blogId', async ctx => {
@@ -8997,7 +9107,7 @@ router
     if (!checkMod(ctx, 'forumMod')) { ctx.redirect('/modules'); return; }
     const filter = qf(ctx);
     const q = String(ctx.query.q || '').trim();
-    let forums = await forumModel.listAll(filter);
+    let forums = await forumModel.listAll(relationFilterOf(filter) ? 'all' : filter);
     const forumViewer = getViewerId();
     const forumKeys = new Set(forums.map(f => f.key));
     const tribeForums = (await tribeItemsFor('forum')).filter(t => !forumKeys.has(t.id)).map(t => {
@@ -9014,7 +9124,7 @@ router
       ? forums
       : await censusOf('forums', async () => {
           let all = (await forumModel.listAll('all')).concat(tribeForums);
-          all = await applyListFilters(all, ctx);
+          all = await applyListFilters(all, ctx, { relation: null });
           try { all = await lifetime.enrichAndFilter(all); } catch (_) {}
           return all;
         }).catch(() => []);
@@ -9236,14 +9346,14 @@ router
     const filter = qf(ctx), q = ctx.query.q || '', sort = ctx.query.sort || 'recent', viewerId = getViewerId();
     const favs = await contentFavorites.getFavoriteSet("bookmarks");
     const tribeOpen = (await tribeItemsFor('media', 'bookmark')).map(t => ({ ...t, url: t.url || t.description || '' }));
-    const tribeShown = ['recent', 'mine', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === viewerId) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['url', 'title', 'description', 'tags', 'author']) : [];
-    let bookmarks = [...(await bookmarksModel.listAll({ viewerId, filter: filter === "favorites" ? "all" : filter, q, sort })), ...tribeShown].sort((a, b) => sort === 'top' ? 0 : sort === 'oldest' ? new Date(a.createdAt) - new Date(b.createdAt) : new Date(b.createdAt) - new Date(a.createdAt)).map(b => ({ ...b, isFavorite: favs.has(String(b.rootId || b.id)) }));
+    const tribeShown = ['recent', 'mine', 'supported', 'replicated', 'all'].includes(filter) ? applyTextSearch(tribeOpen.filter(t => (filter !== 'mine' || t.author === viewerId) && (filter !== 'recent' || (Date.parse(t.createdAt) || 0) >= Date.now() - 86400000)), q, ['url', 'title', 'description', 'tags', 'author']) : [];
+    let bookmarks = [...(await bookmarksModel.listAll({ viewerId, filter: listFilterFor(filter), q, sort })), ...tribeShown].sort((a, b) => sort === 'top' ? 0 : sort === 'oldest' ? new Date(a.createdAt) - new Date(b.createdAt) : new Date(b.createdAt) - new Date(a.createdAt)).map(b => ({ ...b, isFavorite: favs.has(String(b.rootId || b.id)) }));
     if (filter === "favorites") bookmarks = bookmarks.filter(b => b.isFavorite);
     bookmarks = await applyListFilters(bookmarks, ctx);
     await enrichWithComments(bookmarks, 'rootId');
     const spreadMap = await spreads.forMessages(pageOf(ctx, bookmarks).map(x => x && (x.id || x.key)));
     await warmAuthorNames(pageOf(ctx, bookmarks));
-    const censusBm = (String(filter) === 'all' && !q) ? bookmarks : (await censusOf(`bookmarks:${sort}`, () => bookmarksModel.listAll({ viewerId, filter: 'all', q: '', sort })).catch(() => [])).concat(tribeOpen).map(b2 => ({ ...b2, isFavorite: favs.has(String(b2.rootId || b2.id)) }));
+    const censusBm = (String(filter) === 'all' && !q) ? bookmarks : await markRelations((await censusOf(`bookmarks:${sort}`, () => bookmarksModel.listAll({ viewerId, filter: 'all', q: '', sort })).catch(() => [])).concat(tribeOpen).map(b2 => ({ ...b2, isFavorite: favs.has(String(b2.rootId || b2.id)) })));
     ctx.body = await bookmarkView(bookmarks, filter, null, { censusList: censusBm, q, sort, spreadMap });
   })
   .get("/bookmarks/edit/:id", async (ctx) => {
@@ -9257,7 +9367,7 @@ router
     const filter = qf(ctx), q = ctx.query.q || '', sort = ctx.query.sort || 'recent', favs = await contentFavorites.getFavoriteSet("bookmarks");
     const bookmark = await bookmarksModel.getBookmarkById(ctx.params.bookmarkId), root = bookmark.rootId || bookmark.id, comments = await commentsFor(root);
     await enrichItemLifetime(bookmark);
-    const singleCensus = (await censusOf(`bookmarks:${sort}`, () => bookmarksModel.listAll({ viewerId: getViewerId(), filter: 'all', q: '', sort })).catch(() => [])).map(b2 => ({ ...b2, isFavorite: favs.has(String(b2.rootId || b2.id)) }));
+    const singleCensus = await markRelations((await censusOf(`bookmarks:${sort}`, () => bookmarksModel.listAll({ viewerId: getViewerId(), filter: 'all', q: '', sort })).catch(() => [])).map(b2 => ({ ...b2, isFavorite: favs.has(String(b2.rootId || b2.id)) })));
     if (bookmark) bookmark.clearnet = await clearnetPublic('bookmarks', bookmark).catch(() => false);
     ctx.body = await singleBookmarkView({ ...bookmark, commentCount: comments.length, isFavorite: favs.has(String(root)) }, filter, comments, { censusList: singleCensus, q, sort, returnTo: safeReturnTo(ctx, `/bookmarks?filter=${encodeURIComponent(filter)}`, ['/bookmarks']), spreads: await spreads.forMessage(bookmark.id) });
   })
@@ -9271,7 +9381,7 @@ router
       return { id: t.id, rootId: t.id, title: t.title || '', description: t.description || '', startTime: t.createdAt || '', endTime: t.deadline || '', priority: pr === 'CRITICAL' ? 'URGENT' : pr, location: t.location || '', tags: Array.isArray(t.tags) ? t.tags.filter(Boolean) : [], isPublic: 'PUBLIC', images: [], assignees: [], createdAt: t.createdAt || new Date(Number(t._ts) || 0).toISOString(), status: String(t.status || 'OPEN').toUpperCase(), author: t.author || '', opinions: {}, opinions_inhabitants: [], tribeOrigin: t.tribeOrigin };
     }));
     tasks = applyTextSearch(tasks, q, ['title', 'description', 'location', 'tags']);
-    tasks = await applyListFilters(tasks, ctx);
+    tasks = await applyListFilters(tasks, ctx, { relation: null });
     try { tasks = await lifetime.enrichAndFilter(tasks); } catch (_) {}
     const taskViewer = getViewerId();
     const pageItems = await renderedPage(async () => taskView(tasks, filter, null, ctx.query.returnTo, { spreadMap: new Map(), q, prefillTitle: ctx.query.title || '', prefillDescription: ctx.query.description || '' }));
@@ -9290,14 +9400,14 @@ router
     const comments = await commentsFor(taskId);
     await enrichMsgSize([task]);
     await enrichItemLifetime(task);
-    const singleCensus = await censusOf('tasks', () => tasksModel.listAll()).catch(() => []);
+    const singleCensus = await markRelations(await censusOf('tasks', () => tasksModel.listAll()).catch(() => []));
     ctx.body = await singleTaskView(await withFavorite(withCount(task, comments), 'tasks'), filter, comments, { censusList: singleCensus, spreads: await spreads.forMessage(task.id).catch(() => null) });
   })
   .get('/events', async (ctx) => {
     if (!checkMod(ctx, 'eventsMod')) { ctx.redirect('/modules'); return; }
     const filter = qf(ctx);
     const q = String(ctx.query.q || '').trim();
-    let events = await enrichWithComments(await eventsModel.listAll(null, filter));
+    let events = await enrichWithComments(await eventsModel.listAll(null, relationFilterOf(filter) ? 'all' : filter));
     const eventIds = new Set(events.map(e => e.id));
     const tribeEvents = (await tribeItemsFor('event')).filter(t => !eventIds.has(t.id)).map(t => ({ id: t.id, rootId: t.id, title: t.title || '', description: t.description || '', date: t.date || '', location: t.location || '', price: 0, url: t.url || '', attendees: [], tags: Array.isArray(t.tags) ? t.tags.filter(Boolean) : [], createdAt: t.createdAt || new Date(Number(t._ts) || 0).toISOString(), organizer: t.author || '', author: t.author || '', status: String(t.status || '').toUpperCase() === 'CLOSED' || (t.date && (Date.parse(t.date) + (String(t.date).length <= 10 ? 86400000 : 0)) < Date.now()) ? 'CLOSED' : 'OPEN', isPublic: 'public', images: [], encrypted: false, opinions: {}, opinions_inhabitants: [], tribeOrigin: t.tribeOrigin }));
     events = events.concat(tribeEvents);
@@ -9310,7 +9420,7 @@ router
       ? events
       : await censusOf('events', async () => {
           let all = (await eventsModel.listAll(null, 'all')).concat(tribeEvents);
-          all = await applyListFilters(all, ctx);
+          all = await applyListFilters(all, ctx, { relation: null });
           try { all = await lifetime.enrichAndFilter(all); } catch (_) {}
           return all;
         }).catch(() => []);
@@ -9343,7 +9453,7 @@ router
     const evAuthorPrefs2 = await about.visibilityPrefs(event.organizer).catch(() => null);
     await warmAuthorNames(event, comments);
     try { event.subscription = await subscriptionStateFor(event.rootId || event.id, event.organizer || event.author); } catch (_) {}
-    const singleCensus = await censusOf('events', () => eventsModel.listAll(null, 'all')).catch(() => []);
+    const singleCensus = await markRelations(await censusOf('events', () => eventsModel.listAll(null, 'all')).catch(() => []));
     if (event) event.clearnet = await clearnetPublic('events', event).catch(() => false);
     ctx.body = await singleEventView(await withFavorite(withCount(event, comments), 'events'), filter, comments, { censusList: singleCensus, mapData, baseUrl: resolveExternalBaseUrl(ctx), authorPrefs: evAuthorPrefs2, linkedCalendarId, spreads: await spreads.forMessage(event.id).catch(() => null) });
   })
@@ -9368,7 +9478,7 @@ router
   .get('/votes', async ctx => {
     const filter = qf(ctx);
     const q = String(ctx.query.q || '').trim();
-    let voteList = await enrichWithComments(await votesModel.listAll(filter));
+    let voteList = await enrichWithComments(await votesModel.listAll(relationFilterOf(filter) ? 'all' : filter));
     const voteViewer = getViewerId();
     const voteIds = new Set(voteList.map(v => v.id));
     const tribeVotes = (await tribeItemsFor('votation')).filter(t => !voteIds.has(t.id)).map(t => ({ id: t.id, latestId: t.id, question: t.title || '', description: t.description || '', createdBy: t.author || '', author: t.author || '', deadline: t.deadline || '', status: String(t.status || 'OPEN').toUpperCase(), votes: {}, voters: [], totalVotes: 0, tags: Array.isArray(t.tags) ? t.tags.filter(Boolean) : [], createdAt: t.createdAt || new Date(Number(t._ts) || 0).toISOString(), opinions: {}, opinions_inhabitants: [], tribeOrigin: t.tribeOrigin }));
@@ -9376,7 +9486,7 @@ router
     voteList = await applyListFilters(voteList, ctx);
     voteList = applyTextSearch(voteList, q, ['question', 'tags']);
     try { voteList = await lifetime.enrichAndFilter(voteList, { getAuthor: (x) => x.createdBy }); } catch (_) {}
-    const voteCensus = String(filter) === 'all' ? voteList : (await censusOf('votes', () => votesModel.listAll('all')).catch(() => [])).concat(tribeVotes);
+    const voteCensus = String(filter) === 'all' ? voteList : await markRelations((await censusOf('votes', () => votesModel.listAll('all')).catch(() => [])).concat(tribeVotes));
     const pageItems = await renderedPage(async () => voteView(voteList, filter, null, [], filter, { spreadMap: new Map(), q, censusList: voteCensus, ...voteFormState(ctx) }));
     await enrichMsgSize(pageItems);
     const spreadMap = await spreads.forMessages(pageItems.map(x => x && (x.id || x.key)));
@@ -9403,7 +9513,7 @@ router
     let marketItems = await marketModel.listAllItems("all");
     if (await marketModel.checkAuctionItemsStatus(marketItems)) marketItems = await marketModel.listAllItems("all");
     await enrichWithComments(marketItems);
-    marketItems = await applyListFilters(marketItems, ctx);
+    marketItems = await applyListFilters(marketItems, ctx, { relation: null });
     if (String(filter || '').toUpperCase() !== 'MINE') {
       try { marketItems = await lifetime.enrichAndFilter(marketItems, { getCreatedAt: (x) => x.updatedAt || x.createdAt }); } catch (_) {}
     }
@@ -9443,7 +9553,7 @@ router
       return `/market${params.length ? `?${params.join("&")}` : ""}`
     })()
     await enrichItemLifetime(item, { author: item.seller, createdAt: item.updatedAt || item.createdAt })
-    const singleCensus = await censusOf('market', () => marketModel.listAllItems('all')).catch(() => []);
+    const singleCensus = await markRelations(await censusOf('market', () => marketModel.listAllItems('all')).catch(() => []));
     if (item) item.clearnet = await clearnetPublic('market', item).catch(() => false);
     const orders = await marketModel.listOrders(item.rootId || item.id).catch(() => []);
     ctx.body = await singleMarketView(await withFavorite(withCount(item, comments), 'market'), filter, comments, { censusList: singleCensus, q, minPrice, maxPrice, sort, returnTo, mapData, zoom, orders, spreads: await spreads.forMessage(item.id).catch(() => null) })
@@ -9478,12 +9588,12 @@ router
         filter: 'CVs',
         ...query
       })
-      const cvJobsCensus = await censusOf('jobs', () => jobsModel.listJobs('ALL', getViewerId(), {})).catch(() => [])
+      const cvJobsCensus = await markRelations(await censusOf('jobs', () => jobsModel.listJobs('ALL', getViewerId(), {})).catch(() => []))
       ctx.body = await jobsView(inhabitants, filter, { ...query, censusList: cvJobsCensus, anyCVs: inhabitants.length > 0 })
       return
     }
     const viewerId = getViewerId()
-    let jobs = await jobsModel.listJobs(filter, viewerId, query)
+    let jobs = await jobsModel.listJobs(relationFilterOf(filter) ? 'ALL' : filter, viewerId, query)
     await enrichWithComments(jobs)
     jobs = await applyListFilters(jobs, ctx)
     if (filter !== 'MINE') {
@@ -9492,7 +9602,7 @@ router
     await enrichMsgSize(pageOf(ctx, jobs))
     const spreadMap = await spreads.forMessages(pageOf(ctx, jobs).map(x => x && (x.id || x.key)));
     await warmAuthorNames(pageOf(ctx, jobs));
-    const jobsCensus = (String(filter).toUpperCase() === 'ALL') ? jobs : await censusOf('jobs', () => jobsModel.listJobs('ALL', viewerId, {})).catch(() => [])
+    const jobsCensus = (String(filter).toUpperCase() === 'ALL') ? jobs : await markRelations(await censusOf('jobs', () => jobsModel.listJobs('ALL', viewerId, {})).catch(() => []))
     const anyCVs = ((await inhabitantsModel.listInhabitants({ filter: 'CVs' }).catch(() => [])) || []).length > 0
     await annotateClearnet('jobs', jobs);
     ctx.body = await jobsView(jobs, filter, { ...(query || {}), spreadMap, censusList: jobsCensus, anyCVs })
@@ -9558,7 +9668,7 @@ router
     query.maxImages = housingModel.MAX_IMAGES
     if (filter === 'CREATE') { ctx.body = await housingView([], 'CREATE', { ...query, reach: String(ctx.query.visibility || '') }); return }
     const viewerId = getViewerId()
-    let items = await housingModel.listHousing(filter, viewerId, query)
+    let items = await housingModel.listHousing(relationFilterOf(filter) ? 'ALL' : filter, viewerId, query)
     await enrichWithComments(items)
     items = await applyListFilters(items, ctx)
     if (filter !== 'MINE') {
@@ -9567,7 +9677,7 @@ router
     await enrichMsgSize(pageOf(ctx, items))
     const spreadMap = await spreads.forMessages(pageOf(ctx, items).map(x => x && (x.id || x.key)));
     await warmAuthorNames(pageOf(ctx, items));
-    const housingCensus = (String(filter).toUpperCase() === 'ALL') ? items : await censusOf('housing', () => housingModel.listHousing('ALL', viewerId, {})).catch(() => [])
+    const housingCensus = (String(filter).toUpperCase() === 'ALL') ? items : await markRelations(await censusOf('housing', () => housingModel.listHousing('ALL', viewerId, {})).catch(() => []))
     ctx.body = await housingView(items, filter, { ...query, spreadMap, censusList: housingCensus })
   })
   .get('/housing/edit/:id', async (ctx) => {
@@ -9755,7 +9865,7 @@ router
       ctx.body = await shopsView(enriched, filter, null, { q, sort, viewerPrefs, hasPurchases, spreadMap: productSpreads, modesAvail: await shopModesAvailFor(hasPurchases) });
       return;
     }
-    const items = await shopsModel.listAll({ filter: filter === 'favorites' ? 'all' : filter, q, sort, viewerId: getViewerId() });
+    const items = await shopsModel.listAll({ filter: listFilterFor(filter), q, sort, viewerId: getViewerId() });
     const fav = await contentFavorites.getFavoriteSet('shops');
     let enriched = items.map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
     if (filter === 'favorites') enriched = enriched.filter(x => x.isFavorite);
@@ -10072,9 +10182,7 @@ router
     items.sort((a, b) => (new Date(b.createdAt).getTime() || 0) - (new Date(a.createdAt).getTime() || 0));
     const names = {};
     for (const it of items) {
-      for (const id of [it.author, ...((it.replies || []).map(r => r.author))]) {
-        if (id && !names[id]) names[id] = await about.name(id).catch(() => '');
-      }
+      if (it.author && !names[it.author]) names[it.author] = await about.name(it.author).catch(() => '');
     }
     ctx.type = 'text/html';
     ctx.body = await require('../views/tribes_view').clearnetTribeView({ tribe, items, names, slug: clearnetSlugFor(tribe.title, hit.id), page: ctx.query.page, filterType: String(ctx.query.type || ''), filterAuthor: String(ctx.query.author || '') });
@@ -10269,7 +10377,7 @@ router
       ctx.body = await chatsView([], 'create', null, { q, ...(tribeId ? { tribeId } : {}) });
       return;
     }
-    const modelFilter = filter === "favorites" ? "all" : filter;
+    const modelFilter = listFilterFor(filter);
     const items = await chatsModel.listAll({ filter: modelFilter, q, viewerId });
     const fav = await contentFavorites.getFavoriteSet('chats');
     const enriched = items.filter(x => !x.tribeId).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
@@ -10289,7 +10397,7 @@ router
       ? enriched
       : (await censusOf('chats', () => chatsModel.listAll({ filter: 'all', q: '', viewerId })).catch(() => []))
           .filter(x => !x.tribeId).map(x => ({ ...x, isFavorite: fav.has(String(x.rootId || x.key)) }));
-    const chatModesAvail = chatModesFromCensus(chatCensus, viewerId);
+    const chatModesAvail = chatModesFromCensus(await markRelations(chatCensus), viewerId);
     ctx.body = await chatsView(finalList, filter, null, { q, spreadMap, workspace: uxChatsMode, modesAvail: chatModesAvail });
   })
   .get("/chats/edit/:id", async (ctx) => {
@@ -10349,7 +10457,7 @@ router
       if (!tribe.members.includes(uid)) { ctx.body = tribeAccessDeniedView(tribe); return; }
       await tribesModel.processIncomingKeys().catch(() => {});
     }
-    const wikiCensus = await censusOf(`wiki:${tribeId || ""}`, () => wikiModel.listPages({ tribeId, filter: "all", q: "", viewerId: uid })).catch(() => []);
+    const wikiCensus = await markRelations(await censusOf(`wiki:${tribeId || ""}`, () => wikiModel.listPages({ tribeId, filter: "all", q: "", viewerId: uid })).catch(() => []));
     if (filter === "create") {
       ctx.body = await wikiView([], "create", { tribeId, tribe, censusList: wikiCensus, title: stripDangerousTags(String(ctx.query.title || "")) });
       return;
@@ -10368,7 +10476,7 @@ router
       return;
     }
     const favWiki = await contentFavorites.getFavoriteSet('wiki');
-    const pages = (await wikiModel.listPages({ tribeId, filter, q, viewerId: uid })).map(x => ({ ...x, isFavorite: favWiki.has(String(x.id)) })).concat(tribeId ? [] : await openTribeListFor('wiki', filter, q, ['title', 'body', 'tags', 'author']));
+    const pages = byRelation(await markRelations((await wikiModel.listPages({ tribeId, filter: relationFilterOf(filter) ? 'all' : filter, q, viewerId: uid })).map(x => ({ ...x, isFavorite: favWiki.has(String(x.id)) })).concat(tribeId ? [] : await openTribeListFor('wiki', filter, q, ['title', 'body', 'tags', 'author']))), filter);
     const censusList = (filter === "all" && !q) ? pages : wikiCensus.map(x => ({ ...x, isFavorite: favWiki.has(String(x.id)) }));
     const shownList = await applyWishScope(pages);
     const spreadMap = await spreads.forMessages(pageOf(ctx, shownList).map(x => x && x.id));
@@ -10432,7 +10540,7 @@ router
     }
     const q = String(ctx.query.q || "").trim();
     const tribeId = ctx.query.tribeId || "";
-    const pads = await padsModel.listAll({ filter, viewerId: uid });
+    const pads = await padsModel.listAll({ filter: relationFilterOf(filter) ? 'all' : filter, viewerId: uid });
     const fav = await contentFavorites.getFavoriteSet('pads');
     let enriched = pads.filter(p => !p.tribeId).map(p => ({ ...p, isFavorite: fav.has(String(p.rootId)) }));
     enriched = await applyListFilters(enriched, ctx);
@@ -10442,7 +10550,7 @@ router
       ? enriched
       : (await censusOf('pads', () => padsModel.listAll({ filter: 'all', viewerId: uid })).catch(() => []))
           .filter(p2 => !p2.tribeId).map(p2 => ({ ...p2, isFavorite: fav.has(String(p2.rootId)) }));
-    const padModesAvail = padModesFromCensus(padCensus, uid);
+    const padModesAvail = padModesFromCensus(await markRelations(padCensus), uid);
     const pageItems = await renderedPage(async () => padsView(enriched, filter, null, { q, ...(tribeId ? { tribeId } : {}), spreadMap: new Map(), modesAvail: padModesAvail }));
     const spreadMap = await spreads.forMessages(pageItems.map(x => x && (x.rootId || x.key || x.id)));
     await warmAuthorNames(pageItems);
@@ -10497,7 +10605,7 @@ router
       return;
     }
     const q = String(ctx.query.q || "").trim();
-    const census = await roomsCensus(true);
+    const census = await markRelations(await roomsCensus(true));
     const occupancy = await roomsModel.occupancies(census.filter(r => !r.isClosed));
     let list = census.filter(roomFilterFn(filter, uid, occupancy));
     list = await applyListFilters(list, ctx);
@@ -10524,7 +10632,7 @@ router
     const live = await roomsModel.liveState();
     const inside = !!(live && live.ref === room.rootId);
     const occ = inside ? null : await roomsModel.occupancy(room);
-    const census = await roomsCensus();
+    const census = await markRelations(await roomsCensus());
     await warmAuthorNames([room, ...room.members.map(m => ({ author: m }))]);
     room.clearnet = await clearnetPublic('rooms', room).catch(() => false);
     const roomMember = room.author === uid || room.members.includes(uid) || isTribeMember;
@@ -10550,7 +10658,7 @@ router
     }
     const q = String(ctx.query.q || "").trim();
     const tribeId = ctx.query.tribeId || "";
-    const modelFilter = filter === "favorites" ? "all" : filter;
+    const modelFilter = listFilterFor(filter);
     const calendars = await calendarsModel.listAll({ filter: modelFilter, viewerId: uid });
     const fav = await contentFavorites.getFavoriteSet('calendars');
     const enriched = calendars.filter(c => !c.tribeId).map(c => ({ ...c, isFavorite: fav.has(String(c.rootId)) }));
@@ -10565,7 +10673,7 @@ router
       ? enriched
       : (await censusOf('calendars', () => calendarsModel.listAll({ filter: 'all', viewerId: uid })).catch(() => []))
           .filter(c2 => !c2.tribeId).map(c2 => ({ ...c2, isFavorite: fav.has(String(c2.rootId)) }));
-    const calModesAvail = calModesFromCensus(calCensus, uid);
+    const calModesAvail = calModesFromCensus(await markRelations(calCensus), uid);
     ctx.body = await calendarsView(finalList, filter, null, { q, modesAvail: calModesAvail, ...(tribeId ? { tribeId } : {}), spreadMap, reach: String(ctx.query.status || '') });
   })
   .get("/calendars/:calId", async (ctx) => {
@@ -10615,7 +10723,7 @@ router
       return
     }
     const q = String(ctx.query.q || '').trim()
-    const modelFilter = filter === "BACKERS" ? "ALL" : filter
+    const modelFilter = filter === "BACKERS" || relationFilterOf(filter) ? "ALL" : filter
     let projects = await projectsModel.listProjects(modelFilter, { q })
     await enrichWithComments(projects)
     projects = await applyListFilters(projects, ctx)
@@ -10624,7 +10732,7 @@ router
     const spreadMap = await spreads.forMessages(pageOf(ctx, projects).map(x => x && (x.id || x.key)));
     await warmAuthorNames(pageOf(ctx, projects));
     await decorateSubscriptionIn('projects', projects)
-    const projectsCensus = (String(filter).toUpperCase() === 'ALL' && !q) ? projects : await censusOf('projects', () => projectsModel.listProjects('ALL', { q: '' })).catch(() => [])
+    const projectsCensus = (String(filter).toUpperCase() === 'ALL' && !q) ? projects : await markRelations(await censusOf('projects', () => projectsModel.listProjects('ALL', { q: '' })).catch(() => []))
     ctx.body = await projectsView(projects, filter, null, { viewerPrefs, spreadMap, q, censusList: projectsCensus })
   })
   .get("/projects/edit/:id", async (ctx) => {
@@ -10677,13 +10785,13 @@ router
       if (q) items = items.filter(x => [x.name, x.title, x.description, x.notes, x.facilityName].some(v => String(v || "").toLowerCase().includes(q)))
       const shownList = await applyWishScope(items)
       const spreadMap = await spreads.forMessages(pageOf(ctx, shownList).map(x => x && (x.id || x.key))).catch(() => new Map())
-      const facilityCensus = await censusOf('industry', () => industryModel.listFacilities('ALL')).catch(() => [])
+      const facilityCensus = await markRelations(await censusOf('industry', () => industryModel.listFacilities('ALL')).catch(() => []))
       ctx.body = await industryView(shownList, filter, { spreadMap, censusList: facilityCensus })
       return
     }
     const search = String(ctx.query.search || "").trim()
     const sector = String(ctx.query.sector || "").trim().toLowerCase()
-    let facilities = await industryModel.listFacilities(filter)
+    let facilities = byRelation(await markRelations(await industryModel.listFacilities(relationFilterOf(filter) ? "ALL" : filter)), filter)
     if (sector) facilities = facilities.filter(x => x.sector === sector)
     if (search) {
       const q = search.toLowerCase()
@@ -10695,7 +10803,7 @@ router
     const spreadMap = await spreads.forMessages(pageOf(ctx, shownList).map(x => x && (x.id || x.key)));
     await warmAuthorNames(pageOf(ctx, shownList));
     await decorateSubscriptionIn('industry', facilities)
-    const industryCensus = (String(filter).toUpperCase() === 'ALL' && !search) ? facilities : await censusOf('industry', () => industryModel.listFacilities('ALL')).catch(() => [])
+    const industryCensus = (String(filter).toUpperCase() === 'ALL' && !search) ? facilities : await markRelations(await censusOf('industry', () => industryModel.listFacilities('ALL')).catch(() => []))
     ctx.body = await industryView(shownList, filter, { spreadMap, search, sector, censusList: industryCensus })
   })
   .get("/industry/edit/:id", async (ctx) => {
@@ -11285,13 +11393,13 @@ router
   .get('/transfers', async ctx => {
     if (!checkMod(ctx, 'transfersMod')) { ctx.redirect('/modules'); return; }
     let filter = ctx.query.filter || 'all'; if (filter === 'favs') filter = 'all';
-    let list = await transfersModel.listAll(filter, getViewerId());
+    let list = await markRelations(await transfersModel.listAll(relationFilterOf(filter) ? 'all' : filter, getViewerId()));
     try { list = await lifetime.enrichAndFilter(list, { getAuthor: (x) => x.from }); } catch (_) {}
     const shownList = await applyWishScope(list);
     const favTransfers = await contentFavorites.getFavoriteSet('transfers').catch(() => new Set());
     for (const t of list || []) if (t) t.isFavorite = favTransfers.has(String(t.rootId || t.id || t.key));
     const prefill = filter === 'create' ? { to: ctx.query.to || '', amount: ctx.query.amount || '', concept: ctx.query.concept || '', category: ctx.query.category || '' } : undefined;
-    const transferCensus = String(filter) === 'all' ? list : await censusOf('transfers', () => transfersModel.listAll('all', getViewerId())).catch(() => []);
+    const transferCensus = String(filter) === 'all' ? list : await markRelations(await censusOf('transfers', () => transfersModel.listAll('all', getViewerId())).catch(() => []));
     const pageItems = await renderedPage(async () => transferView(shownList, filter, null, { censusList: transferCensus, q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', category: ctx.query.category || '', spreadMap: new Map(), prefill }));
     await enrichMsgSize(pageItems);
     const spreadMap = await spreads.forMessages(pageItems.map(x => x && (x.id || x.key)));
@@ -11376,7 +11484,7 @@ router
     const comments = await commentsFor(transfer.id);
     const fav = await contentFavorites.getFavoriteSet('transfers');
     await warmAuthorNames([transfer, { author: transfer.from }, { author: transfer.to }], comments);
-    const singleCensus = await censusOf('transfers', () => transfersModel.listAll('all', getViewerId())).catch(() => []);
+    const singleCensus = await markRelations(await censusOf('transfers', () => transfersModel.listAll('all', getViewerId())).catch(() => []));
     ctx.body = await singleTransferView({ ...transfer, isFavorite: fav.has(String(transfer.id)) }, filter, { censusList: singleCensus, q: ctx.query.q || '', minAmount: ctx.query.minAmount ?? '', maxAmount: ctx.query.maxAmount ?? '', sort: ctx.query.sort || 'recent', returnTo: safeReturnTo(ctx, `/transfers?filter=${encodeURIComponent(filter)}`, ['/transfers']), comments, spreads: await spreads.forMessage(transfer.id).catch(() => null) });
   })
   .post('/ai', koaBody(), async (ctx) => {
@@ -11972,6 +12080,7 @@ router
         }
       }
     } catch (_) {}
+    target = safeReturnTo(ctx, target, []);
     if (!message || typeof message !== 'string' || !message.startsWith('%') || !/\.sha256$/.test(message)) {
       sendErrorPage(ctx, `Spread failed: invalid message id`, { status: 400 });
       return;
@@ -12103,7 +12212,7 @@ router
   })
   .post('/forum/:forumId/vote', koaBody(), async ctx => {
     await forumModel.voteContent(ctx.request.body.target, parseInt(ctx.request.body.value, 10));
-    ctx.redirect(ctx.get('referer') || `/forum/${encodeURIComponent(ctx.params.forumId)}`);
+    ctx.redirect(safeReturnTo(ctx, ctx.get('referer') || `/forum/${encodeURIComponent(ctx.params.forumId)}`, ['/forum']));
   })
   .post('/forum/delete/:id', koaBody(), async ctx => {
     const forum = await forumModel.getForumById(ctx.params.id).catch(() => null);
@@ -12198,20 +12307,20 @@ router
     }
     await trendingModel.createVote(contentId, category); ctx.redirect('/trending');
   })
-  .post('/opinions/:contentId/:category', async (ctx) => {
+  .post('/opinions/:contentId/:category', koaBody(), async (ctx) => {
     const { contentId, category } = ctx.params, voterId = SSBconfig?.keys?.id;
     if (await denyTribeContent(ctx, contentId)) return;
     const target = await opinionsModel.getMessageById(contentId);
     if (target?.content?.type === 'post') {
       try { await blogModel.createOpinion(contentId, category); } catch (_) { return failWith(ctx, 'opinionAlreadyGiven', '/opinions'); }
-      ctx.redirect('/opinions');
+      ctx.redirect(safeReturnTo(ctx, '/opinions', ['/opinions']));
       return;
     }
     if (target?.content && !target.content.opinions && !require('./opinion_categories').opinable(target.content)) return actionFail(ctx);
     if (target?.content?.opinions_inhabitants?.includes(voterId) || (await opinionsModel.tallyOf([contentId])).opinions_inhabitants.includes(voterId)) {
       return failWith(ctx, 'opinionAlreadyGiven', '/opinions');
     }
-    await opinionsModel.createVote(contentId, category); ctx.redirect('/opinions');
+    await opinionsModel.createVote(contentId, category); ctx.redirect(safeReturnTo(ctx, '/opinions', ['/opinions']));
   })
   .post('/agenda/discard/:itemId', async (ctx) => {
     await agendaModel.discardItem(ctx.params.itemId); ctx.redirect('/agenda');
@@ -12250,13 +12359,13 @@ router
     }
     ctx.redirect("/feed?filter=ALL&msg=feedPublished");
   })
-  .post("/feed/opinions/:feedId/:category", async (ctx) => {
+  .post("/feed/opinions/:feedId/:category", koaBody(), async (ctx) => {
     const { feedId, category } = ctx.params;
     try {
       await feedModel.addOpinion(feedId, category);
     } catch {}
     try { activityModel.invalidateCache(); } catch (_) {}
-    ctx.redirect(ctx.get("Referer") || "/feed");
+    ctx.redirect(safeReturnTo(ctx, ctx.get("Referer") || "/feed", ["/feed"]));
   })
   .post("/clearnet/item/:id", koaBody(), async (ctx) => {
     const id = String(ctx.params.id || '');
@@ -12311,7 +12420,7 @@ router
     } catch (e) {
       if (e.message !== "Already refeeded") throw e;
     }
-    ctx.redirect(ctx.get("Referer") || "/feed");
+    ctx.redirect(safeReturnTo(ctx, ctx.get("Referer") || "/feed", ["/feed"]));
   })
   .post("/feed/:feedId/comments", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     const text = ctx.request.body?.text != null ? stripDangerousTags(String(ctx.request.body.text)) : "";
@@ -12830,7 +12939,7 @@ router
     const tribe = await tribesModel.getTribeById(ctx.params.id);
     if (!tribe.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
     await tribesContentModel.toggleAttendee(ctx.params.eventId);
-    ctx.redirect(`/tribe/${encodeURIComponent(ctx.params.id)}?section=events`);
+    ctx.redirect(safeReturnTo(ctx, `/tribe/${encodeURIComponent(ctx.params.id)}?section=events`, ['/tribe']));
   })
   .post('/tribe/:id/tasks/create', longTextBody, async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
@@ -12891,7 +13000,7 @@ router
     const tribe = await tribesModel.getTribeById(ctx.params.id);
     if (!tribe.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
     await tribesContentModel.castVote(ctx.params.voteId, parseInt(ctx.request.body.optionIndex, 10));
-    ctx.redirect(`/tribe/${encodeURIComponent(ctx.params.id)}?section=votations`);
+    ctx.redirect(safeReturnTo(ctx, `/tribe/${encodeURIComponent(ctx.params.id)}?section=votations`, ['/tribe']));
   })
   .post('/tribe/:id/votations/close/:voteId', koaBody(), async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
@@ -13091,7 +13200,7 @@ router
     if (!checkMod(ctx, 'emergenciesMod')) { ctx.redirect('/modules'); return; }
     try { await emergenciesModel.confirmEmergency(ctx.params.id); } catch (e) { if (!/already/i.test(String(e && e.message))) return actionFail(ctx); }
     try { sharedState.setFeaturedEmergency(await emergenciesModel.featured()); } catch (_) {}
-    ctx.redirect(`/emergencies/${encodeURIComponent(ctx.params.id)}`);
+    ctx.redirect(safeReturnTo(ctx, `/emergencies/${encodeURIComponent(ctx.params.id)}`, ['/emergencies']));
   })
   .post('/emergencies/status/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'emergenciesMod')) { ctx.redirect('/modules'); return; }
@@ -13445,7 +13554,7 @@ router
       const after = await campaignsModel.getCampaignById(ctx.params.id);
       if (before && after && !before.achieved && after.achieved) await notifyCampaignWatchers(after.id, 'CAMPAIGN_ACHIEVED');
     } catch (_) {}
-    ctx.redirect(`/campaigns/${encodeURIComponent(ctx.params.id)}`);
+    ctx.redirect(safeReturnTo(ctx, `/campaigns/${encodeURIComponent(ctx.params.id)}`, ['/campaigns']));
   })
   .post('/campaigns/updates/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async ctx => {
     if (!checkMod(ctx, 'campaignsMod')) { ctx.redirect('/modules'); return; }
@@ -13506,9 +13615,9 @@ router
     await reportsModel.deleteReportById(ctx.params.id);
     ctx.redirect('/reports?filter=mine');
   })
-  .post('/reports/confirm/:id', async ctx => {
+  .post('/reports/confirm/:id', koaBody(), async ctx => {
     await reportsModel.confirmReportById(ctx.params.id);
-    ctx.redirect('/reports');
+    ctx.redirect(safeReturnTo(ctx, '/reports', ['/reports']));
   })
   .post('/reports/status/:id', koaBody(), async ctx => {
     await reportsModel.updateReportById(ctx.params.id, { status: ctx.request.body.status });
@@ -13704,7 +13813,8 @@ router
   })
   .post('/votes/vote/:id', koaBody(), async ctx => {
     await votesModel.voteOnVote(ctx.params.id, ctx.request.body.choice);
-    ctx.redirect(safeReturnTo(ctx, '/votes?filter=open', ['/votes']));
+    try { activityModel.invalidateCache(); } catch (_) {}
+    ctx.redirect(safeReturnTo(ctx, '/votes?filter=open', ['/votes', '/activity']));
   })
   .post('/votes/opinions/:voteId/:category', koaBody(), async ctx => {
     try { await votesModel.createOpinion(ctx.params.voteId, ctx.params.category); }
@@ -13790,7 +13900,7 @@ router
     const candidatureId = String(ctx.request.body?.candidatureId || '').trim();
     if (!candidatureId) ctx.throw(400, 'Missing candidatureId');
     await parliamentModel.tribe.voteTribeCandidature({ tribeId, candidatureId }).catch(e => ctx.throw(400, String(e?.message || e)));
-    ctx.redirect(`/tribe/${encodeURIComponent(tribeId)}?section=governance&filter=candidatures`);
+    ctx.redirect(safeReturnTo(ctx, `/tribe/${encodeURIComponent(tribeId)}?section=governance&filter=candidatures`, ['/tribe']));
   })
   .post('/tribe/:id/governance/rule/add', koaBody(), async (ctx) => {
     const tribeId = ctx.params.id;
@@ -13817,7 +13927,7 @@ router
   })
   .post('/parliament/candidatures/:id/vote', koaBody(), async (ctx) => {
     await parliamentModel.voteCandidature(ctx.params.id).catch(e => ctx.throw(400, String(e?.message || e)));
-    ctx.redirect('/parliament?filter=candidatures');
+    ctx.redirect(safeReturnTo(ctx, '/parliament?filter=candidatures', ['/parliament']));
   })
   .post('/parliament/proposals/create', koaBody(), async (ctx) => {
     const b = ctx.request.body || {}, t = String(b.title || '').trim(), d = String(b.description || '').trim();
@@ -13902,7 +14012,7 @@ router
     if (!mediators.length) { return failWith(ctx, 'courtsErrMediator', `/courts/cases/${encodeURIComponent(caseId)}`); }
     if (uid && mediators.includes(uid)) { return failWith(ctx, 'courtsErrSelfMediator', `/courts/cases/${encodeURIComponent(caseId)}`); }
     try { await courtsModel.setMediators({ caseId, side: 'accuser', mediators }); } catch (e) { return actionFail(ctx); }
-    ctx.redirect(`/courts/cases/${encodeURIComponent(caseId)}`);
+    ctx.redirect(safeReturnTo(ctx, `/courts/cases/${encodeURIComponent(caseId)}`, ['/courts']));
   })
   .post('/courts/cases/:id/mediators/respondent', koaBody(), async (ctx) => {
     const caseId = ctx.params.id, mediators = String(ctx.request.body?.mediators || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -13943,7 +14053,7 @@ router
   .post('/courts/judges/:id/vote', koaBody(), async (ctx) => {
     if (!ctx.params.id) { return failWith(ctx, 'courtsErrNomination', '/courts?filter=judges'); }
     try { await courtsModel.voteNomination(ctx.params.id); } catch (e) { return actionFail(ctx); }
-    ctx.redirect('/courts?filter=judges');
+    ctx.redirect(safeReturnTo(ctx, '/courts?filter=judges', ['/courts']));
   })  
   .post("/market/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'marketMod')) { ctx.redirect('/modules'); return; }
@@ -16118,6 +16228,7 @@ const refreshAll = async (now) => {
   try { await tasksModel.checkDueReminders(); } catch (_) {}
   try { await checkPoliticalChanges(); } catch (_) {}
   try { await checkJobMatches(); } catch (_) {}
+  try { await checkNewSupporters(); } catch (_) {}
   try {
     const peers = await meta.connectedPeers();
     sharedState.setOnlinePeerCount(Array.isArray(peers) ? peers.length : 0);
@@ -16202,6 +16313,7 @@ const middleware = [
       let timer = null;
       try { [store.commentCounts, store.opinionTallies] = await Promise.race([Promise.all([commentIndex(), opinionIndexCache.get()]), new Promise((resolve) => { timer = setTimeout(() => resolve([null, null]), COMMENT_INDEX_WAIT_MS); })]); } catch (_) {}
       clearTimeout(timer);
+      try { store.relationSets = await relationView(); } catch (_) {}
     }
     await next();
   },
@@ -16640,6 +16752,48 @@ function buildTribeGovMsg(gov = {}, t = {}) {
   return { subject: 'TRIBE_GOV', body: [intro, ''].concat(pbGovBlock(gov, t)).join('\n') };
 }
 let jobsBotRunning = false;
+let supportersCheckRunning = false;
+async function checkNewSupporters() {
+  if (supportersCheckRunning || config.public) return;
+  supportersCheckRunning = true;
+  try {
+    const ssbClient = await cooler.open().catch(() => null);
+    if (!ssbClient || !ssbClient.id) return;
+    const me = ssbClient.id;
+    const graph = await new Promise((resolve) => ssbClient.friends.graph((err, g) => resolve(err || !g ? {} : g)));
+    const blocked = await friend.blockedIds().catch(() => new Set());
+    const current = new Set();
+    for (const [author, edges] of Object.entries(graph || {})) {
+      if (author === me || !edges || Math.round(edges[me]) !== 1) continue;
+      if (blocked.has(author) || (sharedState.isPubId && sharedState.isPubId(author))) continue;
+      current.add(author);
+    }
+    const seen = pmPolicy.readSupportersSeen();
+    const known = new Set(seen && Array.isArray(seen.ids) ? seen.ids : []);
+    const followedAt = new Map();
+    if (seen) {
+      for (const id of [...current].filter(id => !known.has(id)).slice(0, pmPolicy.SUPPORTERS_LOOKUPS)) {
+        const at = await new Promise((resolve) => pull(ssbClient.links({ source: id, dest: me, rel: 'contact', values: true }), pull.collect((err, msgs) => {
+          const ts = (err ? [] : msgs || []).filter(m => m && m.value && m.value.content && m.value.content.following === true).map(m => Number(m.value.timestamp) || 0);
+          resolve(ts.length ? Math.max(...ts) : null);
+        })));
+        if (Number.isFinite(at)) followedAt.set(id, at);
+      }
+    }
+    const { announce, state, changed } = pmPolicy.newSupporters(current, seen, followedAt);
+    const failed = new Set();
+    for (const id of announce) {
+      try { await notifyBot('SOCIAL_SUPPORTED', [], `${await actorLink(id)} has started supporting you`, { ref: id }); }
+      catch (e) { failed.add(id); if (config.debug) console.error('[social-bot] send failed:', e && e.message); }
+    }
+    if (changed) pmPolicy.writeSupportersSeen({ ...state, ids: state.ids.filter(id => !failed.has(id)) });
+  } catch (e) {
+    if (config.debug) console.error('[social-bot] failed:', e && e.message);
+  } finally {
+    supportersCheckRunning = false;
+  }
+}
+
 async function checkJobMatches() {
   if (jobsBotRunning) return;
   jobsBotRunning = true;

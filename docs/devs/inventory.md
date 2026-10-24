@@ -73,13 +73,16 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `banking/banking-ubi-paid.json` | On a PUB, the ledger of UBI already paid: one entry per inhabitant and month, with its transaction. It is what stops the same month being paid twice. |
 | `banking-rebalance-pending.json` | On a PUB, the rebalance to another PUB that was handed to the wallet but not yet confirmed. Written at the root of `~/.ssb/oasis/`. |
 | `clearnet-since.json` | A marker that this identity has published, on its profile, the moment from which its CLEARNET choices apply; it is written once. Written at the root of `~/.ssb/oasis/`. |
+| `blob-pins.json` | The blobs of the encrypted files you uploaded to a tribe, which the media cache never drops. Written at the root of `~/.ssb/oasis/`. |
 | `banking/banking-ubi-notice.json` | Which UBI payments BankingBot has already told you about, so it does not repeat itself. |
 | `banking/banking-confirm-notice.json` | The same, for contracts waiting for your confirmation. |
 | `content/content_favorites.json` | What you marked as a favourite, by content type. |
 | `content/follow_state.json` | Follow requests pending and accepted, with the moment of the last one. |
+| `content/supporters-seen.json` | The inhabitants already known to support you, so SocialBot only tells you about the new ones. The first time it is created it only records who already supports you, without notices. |
 | `content/viewer_hidden.json` | Inhabitants you muted and content you hid. Applied only by this node; nothing about it is published. |
 | `content/invites-used.json` | The latest invitations you used, with what you joined and when. |
 | `content/agenda-config.json` | How you arranged your Agenda. |
+| `content/scheduled.json` | The content you scheduled and that has not been published yet, with the moment it is due. It stays on this device until then; once published it leaves the file, and if publishing fails it stays, marked with the error. |
 | `content/blob-access.json` | When each downloaded blob was last opened. The media cache (Settings → Content → Media cache) uses it to decide what to drop first once the quota is exceeded. |
 | `content/snapshot.oasissn`, `content/snapshot-recent.oasissn` | Only on a PUB: the copies of its log (every feed whole, and the recently active feeds; private messages as ciphertext) that newcomers receive over the SSB connection when they join, so they can start right away. Rebuilt periodically. |
 | `ai/AI-history.json` | Your conversation with the AI. It stays here; it is never published. |
@@ -96,8 +99,8 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `peers/gossip_unfollowed.json` | The pubs you stopped following, so they are not offered again. |
 | `peers/peer-health.json` | Since when each pub or peer has been failing to connect. A pub that keeps failing for long enough is shown as unreachable and hidden from the peer lists; as soon as it connects again it is removed from here. |
 | `peers/lan-peers.json` | The inhabitants this node has met on the local network and when each one was last seen. With the Wish set to Only LAN, you see content from them and from yourself. Offline entries can be removed from the LAN tab; a removed inhabitant is added again when seen on the network. |
-| `phone/phone-history.json` | Your call history: who, when, direction, result and duration. It stays on this device. |
 | `rooms/` | The recordings you made in rooms, as audio files. They stay on this device and are not part of a backup. |
+| `phone/phone-history.json` | Your call history: who, when, direction, result and duration. It stays on this device. |
 | `phone/phone-seen.json` | Which missed calls and audio records you have already seen or played, so the PHONE counter only counts the rest. |
 
 A file with a `.before-restore` suffix next to any of these is the copy a restore kept of whatever was there before it wrote the one from the backup.

@@ -441,6 +441,33 @@ function resolveUserId(maybeId) {
 
 
 
+function bucketEvents(events, range, explicit, fields) {
+  const effective = explicit ? normalizeRange(range) : widenRange(events, range);
+  const inRange = filterByRange(events, effective);
+  const bucketMs = effective === "today" ? 60 * 60 * 1000 : (effective === "week" || effective === "month") ? ONE_DAY_MS : 0;
+  const bucketOf = (ts) => {
+    if (bucketMs) return Math.floor(ts / bucketMs) * bucketMs;
+    const d = new Date(ts);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+  };
+  const buckets = new Map();
+  for (const e of inRange) {
+    const b = bucketOf(e.ts);
+    const cur = buckets.get(b) || fields.reduce((acc, f) => ({ ...acc, [f]: 0 }), { ts: b });
+    for (const f of fields) cur[f] += Number(e[f]) || 0;
+    buckets.set(b, cur);
+  }
+  let points = Array.from(buckets.values()).sort((a, b) => a.ts - b.ts)
+    .map(p => fields.reduce((acc, f) => ({ ...acc, [f]: Number(Number(p[f]).toFixed(6)) }), { ts: p.ts }))
+    .slice(-240);
+  if (points.length === 1) {
+    const span = RANGE_MS[effective];
+    const baseTs = Number.isFinite(span) ? Date.now() - span : points[0].ts - (bucketMs || 30 * ONE_DAY_MS);
+    points = [fields.reduce((acc, f) => ({ ...acc, [f]: 0 }), { ts: Math.min(baseTs, points[0].ts - 1) }), ...points];
+  }
+  return { points, range: effective, bucket: bucketMs === 60 * 60 * 1000 ? "hour" : bucketMs ? "day" : "month", hasAnyData: events.length >= 1 };
+}
+
 module.exports = ({ services } = {}) => {
   const transfersRepo = {
     listAll: async () => { ensureStoreFiles(); return readJson(TRANSFERS_PATH, []); },
@@ -1318,32 +1345,6 @@ async function getSchoolBalance(userId) {
     };
   }
 
-  function bucketEvents(events, range, explicit, fields) {
-    const effective = explicit ? normalizeRange(range) : widenRange(events, range);
-    const inRange = filterByRange(events, effective);
-    const bucketMs = effective === "today" ? 60 * 60 * 1000 : (effective === "week" || effective === "month") ? ONE_DAY_MS : 0;
-    const bucketOf = (ts) => {
-      if (bucketMs) return Math.floor(ts / bucketMs) * bucketMs;
-      const d = new Date(ts);
-      return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
-    };
-    const buckets = new Map();
-    for (const e of inRange) {
-      const b = bucketOf(e.ts);
-      const cur = buckets.get(b) || fields.reduce((acc, f) => ({ ...acc, [f]: 0 }), { ts: b });
-      for (const f of fields) cur[f] += Number(e[f]) || 0;
-      buckets.set(b, cur);
-    }
-    let points = Array.from(buckets.values()).sort((a, b) => a.ts - b.ts)
-      .map(p => fields.reduce((acc, f) => ({ ...acc, [f]: Number(Number(p[f]).toFixed(6)) }), { ts: p.ts }))
-      .slice(-240);
-    if (points.length === 1) {
-      const span = RANGE_MS[effective];
-      const baseTs = Number.isFinite(span) ? Date.now() - span : points[0].ts - (bucketMs || 30 * ONE_DAY_MS);
-      points = [fields.reduce((acc, f) => ({ ...acc, [f]: 0 }), { ts: Math.min(baseTs, points[0].ts - 1) }), ...points];
-    }
-    return { points, range: effective, bucket: bucketMs === 60 * 60 * 1000 ? "hour" : bucketMs ? "day" : "month", hasAnyData: events.length >= 1 };
-  }
 
   async function listUbiPaymentsSeries(range = "all", explicit = true) {
     const ssb = await openSsb();
@@ -2294,3 +2295,5 @@ async function getSchoolBalance(userId) {
     ECOIN_PER_DAY_OF_HISTORY
   };
 };
+
+module.exports.bucketEvents = bucketEvents;

@@ -4,7 +4,7 @@ const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
   votes: i18n.typeVotes, vote: i18n.typeVote, recent: i18n.recent, all: i18n.all,
-  mine: i18n.mine, tombstone: i18n.typeTombstone, logs: i18n.typeLog || 'LOGS', pixelia: i18n.typePixelia,
+  mine: i18n.mine, supported: i18n.filterSupported, replicated: i18n.filterReplicated, tombstone: i18n.typeTombstone, logs: i18n.typeLog || 'LOGS', pixelia: i18n.typePixelia,
   curriculum: i18n.typeCurriculum, document: i18n.typeDocument, bookmark: i18n.typeBookmark,
   feed: i18n.typeFeed, event: i18n.typeEvent, task: i18n.typeTask, report: i18n.typeReport,
   image: i18n.typeImage, audio: i18n.typeAudio, video: i18n.typeVideo, post: i18n.typePost,
@@ -68,6 +68,8 @@ const toQueryString = (filter, search = {}) => {
 const filterBlocks = (blocks, filter, userId) => {
   if (filter === 'recent') return blocks.filter(b => Date.now() - b.ts < 24*60*60*1000);
   if (filter === 'mine') return blocks.filter(b => b.author === userId);
+  if (filter === 'supported') return blocks.filter(b => b.isSupported);
+  if (filter === 'replicated') return blocks.filter(b => b.isReplicated);
   if (filter === 'all') return blocks;
   if (filter === 'banking') return blocks.filter(b => b.type === 'bankWallet' || b.type === 'bankClaim');
   if (filter === 'parliament') {
@@ -453,7 +455,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
   const qs = toQueryString(filter, s);
   const censusBlocks = Array.isArray(extras && extras.censusBlocks) ? extras.censusBlocks : blocks;
   const chipVisible = (mode) => mode === filter || filterBlocks(censusBlocks, mode, userId).length > 0;
-  const baseChips = ['all', 'recent', 'mine', ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
+  const baseChips = ['all', 'recent', 'mine', ...['supported', 'replicated'].filter(chipVisible), ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
 
   return template(
     i18n.blockchain,
