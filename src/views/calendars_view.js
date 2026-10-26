@@ -506,6 +506,8 @@ exports.clearnetCalendarView = async (calendar, dates, notesByDate = {}) => {
   <h1 class="cn-cal-title">${esc(name)}</h1>
   <div class="cn-cal-meta">
     ${renderKindTag("calendar")}
+    ${calendar.createdAt ? `<span class="cn-detail">📅 ${esc(moment(calendar.createdAt).format("YYYY/MM/DD"))}</span>` : ""}
+    <span class="cn-detail">${esc(calendar.isClosed ? i18n.calendarStatusClosed : i18n.calendarStatusOpen)}</span>
     ${calendar.deadline ? `<span class="cn-detail">⏳ ${esc(i18n.calendarDeadlineLabel || "Deadline")}: ${fmt(calendar.deadline)}</span>` : ""}
   </div>
   ${renderTagChips(calendar.tags)}

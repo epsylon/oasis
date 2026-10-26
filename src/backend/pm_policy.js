@@ -2,6 +2,7 @@ const fs = require('fs');
 
 const ANNOUNCE_SEEN_FILE = 'oasis-political-seen';
 const SUPPORTERS_SEEN_FILE = 'supporters-seen.json';
+const LARP_SEEN_FILE = 'larp-seen.json';
 
 const isMutual = (relationship) => !!(relationship && relationship.following && relationship.followsMe);
 
@@ -68,6 +69,25 @@ const writeSupportersSeen = (state) => {
   try { fs.writeFileSync(file, JSON.stringify({ ids: Array.from(new Set((state && state.ids) || [])), since: Number(state && state.since) || Date.now() })); return true; } catch (_) { return false; }
 };
 
+const larpSeenPath = () => {
+  try { return require('../configs/state-manager').statePath(LARP_SEEN_FILE); } catch (_) { return null; }
+};
+
+const readLarpSeen = () => {
+  const file = larpSeenPath();
+  if (!file) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (_) { return null; }
+};
+
+const writeLarpSeen = (state) => {
+  const file = larpSeenPath();
+  if (!file) return false;
+  try { fs.writeFileSync(file, JSON.stringify(state || {})); return true; } catch (_) { return false; }
+};
+
 const SUPPORTERS_PER_ROUND = 20;
 const SUPPORTERS_LOOKUPS = 50;
 
@@ -83,4 +103,4 @@ const newSupporters = (current, seen, followedAt = null, now = Date.now()) => {
   return { announce, state: { ids: Array.from(new Set([...known, ...before, ...announce])), since }, changed: before.length + announce.length > 0 || !Number(seen.since) };
 };
 
-module.exports = { isRecipientAllowed, isMutual, announceSeenPath, readAnnounceSeen, writeAnnounceSeen, decideAnnouncement, readSupportersSeen, writeSupportersSeen, newSupporters, SUPPORTERS_PER_ROUND, SUPPORTERS_LOOKUPS };
+module.exports = { isRecipientAllowed, isMutual, announceSeenPath, readAnnounceSeen, writeAnnounceSeen, decideAnnouncement, readSupportersSeen, writeSupportersSeen, newSupporters, SUPPORTERS_PER_ROUND, SUPPORTERS_LOOKUPS, readLarpSeen, writeLarpSeen };

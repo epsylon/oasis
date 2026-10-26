@@ -3,28 +3,6 @@ const { template, i18n, userLink } = require('./main_views');
 const { buildSeriesChartSvg, renderRangedChart, bucketLabel, bucketXLabels } = require('./banking_views');
 const sharedState = require('../configs/shared-state');
 
-Object.assign(i18n, {
-  statsChat: "Chats",
-  statsChatMessage: "Chat messages",
-  statsPad: "Pads",
-  statsPadEntry: "Pad entries",
-  statsGameScore: "Game scores",
-  statsParliamentCandidature: "Parliament candidatures",
-  statsParliamentTerm: "Parliament terms",
-  statsParliamentProposal: "Parliament proposals",
-  statsParliamentRevocation: "Parliament revocations",
-  statsParliamentLaw: "Parliament laws",
-  statsCourtsCase: "Court cases",
-  statsCourtsEvidence: "Court evidence",
-  statsCourtsAnswer: "Court answers",
-  statsCourtsVerdict: "Court verdicts",
-  statsCourtsSettlement: "Court settlements",
-  statsCourtsSettlementProposal: "Settlement proposals",
-  statsCourtsSettlementAccepted: "Settlements accepted",
-  statsCourtsNomination: "Judge nominations",
-  statsCourtsNominationVote: "Nomination votes"
-});
-
 const C = (stats, t) => Number((stats && stats.content && stats.content[t]) || 0);
 const O = (stats, t) => Number((stats && stats.opinions && stats.opinions[t]) || 0);
 
@@ -39,9 +17,9 @@ exports.statsView = (stats, filter) => {
   const modes = ['ALL', 'MINE', 'TOMBSTONE'];
   const types = [
     'bookmark', 'event', 'task', 'votes', 'poll', 'report', 'feed', 'project', 'industry', 'industryBlueprint',
-    'image', 'torrent', 'file', 'audio', 'video', 'document', 'transfer', 'post', 'tribe',
+    'image', 'torrent', 'file', 'audio', 'video', 'document', 'transfer', 'post', 'comment', 'tribe',
     'market', 'forum', 'job', 'aiExchange', 'map', 'shop', 'shopProduct',
-    'chat', 'chatMessage', 'pad', 'padEntry', 'room', 'roomMember', 'wikiPage', 'emergency', 'emergencyConfirm', 'emergencyUpdate', 'mailingList', 'logisticsRoute', 'logisticsRating', 'podcast', 'podcastEpisode', 'podcastPlay', 'campaign', 'campaignSignature', 'campaignUpdate', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
+    'chat', 'chatMessage', 'pad', 'padEntry', 'room', 'roomMember', 'wikiPage', 'housing', 'curriculum', 'pixelia', 'larpHousePost', 'emergency', 'emergencyConfirm', 'emergencyUpdate', 'mailingList', 'logisticsRoute', 'logisticsRating', 'podcast', 'podcastEpisode', 'podcastPlay', 'campaign', 'campaignSignature', 'campaignUpdate', 'gameScore', 'calendar', 'calendarDate', 'calendarNote',
     'schoolCourse', 'schoolLesson', 'schoolEnroll', 'schoolCertificate',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
@@ -56,7 +34,6 @@ exports.statsView = (stats, filter) => {
     feed: i18n.statsFeed,
     project: i18n.statsProject,
     industry: i18n.industryTitle,
-    industryBlueprint: i18n.industryBlueprints,
     image: i18n.statsImage,
     torrent: i18n.statsTorrent,
     file: i18n.statsFile,
@@ -64,7 +41,8 @@ exports.statsView = (stats, filter) => {
     video: i18n.statsVideo,
     document: i18n.statsDocument,
     transfer: i18n.statsTransfer,
-    post: i18n.statsPost,
+    post: i18n.blogTitle,
+    comment: i18n.blogComments,
     tribe: i18n.statsTribe,
     market: i18n.statsMarket,
     forum: i18n.statsForum,
@@ -77,43 +55,46 @@ exports.statsView = (stats, filter) => {
     chatMessage: i18n.statsChatMessage,
     pad: i18n.statsPad,
     padEntry: i18n.statsPadEntry,
-    room: i18n.statsRoom,
-    roomMember: i18n.statsRoomMember,
-    wikiPage: i18n.statsWiki,
-    emergency: i18n.statsEmergency,
-    emergencyConfirm: i18n.statsEmergencyConfirm,
-    emergencyUpdate: i18n.statsEmergencyUpdate,
-    mailingList: i18n.statsMailingList,
-    logisticsRoute: i18n.statsLogisticsRoute,
-    logisticsRating: i18n.statsLogisticsRating,
-    podcast: i18n.statsPodcast,
-    podcastEpisode: i18n.statsPodcastEpisode,
-    podcastPlay: i18n.statsPodcastPlay,
-    campaign: i18n.statsCampaign,
-    campaignSignature: i18n.statsCampaignSignature,
-    campaignUpdate: i18n.statsCampaignUpdate,
+    room: i18n.roomsTitle,
+    wikiPage: i18n.wikiTitle,
+    housing: i18n.housingTitle,
+    curriculum: i18n.cvTitle,
+    pixelia: i18n.pixeliaTitle,
+    larpHousePost: i18n.larpTitle,
+    emergency: i18n.emergenciesTitle,
+    mailingList: i18n.statsMailing,
+    logistics: i18n.logisticsTitle,
+    podcast: i18n.podcastsTitle,
+    campaign: i18n.campaignsTitle,
     gameScore: i18n.statsGameScore,
-    schoolCourse: i18n.statsSchoolCourse,
-    schoolLesson: i18n.statsSchoolLesson,
-    schoolEnroll: i18n.statsSchoolEnroll,
-    schoolCertificate: i18n.statsSchoolCertificate,
+    school: i18n.schoolTitle,
     calendar: i18n.statsCalendar,
     calendarDate: i18n.statsCalendarDate,
     calendarNote: i18n.statsCalendarNote,
-    parliamentCandidature: i18n.statsParliamentCandidature,
-    parliamentTerm: i18n.statsParliamentTerm,
-    parliamentProposal: i18n.statsParliamentProposal,
-    parliamentRevocation: i18n.statsParliamentRevocation,
-    parliamentLaw: i18n.statsParliamentLaw,
-    courtsCase: i18n.statsCourtsCase,
-    courtsEvidence: i18n.statsCourtsEvidence,
-    courtsAnswer: i18n.statsCourtsAnswer,
-    courtsVerdict: i18n.statsCourtsVerdict,
-    courtsSettlement: i18n.statsCourtsSettlement,
-    courtsSettlementProposal: i18n.statsCourtsSettlementProposal,
-    courtsSettlementAccepted: i18n.statsCourtsSettlementAccepted,
-    courtsNomination: i18n.statsCourtsNomination,
-    courtsNominationVote: i18n.statsCourtsNominationVote
+    parliament: i18n.parliamentTitle,
+    courts: i18n.courtsTitle
+  };
+  const STATS_GROUPS = {
+    room: ['room', 'roomMember'],
+    emergency: ['emergency', 'emergencyConfirm', 'emergencyUpdate'],
+    industry: ['industry', 'industryBlueprint'],
+    logistics: ['logisticsRoute', 'logisticsRating'],
+    podcast: ['podcast', 'podcastEpisode', 'podcastPlay'],
+    campaign: ['campaign', 'campaignSignature', 'campaignUpdate'],
+    school: ['schoolCourse', 'schoolLesson', 'schoolEnroll', 'schoolCertificate'],
+    parliament: ['parliamentCandidature', 'parliamentTerm', 'parliamentProposal', 'parliamentRevocation', 'parliamentLaw'],
+    courts: ['courtsCase', 'courtsEvidence', 'courtsAnswer', 'courtsVerdict', 'courtsSettlement', 'courtsSettlementProposal', 'courtsSettlementAccepted', 'courtsNomination', 'courtsNominationVote']
+  };
+  const groupOf = Object.fromEntries(Object.entries(STATS_GROUPS).flatMap(([g, list]) => list.map(t => [t, g])));
+  const groupedRows = (list, countOf) => {
+    const sums = new Map();
+    for (const t of list) {
+      const n = Number(countOf(t)) || 0;
+      if (n <= 0) continue;
+      const g = groupOf[t] || t;
+      sums.set(g, (sums.get(g) || 0) + n);
+    }
+    return [...sums].map(([g, n]) => [labels[g] || g, n]).sort((a, b) => b[1] - a[1]);
   };
   const CONTENT_HIDDEN = new Set(['karmaScore', 'shopProduct', 'padEntry', 'chatMessage', 'calendarDate', 'calendarNote', 'parliamentTerm']);
   const totalContent = types.filter(t => !CONTENT_HIDDEN.has(t)).reduce((sum, t) => sum + C(stats, t), 0);
@@ -319,7 +300,7 @@ exports.statsView = (stats, filter) => {
 
   const networkRows = [
       [i18n.statsUsersTitle, totalInhabitants],
-      [i18n.statsTotalMsgs || 'Total messages', networkKPIs.totalMsgs || 0],
+      [i18n.statsTotalMsgs || 'Messages', networkKPIs.totalMsgs || 0],
       [i18n.statsLogsTitle || 'Logs', stats?.logsCount || 0],
       [i18n.statsAITraining, C(stats, 'aiExchange') || 0],
       [i18n.statsPUBs, stats.pubsCount || 0],
@@ -375,12 +356,12 @@ exports.statsView = (stats, filter) => {
     );
   })();
 
-  const topTypes = Array.isArray(stats.topTypes) ? stats.topTypes : [];
+  const topTypes = groupedRows((Array.isArray(stats.topTypes) ? stats.topTypes : []).map(it => it.type), t => ((stats.topTypes || []).find(it => it.type === t) || {}).count).map(([label, count]) => ({ label, count }));
   const topTypesBlock = topTypes.length ? div({ class: 'stats-block' },
     h2(i18n.statsTopTypesTitle || 'Top Content Types'),
     renderTopList(
       topTypes,
-      it => labels[it.type] || it.type,
+      it => it.label,
       it => it.count,
       topTypes[0] ? topTypes[0].count : 1
     )
@@ -422,18 +403,8 @@ exports.statsView = (stats, filter) => {
   const memberTribesDetailed = Array.isArray(stats.memberTribesDetailed) ? stats.memberTribesDetailed : [];
   const myPrivateTribesDetailed = Array.isArray(stats.myPrivateTribesDetailed) ? stats.myPrivateTribesDetailed : [];
 
-  const buildContentRows = () => {
-    const excluded = CONTENT_HIDDEN;
-    const rows = [];
-    types.filter(t => !excluded.has(t)).forEach(t => {
-      const cnt = C(stats, t);
-      if (cnt <= 0) return;
-      rows.push([labels[t], cnt]);
-    });
-    return rows;
-  };
   const buildContentTable = () => {
-    const rows = buildContentRows().slice().sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
+    const rows = groupedRows(types.filter(t => !CONTENT_HIDDEN.has(t)), t => C(stats, t));
     if (!rows.length) return p({ class: 'no-content' }, i18n.no_results || 'No data');
     return table({ class: 'tag-table' },
       thead(tr(
@@ -445,7 +416,7 @@ exports.statsView = (stats, filter) => {
   };
 
   const buildOpinionTable = () => {
-    const rows = types.map(t => [labels[t], O(stats, t)]).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
+    const rows = groupedRows(types, t => O(stats, t));
     if (!rows.length) return p({ class: 'no-content' }, i18n.no_results || 'No data');
     return table({ class: 'tag-table' },
       thead(tr(
@@ -523,18 +494,22 @@ exports.statsView = (stats, filter) => {
     const ch = stats.chain;
     if (!ch || !ch.usage || !ch.growth) return null;
     const usagePts = Array.isArray(ch.usage.points) ? ch.usage.points : [];
-    const growthPts = Array.isArray(ch.growth.points) ? ch.growth.points : [];
     const usageSvg = usagePts.length >= 2 ? buildSeriesChartSvg({
       series: [{ label: `${i18n.statsUsageSeries} ${bucketLabel(ch.usage.bucket)}`, points: usagePts.map(pt => Number(pt.count) || 0) }],
       xLabels: bucketXLabels(usagePts, ch.usage.bucket),
       empty: i18n.bankExchangeChartEmpty, yDecimals: 0
     }) : null;
-    const growthSvg = growthPts.length >= 2 ? buildSeriesChartSvg({
-      series: [{ label: i18n.statsChainSizeSeries, points: growthPts.map(pt => Number(pt.mb) || 0) }],
-      xLabels: bucketXLabels(growthPts, ch.growth.bucket),
-      empty: i18n.bankExchangeChartEmpty, yDecimals: 2
-    }) : null;
     const wrap = (node) => node ? div({ class: 'stats-block stats-charts' }, node) : null;
+    const sizeChart = (id, title, data) => {
+      if (!data) return null;
+      const pts = Array.isArray(data.points) ? data.points : [];
+      const svg = pts.length >= 2 ? buildSeriesChartSvg({
+        series: [{ label: i18n.statsChainSizeSeries, points: pts.map(pt => Number(pt.mb) || 0) }],
+        xLabels: bucketXLabels(pts, data.bucket),
+        empty: i18n.bankExchangeChartEmpty, yDecimals: 2
+      }) : null;
+      return wrap(renderRangedChart(id, title, filter, data.range, !!data.hasAnyData, svg, '/stats'));
+    };
     const evoPts = ch.evolution && Array.isArray(ch.evolution.points) ? ch.evolution.points : [];
     const evoSvg = evoPts.length >= 2 ? buildSeriesChartSvg({
       series: [{ label: i18n.statsTombstoneTotalSeries, points: evoPts.map(pt => Number(pt.total) || 0) }],
@@ -544,7 +519,9 @@ exports.statsView = (stats, filter) => {
     return {
       evolution: ch.evolution ? wrap(renderRangedChart('stats-tomb-chart', i18n.statsTombstoneEvolutionTitle, filter, ch.evolution.range, !!ch.evolution.hasAnyData, evoSvg, '/stats')) : null,
       usage: wrap(renderRangedChart('stats-usage-chart', i18n.statsUsageChartTitle, filter, ch.usage.range, !!ch.usage.hasAnyData, usageSvg, '/stats')),
-      growth: wrap(renderRangedChart('stats-growth-chart', i18n.statsChainGrowthTitle, filter, ch.growth.range, !!ch.growth.hasAnyData, growthSvg, '/stats'))
+      blobs: sizeChart('stats-blobs-chart', i18n.statsBlobsGrowthTitle, ch.blobs),
+      growth: sizeChart('stats-growth-chart', i18n.statsChainGrowthTitle, ch.growth),
+      total: sizeChart('stats-total-chart', i18n.statsTotalGrowthTitle, ch.total)
     };
   })() || {};
 
@@ -583,7 +560,9 @@ exports.statsView = (stats, filter) => {
         filter === 'MINE' ? accountCard : null,
         filter === 'ALL' ? storageCard : null,
         tombMode,
+        filter === 'ALL' ? chainCharts.blobs : null,
         filter === 'ALL' ? chainCharts.growth : null,
+        filter === 'ALL' ? chainCharts.total : null,
         filter === 'ALL' ? networkStrip : null,
         filter === 'ALL' ? chainCharts.usage : null,
         filter === 'TOMBSTONE' ? chainCharts.evolution : null,

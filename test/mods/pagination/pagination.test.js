@@ -77,33 +77,34 @@ describe('pagination: the public clearnet pages', (t) => {
   const A = '@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=.ed25519';
   const many = (n, make) => Array.from({ length: n }, (_, i) => make(i));
   const cards = (html) => (String(html).match(/class="cn-hub-card"/g) || []).length;
+  const gridCards = (html) => { const s = String(html); const i = s.indexOf('class="cn-hub-grid"'); return i < 0 ? 0 : cards(s.slice(i, s.indexOf('<aside', i) < 0 ? undefined : s.indexOf('<aside', i))); };
 
   t('the hub shows one page at a time, keeps the filters in the page links and clamps out-of-range pages', async () => {
     const { clearnetHubView, LIST_PAGE_SIZE } = require('../../../src/views/main_views');
     const total = 2 * LIST_PAGE_SIZE + 7;
     const items = { jobs: many(total, i => ({ id: `%j${i}.sha256`, title: `Job ${i}`, snippet: 'work', ts: i, author: A })) };
-    const first = String(await clearnetHubView({ authors: [], items }));
-    eq(cards(first), LIST_PAGE_SIZE, 'the first page is capped');
+    const first = String(await clearnetHubView({ items }));
+    eq(gridCards(first), LIST_PAGE_SIZE, 'the first page is capped');
     ok(pageLinks(first).includes('/c?page=2') && !pageLinks(first).some(h => /[?&]page=1(&|$)/.test(h)), 'page one offers next but no previous');
-    const third = String(await clearnetHubView({ authors: [], items, page: 3 }));
-    eq(cards(third), 7, 'the last page holds the remainder');
+    const third = String(await clearnetHubView({ items, page: 3 }));
+    eq(gridCards(third), 7, 'the last page holds the remainder');
     ok(pageLinks(third).includes('/c?page=2') && !pageLinks(third).some(h => /[?&]page=4/.test(h)), 'the last page offers previous but no next');
-    eq(cards(String(await clearnetHubView({ authors: [], items, page: 99 }))), 7, 'an out-of-range page lands on the last one');
-    eq(cards(String(await clearnetHubView({ authors: [], items, page: 'x' }))), LIST_PAGE_SIZE, 'a bogus page lands on the first one');
-    ok(pageLinks(String(await clearnetHubView({ authors: [], items, filterType: 'jobs', query: 'work' }))).includes('/c?type=jobs&q=work&page=2'), 'the page links keep the type and the query');
-    eq(pageLinks(String(await clearnetHubView({ authors: [], items: { jobs: items.jobs.slice(0, 5) } }))).length, 0, 'a short list has no pager');
+    eq(gridCards(String(await clearnetHubView({ items, page: 99 }))), 7, 'an out-of-range page lands on the last one');
+    eq(gridCards(String(await clearnetHubView({ items, page: 'x' }))), LIST_PAGE_SIZE, 'a bogus page lands on the first one');
+    ok(pageLinks(String(await clearnetHubView({ items, filterType: 'jobs', query: 'work' }))).includes('/c?type=jobs&q=work&page=2'), 'the page links keep the type and the query');
+    eq(pageLinks(String(await clearnetHubView({ items: { jobs: items.jobs.slice(0, 5) } }))).length, 0, 'a short list has no pager');
   });
 
   t('the hub applies the chosen size and offers the same sizes as the app', async () => {
     const { clearnetHubView, LIST_PAGE_SIZE } = require('../../../src/views/main_views');
     const items = { jobs: many(2 * LIST_PAGE_SIZE + 7, i => ({ id: `%j${i}.sha256`, title: `Job ${i}`, snippet: 'work', ts: i, author: A })) };
-    const html = await scoped('/c', 'perPage=10&page=2', async () => String(await clearnetHubView({ authors: [], items, page: 2 })));
-    eq(cards(html), 10, 'ten per page');
+    const html = await scoped('/c', 'perPage=10&page=2', async () => String(await clearnetHubView({ items, page: 2 })));
+    eq(gridCards(html), 10, 'ten per page');
     const nav = pageLinks(html);
     ok(nav.includes('/c?perPage=10') && nav.includes('/c?perPage=10&page=3'), 'previous and next keep the size');
     for (const s of ['10', '50', '100', 'all']) ok(nav.includes(`/c?perPage=${s}`), `the size ${s} is offered`);
-    const all = await scoped('/c', 'perPage=all', async () => String(await clearnetHubView({ authors: [], items })));
-    eq(cards(all), 2 * LIST_PAGE_SIZE + 7, 'all lists everything');
+    const all = await scoped('/c', 'perPage=all', async () => String(await clearnetHubView({ items })));
+    eq(gridCards(all), 2 * LIST_PAGE_SIZE + 7, 'all lists everything');
   });
 
   t('the inhabitant page and the public tribe page paginate the same way', async () => {

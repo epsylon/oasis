@@ -326,8 +326,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         }
       }
       return true;
-    })
-    .sort((a, b) => b.ts - a.ts);
+    });
+  if (!(extras && extras.ordered)) validActions.sort((a, b) => b.ts - a.ts);
 
   const terms = validActions.filter(a => a.type === 'parliamentTerm');
   let chosenTerm = null;
@@ -341,7 +341,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
   }
 
   const seenDocumentTitles = new Set();
-  const grouped = buildActivityItemsWithPostThreads(deduped, all);
+  const grouped = extras && extras.ordered ? deduped : buildActivityItemsWithPostThreads(deduped, all);
   const items = extras && extras.paged ? paged(grouped) : grouped;
 
   const spreadOrdinalById = new Map();
@@ -1855,24 +1855,29 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       (() => {
         const shareNode = detailHref ? renderShareButton(msgId, detailHref, (content && (content.title || content.question || content.concept || content.name)) || '') : null;
         const supportNode = renderSupportButton(bylineAuthorId, extras.following, extras.returnTo);
-        const commentTotal = typeof action.commentCount === 'number' ? action.commentCount : commentCountFor([action.id, action.rootId, action.key, msgId]);
+        const commentTotal = typeof action.commentCount === 'number' ? action.commentCount : commentCountFor([commentOf(action) && commentOf(action).rootId, action.id, action.rootId, action.key, msgId]);
         const commentsHref = !detailHref ? '' : commentOf(action) ? detailHref : commentsOpenHref(detailHref, commentTotal);
         const commentsNode = type !== 'about' ? renderCommentsSummary(commentsHref, commentTotal) : null;
-        const routeFn = OPINION_TYPES.has(type) ? OPINION_ROUTES[type] : null;
+        const routeFn = extras.opinionRoute || (OPINION_TYPES.has(type) ? OPINION_ROUTES[type] : null);
         if (!routeFn) return renderCardMetaRow(type !== 'about' && detailHref ? renderOpinionsPill(msgId, detailHref) : null, commentsNode, shareNode, supportNode);
         const ops = (action.value?.content?.opinions) || (action.content?.opinions) || {};
         const opsTotal = Object.values(ops).reduce((s, n) => s + (Number(n) || 0), 0);
+        const opinionsBy = (action.value?.content?.opinions_inhabitants) || (action.content?.opinions_inhabitants) || [];
+        const voted = Array.isArray(opinionsBy) && opinionsBy.includes(userId);
         const votingNode = details({ class: 'opinions-voting-collapse' },
           summary({ class: opsTotal > 0 ? 'opinions-summary engage-on' : 'opinions-summary' },
             span({ class: 'opinions-summary-icon' }, 'ꔍ'),
             span({ class: 'opinions-summary-count' }, `(${opsTotal})`)),
           div({ class: 'voting-buttons' },
-            opinionCategories.map(cat =>
-              form({ method: 'POST', action: `${routeFn(action.id)}/${cat}` },
-                input({ type: 'hidden', name: 'returnTo', value: extras.returnTo || '/activity' }),
-                button({ class: 'vote-btn' }, `${String(i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat).toUpperCase()} [${ops[cat] || 0}]`)
-              )
-            )
+            opinionCategories.map(cat => {
+              const label = `${String(i18n['vote' + cat.charAt(0).toUpperCase() + cat.slice(1)] || cat).toUpperCase()} [${ops[cat] || 0}]`;
+              return voted
+                ? button({ class: 'vote-btn', type: 'button' }, label)
+                : form({ method: 'POST', action: `${routeFn(action.id)}/${cat}` },
+                    input({ type: 'hidden', name: 'returnTo', value: extras.returnTo || '/activity' }),
+                    button({ class: 'vote-btn' }, label)
+                  );
+            })
           )
         );
         return [renderVotesSummary(ops), renderCardMetaRow(votingNode, commentsNode, shareNode, supportNode)];

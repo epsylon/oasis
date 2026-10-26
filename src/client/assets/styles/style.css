@@ -1824,14 +1824,6 @@ body.pdf-embed {
   border-radius: 6px;
 }
 
-.trending-image .feed-image,
-.opinion-image .feed-image {
-  max-width: 100%;
-  width: auto;
-  max-height: 480px;
-  height: auto;
-}
-
 .opinions-voting-collapse { margin: 8px 0; }
 .card-meta-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;overflow:visible}
 .card-meta-row .opinions-voting-collapse:not([open]){display:flex}
@@ -4072,11 +4064,9 @@ a.pm-btn:hover { text-decoration: none }
 .audio-container{display:flex;flex-direction:row;align-items:center;gap:10px;width:100%;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none;margin:0 0 8px 0}
 .audio-container audio{flex:1 1 auto;min-width:0;width:100%}
 .card-section .card-field.audio-container,
-.trending-card .card-field.audio-container,
-.opinions-card .card-field.audio-container{display:flex}
+.trending-card .card-field.audio-container{display:flex}
 .card-section .card-field.video-container,
-.trending-card .card-field.video-container,
-.opinions-card .card-field.video-container{display:block}
+.trending-card .card-field.video-container{display:block}
 .audio-transcode-form .filter-btn{background:transparent;color:inherit;font-size:.75em;padding:3px 10px;border:1px solid #555;border-radius:12px;white-space:nowrap;line-height:1.5}
 .audio-transcode-form .filter-btn:hover{border-color:#ffa300;color:#ffa300;background:transparent}
 .audio-transcode-form .create-button{margin:0;font-size:.75em;padding:3px 12px;border-radius:12px;border:1px solid #ffcc00;background:#ffcc00;color:#111;font-weight:bold;line-height:1.5;cursor:pointer}
@@ -6555,7 +6545,7 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .larp-house-badges{display:flex;flex-wrap:wrap;gap:14px;margin:8px 0 12px 0;background:transparent !important;border:0 !important;padding:0 !important}
 .larp-house-nav{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0;background:transparent !important;border:0 !important;padding:0 !important}
 .larp-house-nav-label{color:#FFD700;font-size:12px;text-transform:uppercase;letter-spacing:1px;margin-right:6px}
-.larp-house-nav-chip{display:inline-block;padding:4px 10px;border:1px solid #555;border-radius:14px;color:#ccc;font-size:12px;font-weight:600;text-decoration:none;background:#1A1A1A}
+.larp-house-nav-chip{display:inline-block;padding:4px 10px;border:1px solid #555;border-radius:14px;color:#FFD700;font-size:12px;font-weight:600;text-decoration:none;background:#1A1A1A}
 .larp-house-nav-chip:hover{border-color:#FFA500;color:#FFA500}
 .larp-house-nav-chip.active{background:#FFA500;border-color:#FFA500;color:#000}
 .larp-detail-name{color:#FFA500;font-size:22px;margin:0 0 4px 0}
@@ -6565,12 +6555,8 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .larp-post-label{color:#FFD700;font-size:13px;font-weight:600}
 .larp-post-public-label{color:#bbb;font-size:13px;display:inline-flex;align-items:center;gap:6px}
 .larp-posts-list{display:flex;flex-direction:column;gap:10px;background:transparent !important;border:0 !important;padding:0 !important}
-.larp-post{background:#1A1A1A;border:1px solid #2a2a2a;border-radius:6px;padding:10px 14px}
 .larp-post-private{border-left:3px solid #FFA500}
-.larp-post-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;font-size:13px;background:transparent !important;border:0 !important;padding:0 !important;margin-bottom:6px}
-.larp-post-time{color:#888;font-size:12px}
 .larp-post-badge{display:inline-block;padding:2px 8px;border-radius:10px;background:#3a2300;color:#FFD700;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px}
-.larp-post-text{color:#ddd;line-height:1.5;margin:0;white-space:pre-wrap;word-break:break-word}
 .larp-rules{margin-top:14px;display:flex;flex-direction:column;gap:18px;background:transparent !important;border:0 !important;padding:0 !important}
 .larp-rules-list{display:flex;flex-direction:column;gap:6px;background:transparent !important;border:0 !important;padding:0 !important}
 .larp-rules-list strong{color:#FFD700}
@@ -6640,10 +6626,11 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .larp-test-form-compact .larp-test-option{font-size:14px;padding:4px 6px}
 .larp-will-test-hint{color:#FFA500;opacity:.85;font-size:14px;line-height:1.5;margin:4px 0 12px 0}
 .larp-academia-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px;background:transparent !important;border:0 !important;padding:0 !important}
-.larp-invite-redeem-form,.larp-invite-create-form,.larp-card-invite-form{display:inline-flex;gap:6px;align-items:center;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
-.larp-invite-redeem-form input[type=text],.larp-card-invite-form input[type=text]{padding:4px 8px;font-family:monospace;font-size:12px;min-width:280px;width:100%;max-width:360px;box-sizing:border-box}
-.larp-card-invite-form{margin-top:8px;flex-wrap:wrap}
+.larp-invite-create-form{display:inline-flex;gap:6px;align-items:center;background:transparent !important;border:0 !important;padding:0 !important;margin:0}
 .larp-invite-banner{background:#161616;border:1px solid #FFA500;border-radius:6px;padding:10px 14px;margin:10px 0}
+.larp-solstice-banner{display:flex;align-items:center;gap:14px;text-decoration:none}
+.larp-solstice-image{width:64px;height:64px;object-fit:cover;border-radius:6px;border:1px solid #FFA500;flex:0 0 auto}
+.larp-solstice-text{display:flex;flex-direction:column;gap:2px;color:#FFD700}
 .larp-invite-banner-title{color:#FFD700;margin:0 0 4px 0;font-size:14px}
 .larp-invite-banner-hint{color:#bbb;font-size:13px;margin:0 0 8px 0}
 .larp-invite-banner-code{color:#9aff9a;font-family:monospace;font-size:15px;letter-spacing:1px;margin:0;word-break:break-all}
@@ -7171,7 +7158,6 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .document-card,
 .torrent-card,
 .chat-card,
-.opinions-card,
 .post-card,
 .mention-card,
 .trending-card,
@@ -7332,7 +7318,6 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .document-card .card-field,
 .torrent-card .card-field,
 .chat-card .card-field,
-.opinions-card .card-field,
 .post-card .card-field,
 .mention-card .card-field,
 .trending-card .card-field,
@@ -8479,8 +8464,7 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .image-container-row,.video-container-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .image-card .image-container-row,
 .card-section .card-field.image-container,
-.trending-card .card-field.image-container,
-.opinions-card .card-field.image-container{display:block;text-align:center}
+.trending-card .card-field.image-container{display:block;text-align:center}
 .video-container-row{flex-direction:column;align-items:center;width:100%}
 .video-container-row video{width:100%;max-height:640px;margin:0 auto}
 .vote-no-quorum{color:#ffcc00;font-weight:bold}
@@ -8865,8 +8849,6 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .hemi-threshold-label{font-size:11px;font-weight:400;fill:#ddd}
 .hemi-threshold-label.hemi-threshold-quorum{fill:#66bb6a}
 .hemi-threshold-label.hemi-threshold-pass{fill:#ffa300}
-.hemi-modes{padding:0 !important;margin:0 0 8px 0;display:flex;gap:6px;justify-content:center;background:transparent !important;border:0 !important}
-.hemi-legend{list-style:none;margin:10px auto 0;padding:0;display:flex;flex-wrap:wrap;gap:6px 18px;justify-content:center}
 .hemi-legend-item{display:inline-flex;align-items:center;gap:6px;font-size:13px}
 .hemi-swatch{display:inline-block;width:12px;height:12px;border-radius:50%;background:#444}
 .hemi-swatch.hemi-bloc-gov{background:#ffa300}
@@ -8874,7 +8856,6 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .hemi-swatch.hemi-bloc-none{background:#2f6fb5}
 .hemi-swatch.hemi-house-academia{background:#5c6bc0}.hemi-swatch.hemi-house-solaris{background:#ffb300}.hemi-swatch.hemi-house-arrakis{background:#d2691e}.hemi-swatch.hemi-house-terraverde{background:#43a047}.hemi-swatch.hemi-house-unsystem{background:#9e9e9e}.hemi-swatch.hemi-house-dogma{background:#8e24aa}.hemi-swatch.hemi-house-helix{background:#00acc1}.hemi-swatch.hemi-house-quark{background:#e53935}.hemi-swatch.hemi-house-hermandad{background:#c0a000}
 .hemi-legend-link{color:#ffa300;text-decoration:none}
-.hemi-legend-count{color:#ffd700;font-size:12px}
 .hemi-legend-item{color:#ffd700}
 .hemi-note{text-align:center;color:#ffd700;font-size:12px;margin:6px 0 0}
 .torrent-oasis{margin:8px 0 14px}
@@ -8967,8 +8948,7 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .clearnet-switch-btn+.clearnet-switch-btn{border-left:1px solid #555}
 .clearnet-switch-btn.active{background:#ffa500;color:#000;cursor:default}
 .clearnet-switch-btn:disabled{opacity:1}
-.votations-comment-card,.larp-post{position:relative}
-.larp-post.own-comment > .larp-post-head{padding-right:48px;box-sizing:border-box}
+.votations-comment-card{position:relative}
 .comment-delete-form{position:absolute;top:12px;right:12px;margin:0;padding:0;background:transparent !important;border:0 !important;box-shadow:none}
 .votations-comment-card.own-comment > .created-at{display:block;padding-right:48px;box-sizing:border-box}
 .comment-form .comment-textarea{display:block;max-width:100%;margin:0}
@@ -9190,7 +9170,6 @@ div:has(>.card-top):not(.tribe-side){padding:8px 16px 12px !important;border-rad
 .wallet-error-actions .update-download-link:hover{background:#FFD700;color:#000;text-decoration:none}
 .tribe-card:has(>.card-top)>.tribe-card-body{padding-bottom:0}
 .tribe-card:has(>.card-top)>.tribe-card-body>:last-child{margin-bottom:0}
-.bookmark-title .card-title-link:not([href^="/tribe/"]){color:#ff6600}
 .blockexplorer-search{margin:12px 0 16px;padding:10px 12px}
 .blockexplorer-search-form :is(.blockexplorer-search-row,.blockexplorer-search-pair,.blockexplorer-search-dates,.blockexplorer-search-actions,.filter-box__controls){margin:0;padding:0;border:0;background:transparent;box-shadow:none;overflow:visible}
 .blockexplorer-search-form .blockexplorer-search-row{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px}
@@ -9270,7 +9249,6 @@ div:has(>.card-top):not(.tribe-side){padding:8px 16px 12px !important;border-rad
 .tribe-subtribes-empty{justify-content:center;margin:24px 0}
 .tribe-subtribes-empty form{margin:0}
 .parliament-overview-table{margin:12px 0}
-.parliament-overview-table .tribe-info-label{width:55%}
 .forum-thread-card{margin:0 0 14px 0}
 .forum-thread-card .forum-body{margin:0}
 .forum-invite-row{margin:8px 0}

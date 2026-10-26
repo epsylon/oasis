@@ -11,6 +11,12 @@ const HOUSE_KEYS = ['academia','solaris','arrakis','terraverde','unsystem','dogm
 const VALID_KEY = (k) => HOUSE_KEYS.includes(String(k || '').toLowerCase());
 
 const TEST_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+const DECREE_TYPE = 'larpDecree';
+const DECREES_PER_CYCLE = 3;
+const DECREE_VOTE_MS = 7 * 24 * 60 * 60 * 1000;
+const DECREE_TITLE_MAX = 160;
+const DECREE_TEXT_MAX = 1000;
+const LAW_POINTS = 10;
 const ACADEMIA_GRACE_MS = 10 * 60 * 1000;
 
 const PROFILE_QUESTIONS = [
@@ -140,40 +146,118 @@ const TEST_QUESTIONS_COUNT = PROFILE_QUESTIONS.length;
 
 const SOLAR_AGE_OFFSET = 10000000 - 2026;
 
+const RULING_KEYS = HOUSE_KEYS.filter(k => k !== 'academia');
+const WHEEL_POINTS = [[11, 21], [1, 4], [2, 21], [4, 6], [5, 21], [7, 5], [8, 22], [10, 6]];
+
+const wheelStart = (wheelYear, idx) => {
+  const [month, day] = WHEEL_POINTS[idx];
+  return new Date(idx === 0 ? wheelYear - 1 : wheelYear, month, day);
+};
+
+function getCycleWindow(now = new Date()) {
+  const t = new Date(now);
+  const wheelYear = t >= new Date(t.getFullYear(), 11, 21) ? t.getFullYear() + 1 : t.getFullYear();
+  let index = 0;
+  for (let i = WHEEL_POINTS.length - 1; i >= 0; i -= 1) {
+    if (t >= wheelStart(wheelYear, i)) { index = i; break; }
+  }
+  const start = wheelStart(wheelYear, index);
+  const end = index + 1 < WHEEL_POINTS.length ? wheelStart(wheelYear, index + 1) : wheelStart(wheelYear + 1, 0);
+  const season = index < 4 ? 1 : 2;
+  const seasonStart = wheelStart(wheelYear, season === 1 ? 0 : 4);
+  const seasonEnd = season === 1 ? wheelStart(wheelYear, 4) : wheelStart(wheelYear + 1, 0);
+  return { wheelYear, index, houseKey: RULING_KEYS[index], start, end, season, seasonStart, seasonEnd };
+}
+
+function nextRulingStart(houseKey, now = new Date()) {
+  const idx = RULING_KEYS.indexOf(houseKey);
+  if (idx < 0) return null;
+  const w = getCycleWindow(now);
+  if (w.index === idx) return w.start;
+  return wheelStart(idx > w.index ? w.wheelYear : w.wheelYear + 1, idx);
+}
+
+function cyclesUntilRuling(houseKey, now = new Date()) {
+  const idx = RULING_KEYS.indexOf(houseKey);
+  if (idx < 0) return null;
+  const w = getCycleWindow(now);
+  return (idx - w.index + RULING_KEYS.length) % RULING_KEYS.length;
+}
+
 function computeCycle(now = new Date()) {
-  const year = now.getFullYear();
-  const monthIdx = now.getMonth();
-  const start = new Date(year, 0, 1);
-  const dayOfYear = Math.floor((now - start) / 86400000) + 1;
-  const summerSolstice = new Date(year, 5, 21);
-  const winterSolstice = new Date(year, 11, 21);
-  const solsticeNum = now < summerSolstice ? 1 : (now < winterSolstice ? 2 : 1);
-  const houseKey = HOUSE_KEYS[monthIdx % HOUSE_KEYS.length];
-  const house = HOUSES[houseKey] || { short: houseKey.slice(0, 3), name: houseKey };
+  const t = new Date(now);
+  const year = t.getFullYear();
+  const dayOfYear = Math.floor((t - new Date(year, 0, 1)) / 86400000) + 1;
+  const w = getCycleWindow(t);
+  const house = HOUSES[w.houseKey] || { short: w.houseKey.slice(0, 3), name: w.houseKey };
   const solarAge = year + SOLAR_AGE_OFFSET;
   const houseCycle = Math.floor(year - 2026 + 1);
   return {
     day: dayOfYear,
-    solstice: solsticeNum,
+    solstice: w.season,
     age: solarAge,
-    houseKey,
-    houseShort: house.short || houseKey.slice(0, 3),
+    houseKey: w.houseKey,
+    houseShort: house.short || w.houseKey.slice(0, 3),
     cycle: houseCycle,
-    formatted: `${dayOfYear}.${solsticeNum}.${solarAge}.${house.short || houseKey.slice(0, 3)}.${houseCycle}`
+    start: w.start,
+    end: w.end,
+    formatted: `${dayOfYear}.${w.season}.${solarAge}.${house.short || w.houseKey.slice(0, 3)}.${houseCycle}`
   };
 }
 
+function decreeQuorum(population) {
+  return Math.max(3, Math.ceil((Number(population) || 0) * 0.05));
+}
+
+function decreeOutcome(decree, vote, minVoters, now = Date.now()) {
+  if (decree && (decree.status === 'ENACTED' || decree.status === 'REJECTED')) return decree.status;
+  const deadline = Date.parse((decree && decree.deadline) || (vote && vote.deadline) || '') || 0;
+  if (!deadline || now < deadline) return 'OPEN';
+  const yes = Number(vote && vote.votes && vote.votes.YES) || 0;
+  const no = Number(vote && vote.votes && vote.votes.NO) || 0;
+  const voters = Number(vote && vote.totalVotes) || (vote && Array.isArray(vote.voters) ? vote.voters.length : 0);
+  return voters >= minVoters && yes > no ? 'APPROVED' : 'REJECTED';
+}
+
+function influenceOf(decrees, houseAt, window = null) {
+  const rows = Object.fromEntries(RULING_KEYS.map(k => [k, { house: k, points: 0, laws: 0, votes: 0 }]));
+  for (const d of Array.isArray(decrees) ? decrees : []) {
+    if (!rows[d.house]) continue;
+    if (window && (d.ts < window.start.getTime() || d.ts >= window.end.getTime())) continue;
+    if (d.status === 'ENACTED') { rows[d.house].points += LAW_POINTS; rows[d.house].laws += 1; }
+    const choices = d.vote && d.vote.choices && typeof d.vote.choices === 'object' ? d.vote.choices : {};
+    const at = Math.min(Date.now(), Date.parse(d.deadline || '') || Date.now());
+    for (const voter of Object.keys(choices)) {
+      const h = houseAt(voter, at);
+      if (!rows[h] || h === d.house) continue;
+      rows[h].points += 1;
+      rows[h].votes += 1;
+    }
+  }
+  return Object.values(rows).sort((a, b) => b.points - a.points || b.laws - a.laws || b.votes - a.votes || a.house.localeCompare(b.house));
+}
+
+function winnerOf(rows) {
+  const top = (rows || [])[0];
+  if (!top || top.points <= 0) return null;
+  const second = rows[1];
+  if (second && second.points === top.points && second.laws === top.laws && second.votes === top.votes) return null;
+  return top;
+}
+
 function getGoverningHouseKey(now = new Date()) {
-  return HOUSE_KEYS[now.getMonth() % HOUSE_KEYS.length];
+  return getCycleWindow(now).houseKey;
 }
 
 function getGoverningPeriodId(now = new Date()) {
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `${getGoverningHouseKey(now)}:${now.getFullYear()}-${month}`;
+  const w = getCycleWindow(now);
+  return `${w.houseKey}:${w.wheelYear}-${w.index + 1}`;
 }
 
 module.exports = ({ cooler, tribesModel, cryptoModel }) => {
   let ssb;
+  let services = {};
+  const attach = (extra) => { services = { ...services, ...(extra || {}) }; };
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
   const startedAt = Date.now();
   let academiaRetry = null;
@@ -510,6 +594,34 @@ module.exports = ({ cooler, tribesModel, cryptoModel }) => {
     if (store) delete store.larpMemberships;
   };
 
+  async function readTimeline() {
+    const client = await openSsb();
+    const msgs = await readTyped(client, ['larpJoinHouse', 'larpLeaveLarp'], { limit: 0 });
+    const byAuthor = new Map();
+    for (const m of msgs) {
+      const author = m && m.value && m.value.author;
+      const c = m && m.value && m.value.content;
+      if (!author || !c) continue;
+      const house = c.type === 'larpJoinHouse' ? (VALID_KEY(c.house) ? c.house : undefined) : c.type === 'larpLeaveLarp' ? null : undefined;
+      if (house === undefined) continue;
+      if (!byAuthor.has(author)) byAuthor.set(author, []);
+      byAuthor.get(author).push({ ts: m.value.timestamp || 0, seq: Number(m.value.sequence) || 0, house });
+    }
+    for (const list of byAuthor.values()) list.sort((a, b) => a.ts - b.ts || a.seq - b.seq);
+    return (author, ts) => {
+      let house = null;
+      for (const e of byAuthor.get(author) || []) { if (e.ts <= ts) house = e.house; else break; }
+      return house;
+    };
+  }
+
+  async function houseTimeline() {
+    const store = requestScope.getStore();
+    if (!store) return readTimeline();
+    if (!store.larpTimeline) store.larpTimeline = readTimeline();
+    return store.larpTimeline;
+  }
+
   async function listAllMemberships() {
     const store = requestScope.getStore();
     if (!store) return readMemberships();
@@ -580,7 +692,7 @@ module.exports = ({ cooler, tribesModel, cryptoModel }) => {
     const viewerIsMember = viewerHouse === houseKey;
     if (!viewerIsMember && !wallIsPublic(houseKey, { isGoverning })) return [];
     const client = await openSsb();
-    const memberships = await listAllMemberships();
+    const houseAt = await houseTimeline();
     return new Promise((resolve) => {
       const posts = [];
       const tombs = new Map();
@@ -596,13 +708,14 @@ module.exports = ({ cooler, tribesModel, cryptoModel }) => {
           if (!c || c.type !== 'larpHousePost') return;
           if (c.house !== houseKey) return;
           const author = m.value.author;
-          const memberHouse = memberships.get(author) || 'academia';
-          if (memberHouse !== houseKey) return;
+          const memberHouse = houseAt(author, m.value.timestamp || 0) || 'academia';
+          if (houseKey !== 'academia' && memberHouse !== houseKey) return;
           posts.push({
             id: m.key,
             author,
+            authorHouse: memberHouse,
             text: String(c.text || ''),
-            createdAt: c.createdAt || new Date(m.value.timestamp || 0).toISOString(),
+            createdAt: m.value.timestamp ? new Date(m.value.timestamp).toISOString() : (c.createdAt || new Date(0).toISOString()),
             ts: m.value.timestamp || 0
           });
         }, () => {
@@ -689,6 +802,196 @@ module.exports = ({ cooler, tribesModel, cryptoModel }) => {
     });
     await publishJoin(target);
     return { ok: true, passed: true, house: target, score: bestScore, scores, ranking };
+  }
+
+  async function readDecrees() {
+    const client = await openSsb();
+    const msgs = await readTyped(client, [DECREE_TYPE], { limit: 0 });
+    const houseAt = await houseTimeline();
+    const roots = new Map();
+    const updates = [];
+    for (const m of msgs) {
+      const c = m && m.value && m.value.content;
+      if (!c || c.type !== DECREE_TYPE) continue;
+      if (typeof c.replaces === 'string') { updates.push(m); continue; }
+      const author = m.value.author;
+      const ts = m.value.timestamp || 0;
+      const when = new Date(ts);
+      if (!RULING_KEYS.includes(c.house) || getGoverningHouseKey(when) !== c.house || c.period !== getGoverningPeriodId(when)) continue;
+      if (houseAt(author, ts) !== c.house || typeof c.voteId !== 'string' || !String(c.title || '').trim()) continue;
+      roots.set(m.key, {
+        id: m.key, author, ts, house: c.house, period: c.period,
+        title: String(c.title).trim().slice(0, DECREE_TITLE_MAX),
+        description: String(c.description || '').slice(0, DECREE_TEXT_MAX),
+        voteId: c.voteId, deadline: c.deadline || null, createdAt: c.createdAt || when.toISOString(),
+        status: 'OPEN', lawId: null
+      });
+    }
+    const perPeriod = new Map();
+    for (const d of [...roots.values()].sort((a, b) => a.ts - b.ts)) {
+      const n = perPeriod.get(d.period) || 0;
+      if (n >= DECREES_PER_CYCLE) { roots.delete(d.id); continue; }
+      perPeriod.set(d.period, n + 1);
+    }
+    for (const m of updates.sort((a, b) => (a.value.timestamp || 0) - (b.value.timestamp || 0))) {
+      const c = m.value.content;
+      const d = roots.get(c.replaces);
+      if (!d || m.value.author !== d.author || !['ENACTED', 'REJECTED'].includes(c.status)) continue;
+      d.status = c.status;
+      d.lawId = c.lawId || null;
+    }
+    return [...roots.values()].sort((a, b) => b.ts - a.ts);
+  }
+
+  async function voteIndex() {
+    const list = services.votes && typeof services.votes.listAll === 'function' ? await services.votes.listAll('all').catch(() => []) : [];
+    const index = new Map();
+    for (const v of list) {
+      if (v && v.id) index.set(v.id, v);
+      if (v && v.rootId) index.set(v.rootId, v);
+    }
+    return index;
+  }
+
+  async function currentQuorum() {
+    let population = 0;
+    try {
+      if (services.inhabitants && typeof services.inhabitants.countInhabitants === 'function') population = Number(await services.inhabitants.countInhabitants()) || 0;
+    } catch (_) {}
+    return decreeQuorum(population);
+  }
+
+  async function listDecrees(filter = {}) {
+    const [decrees, votes, minVoters] = await Promise.all([readDecrees(), voteIndex(), currentQuorum()]);
+    return decrees
+      .filter(d => (!filter.house || d.house === filter.house) && (!filter.period || d.period === filter.period))
+      .map(d => {
+        const vote = votes.get(d.voteId) || null;
+        return {
+          ...d,
+          vote,
+          minVoters,
+          yes: Number(vote && vote.votes && vote.votes.YES) || 0,
+          no: Number(vote && vote.votes && vote.votes.NO) || 0,
+          voters: Number(vote && vote.totalVotes) || 0,
+          outcome: decreeOutcome(d, vote, minVoters)
+        };
+      });
+  }
+
+  async function decreeStatus(now = new Date()) {
+    const client = await openSsb();
+    const w = getCycleWindow(now);
+    const myHouse = await getUserHouse(client.id).catch(() => null);
+    const period = getGoverningPeriodId(now);
+    const used = (await readDecrees()).filter(d => d.period === period).length;
+    const lateness = w.end.getTime() - now.getTime() < DECREE_VOTE_MS;
+    const reason = myHouse !== w.houseKey ? 'not-governing' : used >= DECREES_PER_CYCLE ? 'limit' : lateness ? 'late' : null;
+    return { allowed: !reason, reason, house: w.houseKey, period, used, left: Math.max(0, DECREES_PER_CYCLE - used) };
+  }
+
+  async function proposeDecree({ title, description = '' } = {}, now = new Date()) {
+    const cleanTitle = String(title || '').trim().slice(0, DECREE_TITLE_MAX);
+    if (!cleanTitle) return { ok: false, reason: 'title' };
+    const status = await decreeStatus(now);
+    if (!status.allowed) return { ok: false, reason: status.reason };
+    if (!services.votes || typeof services.votes.createVote !== 'function') return { ok: false, reason: 'votes' };
+    const deadline = new Date(now.getTime() + DECREE_VOTE_MS).toISOString();
+    const vote = await services.votes.createVote(cleanTitle, deadline, ['YES', 'NO', 'ABSTENTION'], ['decree', status.house]);
+    const voteId = vote && (vote.key || vote.id);
+    if (!voteId) return { ok: false, reason: 'votes' };
+    const client = await openSsb();
+    const msg = await new Promise((resolve, reject) => client.publish({
+      type: DECREE_TYPE,
+      house: status.house,
+      period: status.period,
+      title: cleanTitle,
+      description: String(description || '').trim().slice(0, DECREE_TEXT_MAX),
+      voteId,
+      deadline,
+      createdAt: now.toISOString()
+    }, (err, m) => err ? reject(err) : resolve(m)));
+    return { ok: true, id: msg && msg.key, voteId, house: status.house };
+  }
+
+  let settling = false;
+  async function settleMyDecrees() {
+    if (settling) return [];
+    settling = true;
+    const settled = [];
+    try {
+      const client = await openSsb();
+      const publish = (c) => new Promise((resolve, reject) => client.publish(c, (err, m) => err ? reject(err) : resolve(m)));
+      for (const d of await listDecrees()) {
+        if (d.author !== client.id || d.status !== 'OPEN' || d.outcome === 'OPEN') continue;
+        if (d.outcome === 'APPROVED') {
+          const law = await publish({
+            type: 'parliamentLaw',
+            question: d.title,
+            description: d.description,
+            method: 'LARP',
+            proposer: client.id,
+            termId: null,
+            voteId: d.voteId,
+            votes: { YES: d.yes, NO: d.no, ABSTENTION: Number(d.vote && d.vote.votes && d.vote.votes.ABSTENTION) || 0, total: d.voters },
+            proposedAt: d.createdAt,
+            proposalId: d.id,
+            enactedAt: new Date().toISOString(),
+            origin: { larp: d.house }
+          });
+          await publish({ type: DECREE_TYPE, replaces: d.id, status: 'ENACTED', lawId: law && law.key, settledAt: new Date().toISOString() });
+          settled.push({ ...d, status: 'ENACTED' });
+        } else {
+          await publish({ type: DECREE_TYPE, replaces: d.id, status: 'REJECTED', settledAt: new Date().toISOString() });
+          settled.push({ ...d, status: 'REJECTED' });
+        }
+      }
+    } finally {
+      settling = false;
+    }
+    return settled;
+  }
+
+  async function decreeForLaw(law, lawAuthor) {
+    if (!law || !law.origin || !RULING_KEYS.includes(law.origin.larp)) return null;
+    const d = (await listDecrees()).find(x => x.id === law.proposalId);
+    if (!d || d.author !== lawAuthor || d.house !== law.origin.larp || d.voteId !== law.voteId) return null;
+    if (d.vote && !(d.yes > d.no)) return null;
+    return d;
+  }
+
+  async function seasonInfluence(now = new Date()) {
+    const w = getCycleWindow(now);
+    const [decrees, houseAt] = await Promise.all([listDecrees(), houseTimeline()]);
+    return influenceOf(decrees, houseAt, { start: w.seasonStart, end: w.seasonEnd });
+  }
+
+  async function solsticeHouse(now = new Date()) {
+    const current = getCycleWindow(now);
+    const previous = getCycleWindow(new Date(current.seasonStart.getTime() - 1));
+    const [decrees, houseAt] = await Promise.all([listDecrees(), houseTimeline()]);
+    const winner = winnerOf(influenceOf(decrees, houseAt, { start: previous.seasonStart, end: previous.seasonEnd }));
+    return winner ? { ...winner, season: previous.seasonStart.toISOString(), until: current.seasonEnd } : null;
+  }
+
+  async function chooseHouse(houseKey) {
+    if (!VALID_KEY(houseKey) || houseKey === 'academia') return { ok: false, reason: 'invalid' };
+    const client = await openSsb();
+    const current = await getUserHouse(client.id).catch(() => null);
+    if (current !== 'academia') return { ok: false, reason: 'not-in-academia' };
+    const can = await canTakeTest(client.id);
+    if (!can.allowed) return { ok: false, reason: 'cooldown', nextAt: can.nextAt };
+    await new Promise((resolve, reject) => {
+      client.publish({
+        type: 'larpTestAttempt',
+        house: houseKey,
+        passed: true,
+        chosen: true,
+        attemptedAt: new Date().toISOString()
+      }, (err) => err ? reject(err) : resolve());
+    });
+    await publishJoin(houseKey);
+    return { ok: true, house: houseKey };
   }
 
   async function issueAutoInvitesForMyHouse() {
@@ -943,9 +1246,28 @@ module.exports = ({ cooler, tribesModel, cryptoModel }) => {
     TEST_COOLDOWN_MS,
     TEST_QUESTIONS_COUNT,
     PROFILE_QUESTIONS,
+    RULING_KEYS,
+    DECREES_PER_CYCLE,
+    attach,
+    decreeQuorum,
+    decreeOutcome,
+    influenceOf,
+    winnerOf,
+    listDecrees,
+    decreeStatus,
+    proposeDecree,
+    settleMyDecrees,
+    decreeForLaw,
+    seasonInfluence,
+    solsticeHouse,
+    houseTimeline,
     computeCycle,
+    getCycleWindow,
+    nextRulingStart,
+    cyclesUntilRuling,
     getGoverningHouseKey,
     getGoverningPeriodId,
+    chooseHouse,
     publishJoin,
     publishLeaveLarp,
     getUserHouse,
@@ -971,3 +1293,5 @@ module.exports = ({ cooler, tribesModel, cryptoModel }) => {
     getHouse: (key) => HOUSES[key] || null
   };
 };
+
+module.exports.larpDate = (d) => computeCycle(new Date(d)).formatted;

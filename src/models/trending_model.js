@@ -11,6 +11,7 @@ const isRootBlogPost = (c) =>
   c.private !== true && !Array.isArray(c.recps);
 
 const { buildVoteTally } = require('../backend/vote_tally');
+const { isComment } = require('./comments_model');
 const { versionGroups, versionEntry } = require('../backend/dedupe');
 
 module.exports = ({ cooler }) => {
@@ -28,6 +29,9 @@ module.exports = ({ cooler }) => {
   ];
 
   const categories = opinionCategories;
+  const TREND_GOOD = opinionCategories.positive;
+  const TREND_BAD = [...opinionCategories.constructive, ...opinionCategories.moderation];
+  const opinionSum = (ops, cats) => cats.reduce((sum, k) => sum + (Number(ops && ops[k]) || 0), 0);
 
   const computeBase = async () => {
     const ssbClient = await openSsb();
@@ -88,6 +92,26 @@ module.exports = ({ cooler }) => {
       itemsById.set(k, { ...m, value: { ...m.value, content: { ...c, opinions: mergedOpinions, opinions_inhabitants: [...mergedVoters] } } });
     }
 
+    const engaged = new Map();
+    const engage = (target, kind, author) => {
+      if (typeof target !== 'string' || !author) return;
+      const tip = vg.tipOf(target);
+      if (!itemsById.has(tip)) return;
+      if (!engaged.has(tip)) engaged.set(tip, { comments: new Set(), spreads: new Set(), refeeds: new Set(), voters: new Set() });
+      engaged.get(tip)[kind].add(author);
+    };
+    for (const m of messages) {
+      const c = m.value?.content;
+      const author = m.value?.author;
+      if (!c || !author || tombstoned.has(m.key)) continue;
+      if (isComment(c)) engage(c.root, 'comments', author);
+      else if (c.type === 'feed-action' && c.action === 'comment') engage(c.root, 'comments', author);
+      else if (c.type === 'feed-action' && c.action === 'refeed') engage(c.root, 'refeeds', author);
+      else if (c.type === 'spread') engage(c.link, 'spreads', author);
+      else if (c.type === 'vote' && c.vote && Number(c.vote.value) === 1 && (Array.isArray(c.branch) ? c.branch : [c.branch]).includes(c.vote.link)) engage(c.vote.link, 'spreads', author);
+      else if (c.type === 'pollVote') engage(c.target, 'voters', author);
+    }
+
     let rawItems = Array.from(itemsById.values()).filter(m => types.includes(m.value?.content?.type));
     rawItems = rawItems.filter(m => {
       const c = m.value?.content;
@@ -145,7 +169,22 @@ module.exports = ({ cooler }) => {
         bySig.set(sig, m);
       }
     }
-    return Array.from(bySig.values());
+    return Array.from(bySig.values()).map(m => {
+      const c = m.value?.content || {};
+      const e = engaged.get(m.key);
+      const good = opinionSum(c.opinions, TREND_GOOD);
+      const bad = opinionSum(c.opinions, TREND_BAD);
+      const trend = {
+        opinions: good,
+        negative: bad,
+        comments: e ? e.comments.size : 0,
+        spreads: e ? e.spreads.size : 0,
+        refeeds: Math.max(e ? e.refeeds.size : 0, Number(c.refeeds) || 0),
+        votes: c.type === 'votes' ? (Number(c.totalVotes) || 0) : (e ? e.voters.size : 0)
+      };
+      const score = trend.opinions + trend.comments + trend.spreads + trend.refeeds + trend.votes;
+      return { ...m, trend, trendScore: bad > good ? 0 : score };
+    });
   };
 
   const baseItems = () => {
@@ -172,22 +211,8 @@ module.exports = ({ cooler }) => {
       items = items.filter(m => m.value.content.type === filter);
     }
 
-    items = items.filter(m => (m.value.content.opinions_inhabitants || []).length > 0);
-
-    if (filter === 'TOP') {
-      items.sort((a, b) => {
-        const aLen = (a.value.content.opinions_inhabitants || []).length;
-        const bLen = (b.value.content.opinions_inhabitants || []).length;
-        if (bLen !== aLen) return bLen - aLen;
-        return b.value.timestamp - a.value.timestamp;
-      });
-    } else {
-      items.sort((a, b) => {
-        const aLen = (a.value.content.opinions_inhabitants || []).length;
-        const bLen = (b.value.content.opinions_inhabitants || []).length;
-        return bLen - aLen;
-      });
-    }
+    items = items.filter(m => (m.trendScore || 0) > 0);
+    items.sort((a, b) => (b.trendScore || 0) - (a.trendScore || 0) || b.value.timestamp - a.value.timestamp);
 
     return { filtered: items };
   };
@@ -224,6 +249,6 @@ module.exports = ({ cooler }) => {
     });
   };
 
-  return { listTrending, getMessageById, createVote, types, categories };
+  return { listTrending, getMessageById, createVote, types };
 };
 

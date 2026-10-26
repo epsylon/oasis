@@ -79,6 +79,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `content/content_favorites.json` | What you marked as a favourite, by content type. |
 | `content/follow_state.json` | Follow requests pending and accepted, with the moment of the last one. |
 | `content/supporters-seen.json` | The inhabitants already known to support you, so SocialBot only tells you about the new ones. The first time it is created it only records who already supports you, without notices. |
+| `content/larp-seen.json` | What LarpBot has already told you about (decrees, results, Wall posts of your house, the pending test, the House of the solstice), so it does not repeat itself. |
 | `content/viewer_hidden.json` | Inhabitants you muted and content you hid. Applied only by this node; nothing about it is published. |
 | `content/invites-used.json` | The latest invitations you used, with what you joined and when. |
 | `content/agenda-config.json` | How you arranged your Agenda. |

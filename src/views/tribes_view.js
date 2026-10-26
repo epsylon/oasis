@@ -1777,39 +1777,25 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
   return page;
 };
 
-exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, filterType = '', filterAuthor = '' }) => {
+exports.clearnetTribeView = async ({ tribe, items, slug, page = 1, filterType = '' }) => {
   const t = tribe || {};
   const all = (Array.isArray(items) ? items : []).filter(it => it && it.contentType !== 'forum-reply');
   const kindKey = (it) => it.contentType === 'media' ? `media-${String(it.mediaType || '')}` : String(it.contentType || '');
   const kindName = (it) => it.contentType === 'media' ? activityMediaTypeName(String(it.mediaType || '')) : contentTypeName(it.contentType);
   const activeType = String(filterType || '').toLowerCase();
-  const activeAuthor = String(filterAuthor || '');
-  const byAuthor = activeAuthor ? all.filter(it => it.author === activeAuthor) : all;
-  const list = activeType ? byAuthor.filter(it => kindKey(it) === activeType) : byAuthor;
+  const list = activeType ? all.filter(it => kindKey(it) === activeType) : all;
   const base = `/c/tribe/${encodeURIComponent(slug || '')}`;
-  const hrefFor = (type, author) => {
-    const q = new URLSearchParams();
-    if (type) q.set('type', type);
-    if (author) q.set('author', author);
-    const qs = q.toString();
-    return escapeHtml(qs ? `${base}?${qs}` : base);
-  };
+  const hrefFor = (type) => escapeHtml(type ? `${base}?type=${encodeURIComponent(type)}` : base);
   const paged = paginateClearnet(list, page);
-  const pager = renderClearnetPager({ base, params: { type: activeType, author: activeAuthor }, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
+  const pager = renderClearnetPager({ base, params: { type: activeType }, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
   const name = t.title || i18n.cnUntitled || 'Untitled';
   const cover = cnBlobUrl(t.image);
   const desc = renderRichText(t.description || '');
   const day = (v) => { const d = new Date(v); return v && !isNaN(d) ? d.toISOString().slice(0, 10) : ''; };
-  const who = (id) => (names && names[id]) || (id ? `${String(id).slice(0, 10)}…` : '');
-  const countBy = (arr, fn) => { const out = new Map(); for (const it of arr) { const k = fn(it); if (k) out.set(k, (out.get(k) || 0) + 1); } return out; };
-  const typeCounts = countBy(byAuthor, kindKey);
-  const authorCounts = countBy(activeType ? all.filter(it => kindKey(it) === activeType) : all, it => it.author);
-  const btn = (href, label, count, active) => `<a class="cn-filter-btn${active ? ' active' : ''}" href="${href}">${escapeHtml(label)} (${count})</a>`;
-  const typeRow = typeCounts.size > 1
-    ? `<div class="cn-filter-row">${btn(hrefFor('', activeAuthor), i18n.all, byAuthor.length, !activeType)}${[...typeCounts.entries()].map(([k, n]) => btn(hrefFor(k, activeAuthor), kindName(byAuthor.find(it => kindKey(it) === k)), n, activeType === k)).join('')}</div>`
-    : '';
-  const authorRow = authorCounts.size > 1
-    ? `<div class="cn-filter-row">${[...authorCounts.entries()].map(([id, n]) => btn(hrefFor(activeType, activeAuthor === id ? '' : id), who(id), n, activeAuthor === id)).join('')}</div>`
+  const typeKeys = [...new Set(all.map(kindKey).filter(Boolean))];
+  const btn = (href, label, active) => `<a class="cn-filter-btn${active ? ' active' : ''}" href="${href}">${escapeHtml(label)}</a>`;
+  const typeRow = typeKeys.length > 1
+    ? `<div class="cn-filter-row">${btn(hrefFor(''), i18n.all, !activeType)}${typeKeys.map(k => btn(hrefFor(k), kindName(all.find(it => kindKey(it) === k)), activeType === k)).join('')}</div>`
     : '';
   const renderItem = (it) => {
     const mt = it.contentType === 'media' ? String(it.mediaType || '') : '';
@@ -1826,7 +1812,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
     const url = mt === 'bookmark' ? String(it.url || '') : '';
     const href = url ? safeExternalHref(url) : '';
     const bookmark = !url ? ''
-      : href ? `<a class="cn-tribe-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(url)}</a>`
+      : href ? `<a class="cn-tribe-link cn-bookmark-url" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(url)}</a>`
       : `<span class="cn-tribe-link">${escapeHtml(url)}</span>`;
     const chip = (d) => `<span class="cn-detail">${escapeHtml(String(d))}</span>`;
     const chips = [
@@ -1843,7 +1829,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
     const pdfFrames = (Array.isArray(it.pdfs) ? it.pdfs : []).map(p => renderClearnetPdfFrame(cnBlobUrl(p.blob), p.name)).join('');
     const when = day(it.createdAt);
     return `<div class="cn-tribe-item">
-      <div class="cn-tribe-meta"><span class="cn-kind-tag">[${escapeHtml(String(kind).toUpperCase())}]</span>${when ? `<span>📅 ${escapeHtml(when)}</span>` : ''}${it.author ? `<span>${escapeHtml(who(it.author))}</span>` : ''}</div>
+      <div class="cn-tribe-meta"><span class="cn-kind-tag">[${escapeHtml(String(kind).toUpperCase())}]</span>${when ? `<span>📅 ${escapeHtml(when)}</span>` : ''}</div>
       ${chips ? `<div class="cn-hub-details">${chips}</div>` : ''}
       ${title ? `<h2 class="cn-tribe-title">${it.href ? `<a href="${escapeHtml(it.href)}">${title}</a>` : title}</h2>` : ''}
       ${media}
@@ -1875,7 +1861,7 @@ exports.clearnetTribeView = async ({ tribe, items, names = {}, slug, page = 1, f
       ${desc ? `<p class="cn-tribe-desc">${desc}</p>` : ''}
     </div>
   </div>
-  ${typeRow}${authorRow}
+  ${typeRow}
   ${list.length
     ? `<h2 class="cn-section">${escapeHtml(i18n.cnPublicContent || 'Content')} (${list.length})</h2><div class="cn-tribe-list">${paged.items.map(renderItem).join('')}</div>${pager}`
     : `<div class="cn-empty-content">${escapeHtml(i18n.cnCategoryEmpty || '')}</div>`}

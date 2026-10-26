@@ -42,7 +42,7 @@ describe('trending: opinion + list', (t) => {
     eq(Number(card.value.content.votes.NO), 1, 'NO=1');
   });
 
-  t('only opined content surfaces in the trending feed', async () => {
+  t('content without any interaction stays out of the trending feed', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const opined = await A.use('bookmarks').createBookmark('https://trend.test/surface', [], 's', '');
     await A.use('bookmarks').createBookmark('https://trend.test/silent', [], 'q', '');
@@ -50,7 +50,42 @@ describe('trending: opinion + list', (t) => {
     const { filtered } = await A.use('trending').listTrending('ALL');
     ok(Array.isArray(filtered), 'filtered is an array');
     ok(filtered.find(m => m.value.content.url === 'https://trend.test/surface'), 'opined bookmark surfaced');
-    notOk(filtered.find(m => m.value.content.url === 'https://trend.test/silent'), 'content without opinions stays out');
+    notOk(filtered.find(m => m.value.content.url === 'https://trend.test/silent'), 'content without interactions stays out');
+  });
+
+  t('votes on a votation count as interactions: it trends without opinions and ranks by how many took part', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    const deadline = new Date(Date.now() + 8 * 864e5).toISOString();
+    A.setActor();
+    const v = await A.use('votes').createVote('Plaza or park?', deadline);
+    const quiet = await A.use('bookmarks').createBookmark('https://trend.test/one-opinion', [], 'o', '');
+    await A.use('trending').createVote(quiet.key, 'interesting');
+    B.setActor(); await B.use('votes').voteOnVote(v.key, 'YES');
+    C.setActor(); await C.use('votes').voteOnVote(v.key, 'NO');
+    A.setActor();
+    const { filtered } = await A.use('trending').listTrending('ALL');
+    const vote = filtered.find(m => m.value.content.type === 'votes' && m.value.content.question === 'Plaza or park?');
+    ok(vote, 'a votation with votes and no opinions is trending');
+    eq(vote.trend.votes, 2);
+    eq(vote.trendScore, 2);
+    ok(filtered.indexOf(vote) < filtered.findIndex(m => m.value.content.url === 'https://trend.test/one-opinion'), 'more interactions rank higher');
+  });
+
+  t('only positive opinions make content trend; content with more other opinions stays out', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const liked = await A.use('bookmarks').createBookmark('https://trend.test/liked', [], 'l', '');
+    const spam = await A.use('bookmarks').createBookmark('https://trend.test/spam', [], 's', '');
+    const dup = await A.use('bookmarks').createBookmark('https://trend.test/duplicate', [], 'd', '');
+    B.setActor(); await B.use('trending').createVote(liked.key, 'useful'); await B.use('trending').createVote(spam.key, 'spam'); await B.use('trending').createVote(dup.key, 'duplicate');
+    C.setActor(); await C.use('trending').createVote(spam.key, 'troll');
+    A.setActor();
+    const { filtered } = await A.use('trending').listTrending('TOP');
+    const hit = filtered.find(m => m.value.content.url === 'https://trend.test/liked');
+    ok(hit, 'positive opinions make it trend');
+    eq(hit.trend.opinions, 1);
+    notOk(filtered.find(m => m.value.content.url === 'https://trend.test/spam'), 'negative opinions do not');
+    notOk(filtered.find(m => m.value.content.url === 'https://trend.test/duplicate'), 'neutral opinions do not either');
   });
 
   t('createVote records the voter on the content and it stays as the live tip', async () => {

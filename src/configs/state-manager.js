@@ -19,6 +19,7 @@ const FOLDERS = {
   'blob-access.json': 'content',
   'follow_state.json': 'content',
   'supporters-seen.json': 'content',
+  'larp-seen.json': 'content',
   'viewer_hidden.json': 'content',
   'invites-used.json': 'content',
   'agenda-config.json': 'content',

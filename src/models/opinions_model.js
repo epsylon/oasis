@@ -21,7 +21,7 @@ module.exports = ({ cooler }) => {
   };
 
   const validTypes = [
-    'bookmark', 'votes', 'transfer',
+    'bookmark', 'votes', 'poll', 'transfer',
     'feed', 'post', 'image', 'audio', 'video', 'document', 'torrent', 'file',
     'industry', 'project', 'report', 'task', 'event', 'shopProduct', 'housing', 'market', 'schoolCourse',
     'podcast', 'podcastEpisode', 'campaign', 'logisticsRoute', 'wikiPage', 'map', 'industryBlueprint', 'job'
@@ -164,9 +164,10 @@ module.exports = ({ cooler }) => {
           const t = (c.text || '').replace(/\s+/g, ' ').trim();
           return `feed::${t}`;
         }
-        case 'votes': {
+        case 'votes':
+        case 'poll': {
           const q = (c.question || '').replace(/\s+/g, ' ').trim();
-          return `votes::${q}`;
+          return `${c.type}::${q}`;
         }
         case 'transfer': {
           const concept = (c.concept || '').trim();

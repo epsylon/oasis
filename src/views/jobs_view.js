@@ -724,10 +724,11 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
 }
 
 exports.clearnetJobView = async (job) => {
-  const { escapeHtml: esc, renderRichText, renderKindTag, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
+  const { escapeHtml: esc, renderRichText, renderKindTag, renderTagChips, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
   const title = esc(job.title || i18n.cnKindJob);
   const desc = renderRichText(job.description || '');
   const req = esc(job.requirements || '');
+  const tasks = esc(job.tasks || '');
   const lang = esc(String(job.languages || '').toUpperCase());
   const loc = esc(String(job.location || '').toUpperCase());
   const jobType = String(job.job_type || '').toLowerCase();
@@ -759,12 +760,15 @@ exports.clearnetJobView = async (job) => {
     ${job.createdAt ? `<span class="cn-job-meta-item">📅 ${esc(new Date(job.createdAt).toISOString().slice(0,10))}</span>` : ''}
     ${loc ? `<span class="cn-job-meta-item">📍 ${loc}</span>` : ''}
     ${lang ? `<span class="cn-job-meta-item">🗣 ${lang}</span>` : ''}
+    ${Number(job.vacants) > 0 ? `<span class="cn-job-meta-item">👥 ${esc(i18n.jobVacants)}: ${Number(job.vacants)}</span>` : ''}
     ${compensation ? `<span class="cn-price">${compensation}</span>` : ''}
   </div>
   <hr class="cn-sep"/>
   ${jobImg ? `<img class="cn-job-img" src="${jobImg}" alt="${title}"/>` : ''}
   ${desc ? `<div class="cn-job-section"><h2>${esc(i18n.description)}</h2><p>${desc}</p></div>` : ''}
   ${req ? `<div class="cn-job-section"><h2>${esc(i18n.jobRequirements)}</h2><p>${req}</p></div>` : ''}
+  ${tasks ? `<div class="cn-job-section"><h2>${esc(i18n.jobTasks)}</h2><p>${tasks}</p></div>` : ''}
+  ${renderTagChips(job.tags)}
 `;
   return renderClearnetPage({
     title: `${job.title || 'Job'} | Oasis`,

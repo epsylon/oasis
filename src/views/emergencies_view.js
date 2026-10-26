@@ -38,7 +38,9 @@ const renderEmergencyCard = (emergency, params = {}) =>
       emergency.media && emergency.media.kind === "video" ? videoHyperaxe({ class: "emergency-card-cover", src: `/blob/${encodeURIComponent(emergency.media.blobId)}`, controls: true, preload: "metadata" }) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: emergencyHref(emergency) }, emergency.title || "—"))),
       emergency.expiresAt ? p({ class: "job-meta-line" }, `${i18n.emergencyExpiresAt}: ${moment(emergency.expiresAt).format("YYYY/MM/DD HH:mm")}`) : null,
-      null
+      div({ class: "tribe-card-members" },
+        span({ class: "tribe-members-count" }, `${i18n.emergencyConfirmations}: ${emergency.confirmationCount || 0}`)
+      )
     )
   );
 

@@ -38,13 +38,13 @@ async function step(name, fn) {
   console.log('Oasis seeder — generating dummy content...\n');
   await open();
 
-  const cryptoModel    = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'tribes');
-  const chatCrypto     = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'chats');
-  const padCrypto      = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'pads');
-  const roomCrypto     = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'rooms');
-  const mapCrypto      = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'maps');
-  const calendarCrypto = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'calendars');
-  const schoolCrypto   = require(path.join(__dirname, '..', 'src', 'models', 'crypto'))(ssbConfig.path, 'school');
+  const cryptoModel    = require(path.join(__dirname, '..', 'src', 'models', 'crypto_model'))(ssbConfig.path);
+  const chatCrypto     = cryptoModel.scope('chats');
+  const padCrypto      = cryptoModel.scope('pads');
+  const roomCrypto     = cryptoModel.scope('rooms');
+  const mapCrypto      = cryptoModel.scope('maps');
+  const calendarCrypto = cryptoModel.scope('calendars');
+  const schoolCrypto   = cryptoModel.scope('school');
   const sCooler = require(path.join(__dirname, '..', 'src', 'client', 'gui'))({ offline: ssbConfig.offline });
 
   const models = {

@@ -1,4 +1,5 @@
 const fs = require('fs');
+const pull = require('../server/node_modules/pull-stream');
 const path = require('path');
 const ssbDirOf = () => require('../server/ssb_config').path;
 const { getConfig } = require('../configs/config-manager.js');
@@ -67,9 +68,9 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
 
   const types = [
     'bookmark','event','task','votes','poll','report','feed','project','industry','industryBlueprint',
-    'image','torrent','file','audio','video','document','transfer','post','tribe',
+    'image','torrent','file','audio','video','document','transfer','post','comment','tribe',
     'market','forum','job','aiExchange','map','shop','shopProduct','chat','chatMessage',
-    'pad','padEntry','room','roomMember','wikiPage','emergency','emergencyConfirm','emergencyUpdate','mailingList','logisticsRoute','logisticsRating','podcast','podcastEpisode','podcastPlay','campaign','campaignSignature','campaignUpdate','gameScore','calendar','calendarDate','calendarNote','log',
+    'pad','padEntry','room','roomMember','wikiPage','housing','curriculum','pixelia','larpHousePost','emergency','emergencyConfirm','emergencyUpdate','mailingList','logisticsRoute','logisticsRating','podcast','podcastEpisode','podcastPlay','campaign','campaignSignature','campaignUpdate','gameScore','calendar','calendarDate','calendarNote','log',
     'schoolCourse','schoolLesson','schoolEnroll','schoolCertificate',
     'parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw',
     'courtsCase','courtsEvidence','courtsAnswer','courtsVerdict','courtsSettlement','courtsSettlementProposal','courtsSettlementAccepted','courtsNomination','courtsNominationVote'
@@ -408,7 +409,7 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
       } else if (c && c.tribeId && !accessibleTribeIds.has(c.tribeId)) {
         continue;
       }
-      let theType = c.type;
+      let theType = c.type === 'post' && isComment(c) ? 'comment' : c.type;
       if (!types.includes(theType)) continue;
       byType[theType].set(k, { key: k, ts: m.value.timestamp, content: c, author: m.value.author });
       versionsOf[theType].push(versionEntry({ key: k, value: { ...m.value, content: c } }));
@@ -712,19 +713,41 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
     return events;
   };
 
+  let blobCache = null;
+  const blobEvents = async (ssbClient) => {
+    if (blobCache && Date.now() - blobCache.at < CHAIN_CACHE_MS) return blobCache.events;
+    const list = await new Promise((resolve) => {
+      if (!ssbClient.blobs || typeof ssbClient.blobs.ls !== 'function') return resolve([]);
+      pull(ssbClient.blobs.ls({ long: true }), pull.collect((err, arr) => resolve(err ? [] : (arr || []))));
+    });
+    const events = list
+      .filter(b => b && b.id && Number(b.ts) > 0)
+      .map(b => ({ ts: Number(b.ts), bytes: Number(b.size) || 0 }))
+      .sort((a, b) => a.ts - b.ts);
+    blobCache = { at: Date.now(), events };
+    return events;
+  };
+
+  const cumulativeMb = (events, range, explicit) => {
+    const sizes = bucketEvents(events, range, explicit, ['bytes']);
+    const first = sizes.points.length ? sizes.points[0].ts : Infinity;
+    let running = events.reduce((acc, e) => e.ts < first ? acc + e.bytes : acc, 0);
+    return { ...sizes, points: sizes.points.map(pt => { running += pt.bytes; return { ts: pt.ts, mb: Number((running / 1048576).toFixed(4)) }; }) };
+  };
+
   const chainSeries = async (filter = 'ALL', range = 'today', explicit = false) => {
     const ssbClient = await openSsb();
     const all = await chainEvents(ssbClient);
     const events = filter === 'MINE' ? all.filter(e => e.author === ssbClient.id) : filter === 'TOMBSTONE' ? all.filter(e => e.tomb) : all;
     const usage = bucketEvents(events, range, explicit, ['count']);
-    const sizes = bucketEvents(events, range, explicit, ['bytes']);
-    const first = sizes.points.length ? sizes.points[0].ts : Infinity;
-    let running = events.reduce((acc, e) => e.ts < first ? acc + e.bytes : acc, 0);
-    const growth = { ...sizes, points: sizes.points.map(pt => { running += pt.bytes; return { ts: pt.ts, mb: Number((running / 1048576).toFixed(4)) }; }) };
+    const growth = cumulativeMb(events, range, explicit);
+    const blobsList = filter === 'ALL' ? await blobEvents(ssbClient).catch(() => []) : null;
+    const blobs = blobsList ? cumulativeMb(blobsList, range, explicit) : null;
+    const total = blobsList ? cumulativeMb([...events, ...blobsList].sort((a, b) => a.ts - b.ts), range, explicit) : null;
     const firstUse = usage.points.length ? usage.points[0].ts : Infinity;
     let count = events.reduce((acc, e) => e.ts < firstUse ? acc + 1 : acc, 0);
     const evolution = { ...usage, points: usage.points.map(pt => { count += pt.count; return { ts: pt.ts, total: count }; }) };
-    return { usage, growth, evolution };
+    return { usage, growth, evolution, blobs, total };
   };
 
   return { getStats, chainSeries };

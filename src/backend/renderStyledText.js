@@ -259,7 +259,7 @@ function renderStyledText(value, opts = {}) {
       result.push(linksOn ? a({ href: `mailto:${m.text}` }, m.text) : plain(m.text));
     } else if (m.type === 'hashtag') {
       const tagHref = typeof opts.hashtagHref === 'function' ? opts.hashtagHref(m.tag) : (internalOn ? `/search?query=%23${encodeURIComponent(m.tag)}` : null);
-      result.push(tagHref ? a({ href: tagHref, class: 'tag-link tag-inline' }, `#${m.tag}`) : `#${m.tag}`);
+      result.push(tagHref ? a({ href: tagHref, class: 'tag-link tag-inline', ...(opts.hashtagTarget ? { target: opts.hashtagTarget, rel: 'noopener noreferrer' } : {}) }, `#${m.tag}`) : `#${m.tag}`);
     }
     cursor = m.index + m.length;
   }

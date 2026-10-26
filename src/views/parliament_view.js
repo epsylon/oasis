@@ -14,6 +14,7 @@ const commentsBlock = (comments, item, returnTo, title) => {
 const parliamentTop = (item, href, date) => renderCardTop(null, href, { author: item.proposer, date: date || item.createdAt });
 
 const { seatPositions } = require('../models/parliament_model').hemicycle;
+const { renderInfluenceTable } = require('./larp_view');
 
 const HEMI_W = 720;
 const HEMI_H = 380;
@@ -99,41 +100,44 @@ const blocLabel = (b) => {
   return i18n.parliamentSeatsAbstention;
 };
 
-const legendElection = (data) => ul({ class: 'hemi-legend' },
-  ...(data.blocs || []).map(b => li({ class: 'hemi-legend-item' },
-    span({ class: `hemi-swatch ${blocClass(b.key)}` }),
-    b.href ? a({ href: b.href, class: 'hemi-legend-link' }, blocLabel(b)) : span(blocLabel(b)),
-    span({ class: 'hemi-legend-count' }, `${b.count} ${i18n.parliamentSeatsSeats} · ${pct(b.count, data.population)}`)
-  ))
-);
+const capFirst = (t) => { const v = String(t || ''); return v.charAt(0).toUpperCase() + v.slice(1); };
+
+const seatsTable = (title, firstLabel, rows, population) => {
+  const seatsLabel = capFirst(i18n.parliamentSeatsSeats || 'seats');
+  return div({ class: 'larp-posts-block hemi-seats-block' },
+    h2(title),
+    table({ class: 'block-info-table' },
+      tr(td({ class: 'card-label' }, firstLabel), td({ class: 'card-label' }, seatsLabel), td({ class: 'card-label' }, '%')),
+      ...rows.map(({ swatch, name, count }) => tr(
+        td({ 'data-label': firstLabel }, span({ class: 'hemi-legend-item' }, span({ class: `hemi-swatch ${swatch}` }), name)),
+        td({ 'data-label': seatsLabel }, String(count)),
+        td({ 'data-label': '%' }, pct(count, population))
+      ))
+    )
+  );
+};
+
+const legendElection = (data) => seatsTable(capFirst(i18n.parliamentSeatsSeats || 'seats'), i18n.parliamentSeatsGroup,
+  (data.blocs || []).map(b => ({ swatch: blocClass(b.key), name: b.href ? a({ href: b.href, class: 'hemi-legend-link' }, blocLabel(b)) : span(blocLabel(b)), count: b.count })),
+  data.population);
 
 const legendHouses = (data, houseNames = {}) => {
   const entries = Object.entries(data.houses || {}).sort((a, b) => b[1] - a[1]);
   const noHouse = data.population - entries.reduce((s, [, n]) => s + n, 0);
-  return ul({ class: 'hemi-legend' },
-    ...entries.map(([key, n]) => li({ class: 'hemi-legend-item' },
-      span({ class: `hemi-swatch hemi-house-${key}` }),
-      a({ href: `/larp/${encodeURIComponent(key)}`, class: 'hemi-legend-link' }, houseNames[key] || key),
-      span({ class: 'hemi-legend-count' }, `${n} ${i18n.parliamentSeatsSeats} · ${pct(n, data.population)}`)
-    )),
-    noHouse > 0 ? li({ class: 'hemi-legend-item' }, span({ class: 'hemi-swatch hemi-bloc-none' }), span(i18n.parliamentSeatsNoHouse), span({ class: 'hemi-legend-count' }, `${noHouse} ${i18n.parliamentSeatsSeats} · ${pct(noHouse, data.population)}`)) : null
-  );
+  const rows = entries.map(([key, n]) => ({ swatch: `hemi-house-${key}`, name: a({ href: `/larp/${encodeURIComponent(key)}`, class: 'hemi-legend-link' }, houseNames[key] || key), count: n }));
+  if (noHouse > 0) rows.push({ swatch: 'hemi-bloc-none', name: span(i18n.parliamentSeatsNoHouse), count: noHouse });
+  return seatsTable(capFirst(i18n.parliamentSeatsSeats || 'seats'), i18n.larpInfluenceHouse || 'House', rows, data.population);
 };
 
-const renderHemicycle = (data, { mode = 'election', baseHref = '/parliament?filter=government', houseNames = {}, showHouses = true } = {}) => {
+const renderHemicycle = (data, { mode = 'election', houseNames = {} } = {}) => {
   if (!data || !Array.isArray(data.seats) || !data.seats.length) return null;
   const seatsMode = mode === 'houses' ? 'houses' : 'election';
-  const join = baseHref.includes('?') ? '&' : '?';
-  const toggle = showHouses ? div({ class: 'filters hemi-modes' },
-    a({ href: baseHref, class: seatsMode === 'election' ? 'filter-btn active' : 'filter-btn' }, i18n.parliamentSeatsByElection),
-    a({ href: `${baseHref}${join}seats=houses`, class: seatsMode === 'houses' ? 'filter-btn active' : 'filter-btn' }, i18n.parliamentSeatsByHouses)
-  ) : null;
   const unit = Math.max(1, Number(data.seatUnit) || 1);
   return div({ class: 'hemicycle' },
-    toggle,
     div({ class: 'hemicycle-canvas', [RAW_HTML]: hemicycleSvg(data, seatsMode) }),
     unit > 1 ? p({ class: 'hemi-note' }, `1 ${i18n.parliamentSeatsSeat} = ${unit}`) : null,
     seatsMode === 'houses' ? legendHouses(data, houseNames) : legendElection(data),
+    seatsMode === 'houses' && Array.isArray(data.influence) ? renderInfluenceTable(data.influence, Object.entries(houseNames).map(([key, name]) => ({ key, name }))) : null,
     data.leaderId ? p({ class: 'hemi-note' }, `${i18n.parliamentSeatsLeader}: `, a({ href: `/author/${encodeURIComponent(data.leaderId)}`, class: 'hemi-legend-link' }, (data.seats.find(s => s.id === data.leaderId) || {}).name || data.leaderId)) : null
   );
 };
@@ -188,7 +192,7 @@ const CycleInfo = (start, end, labels = {
     KPI((labels.end + ': ').toUpperCase(), fmt(end)),
     KPI((labels.remaining + ': ').toUpperCase(), timeLeft(end))
   );
-const Tabs = (active, avail = null) =>
+const Tabs = (active, avail = null, seats = null) => [
   div(
     { class: 'filters' },
     form(
@@ -199,7 +203,15 @@ const Tabs = (active, avail = null) =>
         button({ type: 'submit', name: 'filter', value: f, class: active === f ? 'filter-btn active' : 'filter-btn' }, i18n[`parliamentFilter${f.charAt(0).toUpperCase()+f.slice(1)}`])
       )
     )
-  );
+  ),
+  active === 'government' && seats
+    ? div({ class: 'activity-filter-chips activity-toolbar-row' },
+        span({ class: 'activity-subchip-label' }, '\u21b3'),
+        a({ href: '/parliament?filter=government', class: seats === 'election' ? 'activity-chip active' : 'activity-chip' }, i18n.parliamentSeatsByElection),
+        a({ href: '/parliament?filter=government&seats=houses', class: seats === 'houses' ? 'activity-chip active' : 'activity-chip' }, i18n.parliamentSeatsByHouses)
+      )
+    : null
+];
 
 const GovHeader = (g) => {
   const termStart = g && g.since ? g.since : null;
@@ -281,23 +293,23 @@ const GovernmentCard = (g, meta, hemicycle = null, seatsMode = 'election', house
     h2(i18n.parliamentGovernmentCard),
     GovHeader(g),
     hemicycle
-      ? renderHemicycle(hemicycle, { mode: seatsMode, baseHref: '/parliament?filter=government', houseNames })
+      ? renderHemicycle(hemicycle, { mode: seatsMode, houseNames })
       : div({ class: 'method-image-centered' }, img({ src: methodImageSrc(methodKey), alt: methodLabel })),
-    table({ class: 'tribe-info-table parliament-overview-table' },
+    seatsMode === 'houses' ? null : div({ class: 'larp-posts-block' }, h2(i18n.parliamentSeatsGovernment || 'Government'), table({ class: 'block-info-table parliament-overview-table' },
       ...[
-        [i18n.parliamentGovMethod, methodLabel],
-        [i18n.parliamentThPresented || 'CANDIDATURES', String(g.presented || 0)],
-        [i18n.parliamentPoliciesProposal || 'LAWS PROPOSAL', String(g.proposed || 0)],
-        [i18n.parliamentPoliciesApproved || 'LAWS APPROVED', String(g.approved || 0)],
-        [i18n.parliamentPoliciesDeclined || 'LAWS DECLINED', String(g.declined || 0)],
-        [i18n.parliamentPoliciesDiscarded || 'LAWS DISCARDED', String(g.discarded || 0)],
-        [i18n.parliamentPoliciesRevocated || 'LAWS REVOCATED', String(g.revocated || 0)],
-        [i18n.parliamentEfficiency || '% EFFICIENCY', `${String(g.efficiency || 0)} %`]
+        [i18n.parliamentOverviewMethod, methodLabel],
+        [i18n.parliamentOverviewCandidatures, String(g.presented || 0)],
+        [i18n.parliamentOverviewProposed, String(g.proposed || 0)],
+        [i18n.parliamentOverviewApproved, String(g.approved || 0)],
+        [i18n.parliamentOverviewDeclined, String(g.declined || 0)],
+        [i18n.parliamentOverviewDiscarded, String(g.discarded || 0)],
+        [i18n.parliamentOverviewRevoked, String(g.revocated || 0)],
+        [i18n.parliamentOverviewEfficiency, `${String(g.efficiency || 0)} %`]
       ].map(([labelText, value]) => tr(
-        td({ class: 'tribe-info-label' }, labelText),
-        td({ class: 'tribe-info-value' }, value)
+        td({ class: 'card-label' }, labelText),
+        td({ 'data-label': labelText }, value)
       ))
-    ),
+    )),
     (g.powerType === 'tribe' || g.powerType === 'inhabitant')
       ? div(
           { class: 'table-wrap mt-2' },
@@ -717,7 +729,9 @@ const LawsList = (laws, comments = null) => {
     return div(
       { class: 'card' },
       parliamentTop(l, '/parliament?filter=laws', l.enactedAt),
-      div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod + ': ').toUpperCase()), span({ class: 'card-value' }, l.method)),
+      l.houseKey
+        ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawHouse + ': ').toUpperCase()), span({ class: 'card-value' }, a({ href: `/larp/${encodeURIComponent(l.houseKey)}` }, l.houseName || l.houseKey)))
+        : div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod + ': ').toUpperCase()), span({ class: 'card-value' }, l.method)),
       h2(l.question || ''),
       p(l.description || ''),
       showMetricsFlag ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentVotesNeeded + ': ').toUpperCase()), span({ class: 'card-value' }, String(needed))) : null,
@@ -1072,7 +1086,7 @@ const parliamentView = async (state) => {
       revocations: (revocations || []).length > 0 || (futureRevocations || []).length > 0,
       historical: (historical || []).length > 0,
       leaders: (leaders || []).length > 0
-    })),
+    }, hemicycle && Array.isArray(hemicycle.seats) && hemicycle.seats.length ? (seatsMode || 'election') : null)),
     section(
       filter === 'government' ? GovernmentCard(gov, powerMeta, hemicycle || null, seatsMode || 'election', houseNames || {}) : null,
       filter === 'candidatures' ? CandidaturesSection(gov, candidatures, leaderMeta, electionQuorum) : null,

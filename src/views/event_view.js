@@ -559,10 +559,12 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
 };
 
 exports.clearnetEventView = async (event) => {
-  const { escapeHtml: esc, renderRichText, renderKindTag, renderClearnetPage } = require('./clearnet_view');
+  const { escapeHtml: esc, renderRichText, renderKindTag, renderTagChips, renderClearnetPage } = require('./clearnet_view');
   const title = esc(event.title || i18n.cnKindEvent);
   const desc = renderRichText(event.description || '');
-  const dateStr = event.date ? esc(moment(event.date).format("YYYY/MM/DD HH:mm")) : '';
+  const when = event.recurring && event.nextDate ? event.nextDate : event.date;
+  const dateStr = when ? esc(moment(when).format("YYYY/MM/DD HH:mm")) : '';
+  const recurrence = event.recurring ? [event.intervalWeekly ? i18n.calendarIntervalWeekly : '', event.intervalMonthly ? i18n.calendarIntervalMonthly : '', event.intervalYearly ? i18n.calendarIntervalYearly : ''].filter(Boolean).join(' · ') : '';
   const loc = esc(event.location || '');
   const price = parseFloat(event.price || 0);
   const priceStr = price > 0 ? `${price.toFixed(2)} ECO` : '';
@@ -582,10 +584,14 @@ exports.clearnetEventView = async (event) => {
     ${dateStr ? `<span class="cn-event-meta-item">📅 ${dateStr}</span>` : ''}
     ${loc ? `<span class="cn-event-meta-item">📍 ${loc}</span>` : ''}
     ${priceStr ? `<span class="cn-event-meta-item">💰 ${priceStr}</span>` : ''}
+    ${recurrence ? `<span class="cn-event-meta-item">🔁 ${esc(recurrence)}</span>` : ''}
+    ${recurrence && event.recurrenceUntil ? `<span class="cn-event-meta-item">${esc(i18n.eventRecurrenceUntil)}: ${esc(moment(event.recurrenceUntil).format("YYYY/MM/DD"))}</span>` : ''}
+    ${event.createdAt ? `<span class="cn-event-meta-item">${esc(i18n.createdAtLabel)}: ${esc(moment(event.createdAt).format("YYYY/MM/DD"))}</span>` : ''}
   </div>
   <hr class="cn-sep"/>
   ${desc ? `<p class="cn-event-desc">${desc}</p>` : ''}
   ${urlHref ? `<a class="cn-event-link" href="${esc(urlHref)}" target="_blank" rel="noopener noreferrer">${esc(i18n.cnMoreInfo)}</a>` : ''}
+  ${renderTagChips(event.tags)}
 `;
   return renderClearnetPage({
     title: `${event.title || 'Event'} | Oasis`,

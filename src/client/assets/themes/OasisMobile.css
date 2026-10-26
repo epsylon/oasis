@@ -2792,7 +2792,6 @@ body > .header {
   color: inherit !important;
   text-decoration: underline !important;
 }
-.main-column .bookmark-title .card-title-link:not([href^="/tribe/"]),
 .main-column .bookmark-title .bookmark-url,
 .main-column .bookmark-subtitle .bookmark-url {
   color: #ff6600 !important;
@@ -4255,3 +4254,11 @@ body > .header {
 .main-column .stats-card table.block-info-table td:last-child { text-align: right !important; }
 .main-column .poll-bar { box-sizing: border-box !important; border: 1px solid rgba(128, 128, 128, 0.5) !important; border-radius: 5px !important; background: rgba(128, 128, 128, 0.12) !important; overflow: hidden !important; }
 .main-column [id^="c-"], .main-column [id^="act-"] { scroll-margin-top: 220px !important; }
+.main-column .larp-info-table td.card-label { word-break: normal !important; overflow-wrap: normal !important; hyphens: none !important; width: 1% !important; }
+.main-column .larp-posts-block table.block-info-table { display: table !important; width: 100% !important; }
+.main-column .larp-posts-block table.block-info-table :is(th, td) { padding: 8px 10px !important; }
+.main-column .larp-decree > .larp-info-table + .filter-btn { margin-top: 10px !important; }
+.main-column table.larp-info-table { display: table !important; width: 100% !important; border-collapse: collapse !important; }
+.main-column table.larp-info-table td, .main-column table.larp-info-table tr > td[class] { padding: 8px 10px !important; vertical-align: middle !important; }
+.main-column .larp-decree table.larp-info-table td.card-label { white-space: nowrap !important; }
+.main-column .larp-posts-block > h2:first-child { margin-top: 0 !important; }

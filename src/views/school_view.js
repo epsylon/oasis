@@ -733,7 +733,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
 }
 
 exports.clearnetCourseView = async (course, lessons = []) => {
-  const { escapeHtml: esc, blobUrl: cnBlob, renderRichText, renderKindTag, renderClearnetPage } = require("./clearnet_view")
+  const { escapeHtml: esc, blobUrl: cnBlob, renderRichText, renderKindTag, renderTagChips, renderClearnetPage } = require("./clearnet_view")
   const title = esc(course.title || i18n.cnKindCourse)
   const desc = renderRichText(course.description || "")
   const courseImg = cnBlob(course.image)
@@ -756,12 +756,14 @@ exports.clearnetCourseView = async (course, lessons = []) => {
   <div class="cn-course-meta">
     <span class="cn-course-meta-item">${renderKindTag('course')}</span>
     <span class="cn-course-meta-item">🎓 ${esc(i18n.cnOpenCourse)}</span>
-    ${course.startDate ? `<span class="cn-course-meta-item">📅 ${esc(new Date(course.startDate).toISOString().slice(0, 10))}</span>` : ""}
+    <span class="cn-course-meta-item">${esc(course.status === "CLOSED" ? i18n.schoolClosed : i18n.schoolOngoing)}</span>
+    ${course.startDate ? `<span class="cn-course-meta-item">📅 ${esc(moment(course.startDate).format("YYYY/MM/DD HH:mm"))}</span>` : ""}
     <span class="cn-course-meta-item">👥 ${safeArr(course.students).length} ${esc(i18n.schoolStudents)}</span>
   </div>
   <hr class="cn-sep"/>
   ${courseImg ? `<img class="cn-course-img" src="${courseImg}" alt="${title}">` : ""}
   ${desc ? `<div class="cn-course-section"><h2>${esc(i18n.description)}</h2><p>${desc}</p></div>` : ""}
+  ${renderTagChips(course.tags)}
   ${visibleLessons.length ? `<div class="cn-course-section"><h2>${esc(i18n.schoolLessons)} (${visibleLessons.length})</h2>${visibleLessons.map(lesson => `
   <div class="cn-lesson">
     <div class="cn-lesson-head"><h3>${esc(lesson.title || "")}</h3>${lesson.sessionDate ? `<span class="cn-lesson-date">📅 ${esc(new Date(lesson.sessionDate).toISOString().slice(0, 10))}</span>` : ""}</div>

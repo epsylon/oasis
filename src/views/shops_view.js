@@ -3,10 +3,10 @@ const { renderCommentsSection: renderSharedCommentsSection } = require("./commen
 const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
-const { renderStyledText } = require("../backend/renderStyledText")
+const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText")
 const { renderMapEmbed } = require("./maps_view")
 const opinionCategories = require("../backend/opinion_categories")
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderRichText: cnRichText, renderKindTag: cnKindTag } = require("./clearnet_view")
+const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderTagChips: cnTagChips, renderRichText: cnRichText, renderKindTag: cnKindTag } = require("./clearnet_view")
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -620,6 +620,7 @@ exports.clearnetShopView = async (shop, products = []) => {
   const shopBlobUrl = cnBlobUrl(shop.image);
   const shopImg = shopBlobUrl ? `<img class="cn-shop-img" src="${shopBlobUrl}" alt="${cnEscapeHtml(shop.title || '')}"/>` : '';
   const desc = cnRichText(shop.shortDescription || shop.description || '');
+  const shopUrl = shop.url ? safeExternalHref(shop.url) : '';
   const extraCss = `
 .cn-hero{display:flex;gap:24px;margin-bottom:24px;flex-wrap:wrap;align-items:flex-start}
 .cn-shop-img{display:block;max-width:280px;width:100%;border:3px solid var(--fg);border-radius:8px;background:#000}
@@ -649,7 +650,10 @@ exports.clearnetShopView = async (shop, products = []) => {
       <div class="cn-shop-meta">
         <span class="cn-shop-meta-item">${cnKindTag('shop')}</span>
         ${shop.createdAt ? `<span class="cn-shop-meta-item">📅 ${new Date(shop.createdAt).toISOString().slice(0,10)}</span>` : ''}
+        ${shop.location ? `<span class="cn-shop-meta-item">📍 ${cnEscapeHtml(shop.location)}</span>` : ''}
+        ${shopUrl ? `<a class="cn-shop-meta-item cn-bookmark-url" href="${cnEscapeHtml(shopUrl)}" target="_blank" rel="noopener noreferrer nofollow">${cnEscapeHtml(shop.url)}</a>` : ''}
       </div>
+      ${cnTagChips(shop.tags)}
     </div>
   </div>
   <hr class="cn-sep"/>
@@ -682,6 +686,7 @@ exports.clearnetProductView = async (shop, product) => {
 .cn-product-page-img{display:block;max-width:420px;width:100%;border:1px solid var(--border);border-radius:8px;background:#000}
 .cn-product-page-body{flex:1 1 320px;min-width:0}
 .cn-product-page-title{color:var(--fg);font-size:26px;font-weight:700;margin:0 0 12px 0}
+.cn-product-page-meta{display:flex;gap:12px;flex-wrap:wrap;align-items:center;color:var(--fg-dim);font-size:13px;margin:0 0 12px 0}
 .cn-product-page-desc{color:var(--fg-soft);line-height:1.6;margin:0 0 16px 0}
 .cn-product-page-price{color:var(--fg);background:var(--bg-sub);border:1px solid var(--fg);display:inline-block;padding:6px 12px;border-radius:4px;font-weight:bold;font-size:16px}
 .cn-product-page-stock{color:var(--fg-dim);font-size:13px;margin:10px 0 0 0;text-transform:uppercase;letter-spacing:1px}
@@ -691,6 +696,7 @@ exports.clearnetProductView = async (shop, product) => {
   <div class="cn-product-page">
     ${mediaHtml}
     <div class="cn-product-page-body">
+      <div class="cn-product-page-meta">${cnKindTag('product')}${product.createdAt ? `<span>📅 ${new Date(product.createdAt).toISOString().slice(0, 10)}</span>` : ''}</div>
       <h1 class="cn-product-page-title">${cnEscapeHtml(product.title || '')}</h1>
       ${product.description ? `<div class="cn-product-page-desc">${cnRichText(product.description)}</div>` : ''}
       <span class="cn-product-page-price">${price} ECO</span>

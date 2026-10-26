@@ -1,5 +1,5 @@
 const { a, br, div, input, option, select, span, strong, form, button, label } = require("../server/node_modules/hyperaxe");
-const { renderStyledHtml } = require('../backend/renderStyledText');
+const { renderStyledHtml, safeExternalHref } = require('../backend/renderStyledText');
 const sharedState = require('../configs/shared-state');
 const cnPkg = (() => { try { return require('../server/package.json'); } catch (_) { return {}; } })();
 const mv = () => require('./main_views');
@@ -60,7 +60,7 @@ const renderTagChips = (tags) => {
   return `<div class="cn-tags">${chips}</div>`;
 };
 
-const KIND_KEYS = { audio: 'cnKindAudio', blog: 'cnKindBlog', bookmark: 'cnKindBookmark', document: 'cnKindDocument', event: 'cnKindEvent', feed: 'cnKindFeed', image: 'cnKindImage', job: 'cnKindJob', market: 'cnKindMarket', podcast: 'cnKindPodcast', project: 'cnKindProject', course: 'cnKindCourse', shop: 'cnKindShop', torrent: 'cnKindTorrent', file: 'cnKindFile', video: 'cnKindVideo', wiki: 'cnKindWiki', emergency: 'emergencyLabel', campaign: 'campaignLabel', housing: 'housingTitle', room: 'cnKindRoom', map: 'cnKindMap', calendar: 'calendarTitle' };
+const KIND_KEYS = { audio: 'cnKindAudio', blog: 'cnKindBlog', bookmark: 'cnKindBookmark', document: 'cnKindDocument', event: 'cnKindEvent', feed: 'cnKindFeed', image: 'cnKindImage', job: 'cnKindJob', market: 'cnKindMarket', podcast: 'cnKindPodcast', project: 'cnKindProject', course: 'cnKindCourse', shop: 'cnKindShop', torrent: 'cnKindTorrent', file: 'cnKindFile', video: 'cnKindVideo', wiki: 'cnKindWiki', emergency: 'emergencyLabel', campaign: 'campaignLabel', housing: 'housingTitle', room: 'cnKindRoom', map: 'cnKindMap', calendar: 'calendarTitle', product: 'shopProductTitle' };
 const kindLabel = (kind) => cnText(KIND_KEYS[String(kind || '').toLowerCase()], String(kind || ''));
 const renderKindTag = (kind) => `<span class="cn-kind-tag">[${escapeHtml(kindLabel(kind).toUpperCase())}]</span>`;
 
@@ -91,6 +91,7 @@ const renderRichText = (s, { links = true, wikiLinks = null } = {}) => renderSty
   links,
   plainUrlClass: 'cn-url',
   hashtagHref: links ? (tag) => `/c?q=%23${encodeURIComponent(tag)}` : null,
+  hashtagTarget: '_blank',
   wikiLink: wikiLinks ? (target, slug, label) => wikiLinks.has(slug)
     ? a({ href: wikiLinks.get(slug), class: 'cn-wiki-link' }, label)
     : label : null
@@ -308,9 +309,10 @@ const CLEARNET_TEXT_CSS = `
 .cn-tag{border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;color:var(--fg-soft);background:var(--bg-sub);text-decoration:none;white-space:nowrap}
 .cn-tag:hover{color:var(--fg);border-color:var(--fg)}
 .cn-license{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:11px;letter-spacing:1px;color:var(--fg-soft);background:var(--bg-sub);text-decoration:none;white-space:nowrap}
-a.tag-link{color:var(--accent);text-decoration:none}
-a.cn-wiki-link{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
-a.cn-wiki-link:hover{color:var(--fg)}
+a.tag-link{text-decoration:none}
+a.cn-wiki-link{text-decoration:underline;text-underline-offset:2px}
+body a.tag-link,body a.cn-wiki-link,body a.styled-link,body a[target="_blank"]{color:#ff6600}
+body a.tag-link:hover,body a.cn-wiki-link:hover,body a.styled-link:hover,body a[target="_blank"]:hover{color:#ff6600;text-decoration:underline}
 .cn-price{display:inline-flex;align-items:center;color:var(--fg);background:var(--bg-sub);border:1px solid var(--fg);border-radius:4px;padding:4px 10px;font-weight:bold;font-size:14px}
 a.tag-link:hover{text-decoration:underline}
 .rt-header{display:block;font-weight:bold;margin:10px 0 4px;line-height:1.3}
@@ -399,10 +401,15 @@ const buildBaseCss = (p) => `
 body{background:var(--bg);color:var(--fg);font-family:${p.font};max-width:960px;margin:0 auto;padding:32px 24px;line-height:1.5}
 a{color:var(--fg);text-decoration:none}
 a:hover{color:var(--accent);text-decoration:underline}
+a.cn-bookmark-url{color:#ff6600;font-weight:bold;overflow-wrap:anywhere}
+a.cn-bookmark-url:hover{color:#ff6600;text-decoration:underline}
 header.cn-header{display:flex;align-items:center;gap:16px;padding-bottom:16px;margin-bottom:24px;border-bottom:1px solid var(--border);flex-wrap:wrap}
 .cn-brand-block{flex:0 0 auto}
 .cn-brand{font-size:20px;font-weight:700;color:var(--fg);letter-spacing:1px}
 .cn-brand-sub{color:var(--fg-dim);font-size:12px;text-transform:uppercase;letter-spacing:2px;margin-top:2px}
+.cn-header-stats{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.cn-stat-pill{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;background:var(--bg-sub);color:var(--fg-dim);border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:10px;text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.cn-stat-pill strong{color:var(--fg);font-weight:700;text-transform:none;letter-spacing:0}
 .cn-header-extra{flex:1 1 auto;display:flex;justify-content:flex-end;align-items:center;min-width:0}
 .cn-kind-tag{font-weight:700;color:var(--fg);letter-spacing:1px}
 .cn-sep{border:0;border-top:1px solid var(--border);margin:24px 0}
@@ -432,6 +439,7 @@ const cnCanonical = (override) => {
   const qs = params.toString();
   return cnAbsolute(`${scope.path || '/c'}${qs ? `?${qs}` : ''}`);
 };
+const CN_FAVICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><text x="0" y="14">\u26f1\ufe0f</text></svg>')}`;
 const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null, ogType = 'website', canonical = '', extraCss = '', body, headerExtra = null, hubFeedId = null, feed = '' }) => {
   const safeTitle = escapeHtml(title || 'Oasis');
   const safeOgTitle = escapeHtml(ogTitle || title || 'Oasis');
@@ -440,10 +448,18 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   const ogImageUrl = ogImage ? escapeHtml(cnAbsolute(ogImage)) : '';
   const palette = getCurrentPalette();
   const baseCss = buildBaseCss(palette);
-  const brandInner = `<div class="cn-brand">⛱ Oasis HUB</div><div class="cn-brand-sub">${escapeHtml(cnText('cnBrandSub', 'Libre · P2P · Federated'))}</div>`;
+  const brandInner = `<div class="cn-brand">⛱️ Oasis HUB</div><div class="cn-brand-sub">${escapeHtml(cnText('cnBrandSub', 'Libre · P2P · Federated'))}</div>`;
   const lang = escapeHtml(mv().getLanguage ? mv().getLanguage() : 'en');
   const langOverride = cnScope().cnLang || '';
-  const brandBlock = `<a class="cn-brand-block cn-brand-link" href="${cnWithLang('/c', langOverride)}">${brandInner}</a>`;
+  const chrome = cnScope().clearnet || null;
+  const st = (chrome && chrome.stats) || {};
+  const brandStats = chrome ? [[cnText('cnNode', 'Node'), st.node], [cnText('invitesPubsTitle', 'PUBs'), Number(st.pubs) || 0], [cnText('inhabitants', 'Inhabitants'), Number(st.inhabitants) || 0]] : [];
+  const statsLine = brandStats
+    .filter(([, v]) => typeof v === 'number' ? v > 0 : String(v || '').trim())
+    .map(([label, v]) => `<span class="cn-stat-pill">${escapeHtml(label)}: <strong>${escapeHtml(typeof v === 'number' ? (typeof Intl !== 'undefined' ? new Intl.NumberFormat(lang).format(v) : String(v)) : String(v).trim())}</strong></span>`).join('');
+  const brandBlock = statsLine
+    ? `<div class="cn-brand-block"><a class="cn-brand-link" href="${cnWithLang('/c', langOverride)}">${brandInner}</a><div class="cn-header-stats">${statsLine}</div></div>`
+    : `<a class="cn-brand-block cn-brand-link" href="${cnWithLang('/c', langOverride)}">${brandInner}</a>`;
   return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
@@ -459,7 +475,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   <meta name="twitter:card" content="${ogImageUrl ? 'summary_large_image' : 'summary'}"/>
   <meta name="description" content="${safeOgDesc}"/>
   <meta name="robots" content="index, follow"/>
-  <link rel="icon" href="/c/assets/images/favicon.svg"/>
+  <link rel="icon" href="${CN_FAVICON}"/>
   ${feed ? `<link rel="alternate" type="application/rss+xml" title="${safeTitle}" href="${escapeHtml(feed)}"/>` : ''}
   <style>${baseCss}${CLEARNET_SEARCH_CSS}${CLEARNET_TEXT_CSS}${CLEARNET_ZOOM_CSS}${extraCss}
 .cn-brand-link{display:block;text-decoration:none}
@@ -596,6 +612,10 @@ const renderClearnetMediaView = ({ kind, item }) => {
   const blob = blobUrl(item.url);
   const title = escapeHtml(item.title || cnText('cnUntitled', 'Untitled'));
   const desc = renderRichText(item.description || '', { wikiLinks: item.wikiLinks instanceof Map ? item.wikiLinks : null });
+  const bookmarkHref = item.bookmarkUrl ? safeExternalHref(item.bookmarkUrl) : '';
+  const bookmarkHtml = !item.bookmarkUrl ? ''
+    : bookmarkHref ? `<p class="cn-media-desc"><a class="cn-bookmark-url" href="${escapeHtml(bookmarkHref)}" target="_blank" rel="noopener noreferrer nofollow">${escapeHtml(item.bookmarkUrl)}</a></p>`
+    : `<p class="cn-media-desc">${escapeHtml(item.bookmarkUrl)}</p>`;
   const dateStr = item.createdAt ? escapeHtml(new Date(item.createdAt).toISOString().slice(0, 10)) : '';
   const extraCss = `
 .cn-media-meta{color:var(--fg-dim);font-size:13px;margin-bottom:16px;display:flex;gap:14px;flex-wrap:wrap;align-items:baseline}
@@ -645,6 +665,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
   ${item.title ? `<h1 class="cn-media-title">${title}</h1>` : ''}
   <hr class="cn-sep"/>
   ${mediaHtml && !fileKind ? `<div class="cn-media-frame">${mediaHtml}</div>` : ''}
+  ${bookmarkHtml}
   ${desc ? `<p class="cn-media-desc">${desc}</p>` : ''}
   ${mediaHtml && fileKind ? `<div class="cn-media-frame">${mediaHtml}</div>` : ''}
   ${renderTagChips(item.tags)}
@@ -652,7 +673,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
   return renderClearnetPage({
     title: `${item.title || (kind ? kindLabel(kind) : 'Oasis')} | Oasis`,
     ogTitle: item.title || (kind ? kindLabel(kind) : 'Oasis'),
-    ogDescription: item.description || '',
+    ogDescription: item.description || item.bookmarkUrl || '',
     ogImage: (kind === 'image') ? blob : null,
     extraCss: kind === 'document' ? extraCss + CLEARNET_PDF_CSS : extraCss,
     body,
@@ -684,13 +705,14 @@ const renderClearnetPodcastView = ({ channel, feed = '' }) => {
       ? `<video controls preload="metadata" src="${src}"></video>`
       : `<audio controls preload="metadata" src="${src}"></audio>`);
     const epDate = ep.createdAt ? escapeHtml(new Date(ep.createdAt).toISOString().slice(0, 10)) : '';
-    return `<div class="cn-episode"><h2>#${Number(ep.number) || 0} · ${escapeHtml(ep.title || '')}</h2><div class="cn-episode-meta">${epDate}</div>${player}${ep.description ? `<p>${renderRichText(ep.description)}</p>` : ''}</div>`;
+    return `<div class="cn-episode"><h2>#${Number(ep.number) || 0} · ${escapeHtml(ep.title || '')}</h2><div class="cn-episode-meta">${epDate}</div>${player}${ep.description ? `<p>${renderRichText(ep.description)}</p>` : ''}${renderTagChips(ep.tags)}</div>`;
   }).join('');
   const body = `
-  <div class="cn-media-meta">${renderKindTag('podcast')}${dateStr ? `<span>📅 ${dateStr}</span>` : ''}<span>🎧 ${episodes.length}</span>${renderClearnetLicense(channel.license)}${feed ? `<a class="cn-license" href="${escapeHtml(feed)}">RSS</a>` : ''}</div>
+  <div class="cn-media-meta">${renderKindTag('podcast')}${dateStr ? `<span>📅 ${dateStr}</span>` : ''}<span>🎧 ${episodes.length}</span>${channel.category ? `<span class="cn-detail">${escapeHtml(String(cnText(`podcastCategory${String(channel.category).charAt(0)}${String(channel.category).slice(1).toLowerCase()}`, channel.category)).toUpperCase())}</span>` : ''}${renderClearnetLicense(channel.license)}${feed ? `<a class="cn-license" href="${escapeHtml(feed)}">RSS</a>` : ''}</div>
   <h1 class="cn-media-title">${title}</h1>
   ${cover ? (coverIsVideo ? `<video class="cn-podcast-cover" controls muted preload="metadata" src="${cover}"></video>` : `<img class="cn-podcast-cover" src="${cover}" alt="${title}"/>`) : ''}
   ${desc ? `<p class="cn-media-desc">${desc}</p>` : ''}
+  ${renderTagChips(channel.tags)}
   ${epHtml ? `<hr class="cn-sep"/>${epHtml}` : ''}
 `;
   return renderClearnetPage({

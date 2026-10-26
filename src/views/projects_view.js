@@ -728,7 +728,6 @@ ${Array.from({ length: 21 }, (_, i) => `.cn-prj-bar-fill-${i * 5}{width:${i * 5}
 .cn-prj-section p{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;font-size:15px;margin:0}
 .cn-prj-ms{padding-left:22px;margin:0;color:var(--fg-soft);line-height:1.7}
 .cn-prj-pct{color:var(--fg-dim);font-size:13px}
-.cn-prj-deadline{color:var(--fg-dim);font-size:13px;margin-top:8px}
 .cn-prj-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
 .cn-prj-date,.cn-prj-idmeta{background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:13px;color:var(--fg-soft)}
 .cn-prj-idmeta{font-family:monospace;font-size:11px;word-break:break-all}
@@ -739,6 +738,8 @@ ${Array.from({ length: 21 }, (_, i) => `.cn-prj-bar-fill-${i * 5}{width:${i * 5}
     ${renderKindTag('project')}
     <span class="cn-prj-status">${esc(i18n['projectStatus' + status] || status)}</span>
     ${pr.createdAt ? `<span class="cn-prj-date">📅 ${esc(new Date(pr.createdAt).toISOString().slice(0,10))}</span>` : ''}
+    ${Number.isFinite(toNum(pr.progress)) ? `<span class="cn-prj-date">📈 ${clamp(Math.round(toNum(pr.progress)), 0, 100)}%</span>` : ''}
+    ${deadline ? `<span class="cn-prj-date">⏳ ${esc(i18n.deadline)}: ${deadline}</span>` : ''}
   </div>
   <hr class="cn-sep"/>
   ${projectImg ? `<img class="cn-prj-img" src="${projectImg}" alt="${title}"/>` : ''}
@@ -747,7 +748,6 @@ ${Array.from({ length: 21 }, (_, i) => `.cn-prj-bar-fill-${i * 5}{width:${i * 5}
     <div class="cn-prj-funding-label">${esc(i18n.projectFunding)}</div>
     <div class="cn-prj-funding-amount">${pledged.toFixed(2)} / ${goal.toFixed(2)} ECO · ${fundingPct}%</div>
     <div class="cn-prj-bar"><div class="cn-prj-bar-fill cn-prj-bar-fill-${Math.round(fundingPct / 5) * 5}"></div></div>
-    ${deadline ? `<div class="cn-prj-deadline">${esc(i18n.deadline)}: ${deadline}</div>` : ''}
   </div>` : ''}
   ${desc ? `<div class="cn-prj-section"><h2>${esc(i18n.description)}</h2><p>${desc}</p></div>` : ''}
   ${milestonesBlock}

@@ -416,8 +416,7 @@ describe('views: supporting an inhabitant from a card', (t) => {
 describe('views: SocialBot notices in the inbox', (t) => {
   t('a local notice of a new supporter comes from SocialBot, is addressed to you and names who supports you', async () => {
     const mv = require('../../../src/views/main_views');
-    const config = require('../../../src/server/ssb_config');
-    const me = (config.keys && config.keys.id) || '@' + 'a'.repeat(43) + '=.ed25519';
+    const me = await mv.getUserId();
     const supporter = '@' + 'c'.repeat(43) + '=.ed25519';
     const msg = { key: '%' + 's'.repeat(43) + '=.sha256', timestamp: Date.now(), value: { author: me, timestamp: Date.now(), content: { type: 'post', private: true, from: me, to: [me], subject: 'SOCIAL_SUPPORTED', text: `[@Ana](/author/${encodeURIComponent(supporter)}) has started supporting you`, sentAt: new Date().toISOString() } } };
     const html = String(await mv.privateView({ messages: [msg], readKeys: [], archivedKeys: [], mutedBots: [] }, undefined));

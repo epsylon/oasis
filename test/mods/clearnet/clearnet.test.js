@@ -19,7 +19,7 @@ describe('clearnet: the visitor language', (t) => {
         ok(String(renderClearnetPodcastView({ channel: { episodes: [] } })).includes(escapeHtml(i18n[lang].cnUntitled)), `${lang}: the untitled fallback is translated`);
       }
       mv.setLanguage('es');
-      const hub = String(await mv.clearnetHubView({ authors: [], items: {} }));
+      const hub = String(await mv.clearnetHubView({ items: {} }));
       ok(hub.includes(i18n.es.cnHubEmpty) && !hub.includes('No public content'), 'the hub speaks the visitor language, not the node language');
     } finally {
       mv.setLanguage(before);
@@ -43,7 +43,7 @@ describe('clearnet: choosing a language without cookies', (t) => {
       const items = { jobs: [{ id: '%j1.sha256', title: 'Dev', snippet: 'x', meta: '2026', author: '@a' }] };
       const html = await requestScope.run({ capped: false, limit: 0, path: '/c', query: 'type=jobs', cnLang: 'it' }, async () => {
         mv.setLanguage('it');
-        return String(await mv.clearnetHubView({ authors: [], items, filterType: 'jobs' }));
+        return String(await mv.clearnetHubView({ items, filterType: 'jobs' }));
       });
       const page = html.replace(/<head>[\s\S]*?<\/head>/, '').replace(/<div class="cn-lang" tabindex="0">[\s\S]*?<\/div><\/div>/, '');
       const internal = page.match(/href="\/c[^"]*"/g) || [];
@@ -52,7 +52,7 @@ describe('clearnet: choosing a language without cookies', (t) => {
       ok(html.includes('<span class="cn-lang-current">IT</span>') && html.includes('href="/c?type=jobs&amp;lang=es"'), 'the listbox links to the same page in the other languages');
       const plain = await requestScope.run({ capped: false, limit: 0, path: '/c', query: '' }, async () => {
         mv.setLanguage('en');
-        return String(await mv.clearnetHubView({ authors: [], items }));
+        return String(await mv.clearnetHubView({ items }));
       });
       const body = plain.replace(/<div class="cn-lang" tabindex="0">[\s\S]*?<\/div><\/div>/, '');
       ok(!/[?&]lang=/.test(body), 'with the browser language nothing is appended to the links');
@@ -69,7 +69,7 @@ describe('licenses', (t) => {
     const mv = require('../../../src/views/main_views');
     const i18n = require('../../../src/client/assets/translations/i18n');
     const tribes = [{ id: '%aaa.sha256', title: 'Seeds', content: 3 }, { id: '%bbb.sha256', title: 'Roots', content: 7 }];
-    const hub = String(await mv.clearnetHubView({ authors: [], items: {}, tribes }));
+    const hub = String(await mv.clearnetHubView({ items: {}, tribes }));
     ok(hub.includes(`${i18n.en.cnPublicContent}: 7`) && hub.includes(`${i18n.en.cnPublicContent}: 3`) && !hub.includes(i18n.en.tribeMembersCount), 'each card shows its published content, not its members');
     ok(hub.indexOf('Roots') < hub.indexOf('Seeds'), 'tribes are ordered by published content');
   });

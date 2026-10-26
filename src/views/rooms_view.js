@@ -455,8 +455,10 @@ exports.renderRoomItem = renderRoomItem
 exports.roomStatsBy = (rooms) => renderModuleStatsBy(safeArr(rooms), r => r.isClosed ? "CLOSED" : r.type, [{ value: "OPEN", label: i18n.roomStatusOpen }, { value: "INVITE-ONLY", label: i18n.roomStatusInviteOnly }, { value: "CLOSED", label: i18n.roomStatusClosed }])
 
 exports.clearnetRoomView = async (room, { live = false, sound = true, base = "" } = {}) => {
-  const { escapeHtml: esc, renderKindTag, renderClearnetPage, cnZoom } = require("./clearnet_view")
+  const { escapeHtml: esc, renderKindTag, renderClearnetPage, cnZoom, renderRichText, renderTagChips, blobUrl: cnBlob } = require("./clearnet_view")
   const name = room.title || i18n.cnKindRoom
+  const cover = cnBlob(room.image)
+  const desc = renderRichText(room.description || "")
   const extraCss = `
 .cn-room-title{color:var(--fg);margin:0 0 16px 0;font-size:32px;font-weight:700;word-break:break-word}
 .cn-room-meta{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
@@ -470,13 +472,19 @@ exports.clearnetRoomView = async (room, { live = false, sound = true, base = "" 
 .cn-room-sound{width:100%;max-width:960px}
 .cn-room-live .cn-lightbox-img{width:92vw;height:88vh;object-fit:contain}
 .cn-room-live .cn-lightbox-full .cn-lightbox-img{width:100vw;height:100vh}
+.cn-room-img{display:block;max-width:100%;border:1px solid var(--border);border-radius:8px;margin:20px 0 0 0}
+.cn-room-desc{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;font-size:15px;margin:16px 0}
 `
   const body = `
   <h1 class="cn-room-title">${esc(name)}</h1>
   <div class="cn-room-meta">
     ${renderKindTag("room")}
     ${room.number ? `<span class="pm-exposition-chip pm-exposition-whole cn-room-number"><span class="pm-exposition-icon">✆</span><span class="pm-exposition-text">${esc(room.number)}</span></span>` : ""}
+    ${room.createdAt ? `<span class="cn-detail">📅 ${esc(moment(room.createdAt).format("YYYY/MM/DD"))}</span>` : ""}
   </div>
+  ${cover ? `<img class="cn-room-img" src="${cover}" alt="${esc(name)}"/>` : ""}
+  ${desc ? `<p class="cn-room-desc">${desc}</p>` : ""}
+  ${renderTagChips(room.tags)}
   ${live && base ? `<section class="cn-room-live">
     <span class="cn-room-live-chip">● ${esc(String(i18n.roomLiveChip || "LIVE").toUpperCase())}</span>
     ${cnZoom("room-live", `${base}/live`, name, { full: true, imgClass: "cn-room-grid" })}

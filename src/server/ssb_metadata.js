@@ -130,7 +130,7 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   const cacheUsage = blobUsageOnDisk(config.path);
   console.log(`- Media cache limit: ${cacheMb > 0 ? formatMB(cacheMb * 1024 * 1024) : 'Unlimited'}`);
   console.log(`- Current usage: ${formatMB(cacheUsage.bytes, 1)} · ${cacheUsage.files} files`);
-  console.log(`- LAN Broadcasting (UDP): ${localDiscovery ? 'enabled' : 'disabled'}`);
+  console.log(`- LAN Broadcasting: ${localDiscovery ? 'enabled' : 'disabled'}`);
   const multiverse = (() => {
     if ((oasisCfg.modules || {}).fediverseMod === 'off') return [];
     try {

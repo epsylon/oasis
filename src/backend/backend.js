@@ -701,40 +701,19 @@ const blobSizeOf = async (value) => {
   } catch (_) { return ''; }
 };
 const detailsOf = (...parts) => parts.map(p => String(p == null ? '' : p).trim()).filter(Boolean).slice(0, 4);
-const clearnetDetails = (kind, x) => {
-  if (!x) return [];
+const clearnetMarketDetails = (x) => {
   const { i18n } = require('../views/main_views');
-  if (kind === 'market') {
-    const type = String(x.item_type || '').toLowerCase();
-    return detailsOf(type === 'auction' ? `🔨 ${i18n.cnAuction}` : type === 'exchange' ? `🔁 ${i18n.cnExchange}` : type.toUpperCase());
-  }
-  if (kind === 'events') return detailsOf(x.location ? `📍 ${x.location}` : '');
-  if (kind === 'jobs') {
-    const time = String(x.job_time || '').toLowerCase();
-    return detailsOf(
-      x.job_type ? `💼 ${String(x.job_type).toUpperCase()}` : '',
-      time === 'partial' ? `⏱ ${String(i18n.jobTimePartial).toUpperCase()}` : time === 'complete' ? `⏱ ${String(i18n.jobTimeComplete).toUpperCase()}` : ''
-    );
-  }
-  if (kind === 'podcasts') return detailsOf(Number(x.episodeCount) > 0 ? `🎙 ${Number(x.episodeCount)} ${String(i18n.podcastEpisodesLabel).toUpperCase()}` : '');
-  if (kind === 'projects') {
-    const progress = Number(x.progress);
-    return detailsOf(Number.isFinite(progress) ? `📈 ${Math.max(0, Math.min(100, Math.round(progress)))}%` : '');
-  }
-  const capOf = (v) => { const s = String(v || ''); return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); };
-  if (kind === 'emergencies') return detailsOf(
-    x.severity ? `⚠ ${String(i18n[`emergencySeverity${capOf(x.severity)}`] || x.severity).toUpperCase()}` : '',
-    x.category ? String(i18n[`emergencyCategory${capOf(x.category)}`] || x.category).toUpperCase() : ''
-  );
-  if (kind === 'campaigns') return detailsOf(
-    Number(x.goal) > 0 ? `✍ ${Number(x.signatureCount) || 0} / ${Number(x.goal)}` : '',
-    x.category ? String(i18n[`campaignCategory${capOf(x.category)}`] || x.category).toUpperCase() : ''
-  );
-  if (kind === 'housing') return detailsOf(
-    x.housing_type ? String(i18n[`housingType${String(x.housing_type).toUpperCase()}`] || x.housing_type).toUpperCase() : '',
-    x.place ? `📍 ${x.place}` : ''
-  );
-  return [];
+  const type = String(x.item_type || '').toLowerCase();
+  const condition = { NEW: i18n.marketFilterNew, USED: i18n.marketFilterUsed, BROKEN: i18n.marketFilterBroken }[String(x.item_status || '').toUpperCase()];
+  const status = { 'FOR SALE': i18n.marketFilterForSale, SOLD: i18n.marketFilterSold }[String(x.status || '').toUpperCase()];
+  return [
+    type === 'auction' ? `🔨 ${i18n.cnAuction}` : type === 'exchange' ? `🔁 ${i18n.cnExchange}` : type.toUpperCase(),
+    condition ? String(condition).toUpperCase() : '',
+    status ? String(status).toUpperCase() : '',
+    x.includesShipping ? `📦 ${String(i18n.marketItemIncludesShipping || '').replace(/\?$/, '').toUpperCase()}` : '',
+    Number(x.stock) > 0 ? `${i18n.marketItemStock}: ${Number(x.stock)}` : '',
+    x.deadline ? `⏳ ${i18n.marketItemAvailable}: ${dayOf(tsOf(x.deadline))}` : ''
+  ].map(v => String(v || '').trim()).filter(Boolean);
 };
 const clearnetMapPoint = async (mapUrl, author) => {
   const m = String(mapUrl || '').trim().match(/^\/maps\/([^/?#\s]+)/);
@@ -813,6 +792,29 @@ const commentIndexCache = cachedIndex(buildCommentIndex);
 const opinionIndexCache = cachedIndex(buildOpinionIndex);
 const commentIndex = commentIndexCache.get;
 const forgetEngagementIndexes = () => { commentIndexCache.forget(); opinionIndexCache.forget(); };
+const attachPollsAndVotes = async (list, viewerId) => {
+  const items = (Array.isArray(list) ? list : []).filter(Boolean);
+  const typeOf = (a) => a.type || (a.value && a.value.content && a.value.content.type);
+  const idOf = (a) => a.id || a.key;
+  const polls = items.filter(a => typeOf(a) === 'poll' && idOf(a));
+  if (polls.length) {
+    const pollMap = await pollsModel.getPollsByIds(polls.map(idOf), viewerId).catch(() => new Map());
+    for (const a of polls) if (pollMap.has(idOf(a))) a.poll = pollMap.get(idOf(a));
+  }
+  const votes = items.filter(a => typeOf(a) === 'votes' && idOf(a));
+  if (votes.length) {
+    const voteById = new Map();
+    for (const v of await votesModel.listAll('all').catch(() => [])) {
+      if (v && v.id) voteById.set(v.id, v);
+      if (v && v.rootId) voteById.set(v.rootId, v);
+    }
+    for (const a of votes) {
+      const v = voteById.get(idOf(a)) || voteById.get(a.rootId) || voteById.get(a.tipId);
+      if (v) a.vote = v;
+    }
+  }
+  return list;
+};
 const attachCommentMeta = async (actions) => {
   const list = Array.isArray(actions) ? actions : [];
   if (!list.length) return list;
@@ -820,7 +822,8 @@ const attachCommentMeta = async (actions) => {
     const byRoot = await commentIndex();
     for (const a of list) {
       if (!a) continue;
-      const hit = byRoot.get(a.id) || byRoot.get(a.rootId) || byRoot.get(a.key);
+      const commentRoot = a.comment && a.comment.rootId;
+      const hit = (commentRoot && byRoot.get(commentRoot)) || byRoot.get(a.id) || byRoot.get(a.rootId) || byRoot.get(a.key);
       a.commentCount = hit ? hit.count : 0;
       a.lastCommentKey = hit ? hit.lastKey : null;
     }
@@ -1141,6 +1144,7 @@ const syncClearnetSince = async () => {
 let clearnetIndexCache = { ts: 0, data: null, building: null };
 const CLEARNET_INDEX_TTL_MS = 60 * 1000;
 let clearnetTribesCache = { at: 0, data: null };
+let clearnetTrendingCache = { at: 0, keys: null };
 const getClearnetTribes = async () => {
   if (clearnetTribesCache.data && Date.now() - clearnetTribesCache.at < CLEARNET_INDEX_TTL_MS) return clearnetTribesCache.data;
   const state = await tribesContentModel.exposureState().catch(() => new Map());
@@ -1341,7 +1345,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         title: j.title || 'Untitled',
         image: j.image || null,
         snippet: j.description || '',
-        details: clearnetDetails('jobs', j),
         tags: tagsOf(j)
       }, tsOf(j.createdAt, j.ts)));
     } catch (_) {}
@@ -1354,7 +1357,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         title: e.title || 'Untitled',
         image: null,
         snippet: e.description || '',
-        details: clearnetDetails('events', e),
         tags: tagsOf(e),
         meta: e.date ? dayOf(tsOf(e.date)) : undefined
       }, tsOf(e.createdAt, e.ts, e.date)));
@@ -1368,7 +1370,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         title: p.title || 'Untitled',
         image: p.image || null,
         snippet: p.description || '',
-        details: clearnetDetails('projects', p),
         price: Number(p.goal) > 0 ? `${(Number(p.pledged) || 0).toFixed(2)} / ${Number(p.goal).toFixed(2)}` : null,
         tags: tagsOf(p)
       }, tsOf(p.createdAt, p.ts)));
@@ -1412,19 +1413,19 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
   if (wants('documents')) {
     try {
       const documents = await documentsModel.listAll('all').catch(() => []);
-      items.documents = await Promise.all((documents || []).filter(m => m.author === feedId).filter(on('documents')).slice(0, MAX_PER_SECTION).map(async (m) => ({ ...mediaItemMapper(m), details: detailsOf(await blobSizeOf(m.url)).map(v => `⇩ ${v}`) })));
+      items.documents = (documents || []).filter(m => m.author === feedId).filter(on('documents')).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m));
     } catch (_) {}
   }
   if (wants('torrents')) {
     try {
       const torrents = await torrentsModel.listAll('all').catch(() => []);
-      items.torrents = await Promise.all((torrents || []).filter(m => m.author === feedId && !m.tribeId && !m.encrypted && m.url).filter(on('torrents')).slice(0, MAX_PER_SECTION).map(async (m) => ({ ...mediaItemMapper(m), details: detailsOf(await blobSizeOf(m.url)).map(v => `⇩ ${v}`) })));
+      items.torrents = (torrents || []).filter(m => m.author === feedId && !m.tribeId && !m.encrypted && m.url).filter(on('torrents')).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m));
     } catch (_) {}
   }
   if (wants('files')) {
     try {
       const files = await filesModel.listAll('all').catch(() => []);
-      items.files = await Promise.all((files || []).filter(m => m.author === feedId && !m.tribeId && !m.encrypted && m.url).filter(on('files')).slice(0, MAX_PER_SECTION).map(async (m) => ({ ...mediaItemMapper(m), details: detailsOf(await blobSizeOf(m.url)).map(v => `⇩ ${v}`) })));
+      items.files = (files || []).filter(m => m.author === feedId && !m.tribeId && !m.encrypted && m.url).filter(on('files')).slice(0, MAX_PER_SECTION).map(m => mediaItemMapper(m));
     } catch (_) {}
   }
   if (wants('market')) {
@@ -1436,7 +1437,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         image: i.image || null,
         snippet: i.description || '',
         price: i.price || null,
-        details: clearnetDetails('market', i),
         tags: tagsOf(i)
       }, tsOf(i.createdAt, i.ts)));
     } catch (_) {}
@@ -1452,7 +1452,7 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
           title: '',
           image: null,
           snippet: text,
-          tags: []
+          tags: tagsOf(c)
         }, tsOf(c.createdAt, f.ts, f.value && f.value.timestamp));
       });
     } catch (_) {}
@@ -1479,7 +1479,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         image: c.cover && c.cover.kind === 'image' ? c.cover.blobId : null,
         media: (() => { const eps = Array.isArray(c.episodes) ? c.episodes : []; const last = eps[eps.length - 1]; return last && last.media && last.media.blobId ? { kind: last.media.kind === 'video' ? 'video' : 'audio', blobId: last.media.blobId } : null; })(),
         snippet: c.description || '',
-        details: clearnetDetails('podcasts', c),
         tags: tagsOf(c)
       }, tsOf(c.lastActivityTs, c.createdAt, c.ts)));
     } catch (_) {}
@@ -1489,8 +1488,9 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
       const bookmarks = await bookmarksModel.listAll('all').catch(() => []);
       items.bookmarks = (bookmarks || []).filter(b => b.author === feedId && b.url).filter(on('bookmarks')).slice(0, MAX_PER_SECTION).map(b => dated({
         id: b.id,
-        title: hostOf(b.url) || 'Bookmark',
+        title: b.title || hostOf(b.url) || 'Bookmark',
         image: null,
+        url: b.url,
         snippet: [b.url, b.description].filter(Boolean).join('\n\n'),
         tags: tagsOf(b)
       }, tsOf(b.createdAt, b.ts)));
@@ -1505,7 +1505,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         title: e.title || 'Untitled',
         image: e.media && e.media.kind === 'image' ? e.media.blobId : null,
         snippet: withoutBlobLinks(e.text),
-        details: clearnetDetails('emergencies', e),
         tags: tagsOf(e)
       }, tsOf(e.createdAt, e.ts)));
     } catch (_) {}
@@ -1518,7 +1517,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         title: c.title || 'Untitled',
         image: c.media && c.media.kind === 'image' ? c.media.blobId : null,
         snippet: withoutBlobLinks(c.text),
-        details: clearnetDetails('campaigns', c),
         tags: tagsOf(c),
         meta: c.deadline ? dayOf(tsOf(c.deadline)) : undefined
       }, tsOf(c.createdAt, c.ts)));
@@ -1533,7 +1531,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         image: (Array.isArray(h.images) ? h.images : []).find(x => !/\[video:/.test(String(x || ''))) || null,
         snippet: h.description || '',
         price: h.housing_type !== 'couchsurfing' && Number(h.price) > 0 ? Number(h.price).toFixed(2) : null,
-        details: clearnetDetails('housing', h),
         tags: tagsOf(h)
       }, tsOf(h.createdAt, h.ts)));
     } catch (_) {}
@@ -1546,7 +1543,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         title: r.title || 'Untitled',
         image: null,
         snippet: '',
-        details: detailsOf(r.number ? `✆ ${r.number}` : ''),
         tags: []
       }, tsOf(r.createdAt)));
     } catch (_) {}
@@ -1559,7 +1555,6 @@ const collectClearnetItems = async (feedId, prefs, { max = 5 } = {}) => {
         title: m.title || 'Untitled',
         image: m.image || null,
         snippet: m.description || '',
-        details: detailsOf(`📍 ${(Number(m.lat) || 0).toFixed(4)}, ${(Number(m.lng) || 0).toFixed(4)}`),
         tags: tagsOf(m)
       }, tsOf(m.createdAt)));
     } catch (_) {}
@@ -2628,14 +2623,14 @@ const sendClearnetRss = async (ctx, mods, label, query) => {
   const items = [];
   for (const mod of mods) {
     for (const entry of index) {
-      for (const it of (entry.items[mod.key] || [])) items.push({ ...it, mod, authorName: entry.name || '', feedId: entry.feedId });
+      for (const it of (entry.items[mod.key] || [])) items.push({ ...it, mod });
     }
   }
   items.sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0));
   const rssItems = items.slice(0, CLEARNET_RSS_ITEMS).map(it => {
     const link = `${base}/c/${it.mod.modulePath || it.mod.key}/${encodeURIComponent(clearnetSlugFor(it.title, it.id))}`;
     const date = new Date(Number(it.ts) || Date.now()).toUTCString();
-    return `    <item>\n      <title>${esc(it.title || i18n.cnUntitled)}</title>\n      <link>${esc(link)}</link>\n      <guid isPermaLink="false">${esc(String(it.id || link))}</guid>\n      <pubDate>${date}</pubDate>\n      <author>${esc(it.authorName || it.feedId || '')}</author>\n      <description>${esc(String(it.snippet || '').slice(0, 500))}</description>\n    </item>`;
+    return `    <item>\n      <title>${esc(it.title || i18n.cnUntitled)}</title>\n      <link>${esc(link)}</link>\n      <guid isPermaLink="false">${esc(String(it.id || link))}</guid>\n      <pubDate>${date}</pubDate>\n      <description>${esc(String(it.snippet || '').slice(0, 500))}</description>\n    </item>`;
   }).join('\n');
   ctx.type = 'application/xml; charset=utf-8';
   ctx.set('Cache-Control', 'public, max-age=600');
@@ -2750,7 +2745,8 @@ const notifyUbiPaid = async ({ to, amount, epochId, txid, transferKey }) => {
 const bankingModel = require("../models/banking_model")({ services: { cooler, notifyUbiPaid, transfers: transfersModel }, isPublic: config.public });
 const favoritesModel = require("../models/favorites_model")({ services: { cooler }, audiosModel, bookmarksModel, documentsModel, imagesModel, videosModel, mapsModel, padsModel, roomsModel, chatsModel, calendarsModel, torrentsModel, filesModel, marketModel, shopsModel, eventsModel, tasksModel, reportsModel, votesModel, jobsModel, housingModel, projectsModel, transfersModel, forumModel, blogsModel: blogModel, pollsModel, schoolModel, wikiModel, emergenciesModel, mailingModel, logisticsModel, podcastsModel, campaignsModel });
 const logsModel = require("../models/logs_model")({ cooler });
-const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel } });
+const parliamentModel = require('../models/parliament_model')({ cooler, services: { tribes: tribesModel, votes: votesModel, inhabitants: inhabitantsModel, banking: bankingModel, larp: larpModel } });
+larpModel.attach({ votes: votesModel, inhabitants: inhabitantsModel });
 const fediverseModel = require('../models/fediverse_model')({ isPublic: config.public });
 const nextcloudModel = require('../models/nextcloud_model')({ isPublic: config.public });
 const NEXTCLOUD_MAX_BYTES = 8 * 1024 * 1024 * 1024;
@@ -4783,6 +4779,8 @@ const refreshPeerHealth = async () => {
   peerHealth.observe({ connected, failing: [...failures].filter(([, f]) => f > 0).map(([k]) => k) });
 };
 const forgottenPeerKeys = () => new Set(readJSON(unfollowedPath).map(u => u && peerHealth.canonicalKey(u.key)).filter(Boolean));
+const isClearnetPage = (p) => /^\/c(\/|$)/.test(p) && !/^\/c\/(blob|qr|assets|rss)(\/|$)/.test(p) && !/^\/c\/pdf\/(embed|page)/.test(p) && !/^\/c\/podcasts\/[^/]+\/rss/.test(p) && !/^\/c\/rooms\/[^/]+\/[^/]+/.test(p);
+const federatedPubCount = () => { const gone = forgottenPeerKeys(); return new Set(readJSON(gossipPath).map(p => p && peerHealth.canonicalKey(p.key)).filter(k => k && !gone.has(k))).size; };
 const forgetPeers = async (keys) => {
   const drop = new Set([...(keys || [])].map(k => peerHealth.canonicalKey(k)).filter(Boolean));
   if (!drop.size) return 0;
@@ -6800,7 +6798,7 @@ router
     ctx.body = await singleReportView(await withFavorite(withCount(report, comments), 'reports'), filter, comments, { censusList: singleCensus, spreads: await spreads.forMessage(report.id).catch(() => null) });
   })
   .get('/trending', async (ctx) => {
-    const filter = qf(ctx, 'ALL');
+    const filter = qf(ctx, 'TOP');
     const q = String(ctx.query.q || '').trim();
     let { filtered = [] } = await trendingModel.listTrending(filter);
     filtered = await applyListFilters(filtered, ctx);
@@ -6816,11 +6814,12 @@ router
       ? filtered
       : await markRelations((await trendingModel.listTrending('ALL').catch(() => ({}))).filtered || []);
     const favIndex = await contentFavorites.getFavoriteIndex().catch(() => new Map());
-    const pageItems = await renderedPage(async () => trendingView(filtered, filter, trendingModel.categories, new Map(), q, allTrending, { favIndex }));
+    const pageItems = await renderedPage(async () => trendingView(filtered, filter, new Map(), q, allTrending, { favIndex }));
     const spreadMap = await spreads.forMessages(pageItems.map(it => it && it.key)).catch(() => new Map());
     const commentCounts = new Map((await attachCommentMeta(pageItems.filter(Boolean))).map(it => [it.key, it.commentCount || 0]));
     await warmAuthorNames(pageItems);
-    ctx.body = await trendingView(filtered, filter, trendingModel.categories, spreadMap, q, allTrending, { favIndex, commentCounts });
+    await attachPollsAndVotes(pageItems, getViewerId());
+    ctx.body = await trendingView(filtered, filter, spreadMap, q, allTrending, { favIndex, commentCounts });
   })
   .get('/agenda', async (ctx) => {
     const filter = qf(ctx);
@@ -6985,6 +6984,7 @@ router
           const houseOf = (id) => { const v = memberships && memberships.get ? memberships.get(id) : null; return typeof v === 'string' ? v : (v && v.house) || null; };
           hemicycle.houses = {};
           for (const seat of hemicycle.seats) { seat.house = houseOf(seat.id); if (seat.house) hemicycle.houses[seat.house] = (hemicycle.houses[seat.house] || 0) + 1; }
+          if (String(ctx.query.seats || '') === 'houses') hemicycle.influence = await larpModel.seasonInfluence().catch(() => null);
         }
       } catch (_) { hemicycle = null; }
     }
@@ -7437,6 +7437,7 @@ router
     ctx.body = await tribeView(tribe, uid, query, section, sectionData);
   })
   .get('/activity', async ctx => {
+    const countsReady = ensureNetworkCounts();
     const filter = qf(ctx), userId = getViewerId();
     const q = String((ctx.query && ctx.query.q) || '');
     let allActions = (await activityModel.listFeed('all')).slice();
@@ -7490,8 +7491,8 @@ router
     } catch (_) {}
     allActions = await applyListFilters(allActions, ctx, { relation: null });
     const favIndex = await contentFavorites.getFavoriteIndex().catch(() => new Map());
-    await attachCommentMeta(allActions);
     await commentsModel.annotate(allActions).catch(() => null);
+    await attachCommentMeta(allActions);
     const actPage = parseInt(String((ctx.query && ctx.query.page) || ''), 10);
     const actPer = ctx.query && ctx.query.perPage ? listPerPage(ctx.querystring) : '';
     const returnTo = `/activity?filter=${encodeURIComponent(filter)}${q ? `&q=${encodeURIComponent(q)}` : ''}${actPer ? `&perPage=${actPer}` : ''}${actPage > 1 ? `&page=${actPage}` : ''}`;
@@ -7502,23 +7503,7 @@ router
     }
     const pageActions = (allActions || []).filter(a => a && pageKeys.has(a.id));
     if (!q.trim()) await settleActions(pageActions);
-    const pagePolls = pageActions.filter(a => a && a.type === 'poll' && a.id);
-    if (pagePolls.length) {
-      const pollMap = await pollsModel.getPollsByIds(pagePolls.map(a => a.id), userId).catch(() => new Map());
-      for (const a of pagePolls) if (pollMap.has(a.id)) a.poll = pollMap.get(a.id);
-    }
-    const pageVotes = pageActions.filter(a => a && a.type === 'votes' && a.id);
-    if (pageVotes.length) {
-      const voteById = new Map();
-      for (const v of await votesModel.listAll('all').catch(() => [])) {
-        if (v && v.id) voteById.set(v.id, v);
-        if (v && v.rootId) voteById.set(v.rootId, v);
-      }
-      for (const a of pageVotes) {
-        const v = voteById.get(a.id) || voteById.get(a.rootId) || voteById.get(a.tipId);
-        if (v) a.vote = v;
-      }
-    }
+    await attachPollsAndVotes(pageActions, userId);
     const spreadMap = new Map();
     const SPREADABLE = new Set(['post','audio','video','image','document','torrent','file','bookmark','event','calendar','task','votes','vote','market','shop','shopProduct','project','industry','industryBuild','industryBlueprint','transfer','housing','job','report','chat','chatMessage','pad','padEntry','room','wikiPage','emergency','mailingList','logisticsRoute','podcast','podcastEpisode','campaign','forum','map','schoolCourse']);
     const targets = pageActions.filter(a => a && a.id && typeof a.id === 'string' && a.id.startsWith('%') && /\.sha256$/.test(a.id) && SPREADABLE.has(a.type));
@@ -7557,6 +7542,7 @@ router
       }
     } catch (_) {}
     const following = await friend.followingIds().catch(() => new Set());
+    await countsReady;
     ctx.body = activityView(allActions, filter, userId, q, { spreadMap, favIndex, returnTo, following });
   })
   .get("/profile", async (ctx) => {
@@ -8229,7 +8215,15 @@ router
       }
     } catch (_) {}
     const tribeReady = canPost && !!governingKey && await larpModel.houseTribeReady(governingKey).catch(() => false);
-    ctx.body = larpListView({ filter, houses, myHouseKey, cycle, governingKey, governingHouse, governingMembers, governingPosts, canPost, tribeReady, q: String(ctx.query.q || '').trim() });
+    const [decrees, decreeStatus, influence, solstice] = filter === 'ruling'
+      ? await Promise.all([
+          larpModel.listDecrees({ house: governingKey, period: larpModel.getGoverningPeriodId() }).catch(() => []),
+          larpModel.decreeStatus().catch(() => null),
+          larpModel.seasonInfluence().catch(() => []),
+          larpModel.solsticeHouse().catch(() => null)
+        ])
+      : [[], null, [], await larpModel.solsticeHouse().catch(() => null)];
+    ctx.body = larpListView({ filter, houses, myHouseKey, cycle, governingKey, governingHouse, governingMembers, governingPosts, canPost, tribeReady, q: String(ctx.query.q || '').trim(), decrees, decreeStatus, decreeError: String(ctx.query.decree || '') || null, influence, solstice });
   })
   .get("/larp/test", async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
@@ -8279,16 +8273,6 @@ router
     if (!result) return actionFail(ctx, `/larp/${encodeURIComponent(houseKey || '')}`);
     ctx.redirect(`/larp/${encodeURIComponent(houseKey)}?invite=${encodeURIComponent(result.code)}`);
   })
-  .post("/larp/invite/redeem", koaBody(), async (ctx) => {
-    if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
-    const code = String((ctx.request.body && ctx.request.body.code) || '').trim();
-    const ret = String((ctx.request.body && ctx.request.body.returnTo) || '').trim();
-    let result = null;
-    try { result = await larpModel.redeemHouseInvite(code); } catch (_) { result = null; }
-    if (result && result.ok) { await recordInviteUse('houses', `/larp/${encodeURIComponent(result.house)}`); return ctx.redirect(`/larp/${encodeURIComponent(result.house)}`); }
-    const back = isLocalPath(ret) ? ret : '/larp';
-    failWith(ctx, 'inviteCodeInvalid', back);
-  })
   .get("/larp/:house", async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
     const houseKey = String(ctx.params.house || '').toLowerCase();
@@ -8311,21 +8295,39 @@ router
     const governingKey = larpModel.getGoverningHouseKey();
     const canPost = myHouseKey === houseKey;
     const posts = await larpModel.listHousePosts(houseKey, { viewerHouse: myHouseKey, isGoverning: houseKey === governingKey });
-    const testStatus = houseKey === 'academia' ? await larpModel.canTakeTest(myFeedId) : null;
+    const testStatus = houseKey === 'academia' || myHouseKey === 'academia' ? await larpModel.canTakeTest(myFeedId) : null;
     const tribeReady = myHouseKey === houseKey && await larpModel.houseTribeReady(houseKey).catch(() => false);
     const questions = (houseKey === 'academia' && myHouseKey === 'academia' && testStatus && testStatus.allowed)
       ? larpModel.getProfileTest() : [];
     const house = { key: houseKey, ...houseRaw };
     const rawInvite = String(ctx.query?.invite || '').trim();
     const inviteCode = /^[0-9a-f]{32}$/i.test(rawInvite) && myHouseKey === houseKey ? rawInvite : null;
-    ctx.body = larpHouseView({ house, members, myHouseKey, cycle, governingKey, houses, posts, canPost, testStatus, inviteCode, questions, tribeReady });
+    const [decrees, decreeStatus, solstice] = await Promise.all([
+      houseKey === 'academia' ? [] : larpModel.listDecrees({ house: houseKey }).then(list => list.slice(0, 10)).catch(() => []),
+      houseKey === governingKey ? larpModel.decreeStatus().catch(() => null) : null,
+      larpModel.solsticeHouse().catch(() => null)
+    ]);
+    ctx.body = larpHouseView({ house, members, myHouseKey, cycle, governingKey, houses, posts, canPost, testStatus, inviteCode, questions, tribeReady, cyclesUntilRuling: larpModel.cyclesUntilRuling(houseKey), nextRulingAt: larpModel.nextRulingStart(houseKey), chooseStatus: myHouseKey === 'academia' && houseKey !== 'academia' ? testStatus : null, decrees, decreeStatus, decreeError: String(ctx.query.decree || '') || null, solstice });
   })
   .post("/larp/join", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
     const houseKey = String((ctx.request.body && ctx.request.body.house) || '').toLowerCase();
-    if (houseKey !== 'academia') { ctx.redirect('/larp'); return; }
+    if (houseKey !== 'academia') {
+      const chosen = await larpModel.chooseHouse(houseKey).catch(() => null);
+      if (!chosen || !chosen.ok) return ctx.redirect(`/larp/${encodeURIComponent(houseKey)}`);
+      return ctx.redirect(`/larp/${encodeURIComponent(houseKey)}`);
+    }
     try { await larpModel.publishJoin('academia'); } catch (_) { return actionFail(ctx); }
     ctx.redirect(safeReturnTo(ctx, '/larp/academia', ['/tribe/']));
+  })
+  .post("/larp/decree", koaBody(), async (ctx) => {
+    if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
+    const b = ctx.request.body || {};
+    const house = larpModel.getGoverningHouseKey();
+    let result = null;
+    try { result = await larpModel.proposeDecree({ title: stripDangerousTags(String(b.title || '')), description: stripDangerousTags(String(b.description || '')) }); } catch (_) { result = { ok: false, reason: 'votes' }; }
+    try { activityModel.invalidateCache(); } catch (_) {}
+    ctx.redirect(result && result.ok ? `/larp/${encodeURIComponent(house)}` : `/larp/${encodeURIComponent(house)}?decree=${encodeURIComponent((result && result.reason) || 'votes')}`);
   })
   .post("/larp/leave", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'larpMod')) return ctx.redirect('/modules');
@@ -8350,7 +8352,8 @@ router
     const text = stripDangerousTags(String(b.text || ''));
     const myFeedId = await meta.myFeedId();
     const myHouseKey = await larpModel.getUserHouse(myFeedId).catch(() => null);
-    if (myHouseKey !== houseKey) { ctx.redirect('/larp'); return; }
+    const mayPost = myHouseKey === houseKey || (houseKey === 'academia' && larpModel.HOUSE_KEYS.includes(myHouseKey));
+    if (!mayPost) { ctx.redirect('/larp'); return; }
     try { await larpModel.publishHousePost({ house: houseKey, text }); }
     catch (e) {
       if (isSsbTooLargeError(e)) { sendErrorPage(ctx, require('../views/main_views').i18n.publishTooLong || 'Your post is too long. Please shorten it.', { status: 400 }); return; }
@@ -8406,7 +8409,7 @@ router
     safeRefererRedirect(ctx, '/mentions');
   })
   .get('/opinions', async (ctx) => {
-    const filter = qf(ctx, 'ALL');
+    const filter = qf(ctx, 'TOP');
     const q = String(ctx.query.q || '').trim();
     let opinions = await opinionsModel.listOpinions(filter);
     if (Array.isArray(opinions)) opinions = await applyListFilters(opinions, ctx);
@@ -8426,6 +8429,7 @@ router
     const spreadMap = await spreads.forMessages(pageItems.map(it => it && it.key)).catch(() => new Map());
     const commentCounts = new Map((await attachCommentMeta(pageItems.filter(Boolean))).map(it => [it.key, it.commentCount || 0]));
     await warmAuthorNames(pageItems);
+    await attachPollsAndVotes(pageItems, getViewerId());
     ctx.body = await opinionsView(opinions, filter, spreadMap, q, allOpinions, { favIndex, commentCounts });
   })
   .get("/feed", async (ctx) => {
@@ -9917,7 +9921,7 @@ router
       return;
     }
     ctx.type = 'text/html';
-    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'audio', item });
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'audio', item: { ...item, details: detailsOf(await blobSizeOf(item.url)).map(v => `⇩ ${v}`) } });
   })
   .get("/c/market/:id", async (ctx) => {
     ctx.params.id = await clearnetIdFor('market', ctx.params.id);
@@ -9930,7 +9934,7 @@ router
       return;
     }
     ctx.type = 'text/html';
-    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'market', item: { ...item, author: seller, url: item.image || null, details: clearnetDetails('market', item) } });
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'market', item: { ...item, author: seller, url: item.image || null, details: clearnetMarketDetails(item) } });
   })
   .get("/c/feed/:id", async (ctx) => {
     ctx.params.id = await clearnetIdFor('feed', ctx.params.id);
@@ -9947,7 +9951,7 @@ router
     ctx.type = 'text/html';
     ctx.body = require('../views/clearnet_view').renderClearnetMediaView({
       kind: 'feed',
-      item: { title: '', description: text, createdAt: c.createdAt || (entry.value && entry.value.timestamp) || null, author, tags: [] }
+      item: { title: '', description: text, createdAt: c.createdAt || (entry.value && entry.value.timestamp) || null, author, tags: Array.isArray(c.tags) ? c.tags : [] }
     });
   })
   .get("/c/wiki/:id", async (ctx) => {
@@ -9998,7 +10002,7 @@ router
     ctx.type = 'text/html';
     ctx.body = require('../views/clearnet_view').renderClearnetMediaView({
       kind: 'bookmark',
-      item: { title: item.title || hostOf(item.url) || 'Bookmark', description: [item.url, item.description].filter(Boolean).join('\n\n'), createdAt: item.createdAt || null, author: item.author, tags: item.tags || [] }
+      item: { title: item.title || hostOf(item.url) || 'Bookmark', bookmarkUrl: item.url, description: item.description || '', createdAt: item.createdAt || null, author: item.author, tags: item.tags || [], details: item.lastVisit ? [`${require('../views/main_views').i18n.bookmarkLastVisit}: ${dayOf(tsOf(item.lastVisit))}`] : [] }
     });
   })
   .get("/c/podcasts/:id", async (ctx) => {
@@ -10055,7 +10059,7 @@ router
       return;
     }
     ctx.type = 'text/html';
-    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'video', item });
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'video', item: { ...item, details: detailsOf(await blobSizeOf(item.url)).map(v => `⇩ ${v}`) } });
   })
   .get("/c/images/:id", async (ctx) => {
     ctx.params.id = await clearnetIdFor('images', ctx.params.id);
@@ -10067,7 +10071,7 @@ router
       return;
     }
     ctx.type = 'text/html';
-    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'image', item });
+    ctx.body = require('../views/clearnet_view').renderClearnetMediaView({ kind: 'image', item: { ...item, details: detailsOf(await blobSizeOf(item.url)).map(v => `⇩ ${v}`) } });
   })
   .get("/c/documents/:id", async (ctx) => {
     ctx.params.id = await clearnetIdFor('documents', ctx.params.id);
@@ -10128,7 +10132,6 @@ router
       ctx.body = require('../views/clearnet_view').renderClearnetNotFound();
       return;
     }
-    const authorName = authorId ? await about.name(authorId).catch(() => '') : '';
     const latest = await blogModel.getBlogById(msgKey).catch(() => null);
     const full = latest ? { text: latest.text, contentWarning: latest.subject, tags: latest.tags } : await longText.joinChunks(ssbX, content, authorId).catch(() => content);
     ctx.type = 'text/html';
@@ -10136,7 +10139,6 @@ router
       msgKey,
       text: full.text || '',
       author: authorId,
-      authorName,
       contentWarning: full.contentWarning || '',
       sentAt: msg.timestamp || content.sentAt,
       tags: Array.isArray(full.tags) ? full.tags : []
@@ -10145,18 +10147,29 @@ router
   .get("/clearnet", async (ctx) => { ctx.redirect("/c"); })
   .get("/c", async (ctx) => {
     const index = await getClearnetIndex();
-    const authors = [];
     const items = {};
-    for (const entry of index) {
-      let count = 0;
-      for (const k of Object.keys(entry.items)) {
-        if (!items[k]) items[k] = [];
-        for (const it of entry.items[k]) { items[k].push({ ...it, authorName: entry.name || '', feedId: entry.feedId }); count++; }
-      }
-      authors.push({ feedId: entry.feedId, name: entry.name || '', count });
+    for (const entry of index) for (const k of Object.keys(entry.items)) items[k] = (items[k] || []).concat(entry.items[k]);
+    const filterType = String(ctx.query.type || '').toLowerCase();
+    let trending = [];
+    let trendingFeeds = [];
+    {
+      try {
+        const { CLEARNET_MODULES } = require('../views/main_views');
+        const byId = new Map();
+        for (const m of CLEARNET_MODULES) for (const it of (items[m.key] || [])) for (const id of [it.id, it.rootId]) if (id && !byId.has(id)) byId.set(id, { ...it, modulePath: m.modulePath || m.key, kind: m.kind, moduleKey: m.key });
+        if (!clearnetTrendingCache.keys || Date.now() - clearnetTrendingCache.at > CLEARNET_INDEX_TTL_MS) {
+          const { filtered } = await trendingModel.listTrending('TOP');
+          clearnetTrendingCache = { at: Date.now(), keys: (filtered || []).map(t => t.key) };
+        }
+        for (const key of clearnetTrendingCache.keys) {
+          const hit = byId.get(key);
+          const list = hit && hit.kind === 'feed' ? trendingFeeds : trending;
+          if (hit && !list.includes(hit)) list.push(hit);
+        }
+      } catch (_) { trending = []; trendingFeeds = []; }
     }
     ctx.type = 'text/html';
-    ctx.body = await clearnetHubView({ authors, items, tribes: await getClearnetTribes().catch(() => []), filterType: String(ctx.query.type || '').toLowerCase(), query: String(ctx.query.q || '').trim(), page: ctx.query.page, tribesPage: ctx.query.tpage });
+    ctx.body = await clearnetHubView({ items, tribes: await getClearnetTribes().catch(() => []), trending, trendingFeeds, filterType, query: String(ctx.query.q || '').trim(), page: ctx.query.page });
   })
   .get("/c/tribe/:id", async (ctx) => {
     const { clearnetSlugFor, clearnetShortId } = require('../views/main_views');
@@ -10177,15 +10190,11 @@ router
     const members = new Set(Array.isArray(tribe.members) ? tribe.members : []);
     for (const entry of await getClearnetIndex().catch(() => [])) {
       if (!members.has(entry.feedId)) continue;
-      for (const b of (entry.items.posts || [])) items.push({ id: b.id, contentType: 'blog', title: b.title, description: b.snippet, pdfs: Array.isArray(b.pdfs) ? b.pdfs : [], author: entry.feedId, createdAt: b.ts, href: `/c/blog/${encodeURIComponent(clearnetSlugFor(b.title, b.id))}` });
+      for (const b of (entry.items.posts || [])) items.push({ id: b.id, contentType: 'blog', title: b.title, description: b.snippet, pdfs: Array.isArray(b.pdfs) ? b.pdfs : [], createdAt: b.ts, href: `/c/blog/${encodeURIComponent(clearnetSlugFor(b.title, b.id))}` });
     }
     items.sort((a, b) => (new Date(b.createdAt).getTime() || 0) - (new Date(a.createdAt).getTime() || 0));
-    const names = {};
-    for (const it of items) {
-      if (it.author && !names[it.author]) names[it.author] = await about.name(it.author).catch(() => '');
-    }
     ctx.type = 'text/html';
-    ctx.body = await require('../views/tribes_view').clearnetTribeView({ tribe, items, names, slug: clearnetSlugFor(tribe.title, hit.id), page: ctx.query.page, filterType: String(ctx.query.type || ''), filterAuthor: String(ctx.query.author || '') });
+    ctx.body = await require('../views/tribes_view').clearnetTribeView({ tribe, items, slug: clearnetSlugFor(tribe.title, hit.id), page: ctx.query.page, filterType: String(ctx.query.type || '') });
   })
   .get(["/c/sitemap.xml", "/sitemap.xml"], async (ctx) => {
     const { escapeHtml: esc } = require('../views/clearnet_view');
@@ -12292,20 +12301,20 @@ router
     ctx.redirect('/backup?type=RESTORE');
   })
 
-  .post('/trending/:contentId/:category', async (ctx) => {
+  .post('/trending/:contentId/:category', koaBody(), async (ctx) => {
     const { contentId, category } = ctx.params, voterId = SSBconfig?.keys?.id;
     if (await denyTribeContent(ctx, contentId)) return;
     const target = await trendingModel.getMessageById(contentId);
     if (target?.content?.type === 'post') {
       try { await blogModel.createOpinion(contentId, category); } catch (_) { return failWith(ctx, 'opinionAlreadyGiven', '/trending'); }
-      ctx.redirect('/trending');
+      ctx.redirect(safeReturnTo(ctx, '/trending', ['/trending']));
       return;
     }
     if (target?.content && !target.content.opinions && !require('./opinion_categories').opinable(target.content)) return actionFail(ctx);
     if (target?.content?.opinions_inhabitants?.includes(voterId) || (await opinionsModel.tallyOf([contentId])).opinions_inhabitants.includes(voterId)) {
       return failWith(ctx, 'opinionAlreadyGiven', '/trending');
     }
-    await trendingModel.createVote(contentId, category); ctx.redirect('/trending');
+    await trendingModel.createVote(contentId, category); ctx.redirect(safeReturnTo(ctx, '/trending', ['/trending']));
   })
   .post('/opinions/:contentId/:category', koaBody(), async (ctx) => {
     const { contentId, category } = ctx.params, voterId = SSBconfig?.keys?.id;
@@ -16229,6 +16238,8 @@ const refreshAll = async (now) => {
   try { await checkPoliticalChanges(); } catch (_) {}
   try { await checkJobMatches(); } catch (_) {}
   try { await checkNewSupporters(); } catch (_) {}
+  try { await larpModel.settleMyDecrees(); } catch (_) {}
+  try { await checkLarpBot(); } catch (_) {}
   try {
     const peers = await meta.connectedPeers();
     sharedState.setOnlinePeerCount(Array.isArray(peers) ? peers.length : 0);
@@ -16280,6 +16291,21 @@ const refreshAll = async (now) => {
     }
   } catch (_) {}
 };
+let networkCountsReady = false;
+let networkCountsLoad = null;
+const ensureNetworkCounts = async () => {
+  if (networkCountsReady) return;
+  if (sharedState.getInhabitantCount() && sharedState.getTribesCount()) { networkCountsReady = true; return; }
+  if (!networkCountsLoad) {
+    networkCountsLoad = Promise.all([
+      inhabitantsModel.countInhabitants().then(n => { if (!sharedState.getInhabitantCount()) sharedState.setInhabitantCount(n || 1); }),
+      tribesModel.listAll().then(list => { if (!sharedState.getTribesCount()) sharedState.setTribesCount((list || []).length); })
+    ]).then(() => { networkCountsReady = true; }).catch(() => {}).finally(() => { networkCountsLoad = null; });
+  }
+  let timer = null;
+  await Promise.race([networkCountsLoad, new Promise((resolve) => { timer = setTimeout(resolve, 3000); })]);
+  clearTimeout(timer);
+};
 let refreshRunning = false;
 const kickRefresh = () => {
   if (refreshRunning) return;
@@ -16306,6 +16332,14 @@ const middleware = [
     await next();
   },
   async (ctx, next) => { await require('../models/typed_log').requestScope.run({ capped: false, limit: 0, path: ctx.path, query: ctx.querystring, method: ctx.method, ...(ctx.state.keepFields ? { keepFields: ctx.state.keepFields } : {}), ...(isClearnetPath(ctx.request) ? { cnBase: resolveExternalBaseUrl(ctx) } : {}) }, next); },
+  async (ctx, next) => {
+    const store = ctx.method === 'GET' && isClearnetPage(ctx.path) ? require('../models/typed_log').requestScope.getStore() : null;
+    if (store) {
+      await ensureNetworkCounts();
+      store.clearnet = { stats: { node: ctx.hostname, pubs: federatedPubCount(), inhabitants: sharedState.getInhabitantCount() } };
+    }
+    await next();
+  },
   async (ctx, next) => {
     if (ctx.method === 'GET' && !config.public && !COMMENT_INDEX_SKIP_RE.test(ctx.path)) await publishScheduled();
     const store = ctx.method === 'GET' && !COMMENT_INDEX_SKIP_RE.test(ctx.path) ? require('../models/typed_log').requestScope.getStore() : null;
@@ -16716,7 +16750,7 @@ function buildLarpRulingMsg(data = {}, t = {}) {
     [
       `${t.larpRolesLabel || 'Roles'}: ${house.roles || ''}`,
       `${t.larpFunctionLabel || 'Function'}: ${house.function || ''}`,
-      `${t.larpMonthLabel || 'Governance cycle'}: ${house.month != null ? house.month : ''}`,
+      `${t.larpMonthLabel || 'Governance cycle'}: ${house.wheel != null ? house.wheel : ''}`,
       `${t.larpMembersCount || 'Members'}: ${data.memberCount || 0}`
     ],
     [house.motto ? `“${house.motto}”` : '']
@@ -16794,6 +16828,117 @@ async function checkNewSupporters() {
   }
 }
 
+let larpBotRunning = false;
+async function checkLarpBot() {
+  if (larpBotRunning || config.public || ((getConfig().modules || {}).larpMod === 'off')) return;
+  larpBotRunning = true;
+  try {
+    const ssbClient = await cooler.open().catch(() => null);
+    if (!ssbClient || !ssbClient.id) return;
+    const me = ssbClient.id;
+    const i18nAll = require('../client/assets/translations/i18n');
+    const t = i18nAll[(getConfig() && getConfig().language) || 'en'] || i18nAll.en;
+    const houseLink = (k) => `[${((larpModel.getHouse(k) || {}).name) || k}](/larp/${encodeURIComponent(k)})`;
+    const announced = await pmModel.sentRefs().catch(() => new Set());
+    const alreadyAnnounced = (subject, ref) => announced.has(`${subject}|${ref}`);
+    const seen = pmPolicy.readAnnounceSeen();
+    const send = async (subject, body, ref) => {
+      const { send: shouldSend, remember } = pmPolicy.decideAnnouncement({ subject, ref, announced, seen });
+      if (!shouldSend) {
+        if (remember) { seen[subject] = String(ref); pmPolicy.writeAnnounceSeen(seen); }
+        return;
+      }
+      try {
+        await notifyBot(subject, [], body, { ref });
+        announced.add(`${subject}|${ref}`);
+        seen[subject] = String(ref);
+        pmPolicy.writeAnnounceSeen(seen);
+      } catch (e) { if (config.debug) console.error('[larp-bot] send failed:', e && e.message); }
+    };
+    try {
+      const houseKey = larpModel.getGoverningHouseKey();
+      if (houseKey) {
+        let cycleFormatted = '';
+        try { cycleFormatted = larpModel.computeCycle().formatted; } catch (_) {}
+        const ref = larpModel.getGoverningPeriodId();
+        if (!alreadyAnnounced('LARP_RULING', ref)) {
+          const house = (larpModel.getHouse && larpModel.getHouse(houseKey)) || {};
+          let memberCount = 0;
+          try { const hc = await larpModel.listHousesWithCounts(); const h = (hc || []).find(x => x.key === houseKey); memberCount = h ? (h.memberCount || 0) : 0; } catch (_) {}
+          const { subject, body } = buildLarpRulingMsg({ houseKey, house, memberCount, cycleFormatted }, t);
+          await send(subject, body, ref);
+        }
+      }
+    } catch (e) { if (config.debug) console.error('[larp-bot] ruling:', e && e.message); }
+
+    const previous = pmPolicy.readLarpSeen();
+    const state = previous || {};
+    const now = new Date();
+    const w = larpModel.getCycleWindow(now);
+    const myHouse = await larpModel.getUserHouse(me).catch(() => null);
+    const notices = [];
+    if (myHouse && larpModel.RULING_KEYS.includes(myHouse) && larpModel.cyclesUntilRuling(myHouse, now) === 1 && w.end.getTime() - now.getTime() <= 7 * 86400000) {
+      const nextRef = larpModel.getGoverningPeriodId(w.end);
+      if (state.next !== nextRef) {
+        state.next = nextRef;
+        notices.push({ subject: 'LARP_NEXT', current: true, body: pbFill(t.larpBotNextBody, { house: houseLink(myHouse), date: larpModel.computeCycle(w.end).formatted }) });
+      }
+    }
+    const decrees = await larpModel.listDecrees().catch(() => []);
+    const seenDecrees = new Set(state.decrees || []);
+    const seenResults = new Set(state.results || []);
+    for (const d of decrees.slice().reverse()) {
+      if (d.outcome === 'OPEN' && !seenDecrees.has(d.id)) {
+        seenDecrees.add(d.id);
+        if (d.author !== me) notices.push({ subject: 'LARP_DECREE', body: pbFill(t.larpBotDecreeBody, { house: houseLink(d.house), title: `[${d.title}](/votes/${encodeURIComponent(d.voteId)})` }) });
+      }
+      if ((d.status === 'ENACTED' || d.status === 'REJECTED') && !seenResults.has(d.id)) {
+        seenResults.add(d.id);
+        if (d.house === myHouse) notices.push({ subject: 'LARP_DECREE_RESULT', body: pbFill(d.status === 'ENACTED' ? t.larpBotDecreeEnacted : t.larpBotDecreeRejected, { house: houseLink(d.house), title: d.status === 'ENACTED' ? `[${d.title}](/parliament?filter=laws)` : d.title }) });
+      }
+    }
+    state.decrees = [...seenDecrees].slice(-200);
+    state.results = [...seenResults].slice(-200);
+    if (myHouse) {
+      const posts = await larpModel.listHousePosts(myHouse, { viewerHouse: myHouse }).catch(() => []);
+      const seenPosts = new Set(state.posts || []);
+      let wallNotices = 0;
+      for (const post of posts.slice().reverse()) {
+        if (seenPosts.has(post.id)) continue;
+        seenPosts.add(post.id);
+        if (post.author === me || wallNotices >= 5) continue;
+        wallNotices += 1;
+        notices.push({ subject: 'LARP_WALL', body: pbFill(t.larpBotWallBody, { author: await actorLink(post.author), house: houseLink(myHouse) }) });
+      }
+      state.posts = [...seenPosts].slice(-300);
+    }
+    if (myHouse === 'academia') {
+      const can = await larpModel.canTakeTest(me).catch(() => null);
+      const key = `test:${(can && can.last && can.last.ts) || 'none'}`;
+      if (can && can.allowed && state.test !== key) {
+        state.test = key;
+        notices.push({ subject: 'LARP_TEST', current: true, body: pbFill(t.larpBotTestBody, { link: '[/larp/test](/larp/test)' }) });
+      }
+    } else {
+      state.test = null;
+    }
+    const solstice = await larpModel.solsticeHouse(now).catch(() => null);
+    if (solstice && state.solstice !== solstice.season) {
+      state.solstice = solstice.season;
+      notices.push({ subject: 'LARP_SOLSTICE', body: pbFill(t.larpBotSolsticeBody, { house: houseLink(solstice.house), points: solstice.points }) });
+    }
+    pmPolicy.writeLarpSeen(state);
+    for (const n of notices) {
+      if (!previous && !n.current) continue;
+      try { await notifyBot(n.subject, [], n.body); } catch (e) { if (config.debug) console.error('[larp-bot] send failed:', e && e.message); }
+    }
+  } catch (e) {
+    if (config.debug) console.error('[larp-bot] failed:', e && e.message);
+  } finally {
+    larpBotRunning = false;
+  }
+}
+
 async function checkJobMatches() {
   if (jobsBotRunning) return;
   jobsBotRunning = true;
@@ -16864,21 +17009,6 @@ async function checkPoliticalChanges() {
       } catch (e) { console.error('[political-bot] send failed:', e && e.message); }
     };
 
-    try {
-      const houseKey = larpModel.getGoverningHouseKey();
-      if (houseKey) {
-        let cycleFormatted = '';
-        try { cycleFormatted = larpModel.computeCycle().formatted; } catch (_) {}
-        const ref = larpModel.getGoverningPeriodId();
-        if (!alreadyAnnounced('LARP_RULING', ref)) {
-          const house = (larpModel.getHouse && larpModel.getHouse(houseKey)) || {};
-          let memberCount = 0;
-          try { const hc = await larpModel.listHousesWithCounts(); const h = (hc || []).find(x => x.key === houseKey); memberCount = h ? (h.memberCount || 0) : 0; } catch (_) {}
-          const { subject, body } = buildLarpRulingMsg({ houseKey, house, memberCount, cycleFormatted }, t);
-          await send(subject, body, ref);
-        }
-      }
-    } catch (e) { console.error('[political-bot] larp:', e && e.message); }
 
     try {
       const card = await parliamentModel.getLatestGovernmentCard().catch(() => null);

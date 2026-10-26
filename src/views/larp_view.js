@@ -1,10 +1,11 @@
 const { div, h1, h2, h3, p, section, button, form, input, span, img, a, br, table, tr, td, textarea, label, strong, details, summary } = require("../server/node_modules/hyperaxe");
 const { renderStyledText } = require("../backend/renderStyledText");
-const { template, i18n, userLink, paged, renderIcon } = require("./main_views");
+const { template, i18n, userLink, paged, renderIcon, renderStateChip } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
 const moment = require("../server/node_modules/moment");
+const { larpDate } = require("../models/larp_model");
 
 const fmtCycle = (c) => c && c.formatted ? c.formatted : '';
 
@@ -43,7 +44,7 @@ const renderHouseNav = (houses, currentKey) => div({ class: 'larp-house-nav' },
   }, h.name))
 );
 
-const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cyclesUntilRuling, canTakeTest = false, tribeReady = false }) => {
+const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cyclesUntilRuling, nextRulingAt = null, chooseStatus = null, canTakeTest = false, tribeReady = false }) => {
   const { renderEncryptedChip } = require('./clearnet_view');
   const isInHouse = viewerHouseKey === house.key;
   const isInLarp = viewerHouseKey !== null && viewerHouseKey !== undefined;
@@ -53,7 +54,7 @@ const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cycl
   const canLeaveToAcademia = isInHouse && !isAcademia;
   const canLeaveLarp = isInHouse && isAcademia;
   const canJoinAcademia = !isInLarp && isAcademia;
-  const showInviteForm = !isAcademia && !isInHouse && (viewerHouseKey === 'academia' || !isInLarp);
+  const canChoose = !isAcademia && viewerHouseKey === 'academia' && !!chooseStatus;
   return div({ class: 'larp-detail' },
   div({ class: 'larp-detail-image-col' },
     img({ src: houseImageSrc(house), alt: house.name, class: 'larp-detail-image' })
@@ -70,9 +71,9 @@ const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cycl
     table({ class: 'larp-info-table' },
       tr(td({ class: 'card-label' }, i18n.larpRolesLabel || 'Roles'),     td({ class: 'card-value' }, house.roles)),
       tr(td({ class: 'card-label' }, i18n.larpFunctionLabel || 'Function'), td({ class: 'card-value' }, house.function)),
-      tr(td({ class: 'card-label' }, i18n.larpMonthLabel || 'Governance cycle'), td({ class: 'card-value' }, String(house.month || ''))),
-      (typeof cyclesUntilRuling === 'number' && cyclesUntilRuling > 0)
-        ? tr(td({ class: 'card-label' }, i18n.larpCyclesUntilRuling || 'Next governance cycle'), td({ class: 'card-value' }, String(cyclesUntilRuling)))
+      house.wheel ? tr(td({ class: 'card-label' }, i18n.larpMonthLabel || 'Governance cycle'), td({ class: 'card-value' }, String(house.wheel))) : null,
+      (typeof cyclesUntilRuling === 'number' && cyclesUntilRuling > 0 && nextRulingAt)
+        ? tr(td({ class: 'card-label' }, i18n.larpCyclesUntilRuling || 'Next governance cycle'), td({ class: 'card-value' }, larpDate(nextRulingAt)))
         : null,
       tr(td({ class: 'card-label' }, i18n.larpMembersCount || 'Members'), td({ class: 'card-value' }, String(Array.isArray(members) ? members.length : (house.memberCount || 0))))
     ),
@@ -98,7 +99,7 @@ const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cycl
         : null,
       canLeaveLarp
         ? form({ method: 'POST', action: '/larp/leave' },
-            button({ type: 'submit', class: 'filter-btn danger-btn' }, i18n.larpLeaveToAcademia || 'Leave House')
+            button({ type: 'submit', class: 'filter-btn danger-btn' }, i18n.larpLeaveLarp)
           )
         : null,
       canJoinAcademia
@@ -107,12 +108,14 @@ const renderHousePanel = (house, members, posts, { canPost, viewerHouseKey, cycl
             button({ type: 'submit', class: 'filter-btn' }, i18n.larpInviteRedeem || 'Join House')
           )
         : null,
-      showInviteForm
-        ? form({ method: 'POST', action: '/larp/invite/redeem', class: 'larp-card-invite-form' },
-            input({ type: 'hidden', name: 'returnTo', value: `/larp/${house.key}` }),
-            input({ type: 'text', name: 'code', placeholder: i18n.larpInvitePlaceholder || 'Invitation code', maxlength: '32', required: 'required' }),
-            button({ type: 'submit', class: 'filter-btn' }, i18n.larpInviteRedeem || 'Join House')
+      canChoose && chooseStatus.allowed
+        ? form({ method: 'POST', action: '/larp/join' },
+            input({ type: 'hidden', name: 'house', value: house.key }),
+            button({ type: 'submit', class: 'filter-btn' }, i18n.larpChooseHouse || 'Choose this house')
           )
+        : null,
+      canChoose && !chooseStatus.allowed
+        ? span({ class: 'larp-test-cooldown-banner' }, `${i18n.larpChooseCooldown || 'You can choose a house again in'} ${formatCooldown(chooseStatus.nextAt - Date.now())} ${i18n.larpTestCooldownDays || 'cycles'}`)
         : null
     )
   )
@@ -158,7 +161,7 @@ const renderAcademiaJoinPanel = (allHouses, testStatus, housesById, questions, m
             last.ts
               ? tr(
                   td({ class: 'card-label' }, i18n.larpLastAttemptWhen || 'When'),
-                  td({ class: 'card-value' }, moment(last.ts).format('YYYY/MM/DD HH:mm:ss'))
+                  td({ class: 'card-value' }, `${larpDate(last.ts)} ${moment(last.ts).format('HH:mm')}`)
                 )
               : null,
             !testStatus.allowed
@@ -189,33 +192,125 @@ const renderAcademiaJoinPanel = (allHouses, testStatus, housesById, questions, m
 };
 
 
-const renderPostsBlock = (posts, house, canPost) => {
+const DECREE_CHIP = { OPEN: 'mutuals', APPROVED: 'pending', ENACTED: 'mutuals', REJECTED: 'closed' };
+const decreeStatusLabel = (outcome) => ({
+  OPEN: i18n.larpDecreeStatusOpen, APPROVED: i18n.larpDecreeStatusApproved, ENACTED: i18n.larpDecreeStatusEnacted, REJECTED: i18n.larpDecreeStatusRejected
+})[outcome] || outcome;
+const decreeResultLabel = (d) => d.outcome === 'REJECTED' && (Number(d.yes) === Number(d.no) || Number(d.voters) < Number(d.minVoters))
+  ? i18n.voteNoQuorum
+  : decreeStatusLabel(d.outcome);
+const DECREE_ERRORS = { 'not-governing': 'larpDecreeErrorNotGoverning', limit: 'larpDecreeErrorLimit', late: 'larpDecreeErrorLate', title: 'larpDecreeErrorTitle', votes: 'larpDecreeErrorVotes' };
+
+const renderDecreeCard = (d) => div({ class: 'card larp-decree' },
+  div({ class: 'title-with-chip' },
+    h3(d.title),
+    renderStateChip(DECREE_CHIP[d.outcome] || 'whole', '', String(decreeStatusLabel(d.outcome) || '').toUpperCase())
+  ),
+  d.description ? p(...renderStyledText(d.description)) : null,
+  table({ class: 'larp-info-table' },
+    d.deadline ? tr(td({ class: 'card-label' }, i18n.larpDecreeDeadline), td({ class: 'card-value', colspan: '2' }, `${larpDate(d.deadline)} ${moment(d.deadline).format('HH:mm')}`)) : null,
+    tr(td({ class: 'card-label' }, i18n.larpDecreeTally), td({ class: 'card-value larp-decree-yes' }, `${i18n.voteOptionYes || 'Yes'}: ${d.yes}`), td({ class: 'card-value larp-decree-no' }, `${i18n.voteOptionNo || 'No'}: ${d.no}`)),
+    tr(td({ class: 'card-label' }, i18n.larpDecreeVoters), td({ class: 'card-value', colspan: '2' }, `${d.voters} / ${d.minVoters}`)),
+    tr(td({ class: 'card-label' }, i18n.larpDecreeProposer), td({ class: 'card-value', colspan: '2' }, userLink(d.author))),
+    tr(td({ class: 'card-label' }, i18n.larpDecreeResult), td({ class: 'card-value', colspan: '2' }, String(decreeResultLabel(d) || '').toUpperCase()))
+  ),
+  d.outcome === 'OPEN'
+    ? a({ href: `/votes/${encodeURIComponent(d.voteId)}`, class: 'filter-btn' }, i18n.larpDecreeVote)
+    : d.outcome === 'ENACTED'
+      ? a({ href: '/parliament?filter=laws', class: 'filter-btn' }, i18n.larpDecreeSeeLaw)
+      : null
+);
+
+const renderDecreesBlock = (decrees, house, { decreeStatus = null, viewerHouseKey = null, error = null } = {}) => {
+  const list = Array.isArray(decrees) ? decrees : [];
+  const canWrite = decreeStatus && decreeStatus.house === house.key && viewerHouseKey === house.key;
+  if (!list.length && !canWrite) return null;
+  return div({ class: 'larp-posts-block larp-decrees-block' },
+    h2(i18n.larpDecreesTitle),
+    error && DECREE_ERRORS[error] ? p({ class: 'larp-test-cooldown-banner' }, i18n[DECREE_ERRORS[error]]) : null,
+    canWrite && decreeStatus.allowed
+      ? form({ method: 'POST', action: '/larp/decree', class: 'larp-post-form' },
+          input({ type: 'text', name: 'title', maxlength: '160', required: 'required', placeholder: i18n.larpDecreeTitlePlaceholder }),
+          textarea({ name: 'description', rows: '3', maxlength: '1000', placeholder: i18n.larpDecreeDescriptionPlaceholder }),
+          button({ type: 'submit', class: 'filter-btn larp-post-submit' }, i18n.larpDecreePropose)
+        )
+      : canWrite && DECREE_ERRORS[decreeStatus.reason]
+        ? p({ class: 'larp-test-cooldown-banner' }, i18n[DECREE_ERRORS[decreeStatus.reason]])
+        : null,
+    list.length ? div({ class: 'larp-posts-list' }, list.map(renderDecreeCard)) : p({ class: 'empty' }, i18n.larpDecreesEmpty)
+  );
+};
+
+const renderInfluenceTable = (rows, houses) => {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return null;
+  const byKey = Object.fromEntries((houses || []).map(h => [h.key, h]));
+  return div({ class: 'larp-posts-block larp-influence-block' },
+    h2(i18n.larpInfluenceTitle),
+    table({ class: 'block-info-table' },
+      tr(
+        td({ class: 'card-label' }, i18n.larpInfluenceHouse),
+        td({ class: 'card-label' }, i18n.larpInfluencePoints),
+        td({ class: 'card-label' }, i18n.larpInfluenceLaws),
+        td({ class: 'card-label' }, i18n.larpInfluenceVotes)
+      ),
+      ...list.map(r => tr(
+        td({ 'data-label': i18n.larpInfluenceHouse }, a({ href: `/larp/${encodeURIComponent(r.house)}` }, (byKey[r.house] && byKey[r.house].name) || r.house)),
+        td({ 'data-label': i18n.larpInfluencePoints }, String(r.points)),
+        td({ 'data-label': i18n.larpInfluenceLaws }, String(r.laws)),
+        td({ 'data-label': i18n.larpInfluenceVotes }, String(r.votes))
+      ))
+    )
+  );
+};
+
+const renderSolsticeBanner = (solstice, houses) => {
+  if (!solstice) return null;
+  const house = (houses || []).find(h => h.key === solstice.house);
+  if (!house) return null;
+  return a({ href: `/larp/${encodeURIComponent(house.key)}`, class: 'larp-invite-banner larp-solstice-banner' },
+    img({ src: houseImageSrc(house), alt: house.name, class: 'larp-solstice-image' }),
+    span({ class: 'larp-solstice-text' },
+      span({ class: 'larp-invite-banner-title' }, i18n.larpSolsticeHouse),
+      strong(house.name),
+      span({ class: 'larp-invite-banner-hint' }, String(i18n.larpSolsticePoints || '').replace('{points}', String(solstice.points)))
+    )
+  );
+};
+
+const renderPostsBlock = (posts, house, canPost, housesById = {}) => {
   const stream = (Array.isArray(posts) ? posts : [])
-    .map(post => ({ ts: Date.parse(post.createdAt) || post.ts || 0, post }))
+    .map(post => ({ ts: post.ts || Date.parse(post.createdAt) || 0, post }))
     .sort((a, b) => b.ts - a.ts);
 
   return div({ class: 'larp-posts-block' },
     h2(i18n.larpPostsTitle || 'Wall'),
     canPost
-      ? form({ method: 'POST', action: '/larp/post', class: 'larp-post-form' },
-          input({ type: 'hidden', name: 'house', value: house.key }),
-          textarea({ id: 'larp_post_text', name: 'text', rows: '3', placeholder: i18n.larpPostPlaceholder || 'What does this house need to say?' }),
-          button({ type: 'submit', class: 'filter-btn larp-post-submit' }, i18n.larpPostSubmit || 'Publish')
+      ? div({ class: 'comment-form-wrapper' },
+          form({ method: 'POST', action: '/larp/post', class: 'comment-form' },
+            input({ type: 'hidden', name: 'house', value: house.key }),
+            textarea({ id: 'larp_post_text', name: 'text', rows: '4', class: 'comment-textarea', placeholder: i18n.larpPostPlaceholder || 'What does this house need to say?' }),
+            button({ type: 'submit', class: 'comment-submit-btn' }, i18n.larpPostSubmit || 'Publish')
+          )
         )
       : null,
     stream.length === 0
-      ? p({ class: 'empty' }, i18n.larpPostsEmpty || 'No posts yet.')
-      : div({ class: 'larp-posts-list' },
-          paged(stream).map(entry => div({ class: entry.post.author === userId ? 'larp-post own-comment' : 'larp-post' },
+      ? p({ class: 'votations-no-comments' }, i18n.larpPostsEmpty || 'No posts yet.')
+      : div({ class: 'comments-list' },
+          paged(stream).map(entry => div({ class: entry.post.author === userId ? 'votations-comment-card own-comment' : 'votations-comment-card', id: entry.post.id || undefined },
             entry.post.author === userId && entry.post.id
               ? form({ method: 'POST', action: `/larp/post/delete/${encodeURIComponent(entry.post.id)}`, class: 'comment-delete-form' },
                   button({ type: 'submit', class: 'btn-singleview btn-delete', title: i18n.chatDelete }, renderIcon('close')))
               : null,
-            div({ class: 'larp-post-head' },
+            span({ class: 'created-at' },
               userLink(entry.post.author),
-              span({ class: 'larp-post-time' }, moment(entry.post.createdAt).format('YYYY/MM/DD HH:mm'))
+              house.key === 'academia' && entry.post.authorHouse && entry.post.authorHouse !== 'academia' && housesById[entry.post.authorHouse]
+                ? [' ', a({ href: `/larp/${encodeURIComponent(entry.post.authorHouse)}` }, renderStateChip('whole', '', String(housesById[entry.post.authorHouse].name || entry.post.authorHouse).toUpperCase()))]
+                : null,
+              span(' | '),
+              span({ class: 'votations-comment-date' }, `${larpDate(entry.post.createdAt)} ${moment(entry.post.createdAt).format('HH:mm')}`)
             ),
-            p({ class: 'larp-post-text' }, ...renderStyledText(String(entry.post.text || '')))
+            p({ class: 'votations-comment-text' }, ...renderStyledText(String(entry.post.text || ''), { zoomImages: true }))
           ))
         )
   );
@@ -248,10 +343,12 @@ const renderRules = () => {
   const points = [
     i18n.larpRulesEntryText,
     i18n.larpRulesOneHouseText,
-    i18n.larpRulesTestEntryText,
-    i18n.larpRulesInviteEntryText,
+    i18n.larpRulesTribeText,
     i18n.larpRulesGovernanceText,
+    i18n.larpRulesDecreesText,
+    i18n.larpRulesInfluenceText,
     i18n.larpRulesWallText,
+    i18n.larpRulesBotText,
     i18n.larpRulesSignText
   ];
   return div(
@@ -301,7 +398,7 @@ const renderHousesGrid = (houses, myHouseKey, governingKey) => {
   );
 };
 
-exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, governingHouse, governingMembers, governingPosts, canPost, tribeReady, q }) => {
+exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, governingHouse, governingMembers, governingPosts, canPost, tribeReady, q, decrees = [], decreeStatus = null, decreeError = null, influence = [], solstice = null }) => {
   const title = i18n.larpTitle || 'L.A.R.P.';
   const description = i18n.larpDescription || 'A live action role-playing layer for collaborative experimentation.';
   const myHouse = houses.find(h => h.key === myHouseKey) || null;
@@ -319,6 +416,7 @@ exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, gover
       renderModeButtons(mode),
       renderCycleBanner(cycle),
       renderHouseBadges({ myHouse, governingHouse, houses }),
+      renderSolsticeBanner(solstice, houses),
       mode === 'houses'
         ? (matched.length
             ? renderHousesGrid(matched, myHouseKey, governingKey)
@@ -326,33 +424,24 @@ exports.larpListView = ({ filter, houses, myHouseKey, cycle, governingKey, gover
         : mode === 'rules'
           ? renderRules()
           : [
+              h2(i18n.larpBadgeRuling || 'Ruling'),
               renderHousePanel(governingHouse, governingMembers, governingPosts, { canPost, viewerHouseKey: myHouseKey, cyclesUntilRuling: 0, tribeReady }),
+              renderInfluenceTable(influence, houses),
+              renderDecreesBlock(decrees, governingHouse, { decreeStatus, viewerHouseKey: myHouseKey, error: decreeError }),
               renderPostsBlock(governingPosts, governingHouse, canPost)
             ]
     )
   );
 };
 
-const computeCyclesUntilRuling = (house, governingKey, now = new Date()) => {
-  if (!house || house.key === governingKey) return 0;
-  const houseIdx = (Number(house.month) || 1) - 1;
-  const currentMonth = now.getMonth();
-  for (let i = 1; i <= 12; i += 1) {
-    const futureMonth = (currentMonth + i) % 12;
-    if (futureMonth % 9 === houseIdx) return i;
-  }
-  return 0;
-};
-
-exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, houses, posts, canPost, testStatus, inviteCode, questions, tribeReady }) => {
+exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, houses, posts, canPost, testStatus, inviteCode, questions, tribeReady, cyclesUntilRuling = null, nextRulingAt = null, chooseStatus = null, decrees = [], decreeStatus = null, decreeError = null, solstice = null }) => {
   const myHouse = houses.find(h => h.key === myHouseKey) || null;
   const governingHouse = houses.find(h => h.key === governingKey) || null;
   const isAcademia = house.key === 'academia';
   const viewerInAcademia = myHouseKey === 'academia';
   const viewerIsMember = myHouseKey === house.key && house.key !== 'academia';
-  const canWriteWall = myHouseKey === house.key;
+  const canWriteWall = myHouseKey === house.key || (isAcademia && houses.some(h => h.key === myHouseKey));
   const showWall = viewerIsMember || house.key === governingKey || house.key === 'academia';
-  const cycles = computeCyclesUntilRuling(house, governingKey);
   const housesById = Object.fromEntries(houses.map(h => [h.key, h]));
 
   return template(
@@ -364,11 +453,14 @@ exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, hous
       ),
       renderCycleBanner(cycle),
       renderHouseBadges({ myHouse, governingHouse, houses }),
+      renderSolsticeBanner(solstice, houses),
       renderHouseNav(houses, house.key),
       renderHousePanel(house, members, posts, {
         canPost,
         viewerHouseKey: myHouseKey,
-        cyclesUntilRuling: cycles,
+        cyclesUntilRuling,
+        nextRulingAt,
+        chooseStatus,
         tribeReady,
         canTakeTest: isAcademia && viewerInAcademia && !!(testStatus && testStatus.allowed)
       }),
@@ -379,9 +471,9 @@ exports.larpHouseView = ({ house, members, myHouseKey, cycle, governingKey, hous
             p({ class: 'larp-invite-banner-code' }, inviteCode)
           )
         : null,
-      null,
+      renderDecreesBlock(decrees, house, { decreeStatus, viewerHouseKey: myHouseKey, error: decreeError }),
       showWall
-        ? renderPostsBlock(posts, house, canWriteWall)
+        ? renderPostsBlock(posts, house, canWriteWall, housesById)
         : null
     )
   );
@@ -461,3 +553,5 @@ exports.larpTestResultView = ({ house, result, cycle, houses, myHouseKey, govern
     )
   );
 };
+
+exports.renderInfluenceTable = renderInfluenceTable;

@@ -95,25 +95,41 @@ describe('larp: governance cycle', (t) => {
     ok(HOUSES.includes(cycle.houseKey));
   });
 
-  t('getGoverningHouseKey maps month index to house', async () => {
+  t('the eight houses govern in turn on the wheel of the year and ACADEMIA never governs', async () => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();
     const lm = A.use('larp');
-    for (let i = 0; i < 12; i += 1) {
-      const d = new Date(2026, i, 15);
-      eq(lm.getGoverningHouseKey(d), HOUSES[i % 9]);
-    }
+    const starts = [new Date(2026, 11, 21), new Date(2027, 1, 4), new Date(2027, 2, 21), new Date(2027, 4, 6), new Date(2027, 5, 21), new Date(2027, 7, 5), new Date(2027, 8, 22), new Date(2027, 10, 6)];
+    starts.forEach((d, i) => eq(lm.getGoverningHouseKey(d), HOUSES[i + 1]));
+    eq(lm.getGoverningHouseKey(new Date(2027, 1, 3)), 'solaris', 'the day before a change still belongs to the previous house');
+    for (let m = 0; m < 12; m += 1) notOk(lm.getGoverningHouseKey(new Date(2027, m, 15)) === 'academia');
+  });
+
+  t('a cycle knows when it ends, its season, and when each house rules next', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const lm = A.use('larp');
+    const w = lm.getCycleWindow(new Date(2027, 2, 30));
+    eq(w.houseKey, 'terraverde');
+    eq(w.end.getTime(), new Date(2027, 4, 6).getTime());
+    eq(w.season, 1);
+    eq(w.seasonEnd.getTime(), new Date(2027, 5, 21).getTime());
+    eq(lm.getCycleWindow(new Date(2027, 6, 1)).season, 2);
+    eq(lm.nextRulingStart('solaris', new Date(2027, 2, 30)).getTime(), new Date(2027, 11, 21).getTime());
+    eq(lm.cyclesUntilRuling('terraverde', new Date(2027, 2, 30)), 0);
+    eq(lm.cyclesUntilRuling('unsystem', new Date(2027, 2, 30)), 1);
+    eq(lm.cyclesUntilRuling('academia'), null);
   });
 
   t('the governing period does not change while the same house rules', async () => {
     const net = makeNetwork();
     const A = makePeer(net); A.setActor();
     const lm = A.use('larp');
-    const first = lm.getGoverningPeriodId(new Date(2026, 7, 1));
-    for (let day = 2; day <= 31; day += 1) {
-      eq(lm.getGoverningPeriodId(new Date(2026, 7, day)), first);
+    const first = lm.getGoverningPeriodId(new Date(2027, 1, 4));
+    for (let day = 5; day <= 48; day += 1) {
+      eq(lm.getGoverningPeriodId(new Date(2027, 1, day)), first);
     }
-    ok(first.startsWith(lm.getGoverningHouseKey(new Date(2026, 7, 1)) + ':'));
+    ok(first.startsWith('arrakis:'));
   });
 
   t('the governing period changes when the ruling house changes', async () => {
@@ -121,9 +137,9 @@ describe('larp: governance cycle', (t) => {
     const A = makePeer(net); A.setActor();
     const lm = A.use('larp');
     const seen = new Set();
-    for (let i = 0; i < 12; i += 1) seen.add(lm.getGoverningPeriodId(new Date(2026, i, 15)));
-    eq(seen.size, 12);
-    notOk(seen.has(lm.getGoverningPeriodId(new Date(2027, 0, 15))));
+    for (let i = 0; i < 12; i += 1) seen.add(lm.getGoverningPeriodId(new Date(2027, i, 15)));
+    eq(seen.size, 8);
+    notOk(seen.has(lm.getGoverningPeriodId(new Date(2028, 6, 15))));
   });
 
   t('the cycle string changes every day, so it cannot identify a governing period', async () => {
@@ -178,6 +194,33 @@ describe('larp: house wall posts', (t) => {
     await A.use('larp').publishHousePost({ house: 'dogma', text: 'spoof' });
     const posts = await A.use('larp').listHousePosts('dogma', { isGoverning: true });
     eq(posts.length, 0);
+  });
+
+  t('anyone with a house can answer on the ACADEMIA wall, and the post shows their house', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); const B = makePeer(net);
+    A.setActor(); await A.use('larp').publishJoin('academia');
+    await A.use('larp').publishHousePost({ house: 'academia', text: 'what now?' });
+    B.setActor(); await B.use('larp').publishJoin('helix');
+    await B.use('larp').publishHousePost({ house: 'academia', text: 'take the test' });
+    const posts = await B.use('larp').listHousePosts('academia');
+    eq(posts.length, 2);
+    eq(posts.find(p => p.text === 'take the test').authorHouse, 'helix');
+  });
+
+  t('a post shows the house its author was in when writing it, not the current one', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const lm = A.use('larp');
+    await lm.publishJoin('academia');
+    await lm.publishHousePost({ house: 'academia', text: 'still deciding' });
+    await new Promise(r => setTimeout(r, 5));
+    await lm.publishJoin('quark');
+    await new Promise(r => setTimeout(r, 5));
+    await lm.publishHousePost({ house: 'academia', text: 'welcome from quark' });
+    const posts = await lm.listHousePosts('academia');
+    eq(posts.find(p => p.text === 'still deciding').authorHouse, 'academia');
+    eq(posts.find(p => p.text === 'welcome from quark').authorHouse, 'quark');
   });
 
   t('publishHousePost rejects invalid house', async () => {
@@ -272,6 +315,102 @@ describe('larp: entrance test attempts', (t) => {
     const second = await lm.submitProfileTest({ answers });
     eq(second.ok, false);
     eq(second.reason, 'cooldown');
+  });
+});
+
+describe('larp: choosing a house without the test', (t) => {
+  t('from ACADEMIA a house can be chosen directly, and it shares the wait with the test', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const lm = A.use('larp');
+    await lm.publishJoin('academia');
+    const r = await lm.chooseHouse('dogma');
+    ok(r.ok);
+    eq(await lm.getUserHouse(A.keypair.id), 'dogma');
+    await lm.publishJoin('academia');
+    const again = await lm.chooseHouse('helix');
+    notOk(again.ok);
+    eq(again.reason, 'cooldown');
+    notOk((await lm.canTakeTest(A.keypair.id)).allowed, 'the test waits as well');
+  });
+
+  t('choosing is only possible from ACADEMIA and never into ACADEMIA', async () => {
+    const net = makeNetwork();
+    const A = makePeer(net); A.setActor();
+    const lm = A.use('larp');
+    eq((await lm.chooseHouse('dogma')).reason, 'not-in-academia');
+    await lm.publishJoin('academia');
+    eq((await lm.chooseHouse('academia')).reason, 'invalid');
+  });
+});
+
+describe('larp: decrees, influence and the house of the solstice', (t) => {
+  const lmOf = () => { const net = makeNetwork(); const A = makePeer(net); A.setActor(); return { A, lm: A.use('larp') }; };
+
+  t('a decree needs 5% of the known inhabitants as voters, and never fewer than 3', async () => {
+    const { lm } = lmOf();
+    eq(lm.decreeQuorum(0), 3);
+    eq(lm.decreeQuorum(40), 3);
+    eq(lm.decreeQuorum(100), 5);
+    eq(lm.decreeQuorum(1001), 51);
+  });
+
+  t('a decree stays open until its vote ends, then passes with more YES than NO and enough voters', async () => {
+    const { lm } = lmOf();
+    const past = new Date(Date.now() - 1000).toISOString();
+    const future = new Date(Date.now() + 86400000).toISOString();
+    eq(lm.decreeOutcome({ deadline: future }, { votes: { YES: 9, NO: 0 }, totalVotes: 9 }, 3), 'OPEN');
+    eq(lm.decreeOutcome({ deadline: past }, { votes: { YES: 3, NO: 1 }, totalVotes: 4 }, 3), 'APPROVED');
+    eq(lm.decreeOutcome({ deadline: past }, { votes: { YES: 2, NO: 2 }, totalVotes: 4 }, 3), 'REJECTED', 'a tie is not enough');
+    eq(lm.decreeOutcome({ deadline: past }, { votes: { YES: 2, NO: 0 }, totalVotes: 2 }, 3), 'REJECTED', 'too few voters');
+    eq(lm.decreeOutcome({ deadline: past, status: 'ENACTED' }, null, 3), 'ENACTED', 'a settled decree keeps its result');
+  });
+
+  t('influence: +10 per decree turned into law and +1 per vote of its members on decrees of other houses', async () => {
+    const { lm } = lmOf();
+    const houseOf = { '@s': 'solaris', '@d': 'dogma', '@d2': 'dogma', '@a': 'academia' };
+    const houseAt = (id) => houseOf[id] || null;
+    const ts = new Date(2027, 2, 1).getTime();
+    const decrees = [
+      { house: 'arrakis', ts, status: 'ENACTED', deadline: new Date(ts + 7 * 86400000).toISOString(), vote: { choices: { '@s': 'YES', '@d': 'NO', '@a': 'YES' } } },
+      { house: 'dogma', ts, status: 'REJECTED', deadline: new Date(ts + 7 * 86400000).toISOString(), vote: { choices: { '@d2': 'YES', '@s': 'NO' } } }
+    ];
+    const rows = Object.fromEntries(lm.influenceOf(decrees, houseAt).map(r => [r.house, r]));
+    eq(rows.arrakis.points, 10);
+    eq(rows.solaris.points, 2, 'one vote on each decree of another house');
+    eq(rows.dogma.points, 1, 'votes on the own house do not count');
+    eq(rows.academia, undefined, 'ACADEMIA does not take part');
+    const outside = lm.influenceOf(decrees, houseAt, { start: new Date(2027, 5, 21), end: new Date(2027, 11, 21) });
+    eq(outside[0].points, 0, 'decrees outside the season do not count');
+  });
+
+  t('the house of the solstice is the one with most influence, and a tie leaves none', async () => {
+    const { lm } = lmOf();
+    eq(lm.winnerOf([{ house: 'helix', points: 12, laws: 1, votes: 2 }, { house: 'quark', points: 3, laws: 0, votes: 3 }]).house, 'helix');
+    eq(lm.winnerOf([{ house: 'helix', points: 0, laws: 0, votes: 0 }]), null);
+    eq(lm.winnerOf([{ house: 'helix', points: 5, laws: 0, votes: 5 }, { house: 'quark', points: 5, laws: 0, votes: 5 }]), null);
+  });
+
+  t('only members of the governing house can propose decrees, up to 3 per cycle, while there is time to vote', async () => {
+    const { A, lm } = lmOf();
+    let created = 0;
+    lm.attach({ votes: { createVote: async () => ({ key: `%vote${created += 1}=.sha256` }), listAll: async () => [] }, inhabitants: { countInhabitants: async () => 10 } });
+    const governing = lm.getGoverningHouseKey();
+    const other = lm.RULING_KEYS.find(k => k !== governing);
+    await lm.publishJoin(other);
+    eq((await lm.proposeDecree({ title: 'Clean water' })).reason, 'not-governing');
+    await lm.publishJoin(governing);
+    eq((await lm.proposeDecree({ title: '   ' })).reason, 'title');
+    const w = lm.getCycleWindow(new Date());
+    if (w.end.getTime() - Date.now() < 7 * 86400000) {
+      eq((await lm.proposeDecree({ title: 'Clean water' })).reason, 'late');
+      return;
+    }
+    for (let i = 0; i < 3; i += 1) ok((await lm.proposeDecree({ title: `Decree ${i}` })).ok);
+    eq((await lm.proposeDecree({ title: 'One too many' })).reason, 'limit');
+    const listed = await lm.listDecrees({ house: governing });
+    eq(listed.length, 3);
+    ok(listed.every(d => d.outcome === 'OPEN' && d.minVoters === 3 && d.author === A.keypair.id));
   });
 });
 

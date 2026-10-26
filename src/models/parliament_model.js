@@ -1418,6 +1418,16 @@ module.exports = ({ cooler, services = {} }) => {
     const chosen = new Map();
     const groupOfLaw = new Map();
     for (const l of laws.items) {
+      if (l.origin && l.origin.larp) {
+        const decree = services.larp && typeof services.larp.decreeForLaw === 'function' ? await services.larp.decreeForLaw(l, laws.authorOf(l.id)).catch(() => null) : null;
+        if (!decree) continue;
+        const key = `larp:${decree.id}`;
+        groupOfLaw.set(l.id, key);
+        const house = typeof services.larp.getHouse === 'function' ? services.larp.getHouse(decree.house) : null;
+        const prev = chosen.get(key);
+        if (!prev || (new Date(l.enactedAt).getTime() || 0) < (new Date(prev.law.enactedAt).getTime() || 0)) chosen.set(key, { law: { ...l, houseKey: decree.house, houseName: (house && house.name) || decree.house }, own: true });
+        continue;
+      }
       const pid = ctx.proposals.resolve(String(l.proposalId || ''));
       const p = pid ? proposalsById.get(pid) : null;
       if (!p || String(p.proposer) !== String(l.proposer) || p.termId !== l.termId) continue;
