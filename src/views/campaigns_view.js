@@ -1,6 +1,6 @@
-const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt } = require("./main_views");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
+const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt, renderCountChip } = require("./main_views");
+const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -22,7 +22,7 @@ const fmt = (d) => moment(d).format("YYYY/MM/DD HH:mm");
 
 const statusChip = (cp) => renderStateChip(cp.closed ? "hidden" : "mutuals", cp.closed ? "✗" : "✓", statusLabel(cp.closed ? "CLOSED" : "OPEN"));
 const outcomeChip = (cp) => cp.closed ? renderStateChip(cp.achieved ? "mutuals" : "closed", cp.achieved ? "✓" : "✗", cp.achieved ? statusLabel("ACHIEVED") : String(i18n.campaignStatusUnachieved || "UNACHIEVED").toUpperCase()) : null;
-const categoryChip = (cp) => renderStateChip("whole", "", catLabel(cp.category));
+const categoryChip = (cp) => renderStateChip("whole", "◇", catLabel(cp.category), "kind");
 const clearnetEligible = (cp) => String(cp.status || "OPEN").toUpperCase() !== "CLOSED" && !cp.tribeId && !cp.encrypted;
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
@@ -31,9 +31,11 @@ const renderTags = (tags) => (Array.isArray(tags) && tags.length)
 
 const renderProgress = (cp) =>
   div({ class: "tribe-card-members campaign-progress" },
-    span({ class: "tribe-members-count" }, `${i18n.campaignSignaturesLabel}: ${cp.signatureCount} / ${cp.goal} (${cp.progress}%)`),
     progress({ class: "confirmations-progress", value: String(cp.signatureCount), max: String(cp.goal || 1) })
   );
+const signaturesChip = (cp) => renderCountChip("✍", i18n.campaignSignaturesLabel, `${cp.signatureCount} / ${cp.goal} (${cp.progress}%)`);
+const elevatedChip = (cp) => cp.proposalId ? renderStateChip("whole", "🏛", String(i18n.campaignElevated).toUpperCase(), "status") : null;
+const deadlineChip = (cp) => cp.deadline ? renderCountChip("◷", i18n.campaignDeadlineLabel, fmt(cp.deadline)) : null;
 
 const renderCover = (cp) => {
   if (!cp.media || !cp.media.blobId) return null;
@@ -57,12 +59,11 @@ exports.campaignChipFor = campaignChipFor;
 
 const renderCampaignCard = (cp, params = {}) =>
   div({ class: `tribe-card campaign-card campaign-${cp.status.toLowerCase()}` },
-    renderCardTop(cp.id, campaignHref(cp), { date: cp.createdAt, chips: [statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.clearnet === true && clearnetEligible(cp) ? renderReachChip(true, i18n, clearnetItemHref("campaigns", cp.title, cp.id)) : null], author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: (params.spreadMap && params.spreadMap.get(cp.id)) || null, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined }),
+    renderCardTop(cp.id, campaignHref(cp), { date: cp.createdAt, chips: [statusChip(cp), outcomeChip(cp), categoryChip(cp), signaturesChip(cp), elevatedChip(cp), deadlineChip(cp), renderScopeChip(cp, i18n, clearnetEligible(cp) && cp.clearnet === true, clearnetItemHref("campaigns", cp.title, cp.id))], author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: (params.spreadMap && params.spreadMap.get(cp.id)) || null, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined }),
     div({ class: "tribe-card-body" },
       renderCover(cp),
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: campaignHref(cp) }, cp.title || "—"))),
       renderProgress(cp),
-      cp.deadline ? p({ class: "job-meta-line" }, `${i18n.campaignDeadlineLabel}: ${fmt(cp.deadline)}`) : null,
       null
     )
   );
@@ -153,7 +154,7 @@ const renderSignatures = (cp) =>
 
 const renderUpdate = (cp, u, href, editing) =>
   div({ class: "campaign-update", id: `update-${encodeURIComponent(u.id)}` },
-    renderCardTop(null, null, { author: u.author, date: u.createdAt, chips: [u.edited ? renderStateChip("whole", "", i18n.campaignUpdateEdited) : null] }),
+    renderCardTop(null, null, { author: u.author, date: u.createdAt, chips: [u.edited ? renderStateChip("whole", "✎", i18n.campaignUpdateEdited, "data") : null] }),
     cp.isOwner
       ? div({ class: "emergency-update-head campaign-update-head" },
           div({ class: "tribe-side-actions emergency-update-actions" },
@@ -207,10 +208,10 @@ exports.singleCampaignView = async (cp, params = {}) => {
     renderCardTop(cp.id, href, { arrow: false,
       date: cp.createdAt,
       chips: [
-        statusChip(cp), outcomeChip(cp), categoryChip(cp), cp.proposalId ? renderStateChip("whole", "⚖", String(i18n.campaignElevated).toUpperCase()) : null,
-        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("campaigns", cp.title, cp.id) : null)
+        statusChip(cp), outcomeChip(cp), categoryChip(cp), signaturesChip(cp), elevatedChip(cp), deadlineChip(cp),
+        renderScopeChip(cp, i18n, isClearnet, clearnetItemHref("campaigns", cp.title, cp.id))
       ],
-      bylineExtra: [renderEditedChip(cp.tipId, cp.rootId)],
+      bylineExtra: [renderEditedChip(cp.tipId, cp.rootId, cp.updatedAt)],
       author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: params.spread || null, returnTo: href, subscription: subscriptionOpts, editAction: cp.isOwner ? `/campaigns?filter=edit&id=${encodeURIComponent(cp.id)}` : undefined, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined
     }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, cp.title)),
@@ -221,14 +222,6 @@ exports.singleCampaignView = async (cp, params = {}) => {
   );
   const main = div({ class: "tribe-main" },
     cp.text ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), div({ class: "campaign-body" }, ...renderStyledText(cp.text))) : null,
-    cp.deadline
-      ? table({ class: "tribe-info-table jobs-info-table" },
-          tr(
-            td({ class: "tribe-info-label" }, i18n.campaignDeadlineLabel),
-            td({ class: "tribe-info-value", colspan: "3" }, fmt(cp.deadline))
-          )
-        )
-      : null,
     renderProgress(cp),
     div({ class: "campaign-qr" },
       img({ src: `${href}/qr.png`, alt: i18n.campaignQrAlt, class: "campaign-qr-img" }),
@@ -247,7 +240,7 @@ exports.singleCampaignView = async (cp, params = {}) => {
       : null,
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     div({ class: "campaign-signed" },
-      cp.signed ? renderStateChip("transport", "✓", i18n.campaignSigned) : renderStateChip("closed", "✗", i18n.campaignNotSigned)
+      cp.signed ? renderStateChip("transport", "✓", i18n.campaignSigned, "mine") : renderStateChip("closed", "✗", i18n.campaignNotSigned, "mine")
     ),
     cp.canElevate
       ? div({ class: "tribe-side-actions campaign-elevate" }, form({ method: "POST", action: `/campaigns/elevate/${encodeURIComponent(cp.id)}` }, button({ type: "submit", class: "tribe-action-btn" }, String(i18n.campaignElevate).toUpperCase())))
@@ -317,3 +310,7 @@ exports.clearnetCampaignView = async (cp, params = {}) => {
     hubFeedId: cp.author || null
   });
 };
+exports.renderCampaignStatusChip = statusChip;
+exports.renderCampaignOutcomeChip = outcomeChip;
+exports.renderCampaignCategoryChip = categoryChip;
+exports.renderCampaignSignaturesChip = signaturesChip;

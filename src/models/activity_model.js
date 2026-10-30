@@ -704,7 +704,8 @@ module.exports = ({ cooler, cryptoModel, tribesModel, padsModel, industryModel, 
         if (a.type === 'report' && reportConfirmsByRoot.has(actionRoot)) {
           content = { ...content, confirmations: [...new Set([...(Array.isArray(content.confirmations) ? content.confirmations : []), ...reportConfirmsByRoot.get(actionRoot)])] };
         }
-        latest.push({ ...a, content, ...extra, tipId: idToTipId.get(a.id) || a.id, rootId: actionRoot !== a.id ? actionRoot : null });
+        const raw = rawById.get(a.id);
+        latest.push({ ...a, content, ...extra, msgSize: raw && raw.value ? Buffer.byteLength(JSON.stringify(raw.value), 'utf8') : 0, tipId: idToTipId.get(a.id) || a.id, rootId: actionRoot !== a.id ? actionRoot : null });
       }
 
       let deduped = latest.filter(a => !a.tipId || a.tipId === a.id || (a.type === 'tribe' && !parentOf.has(a.id)));

@@ -1,7 +1,8 @@
 "use strict";
 
 const { div, h2, p, section, audio, source, span, a, form, input, button, br, textarea, label } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderCardTop, renderEngagement, paged } = require("./main_views");
+const { template, i18n, userLink, renderCardTop, renderEngagement, paged, clearnetItemHref } = require("./main_views");
+const { renderScopeChip } = require("./clearnet_view");
 
 const renderSequenceList = (sequence, availableIds = null) => {
   if (!sequence || sequence.length === 0) {
@@ -97,7 +98,7 @@ const renderBcsList = (bcsAudios) => {
   }
   return div({ class: "melody-bcs-list" },
     bcsAudios.map(item => div({ class: "melody-bcs-card" },
-      renderCardTop(item.key, `/audios/${encodeURIComponent(item.key)}`, { date: item.createdAt, author: item.author, favKind: 'audios', isFavorite: item.isFavorite, torrentFrom: { blobId: item.url, name: item.title }, reportTitle: item.title }),
+      renderCardTop(item.key, `/audios/${encodeURIComponent(item.key)}`, { date: item.createdAt, chips: [renderScopeChip(item, i18n, item.clearnet === true, clearnetItemHref('audios', item.title, item.key))], author: item.author, favKind: 'audios', isFavorite: item.isFavorite, torrentFrom: { blobId: item.url, name: item.title }, reportTitle: item.title }),
       item.title
         ? div({ class: "melody-bcs-head" },
             h2({ class: "melody-bcs-title" }, item.title)

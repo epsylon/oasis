@@ -2123,11 +2123,6 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .mailing-archive-meta > .forum-category {
   flex: 0 0 100% !important;
 }
-.mailing-archive-meta > .mailing-counts {
-  flex: 0 1 auto !important;
-  width: auto !important;
-  font-size: .85em !important;
-}
 
 .forum-thread-container {
   padding: 0 !important;
@@ -2322,7 +2317,6 @@ textarea, select, input:not([type="checkbox"]):not([type="radio"]) { width: 100%
 .main-column .forum-row, .main-column .forum-vote-column, .main-column .forum-vote-counts, .main-column .forum-main, .main-column .forum-main .forum-reply-text, .main-column .forum-main .forum-body { border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; }
 .main-column .forum-vote-column { padding-right: 8px !important; border-right: 1px solid #555 !important; }
 .main-column .forum-main { flex: 1 1 0 !important; min-width: 0 !important; }
-.main-column .forum-vote-stats { display: flex !important; flex-wrap: wrap !important; gap: 8px !important; }
 
 .main-column .forum-card .forum-meta {
   display: flex !important;
@@ -4156,6 +4150,10 @@ body > .header {
 .main-column .card-header.card-top .card-byline-who { display: inline-flex !important; flex: 0 1 auto !important; flex-wrap: nowrap !important; align-items: center !important; gap: 6px !important; min-width: 0 !important; max-width: 100% !important; }
 .main-column .card-header.card-top .card-byline-who a.user-link { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
 .main-column .card-header.card-top > .card-byline > .card-chips-row { flex: 0 0 100% !important; display: flex !important; flex-wrap: wrap !important; gap: 4px !important; min-width: 0 !important; margin: 2px 0 0 0 !important; }
+.main-column .tribe-side > .card-header.card-top + .shop-title-row { margin-top: -10px !important; }
+.main-column .tribe-side > .card-header.card-top + .pad-title-row { margin-top: -12px !important; }
+.main-column .calendar-details > .tribe-side > .card-header.card-top + .shop-title-row { margin-top: -6px !important; }
+.main-column .forum-thread-card > .card-header.card-top + .shop-title-row { margin-top: -5px !important; }
 .main-column .card-header.card-top > .content-actions { display: flex !important; flex: 0 0 auto !important; flex-wrap: nowrap !important; align-items: center !important; gap: 4px !important; width: auto !important; margin: 0 0 0 auto !important; padding: 0 !important; }
 .main-column .card-header.card-top > .content-actions > .card-menu { display: block !important; width: auto !important; margin: 0 !important; }
 .main-column .card-header.card-top > .content-actions .btn-singleview:not(.card-menu-items *) { width: auto !important; min-width: 32px !important; height: 32px !important; margin: 0 !important; }

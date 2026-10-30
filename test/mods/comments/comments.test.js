@@ -55,6 +55,21 @@ describe('comments: where a comment lives', (t) => {
     try { await comments.publish({ rootId: 'not-a-message', text: 'x' }); } catch (_) { refused = true; }
     ok(refused, 'a comment needs a real content to point at');
   });
+
+  t('the comments of a content follow it through its new versions, never through someone else\'s', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const comments = A.use('comments');
+    const first = await publish(A, { type: 'report', title: 'bug', status: 'OPEN' });
+    await comments.publish({ rootId: first.key, text: 'on the first version' });
+    const second = await publish(A, { type: 'report', title: 'bug', status: 'RESOLVED', replaces: first.key });
+    await comments.publish({ rootId: second.key, text: 'on the second version' });
+    eq((await comments.listFor(second.key)).map(m => m.value.content.text).join(','), 'on the first version,on the second version', 'the latest version shows every comment');
+    eq((await comments.listFor(first.key)).length, 1, 'an older version only reaches back');
+    B.setActor();
+    const forged = await publish(B, { type: 'report', title: 'bug', status: 'OPEN', replaces: second.key });
+    eq((await B.use('comments').listFor(forged.key)).length, 0, 'a version by another author does not inherit the comments');
+  });
 });
 
 describe('comments: how lists show them', (t) => {

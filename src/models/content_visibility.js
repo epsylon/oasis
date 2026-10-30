@@ -27,4 +27,4 @@ const isContentVisibleTo = (type, c, viewer, author = null) => {
   }
 };
 
-module.exports = { isContentVisibleTo };
+module.exports = { isContentVisibleTo, isPrivateFlag };

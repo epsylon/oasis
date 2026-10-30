@@ -690,7 +690,6 @@ async function calculateEcoTaxStatsInternal() {
           const spanDays = spanMs / 86400000;
           const annualEcoinTax = spanDays > 0 ? totalEcoinTax * (365 / spanDays) : totalEcoinTax;
           const monthlyEcoinTax = annualEcoinTax / 12;
-          try { sharedState.setMaxBlockBytes(maxBlockBytes); } catch (_) {}
           const ecoTaxes = {
             lifetime: Number(totalEcoinTax.toFixed(6)),
             annual: Number(annualEcoinTax.toFixed(6)),

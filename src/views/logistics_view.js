@@ -1,5 +1,6 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel } = require("./main_views");
+const { renderScopeChip } = require("./clearnet_view");
+const { template, i18n, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -36,10 +37,10 @@ const priceText = (route) => {
   return priceLabel("FREE");
 };
 
-const kindChip = (route) => renderStateChip("whole", route.kind === "TRIP" ? "🚗" : "📦", kindLabel(route.kind));
-const modeChip = (route) => renderStateChip("whole", "", modeLabel(route.mode));
-const statusChip = (route) => renderStateChip(route.status === "OPEN" ? "mutuals" : "hidden", route.status === "OPEN" ? "✓" : (route.status === "CLOSED" ? "✗" : ""), statusLabel(route.status));
-const priceChip = (route) => renderStateChip("whole", "", priceText(route));
+const kindChip = (route) => renderStateChip("whole", route.kind === "TRIP" ? "🚗" : "📦", kindLabel(route.kind), "kind");
+const modeChip = (route) => renderStateChip("whole", "⇄", modeLabel(route.mode), "kind");
+const statusChip = (route) => renderStateChip(route.status === "OPEN" ? "mutuals" : "hidden", route.status === "OPEN" ? "✓" : (route.status === "CLOSED" ? "✗" : "⧖"), statusLabel(route.status));
+const priceChip = (route) => renderStateChip("whole", "¤", priceText(route), "level");
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
   ? div({ class: "card-tags" }, ...tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`)))
@@ -47,18 +48,16 @@ const renderTags = (tags) => (Array.isArray(tags) && tags.length)
 
 const routeLine = (route) => p({ class: "logistics-route-line" }, span({ class: "logistics-zone" }, route.origin), " → ", span({ class: "logistics-zone" }, route.destination));
 const whenLine = (route) => p({ class: "job-meta-line" }, `📅 ${fmt(route.date)}${route.recurrence !== "NONE" ? ` · ${recurrenceLabel(route.recurrence)}` : ""}`);
+const seatsChip = (route) => route.kind === "TRIP" && route.seats ? renderCountChip("💺", i18n.logisticsSeatsLabel, `${route.seatsLeft} / ${route.seats}`) : null;
 const capacityLine = (route) => {
-  if (route.kind === "TRIP") return route.seats ? p({ class: "job-meta-line" }, `💺 ${route.seatsLeft} / ${route.seats}`) : null;
+  if (route.kind === "TRIP") return null;
   const parts = [route.size ? `${i18n.logisticsSizeLabel}: ${route.size}` : null, route.weight ? `${i18n.logisticsWeightLabel}: ${route.weight}` : null].filter(Boolean);
   return parts.length ? p({ class: "job-meta-line" }, `📦 ${parts.join(" · ")}`) : null;
 };
-const countersBlock = (route) =>
-  div({ class: "tribe-card-members" },
-    span({ class: "tribe-members-count" }, `${i18n.logisticsRatingsTitle}: ${route.ratingCount || 0}${route.ratingCount ? ` · ${stars(route.ratingAvg)} ${route.ratingAvg}` : ""}`)
-  );
-const bookingsBlock = (route) => route.isOwner
-  ? div({ class: "tribe-card-members" }, span({ class: "tribe-members-count" }, `${i18n.logisticsBookingsLabel}: ${route.bookingCount || 0}`))
-  : null;
+const counterChips = (route) => [
+  renderCountChip("★", i18n.logisticsRatingsTitle, `${route.ratingCount || 0}${route.ratingCount ? ` · ${stars(route.ratingAvg)} ${route.ratingAvg}` : ""}`),
+  route.isOwner ? renderCountChip("✉", i18n.logisticsBookingsLabel, route.bookingCount || 0) : null
+];
 const renderCover = (route) => {
   if (!route.media || !route.media.blobId) return null;
   if (route.media.kind === "video") return videoHyperaxe({ class: "logistics-card-cover", src: `/blob/${encodeURIComponent(route.media.blobId)}`, controls: true, preload: "metadata" });
@@ -88,14 +87,13 @@ exports.logisticsChipFor = logisticsChipFor;
 
 const renderRouteCard = (route, params = {}) =>
   div({ class: `tribe-card logistics-card logistics-${route.kind.toLowerCase()}` },
-    renderCardTop(route.id, routeHref(route), { date: route.createdAt, chips: [kindChip(route), modeChip(route), statusChip(route), priceChip(route)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: (params.spreadMap && params.spreadMap.get(route.id)) || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
+    renderCardTop(route.id, routeHref(route), { date: route.createdAt, chips: [renderScopeChip(route, i18n), kindChip(route), modeChip(route), statusChip(route), priceChip(route), seatsChip(route), ...counterChips(route)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: (params.spreadMap && params.spreadMap.get(route.id)) || null, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
     div({ class: "tribe-card-body" },
       renderCover(route),
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: routeHref(route) }, route.title || "—"))),
       routeLine(route),
       whenLine(route),
       capacityLine(route),
-      countersBlock(route),
       null
     )
   );
@@ -238,7 +236,7 @@ exports.logisticsView = async (routes, filter = "ALL", params = {}) => {
   );
 };
 
-const bookingStatusChip = (b) => renderStateChip(b.status === "CONFIRMED" || b.status === "DELIVERED" ? "mutuals" : (b.status === "PENDING" ? "pending" : "closed"), "", bookingLabel(b.status));
+const bookingStatusChip = (b) => renderStateChip(b.status === "CONFIRMED" || b.status === "DELIVERED" ? "mutuals" : (b.status === "PENDING" ? "pending" : "closed"), b.status === "CONFIRMED" || b.status === "DELIVERED" ? "✓" : (b.status === "PENDING" ? "⧖" : "✗"), bookingLabel(b.status));
 
 const bookingStatusForm = (route, b, status, cls, text) =>
   form({ method: "POST", action: `/logistics/booking/${encodeURIComponent(b.id)}/status` },
@@ -249,7 +247,7 @@ const bookingStatusForm = (route, b, status, cls, text) =>
 
 const renderBooking = (route, b) =>
   div({ class: "logistics-booking" },
-    renderCardTop(null, null, { author: b.booker, date: b.createdAt, chips: [bookingStatusChip(b), route.kind === "TRIP" ? renderStateChip("whole", "💺", String(b.seats)) : null] }),
+    renderCardTop(null, null, { author: b.booker, date: b.createdAt, chips: [bookingStatusChip(b), route.kind === "TRIP" ? renderStateChip("whole", "💺", String(b.seats), "data") : null] }),
     div({ class: "emergency-update-head logistics-booking-head" },
       div({ class: "tribe-side-actions emergency-update-actions" },
         route.isOwner && b.status === "PENDING" ? bookingStatusForm(route, b, "CONFIRMED", "tribe-action-btn", i18n.logisticsConfirm) : null,
@@ -286,7 +284,7 @@ const renderRatings = (route) =>
     h3(i18n.logisticsRatingsTitle),
     route.ratings.length
       ? div({ class: "logistics-ratings-list" }, ...route.ratings.map(r => div({ class: "logistics-rating" },
-          renderCardTop(null, null, { author: r.author, date: r.createdAt, chips: [renderStateChip("whole", "", stars(r.score))] }),
+          renderCardTop(null, null, { author: r.author, date: r.createdAt, chips: [renderStateChip("whole", "", stars(r.score), "data")] }),
           r.text ? p(r.text) : null
         )))
       : p(route.closed ? i18n.logisticsNoRatings : i18n.logisticsRatingsWhenClosed),
@@ -318,7 +316,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
       )
     : null;
   const side = div({ class: "tribe-side" },
-    renderCardTop(route.id, href, { arrow: false, date: route.createdAt, chips: [kindChip(route), modeChip(route), statusChip(route), priceChip(route)], bylineExtra: [renderEditedChip(route.tipId, route.rootId)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, editAction: route.isOwner ? `/logistics?filter=edit&id=${encodeURIComponent(route.id)}` : undefined, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
+    renderCardTop(route.id, href, { arrow: false, date: route.createdAt, chips: [renderScopeChip(route, i18n), kindChip(route), modeChip(route), statusChip(route), priceChip(route), ...counterChips(route)], bylineExtra: [renderEditedChip(route.tipId, route.rootId, route.updatedAt)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, editAction: route.isOwner ? `/logistics?filter=edit&id=${encodeURIComponent(route.id)}` : undefined, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title)),
     renderDetailShare(route.id, href, route.title, null, null, null, route.author),
     renderTags(route.tags),
@@ -350,13 +348,11 @@ exports.singleLogisticsView = async (route, params = {}) => {
         td({ class: "tribe-info-value", colspan: "3" }, c.value)
       ))
     ),
-    countersBlock(route),
     renderMapEmbed(params.mapData, route.mapUrl),
     route.canBook ? div({ class: "card-section" }, renderBookForm(route)) : null,
     route.orderRef
       ? div({ class: "tribe-side-actions" }, form({ method: "GET", action: route.orderRef }, button({ type: "submit", class: "tribe-action-btn" }, `🛍 ${String(i18n.logisticsOrderLink).toUpperCase()}`)))
       : null,
-    bookingsBlock(route),
     div({ class: "doc-export-actions" },
       form({ method: "GET", action: `${href}/pdf` }, button({ type: "submit", class: "filter-btn" }, i18n.logisticsGenerateReport)),
       form({ method: "POST", action: `${href}/share` }, button({ type: "submit", class: "filter-btn" }, i18n.sharePm))
@@ -378,3 +374,7 @@ exports.singleLogisticsView = async (route, params = {}) => {
     section(div({ class: "tribe-details" }, side, main))
   );
 };
+exports.renderRouteKindChip = kindChip;
+exports.renderRouteModeChip = modeChip;
+exports.renderRouteStatusChip = statusChip;
+exports.renderRoutePriceChip = priceChip;

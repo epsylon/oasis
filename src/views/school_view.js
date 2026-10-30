@@ -1,14 +1,14 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, renderStyledHtml } = require("../backend/renderStyledText")
 const nameCache = require("../backend/nameCache")
 const { sanitizeHtml } = require("../backend/sanitizeHtml")
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
+const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
 const renderMd = (text) => div({ class: "styled-text", [RAW_HTML]: sanitizeHtml(renderStyledHtml(String(text || ""))) })
 
 const userId = config.keys.id
@@ -66,8 +66,10 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
 
 const renderPriceChip = (course) =>
   isFree(course)
-    ? renderStateChip("whole", "✓", i18n.schoolFree)
-    : span({ class: "price-chip" }, `${Number(course.price).toFixed(2)} ECO`)
+    ? renderStateChip("whole", "✓", i18n.schoolFree, "level")
+    : renderStateChip("whole", "¤", `${Number(course.price).toFixed(2)} ECO`, "level")
+
+const renderStartDateChip = (course) => course.startDate ? renderCountChip("◷", i18n.schoolStartDate, moment(course.startDate).format("YYYY/MM/DD HH:mm")) : null
 
 const renderCourseChips = (course, subscription = null) =>
   div({ class: "card-chips-row" },
@@ -76,12 +78,14 @@ const renderCourseChips = (course, subscription = null) =>
       ? renderStateChip("hidden", "✗", i18n.schoolClosed)
       : renderStateChip("pending", "✓", i18n.schoolOngoing),
     renderPriceChip(course),
-    course.clearnet === true && clearnetEligible(course) ? renderReachChip(true, i18n, clearnetItemHref('school', course.title, course.id)) : null,
+    renderScopeChip(course, i18n, clearnetEligible(course) && course.clearnet === true, clearnetItemHref('school', course.title, course.id)),
     subscription
       ? (subscription.in
-          ? renderStateChip("transport", "\u2709", i18n.subscriptionOn)
-          : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
-      : null
+          ? renderStateChip("transport", "\u2709", i18n.subscriptionOn, "mine")
+          : renderStateChip("closed", "\u2709", i18n.subscriptionOff, "mine"))
+      : null,
+    renderCountChip("👥", i18n.schoolStudents, safeArr(course.students).length),
+    renderStartDateChip(course)
   )
 
 const renderCourseCard = (course, filter, params = {}) => {
@@ -99,9 +103,6 @@ const renderCourseCard = (course, filter, params = {}) => {
       returnTo: buildReturnTo(filter, params),
       deleteAction: isOwn ? contentDeleteAction('schoolCourse', course.id) : undefined
     }),
-    course.startDate ? div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.schoolStartDate}: ${moment(course.startDate).format("YYYY/MM/DD HH:mm")}`)
-    ) : null,
     div({ class: "tribe-card-image-wrapper" },
       a({ href: url },
         renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-card-hero-image' })
@@ -111,9 +112,6 @@ const renderCourseCard = (course, filter, params = {}) => {
       h2({ class: "tribe-card-title" }, a({ href: url }, course.title)),
       renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
       course.description ? p({ class: "tribe-card-description" }, ...renderStyledText(course.description)) : null,
-      div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.schoolStudents}: ${course.students.length}`)
-      ),
       null
     )
   )
@@ -405,15 +403,17 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
           ? renderStateChip("hidden", "✗", i18n.schoolClosed)
           : renderStateChip("pending", "✓", i18n.schoolOngoing),
         renderPriceChip(course),
-        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('school', course.title, course.id) : null),
-        courseApproved ? renderStateChip("mutuals", "🎓", i18n.schoolApproved) : null,
+        renderScopeChip(course, i18n, isClearnet, clearnetItemHref('school', course.title, course.id)),
+        courseApproved ? renderStateChip("mutuals", "🎓", i18n.schoolApproved, "mine") : null,
         params.subscription && (isTeacher || isStudent)
           ? ((isTeacher || params.subscription.subscribed === true)
-              ? renderStateChip("transport", "\u2709", i18n.subscriptionOn)
-              : renderStateChip("closed", "\u2709", i18n.subscriptionOff))
-          : null
+              ? renderStateChip("transport", "\u2709", i18n.subscriptionOn, "mine")
+              : renderStateChip("closed", "\u2709", i18n.subscriptionOff, "mine"))
+          : null,
+        renderCountChip("👥", i18n.schoolStudents, safeArr(course.students).length),
+        renderStartDateChip(course)
       ],
-      bylineExtra: [renderEditedChip(course.id, course.rootId)],
+      bylineExtra: [renderEditedChip(course.id, course.rootId, course.updatedAt)],
       spread: params.spreads || null,
       author: course.author,
       favKind: 'school',
@@ -431,17 +431,6 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
     renderDetailShare(course.id, returnTo, course.title, subscriptionOpts, null, null, course.author),
     course.description ? p({ class: "tribe-side-description" }, ...renderStyledText(course.description)) : null,
-    course.startDate
-      ? table({ class: "tribe-info-table" },
-          tr(
-            td({ class: "tribe-info-label" }, i18n.schoolStartDate),
-            td({ class: "tribe-info-value", colspan: "3" }, moment(course.startDate).format("YYYY/MM/DD HH:mm"))
-          )
-        )
-      : null,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.schoolStudents}: ${course.students.length}`)
-    ),
     course.chatId && (isTeacher || isStudent || (course.visibility === "PUBLIC" && isFree(course)))
       ? div({ class: "tribe-side-actions shop-visibility-row stacked-action-row" },
           span({ class: "card-label" }, `${i18n.schoolCourseChat}:`),
@@ -459,7 +448,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       ? (myPending
           ? div({ class: "school-pending-block" },
               div({ class: "tribe-side-actions school-pending-row" },
-                renderStateChip("pending", "⧖", i18n.schoolPendingPayment)
+                renderStateChip("pending", "⧖", i18n.schoolPendingPayment, "mine")
               ),
               myPending.transferId
                 ? div({ class: "doc-export-actions" },
@@ -639,9 +628,9 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
                       const res = exam.myResult
                       const blocked = res && (res.passed || Date.now() - Number(res.at || 0) < 24 * 60 * 60 * 1000)
                       const chip = res && res.passed
-                        ? renderStateChip("mutuals", "✓", i18n.schoolExamPassed)
+                        ? renderStateChip("mutuals", "✓", i18n.schoolExamPassed, "mine")
                         : blocked
-                          ? renderStateChip("closed", "✗", i18n.schoolExamFailed)
+                          ? renderStateChip("closed", "✗", i18n.schoolExamFailed, "mine")
                           : span({ class: "state-chip" }, i18n.schoolExamPending)
                       return details({ class: "school-lesson-details" },
                         summary({ class: "school-lesson-summary" },
@@ -761,7 +750,7 @@ exports.clearnetCourseView = async (course, lessons = []) => {
     <span class="cn-course-meta-item">👥 ${safeArr(course.students).length} ${esc(i18n.schoolStudents)}</span>
   </div>
   <hr class="cn-sep"/>
-  ${courseImg ? `<img class="cn-course-img" src="${courseImg}" alt="${title}">` : ""}
+  ${courseImg ? `<img class="cn-course-img" src="${courseImg}" alt="${title}" loading="lazy">` : ""}
   ${desc ? `<div class="cn-course-section"><h2>${esc(i18n.description)}</h2><p>${desc}</p></div>` : ""}
   ${renderTagChips(course.tags)}
   ${visibleLessons.length ? `<div class="cn-course-section"><h2>${esc(i18n.schoolLessons)} (${visibleLessons.length})</h2>${visibleLessons.map(lesson => `
@@ -919,3 +908,4 @@ exports.schoolInvitePage = (code) => {
     )
   )
 }
+exports.renderCoursePriceChip = renderPriceChip

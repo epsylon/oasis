@@ -1,8 +1,8 @@
 const { div, h2, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
 const { renderMapEmbed } = require("./maps_view")
-const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view")
+const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 
@@ -52,10 +52,12 @@ const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
     renderCalendarStatusChip(cal),
     origin ? renderTribeOriginChip(origin) : renderEncryptedChip(i18n),
     renderLifespanChip(cal.lifetime, i18n),
-    !origin && cal.clearnet === true && clearnetEligible(cal) ? renderReachChip(true, i18n, calClearnetHref(cal)) : null,
+    renderScopeChip(cal, i18n, !origin && clearnetEligible(cal) && cal.clearnet === true, calClearnetHref(cal)),
     cal.subscriptionIn === true
-      ? renderStateChip("transport", "✉", i18n.subscriptionOn)
-      : (cal.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
+      ? renderStateChip("transport", "✉", i18n.subscriptionOn, "mine")
+      : (cal.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff, "mine") : null),
+    origin ? null : renderCountChip("👥", i18n.calendarParticipantsLabel || "Participants", cal.participants.length),
+    cal.deadline ? renderCountChip("◷", i18n.calendarDeadlineLabel || "Deadline", moment(cal.deadline).format("YYYY/MM/DD HH:mm")) : null
   ].filter(Boolean)
   return div({ class: "tribe-card" },
     renderCardTop(cal.rootId, href, origin
@@ -65,20 +67,9 @@ const renderCalendarCard = exports.renderCalendarCard = (cal, spreadInfo) => {
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, a({ href }, cal.title || "\u2014"))
       ),
-      cal.deadline
-        ? div({ class: "card-field card-field-mb" },
-            span({ class: "card-label" }, `${String(i18n.calendarDeadlineLabel).toUpperCase()}: `),
-            span({ class: "card-value" }, moment(cal.deadline).format("YYYY/MM/DD HH:mm"))
-          )
-        : null,
       origin && Array.isArray(cal.dates) && cal.dates.length
         ? div(...cal.dates.map(d => p({ class: "job-meta-line" }, `📅 ${moment(d.date).format("YYYY/MM/DD HH:mm")}${d.label ? ` · ${d.label}` : ""}`)))
         : null,
-      origin
-        ? null
-        : div({ class: "tribe-card-members" },
-            span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${cal.participants.length}`)
-          ),
       null
     )
   )
@@ -283,10 +274,11 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     renderCalendarStatusChip(calendar),
     renderEncryptedChip(i18n),
     renderLifespanChip(calendar.lifetime, i18n),
-    canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? calClearnetHref(calendar) : null) : null,
+    renderScopeChip(calendar, i18n, isClearnet, calClearnetHref(calendar)),
     (isAuthor || isParticipant)
-      ? renderStateChip(subscriptionIn ? "transport" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff)
-      : null
+      ? renderStateChip(subscriptionIn ? "transport" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff, 'mine')
+      : null,
+    renderCountChip("👥", i18n.calendarParticipantsLabel || "Participants", calendar.participants.length)
   ].filter(Boolean)
   const subscriptionOpts = (calendar.subscription && (isAuthor || isParticipant)) ? { target: calendar.rootId || calendar.key, scope: "calendars", subscribed: calendar.subscription.subscribed === true, count: calendar.subscription.count, isOwner: isAuthor, returnTo: shareUrl } : null
   const calSide = div({ class: "tribe-side" },
@@ -315,9 +307,6 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
   const calInfo = table({ class: "tribe-info-table" },
     calendar.deadline ? tr(td({ class: "tribe-info-label" }, i18n.calendarDeadlineLabel || "Deadline"), td({ class: "tribe-info-value", colspan: "3" }, moment(calendar.deadline).format("YYYY/MM/DD HH:mm"))) : null,
     tr(td({ class: "tribe-info-label" }, i18n.calendarStatusLabel || "Status"), td({ class: "tribe-info-value", colspan: "3" }, renderStatus(calendar)))
-  )
-  const calMembers = div({ class: "tribe-card-members" },
-    span({ class: "tribe-members-count calendar-participants-count" }, `${i18n.calendarParticipantsLabel || "Participants"}: ${calendar.participants.length}`)
   )
   const calVisitorActions = [
     !isAuthor && !isParticipant && calendar.status === "OPEN"
@@ -453,7 +442,6 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
     dayNotesSection,
     unifiedForm,
     calVisitorActions.length ? div({ class: "tribe-side-actions detail-action-row" }, ...calVisitorActions) : null,
-    calMembers,
     calOwnerInvites,
     renderDocumentActions('calendars', calendar.rootId)
   )
@@ -525,3 +513,4 @@ exports.clearnetCalendarView = async (calendar, dates, notesByDate = {}) => {
 }
 
 exports.renderIntervalBlock = renderIntervalBlock
+exports.renderCalendarStatusChip = renderCalendarStatusChip

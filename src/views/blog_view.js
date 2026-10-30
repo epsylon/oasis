@@ -4,7 +4,7 @@ const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, renderScheduledChip, renderEditedChip, hasRelation } = require("./main_views");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view");
+const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledHtml } = require("../backend/renderStyledText");
 const { sanitizeHtml } = require("../backend/sanitizeHtml");
@@ -74,7 +74,7 @@ const renderFilterBar = (filter, q, showSearch = true, total = null, censusList 
 
 const blogTopOptions = (blog, href, isOwn, extra = {}) => blog.scheduledAt
   ? { date: blog.createdAt, chips: [renderScheduledChip(blog.scheduledAt)], author: blog.author, report: false, hide: false, deleteAction: `/blogs/scheduled/delete/${encodeURIComponent(blog.id)}`, ...extra }
-  : { date: blog.createdAt, chips: blog.clearnet === true ? [renderReachChip(true, i18n, clearnetItemHref("blog", blog.subject || blog.text, blog.id))] : [], author: blog.author, favKind: 'blogs', isFavorite: blog.isFavorite, reportTitle: blog.subject || blog.text, deleteAction: isOwn ? contentDeleteAction('blog', blog.id) : undefined, ...extra };
+  : { date: blog.createdAt, chips: [renderScopeChip(blog, i18n, blog.clearnet === true, clearnetItemHref("blog", blog.subject || blog.text, blog.id))], author: blog.author, favKind: 'blogs', isFavorite: blog.isFavorite, reportTitle: blog.subject || blog.text, deleteAction: isOwn ? contentDeleteAction('blog', blog.id) : undefined, ...extra };
 
 const renderBlogCard = (blog, filter, spreadInfo) => {
   const href = `/blogs/${encodeURIComponent(blog.id)}`;
@@ -194,7 +194,7 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
   const subscriptionOpts = params.subscription ? { target: blog.author, scope: "blogs", subscribed: params.subscription.subscribed === true, count: params.subscription.count, isOwner: isAuthor, returnTo: href } : null;
 
   const blogSide = div({ class: "tribe-side" },
-    renderCardTop(blog.id, href, blogTopOptions(blog, href, isAuthor, blog.scheduledAt ? { arrow: false, returnTo: href, editAction } : { arrow: false, chips: [renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("blog", blog.subject || blog.text, blog.id) : null)], bylineExtra: [renderEditedChip(blog.tipId, blog.id)], spread: params.spreads || null, returnTo: href, editAction, subscription: subscriptionOpts })),
+    renderCardTop(blog.id, href, blogTopOptions(blog, href, isAuthor, blog.scheduledAt ? { arrow: false, returnTo: href, editAction } : { arrow: false, chips: [renderScopeChip(blog, i18n, isClearnet, clearnetItemHref("blog", blog.subject || blog.text, blog.id))], bylineExtra: [renderEditedChip(blog.tipId, blog.id, blog.updatedAt)], spread: params.spreads || null, returnTo: href, editAction, subscription: subscriptionOpts })),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, blog.subject || i18n.blogTitle)
     ),

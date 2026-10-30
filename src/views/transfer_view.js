@@ -1,4 +1,5 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
+const { renderScopeChip } = require("./clearnet_view")
 const { getConfig } = require('../configs/config-manager.js');
 const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
@@ -84,7 +85,7 @@ const formatBlockSize = (bytes) => {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`
 }
 
-const renderTransferStatusChip = (status) => {
+const renderTransferStatusChip = exports.renderTransferStatusChip = (status) => {
   const up = String(status || "").toUpperCase()
   const variant =
     up === "CLOSED" ? "hidden" :
@@ -107,7 +108,7 @@ const transferTitle = (t) => {
 }
 
 const renderTransferCategoryChip = (cat) =>
-  renderStateChip("whole", "", categoryLabel(cat))
+  renderStateChip("whole", "◇", categoryLabel(cat), "kind")
 
 const generateTransferCard = (transfer, filter, params = {}) => {
   const confirmedBy = safeArr(transfer.confirmedBy)
@@ -121,9 +122,11 @@ const generateTransferCard = (transfer, filter, params = {}) => {
   const cat = categoryOf(transfer)
 
   const chips = [
+    renderScopeChip(transfer, i18n),
     renderTransferStatusChip(transfer.status),
-    isUbi ? renderStateChip("whole", "", "UBI") : null,
-    isExpired ? renderStateChip("closed", "⏰", i18n.transfersExpiredBadge) : null,
+    renderTransferCategoryChip(cat),
+    isUbi ? renderStateChip("whole", "❄", "UBI", "kind") : null,
+    isExpired ? renderStateChip("closed", "⏰", i18n.transfersExpiredBadge, "status") : null,
     renderLifespanChip(transfer.lifetime, i18n)
   ].filter(Boolean)
 
@@ -413,9 +416,11 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
   const cat = categoryOf(transfer)
   const otherParty = transfer.from === userId ? transfer.to : transfer.from
   const chips = [
+    renderScopeChip(transfer, i18n),
     renderTransferStatusChip(transfer.status),
-    isUbi ? renderStateChip("whole", "", "UBI") : null,
-    isExpired ? renderStateChip("closed", "⏰", i18n.transfersExpiredBadge) : null,
+    renderTransferCategoryChip(cat),
+    isUbi ? renderStateChip("whole", "❄", "UBI", "kind") : null,
+    isExpired ? renderStateChip("closed", "⏰", i18n.transfersExpiredBadge, "status") : null,
     renderLifespanChip(transfer.lifetime, i18n)
   ].filter(Boolean)
 
@@ -460,16 +465,13 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
     confirmedList.length ? div({ class: "card-assigned-list" }, ...confirmedList.map(id => userLink(id))) : null
   ])
 
-  const updatedAt = transfer.updatedAt ? moment(transfer.updatedAt) : null
-  const showUpdated = updatedAt && updatedAt.isValid() && updatedAt.valueOf() !== new Date(transfer.createdAt).getTime()
 
   const transferSide = div({ class: "tribe-side" },
     renderCardTop(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, { arrow: false,
       date: transfer.createdAt,
       chips,
       bylineExtra: [
-        renderEditedChip(transfer.id, transfer.rootId),
-        showUpdated ? span({ class: "card-byline-time" }, `${i18n.jobsUpdatedAt}: ${updatedAt.format("YYYY/MM/DD HH:mm")}`) : null
+        renderEditedChip(transfer.id, transfer.rootId, transfer.updatedAt)
       ],
       spread: params.spreads || null,
       author: transfer.from,
@@ -532,4 +534,4 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
     )
   )
 }
-
+exports.renderTransferCategoryChip = renderTransferCategoryChip

@@ -17,8 +17,8 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -75,15 +75,6 @@ const renderAudioCommentsSection = (audioId, comments = [], returnTo = null) => 
   });
 };
 
-const renderAudioUpdated = (audioObj) => {
-  const createdTs = audioObj.createdAt ? new Date(audioObj.createdAt).getTime() : NaN;
-  const updatedTs = audioObj.updatedAt ? new Date(audioObj.updatedAt).getTime() : NaN;
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-  return showUpdated
-    ? span({ class: "votations-comment-date" }, `${i18n.audioUpdatedAt}: ${moment(audioObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
-    : null;
-};
-
 const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
@@ -98,12 +89,12 @@ const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) 
           author: audioObj.author,
           date: audioObj.createdAt,
           chips: [
-            audioObj.tribeOrigin ? renderTribeOriginChip(audioObj.tribeOrigin) : audioObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('audios', audioObj.title, audioObj.key)) : null,
+            audioObj.tribeOrigin ? renderTribeOriginChip(audioObj.tribeOrigin) : null, renderScopeChip(audioObj, i18n, audioObj.clearnet === true, clearnetItemHref('audios', audioObj.title, audioObj.key)),
             renderLicenseChip(audioObj.license),
             ...(typeof params.titleChips === "function" ? params.titleChips(audioObj) : []),
             renderLifespanChip(audioObj.lifetime, i18n)
           ],
-          bylineExtra: [renderAudioUpdated(audioObj)]
+          bylineExtra: [renderEditedChip(audioObj.key, audioObj.rootId, audioObj.updatedAt)]
         };
         const header = typeof params.headerActions === "function"
           ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(audioObj))
@@ -111,7 +102,7 @@ const renderAudioList = exports.renderAudioList = (audios, filter, params = {}) 
             ? renderCardTop(audioObj.key, audioObj.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || null, reportTitle: audioObj.title })
             : renderCardTop(audioObj.key, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(audioObj.key)) || params.spreads || null, favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title }, isFavorite: audioObj.isFavorite, reportTitle: audioObj.title, deleteAction: isOwn ? contentDeleteAction('audio', audioObj.key) : undefined, returnTo });
         const titleHref = typeof params.headerActions === "function" ? null : audioObj.tribeOrigin ? audioObj.tribeOrigin.href : href;
-        const engagement = typeof params.engagement === "function" ? params.engagement(audioObj) : null;
+        const engagement = typeof params.engagement === "function" ? params.engagement(audioObj) : titleHref && !audioObj.tribeOrigin ? renderCardMetaRow(renderOpinionsPill([audioObj.key, audioObj.rootId], titleHref), renderCommentsPill([audioObj.key, audioObj.rootId], titleHref), renderShareButton(audioObj.key, titleHref, audioObj.title || "")) : null;
         return div(
           { class: "trending-card audio-card" + (isOwn ? " own-content" : "") },
           header,
@@ -293,11 +284,11 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       author: audioObj.author,
       date: audioObj.createdAt,
       chips: [
-        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('audios', audioObj.title, audioObj.key) : null),
+        renderScopeChip(audioObj, i18n, isClearnet, clearnetItemHref('audios', audioObj.title, audioObj.key)),
         renderLicenseChip(audioObj.license),
         ...chips
       ],
-      bylineExtra: [renderEditedChip(audioObj.key, audioObj.rootId), renderAudioUpdated(audioObj)],
+      bylineExtra: [renderEditedChip(audioObj.key, audioObj.rootId, audioObj.updatedAt)],
       favKind: 'audios', torrentFrom: { blobId: audioObj.url, name: audioObj.title },
       isFavorite: audioObj.isFavorite,
       spread: params.spreads || null,
@@ -379,7 +370,7 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
         )
       ),
       div({ class: "bookmark-item card" },
-        renderCardTop(audio.key, `/audios/${encodeURIComponent(audio.key)}`, { author: audio.author, date: audio.createdAt, chips: [itemSize ? renderEcoTax(itemSize, audio.key) : null], reportTitle: audio.title }),
+        renderCardTop(audio.key, `/audios/${encodeURIComponent(audio.key)}`, { author: audio.author, date: audio.createdAt, chips: [renderScopeChip(audio, i18n, audio.clearnet === true, clearnetItemHref('audios', audio.title, audio.key)), itemSize ? renderEcoTax(itemSize, audio.key) : null], reportTitle: audio.title }),
         audio.title ? h2(audio.title) : null,
         renderAudioPlayer(audio, { skipTranscode: true }),
         renderDetailShare(audio.key, `/audios/${encodeURIComponent(audio.key)}`, audio.title, null, null, null, audio.author),

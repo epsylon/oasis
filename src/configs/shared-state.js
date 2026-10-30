@@ -16,7 +16,6 @@ let _inboxUnread = null;
 let _lastSyncTs = null;
 let _ecoValue = null;
 let _lastActivity = null;
-let _maxBlockBytes = 0;
 let _inhabitantCount = 0;
 let _tribesCount = 0;
 let _mentionsCount = 0;
@@ -68,8 +67,6 @@ module.exports = {
   setEcoValue: (v) => { _ecoValue = v; },
   getLastActivity: () => _lastActivity,
   setLastActivity: (a) => { _lastActivity = a; },
-  getMaxBlockBytes: () => _maxBlockBytes,
-  setMaxBlockBytes: (n) => { if (Number(n) > _maxBlockBytes) _maxBlockBytes = Number(n); },
   getMentionsTotal: () => _mentionsTotal,
   setMentionsTotal: (n) => { _mentionsTotal = Math.max(0, Number(n) || 0); },
   getMentionsCount: () => _mentionsCount,

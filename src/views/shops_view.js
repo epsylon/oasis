@@ -1,12 +1,12 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText")
 const { renderMapEmbed } = require("./maps_view")
 const opinionCategories = require("../backend/opinion_categories")
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderTagChips: cnTagChips, renderRichText: cnRichText, renderKindTag: cnKindTag } = require("./clearnet_view")
+const { renderClearnetSelector, renderClearnetSwitch, renderClearnetUrlBlock, renderClearnetPage, renderClearnetSearchForm, renderEncryptedChip, blobUrl: cnBlobUrl, escapeHtml: cnEscapeHtml, renderTagChips: cnTagChips, renderRichText: cnRichText, renderKindTag: cnKindTag, renderScopeChip } = require("./clearnet_view")
 
 const userId = config.keys.id
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -81,11 +81,13 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
         shop.visibility === "CLOSED"
           ? renderStateChip("hidden", "✗", i18n.shopClosed)
           : renderStateChip("mutuals", "✓", i18n.shopOpen),
+        shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E", "reach") : null,
         renderLifespanChip(shop.lifetime, i18n),
-        shop.clearnet === true && clearnetEligible(shop) ? renderReachChip(true, i18n, clearnetItemHref('shops', shop.title, shop.key)) : null,
+        renderScopeChip(shop, i18n, clearnetEligible(shop) && shop.clearnet === true, clearnetItemHref('shops', shop.title, shop.key)),
         shop.subscriptionIn === true
-          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
-          : (shop.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn, "mine")
+          : (shop.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff, "mine") : null),
+        renderCountChip("▦", i18n.shopProducts, shop.productCount || 0)
       ],
       spread: params.spreadMap && params.spreadMap.get(shop.key) || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined
     }),
@@ -98,22 +100,25 @@ const renderShopCard = exports.renderShopCard = (shop, filter, params = {}) => {
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, a({ href: shopHref }, shop.title || i18n.shopUntitled))
       ),
-      div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
-      ),
       null
     )
   )
 }
 
-const renderProductCard = (product, shopId, returnTo, params = {}) => {
+const renderStockChip = (stock) => renderCountChip("▦", i18n.shopProductStock, stock > 0 ? String(stock) : i18n.shopOutOfStock, stock > 0 ? "whole" : "closed")
+
+const productScopeChip = (product, shop) => shop
+  ? renderScopeChip(shop, i18n, clearnetEligible(shop) && shop.clearnet === true, clearnetItemHref('shops', shop.title, shop.key))
+  : renderScopeChip(product, i18n, false)
+
+const renderProductCard = (product, shopId, returnTo, params = {}, shop = product.shop || null) => {
   const isAuthor = String(product.author) === String(userId)
   const stock = Number(product.stock) || 0
   const voterCount = safeArr(product.opinions_inhabitants).length
   const productUrl = `/shops/product/${encodeURIComponent(product.key)}?shopId=${encodeURIComponent(shopId)}`
 
   return div({ class: "shop-product-card" },
-    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { date: product.createdAt, spread: params.spreadMap && params.spreadMap.get(product.key) || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, reportTitle: product.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
+    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { date: product.createdAt, chips: [productScopeChip(product, shop), renderStockChip(stock)], spread: params.spreadMap && params.spreadMap.get(product.key) || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, reportTitle: product.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
     product.image ? div({ class: "shop-product-media" }, a({ href: productUrl }, renderMediaBlob(product.image))) : null,
     div({ class: "shop-product-body" },
       product.shopTitle ? p(a({ href: `/shops/${encodeURIComponent(shopId)}`, class: "user-link" }, product.shopTitle)) : null,
@@ -122,10 +127,6 @@ const renderProductCard = (product, shopId, returnTo, params = {}) => {
       product.description ? p(...renderStyledText(product.description)) : null,
       div({ class: "price-chip" }, `${Number(product.price || 0).toFixed(6)} ECO`),
       div({ class: "confirmations-block stock-block" },
-        div({ class: "card-field" },
-          span({ class: "card-label" }, `${i18n.shopProductStock}: `),
-          span({ class: "card-value" }, stock > 0 ? String(stock) : i18n.shopOutOfStock)
-        ),
         progress({ class: "confirmations-progress stock-progress", value: Math.min(stock, 100), max: 100 })
       ),
       (() => {
@@ -299,14 +300,15 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
         shop.visibility === "CLOSED"
           ? renderStateChip("hidden", "✗", i18n.shopClosed)
           : renderStateChip("mutuals", "✓", i18n.shopOpen),
-        shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
+        shop.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E", "reach") : null,
         renderLifespanChip(shop.lifetime, i18n),
-        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('shops', shop.title, shop.key) : null),
+        renderScopeChip(shop, i18n, isClearnet, clearnetItemHref('shops', shop.title, shop.key)),
         shop.subscription
           ? ((isAuthor || shop.subscription.subscribed === true)
-              ? renderStateChip("transport", "✉", i18n.subscriptionOn)
-              : renderStateChip("closed", "✉", i18n.subscriptionOff))
-          : null
+              ? renderStateChip("transport", "✉", i18n.subscriptionOn, "mine")
+              : renderStateChip("closed", "✉", i18n.subscriptionOff, "mine"))
+          : null,
+        renderCountChip("▦", i18n.shopProducts, shop.productCount || 0)
       ],
       spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, subscription: subscriptionOpts, editAction: isAuthor ? `/shops/edit/${encodeURIComponent(shop.key)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined
     }),
@@ -332,14 +334,11 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       ) : null
     ),
     renderMapEmbed(params.mapData, shop.mapUrl),
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.shopProducts}: ${shop.productCount || 0}`)
-    ),
     isAuthor
       ? div({ class: "tribe-side-actions shop-visibility-row housing-visibility-row" },
           span({ class: "card-label" }, `${i18n.visibilityLabel || "Visibility"}: `),
           shop.encrypted
-            ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E")
+            ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E", "reach")
             : renderStateChip("mutuals", "👁", i18n.shopOpen),
           shop.encrypted
             ? form({ method: "POST", action: `/shops/generate-invite/${encodeURIComponent(shop.key)}` },
@@ -392,7 +391,7 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       : null,
     div({ class: "shop-products-grid" },
       products.length
-        ? paged(products).map(prod => renderProductCard(prod, shop.rootId || shop.key, `/shops/${encodeURIComponent(shop.key)}`, params))
+        ? paged(products).map(prod => renderProductCard(prod, shop.rootId || shop.key, `/shops/${encodeURIComponent(shop.key)}`, params, shop))
         : p(i18n.shopNoProducts)
     )
   )
@@ -416,7 +415,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
   const stock = Number(product.stock) || 0
 
   const productSide = div({ class: "tribe-side" },
-    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { arrow: false, date: product.createdAt, bylineExtra: [renderEditedChip(product.key, product.rootId)], spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, editAction: isAuthor ? `/shops/product/edit/${encodeURIComponent(product.key)}?shopId=${encodeURIComponent(product.shopId)}&returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
+    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { arrow: false, date: product.createdAt, chips: [productScopeChip(product, shop), renderStockChip(stock)], bylineExtra: [renderEditedChip(product.key, product.rootId, product.updatedAt)], spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, editAction: isAuthor ? `/shops/product/edit/${encodeURIComponent(product.key)}?shopId=${encodeURIComponent(product.shopId)}&returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
     div({ class: "tribe-side-actions" },
       form({ method: "GET", action: `/shops/${encodeURIComponent(product.shopId)}` },
         button({ type: "submit", class: "tribe-action-btn" }, `← ${i18n.shopBackToShop}`)
@@ -434,10 +433,6 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
   const productMain = div({ class: "tribe-main" },
     product.image ? renderMediaBlob(product.image, null, { class: "tribe-detail-image" }) : null,
     div({ class: "confirmations-block stock-block" },
-      div({ class: "card-field" },
-        span({ class: "card-label" }, `${i18n.shopProductStock}: `),
-        span({ class: "card-value" }, stock > 0 ? String(stock) : i18n.shopOutOfStock)
-      ),
       progress({ class: "confirmations-progress stock-progress", value: Math.min(stock, 100), max: 100 })
     ),
     product.description
@@ -509,7 +504,8 @@ const orderStatusChip = (st) => {
     SHIPPED: i18n.shopOrderStatusShipped || "Shipped",
     RECEIVED: i18n.shopOrderStatusReceived || "Received"
   }
-  return renderStateChip(ORDER_STATUS_VARIANT[s] || "whole", "", labels[s] || s)
+  const icons = { PENDING: "⧖", ACCEPTED: "✓", REJECTED: "✗", PAID: "✓", SHIPPED: "📦", RECEIVED: "✓" }
+  return renderStateChip(ORDER_STATUS_VARIANT[s] || "whole", icons[s] || "⧖", labels[s] || s)
 }
 
 exports.shopOrdersView = async (shop, orders) => {
@@ -611,14 +607,14 @@ exports.clearnetShopView = async (shop, products = []) => {
     const pKind = /^\[video:/.test(String(prod.image || '')) ? 'video' : /^\[audio:/.test(String(prod.image || '')) ? 'audio' : 'img';
     return `<article class="cn-product">
       <a class="cn-product-cover" href="${cnEscapeHtml(`${shopHref}/product/${encodeURIComponent(prod.rootId || prod.key)}`)}" aria-label="${cnEscapeHtml(prod.title || '')}"></a>
-      ${pImg ? (pKind === 'img' ? `<img class="cn-product-img" src="${pImg}" alt="" loading="lazy"/>` : `<${pKind} class="cn-product-img" src="${pImg}" controls preload="metadata"></${pKind}>`) : ''}
+      ${pImg ? (pKind === 'img' ? `<img class="cn-product-img" src="${pImg}" alt="" loading="lazy"/>` : `<${pKind} class="cn-product-img" src="${pImg}" controls preload="none"></${pKind}>`) : ''}
       <h3 class="cn-product-title">${cnEscapeHtml(prod.title || '')}</h3>
       ${prod.description ? `<p class="cn-product-desc">${cnRichText(prod.description)}</p>` : ''}
       <p class="cn-product-price">${fmtPrice(prod.price)} ECO</p>
     </article>`;
   }).join('\n');
   const shopBlobUrl = cnBlobUrl(shop.image);
-  const shopImg = shopBlobUrl ? `<img class="cn-shop-img" src="${shopBlobUrl}" alt="${cnEscapeHtml(shop.title || '')}"/>` : '';
+  const shopImg = shopBlobUrl ? `<img class="cn-shop-img" src="${shopBlobUrl}" alt="${cnEscapeHtml(shop.title || '')}" loading="lazy"/>` : '';
   const desc = cnRichText(shop.shortDescription || shop.description || '');
   const shopUrl = shop.url ? safeExternalHref(shop.url) : '';
   const extraCss = `
@@ -677,8 +673,8 @@ exports.clearnetProductView = async (shop, product) => {
   const media = cnBlobUrl(product.image);
   const kind = /^\[video:/.test(String(product.image || '')) ? 'video' : /^\[audio:/.test(String(product.image || '')) ? 'audio' : 'img';
   const mediaHtml = !media ? '' : kind === 'img'
-    ? `<img class="cn-product-page-img" src="${media}" alt="${cnEscapeHtml(product.title || '')}"/>`
-    : `<${kind} class="cn-product-page-img" src="${media}" controls preload="metadata"></${kind}>`;
+    ? `<img class="cn-product-page-img" src="${media}" alt="${cnEscapeHtml(product.title || '')}" loading="lazy"/>`
+    : `<${kind} class="cn-product-page-img" src="${media}" controls preload="none"></${kind}>`;
   const extraCss = `
 .cn-product-back{display:inline-block;margin-bottom:16px;color:var(--fg-soft);text-decoration:none}
 .cn-product-back:hover{color:var(--fg)}

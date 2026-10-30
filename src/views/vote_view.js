@@ -1,9 +1,9 @@
 const { div, h2, p, section, button, form, a, br, input, table, tr, th, td, label, span } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, anchorFor } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, anchorFor, renderCountChip } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { renderTribeOriginChip } = require("./clearnet_view");
+const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { renderPollInline, renderVotedChip } = require("./polls_view");
 
 const userId = config.keys.id;
@@ -134,10 +134,12 @@ const renderVoteListItem = exports.renderVoteListItem = (v, voteOptionsDefault, 
   const origin = v.tribeOrigin || null;
   const href = opts.href !== undefined ? opts.href : (origin ? origin.href : `/votes/${encodeURIComponent(v.id)}`);
   const chips = [
+    renderScopeChip(v, i18n),
     renderVoteStatusChip(v.status),
     opts.votedChip !== undefined ? opts.votedChip : renderVoteVotedChip(v, { voteOptions }),
     renderLifespanChip(v.lifetime, i18n),
     origin ? renderTribeOriginChip(origin) : null,
+    v.deadline ? renderCountChip("◷", i18n.voteDeadline, moment(v.deadline).format("YYYY/MM/DD HH:mm")) : null,
     ...(Array.isArray(opts.extraChips) ? opts.extraChips : [])
   ].filter(Boolean);
   const returnTo = `/votes?filter=${encodeURIComponent(activeFilter || "all")}`;
@@ -161,7 +163,6 @@ const renderVoteListItem = exports.renderVoteListItem = (v, voteOptionsDefault, 
           href ? a({ href }, v.question || i18n.votationsTitle) : (v.question || i18n.votationsTitle)
         )
       ),
-      v.deadline ? p({ class: "time-chip" }, moment(v.deadline).format("YYYY/MM/DD HH:mm")) : null,
       inline,
       ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : []),
       null
@@ -207,7 +208,9 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
 
   const returnTo = `/votes/${encodeURIComponent(v.id)}?filter=${encodeURIComponent(activeFilter || "all")}`;
   const chips = [
+    renderScopeChip(v, i18n),
     renderVoteStatusChip(v.status),
+    renderVoteVotedChip(v, { voteOptions }),
     renderLifespanChip(v.lifetime, i18n),
     renderEcoTax(v.msgSize, v.id)
   ].filter(Boolean);
@@ -229,11 +232,11 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
   pushRow(i18n.voteStatus, statusLabel(v.status));
 
   const voteSide = div({ class: "tribe-side" },
-    renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { arrow: false, date: v.createdAt, chips, bylineExtra: [renderEditedChip(v.id, v.rootId)], spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, editAction: canModifyVote(v) ? `/votes/edit/${encodeURIComponent(v.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined }),
+    renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { arrow: false, date: v.createdAt, chips, bylineExtra: [renderEditedChip(v.id, v.rootId, v.updatedAt)], spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, editAction: canModifyVote(v) ? `/votes/edit/${encodeURIComponent(v.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, v.question)
     ),
-    renderDetailShare(v.id, `/votes/${encodeURIComponent(v.id)}`, v.question, null, null, null, v.createdBy || v.author),
+    renderDetailShare(v.id, `/votes/${encodeURIComponent(v.id)}`, v.question, params.subscription ? { target: v.rootId || v.id, scope: "votes", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(v.createdBy || v.author) === String(userId), returnTo: `/votes/${encodeURIComponent(v.id)}` } : null, null, null, v.createdBy || v.author),
     tagsNode
   );
 
@@ -249,7 +252,7 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
       : null,
     div({ class: "job-section" },
       div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${totalVotesNum}`)
+        span({ class: "tribe-members-count" }, `${i18n.pollVoters}: ${totalVotesNum}`)
       ),
       div({ class: "vote-table" },
         table(
@@ -402,4 +405,4 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
     )
   );
 };
-
+exports.renderVoteStatusChip = renderVoteStatusChip;

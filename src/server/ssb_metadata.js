@@ -22,6 +22,25 @@ const blobUsageOnDisk = (ssbPath) => {
   return out;
 };
 
+const ownGpgId = (ssb, feedId) => new Promise((resolve) => {
+  if (!ssb || typeof ssb.createUserStream !== 'function' || !feedId) return resolve('');
+  try {
+    const pull = require('pull-stream');
+    pull(
+      ssb.createUserStream({ id: feedId, reverse: true }),
+      pull.filter((m) => {
+        const c = m && m.value && m.value.content;
+        return !!c && typeof c === 'object' && c.type === 'about' && (!c.about || c.about === feedId) && Object.prototype.hasOwnProperty.call(c, 'gpgFingerprint');
+      }),
+      pull.take(1),
+      pull.collect((err, msgs) => {
+        const fp = !err && msgs && msgs[0] ? String(msgs[0].value.content.gpgFingerprint || '').trim() : '';
+        resolve(fp ? fp.slice(-8).toUpperCase() : '');
+      })
+    );
+  } catch (_) { resolve(''); }
+});
+
 let printed = false;
 let checkedForUpdate = false;
 let pendingWarmup = null;
@@ -74,7 +93,7 @@ async function checkForUpdate() {
   await updater.getRemoteVersion();
 }
 
-async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, httpHost = 'localhost', isPublic = false) {
+async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, httpHost = 'localhost', isPublic = false, ssb = null) {
   if (printed) return;
   printed = true;
 
@@ -113,6 +132,8 @@ async function printMetadata(mode, modeColor = colors.cyan, httpPort = 3000, htt
   const phoneNumber = phoneEnabled ? (() => { try { return require('../models/phone_number').phoneNumberOf(`@${publicKey}`); } catch (_) { return null; } })() : null;
   console.log(`- VoIP ID: ${phoneEnabled ? (phoneNumber ? `[ ${colors.orange}${phoneNumber}${colors.reset} ]` : 'enabled') : 'disabled'}`);
   console.log(walletId ? `- ECOin ID: [ ${colors.orange}${walletId}${colors.reset} ]` : `- ECOin ID: disabled`);
+  const gpgId = await ownGpgId(ssb, `@${publicKey}`);
+  console.log(gpgId ? `- GPG ID: [ ${colors.orange}${gpgId}${colors.reset} ]` : `- GPG ID: disabled`);
   console.log("- Logging Level:", logLevel);
   console.log("- Engine: db2-legacy");
   const ifaces = os.networkInterfaces();

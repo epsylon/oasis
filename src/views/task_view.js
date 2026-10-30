@@ -1,9 +1,9 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderCardByline, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderCardByline, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf, renderZoomableImage } = require("./gallery_view");
-const { renderTribeOriginChip } = require("./clearnet_view");
+const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -39,17 +39,11 @@ const statusLabel = (s) => {
   return i18n.taskStatusClosed;
 };
 
-const visibilityLabel = (v) => {
-  const vv = String(v || "").toUpperCase();
-  if (vv === "PRIVATE") return i18n.taskPrivate;
-  return i18n.taskPublic;
-};
-
 const renderTaskStatusRow = exports.renderTaskStatusRow = (task, returnTo, action = null) => {
   const st = normalizeStatus(task.status || "OPEN");
   return div({ class: "tribe-side-actions housing-status-row" },
     span({ class: "card-label" }, `${i18n.taskStatus}: `),
-    renderStateChip(st === "CLOSED" ? "hidden" : "mutuals", st === "CLOSED" ? "🔒" : "👁", statusLabel(task.status)),
+    renderTaskStatusChip(task.status),
     form(
       { method: "POST", action: action || `/tasks/status/${encodeURIComponent(task.id)}`, class: "project-control-form project-control-form--status" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -70,7 +64,7 @@ const renderTaskAssignAction = exports.renderTaskAssignAction = (task, isAssigne
   return [
     span({ class: "card-label" }, `${i18n.taskAssignedTo}: `),
     renderStateChip(isAssignedToMe ? "transport" : "whole", isAssignedToMe ? "👤" : "○",
-      String(isAssignedToMe ? i18n.taskAssignedChip : i18n.taskUnassignedChip).toUpperCase()),
+      String(isAssignedToMe ? i18n.taskAssignedChip : i18n.taskUnassignedChip).toUpperCase(), 'mine'),
     form(
       { method: "POST", action: action || `/tasks/assign/${encodeURIComponent(task.id)}`, class: "project-control-form" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
@@ -109,13 +103,12 @@ const renderTaskPriorityChip = (priority) => {
     p === "HIGH" ? i18n.taskPriorityHigh :
     p === "MEDIUM" ? i18n.taskPriorityMedium :
     i18n.taskPriorityLow;
-  return renderStateChip(variant, "⚑", localized || p);
+  return renderStateChip(variant, "⚑", localized || p, 'level');
 };
 
 const renderTaskItem = exports.renderTaskItem = (task, filter, spreadInfo, opts = {}) => {
   const currentFilter = filter || "all";
   const assignees = safeArray(task.assignees);
-  const isPrivate = String(task.isPublic || "").toUpperCase() === "PRIVATE";
   const isAuthor = String(task.author) === String(userId);
   const origin = task.tribeOrigin || null;
   const detailHref = `/tasks/${encodeURIComponent(task.id)}`;
@@ -131,11 +124,12 @@ const renderTaskItem = exports.renderTaskItem = (task, filter, spreadInfo, opts 
     : null;
 
   const chips = [
-    isPrivate ? renderPrivacyChip(true, i18n) : null,
+    renderScopeChip(task, i18n),
     renderTaskStatusChip(task.status),
     renderTaskPriorityChip(task.priority),
     renderLifespanChip(task.lifetime, i18n),
     origin ? renderTribeOriginChip(origin) : null,
+    origin ? null : renderCountChip("👤", i18n.taskAssignedTo, assignees.length),
     ...(Array.isArray(opts.extraChips) ? opts.extraChips : [])
   ].filter(Boolean);
 
@@ -154,9 +148,6 @@ const renderTaskItem = exports.renderTaskItem = (task, filter, spreadInfo, opts 
         h2({ class: "tribe-card-title" },
           href ? a({ href }, task.title || i18n.tasksTitle) : (task.title || i18n.tasksTitle)
         )
-      ),
-      origin ? null : div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
       ),
       ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : []),
       null
@@ -360,18 +351,18 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
 
   const isAuthor = String(task.author) === String(userId);
   const isAssignedToMe = assignees.includes(userId);
-  const isPrivate = String(task.isPublic || "").toUpperCase() === "PRIVATE";
   const returnToSelf = `/tasks/${encodeURIComponent(task.id)}?filter=${encodeURIComponent(currentFilter)}`;
 
   const lifespanChipNode = renderLifespanChip(task.lifetime, i18n);
   const ecoTaxChipNode = renderEcoTax(task.msgSize, task.id);
 
   const chips = [
-    renderPrivacyChip(isPrivate, i18n),
+    renderScopeChip(task, i18n),
     renderTaskStatusChip(task.status),
     renderTaskPriorityChip(task.priority),
     lifespanChipNode,
-    ecoTaxChipNode
+    ecoTaxChipNode,
+    renderCountChip("👤", i18n.taskAssignedTo, assignees.length)
   ].filter(Boolean);
 
   const tagsNode = Array.isArray(task.tags) && task.tags.length
@@ -402,11 +393,11 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
   if (task.location && String(task.location).trim()) pushRow(i18n.taskLocationLabel, task.location);
 
   const taskSide = div({ class: "tribe-side" },
-    renderCardTop(task.id, `/tasks/${encodeURIComponent(task.id)}`, { arrow: false, date: task.createdAt, chips, bylineExtra: [renderEditedChip(task.id, task.rootId)], spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, editAction: isAuthor ? `/tasks/edit/${encodeURIComponent(task.id)}?returnTo=${encodeURIComponent(returnToSelf)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined }),
+    renderCardTop(task.id, `/tasks/${encodeURIComponent(task.id)}`, { arrow: false, date: task.createdAt, chips, bylineExtra: [renderEditedChip(task.id, task.rootId, task.updatedAt)], spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, editAction: isAuthor ? `/tasks/edit/${encodeURIComponent(task.id)}?returnTo=${encodeURIComponent(returnToSelf)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, task.title)
     ),
-    renderDetailShare(task.id, `/tasks/${encodeURIComponent(task.id)}`, task.title, null, null, null, task.author),
+    renderDetailShare(task.id, `/tasks/${encodeURIComponent(task.id)}`, task.title, params.subscription ? { target: task.rootId || task.id, scope: "tasks", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(task.author) === String(userId), returnTo: `/tasks/${encodeURIComponent(task.id)}` } : null, null, null, task.author),
     tagsNode,
     isAuthor ? renderTaskStatusRow(task, returnToSelf) : null
   );
@@ -424,9 +415,6 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
       : null,
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     assignNode ? div({ class: "tribe-side-actions detail-action-row task-assign-row" }, ...assignNode) : null,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.taskAssignedTo}: ${assignees.length}`)
-    ),
     assigneesListNode,
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     renderDocumentActions('tasks', task.id),
@@ -442,4 +430,5 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
     )
   );
 };
-
+exports.renderTaskStatusChip = renderTaskStatusChip;
+exports.renderTaskPriorityChip = renderTaskPriorityChip;

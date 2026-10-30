@@ -33,12 +33,17 @@ const renderMediaThumb = (entry, alt = "") => isVideoEntry(entry)
 const lightboxId = (scope, itemId, index) => `${scope}-photo-${encodeURIComponent(itemId)}-${index}`
 
 let zoomSeq = 0
+const thumbFor = (src) => {
+  const m = String(src || "").match(/^\/blob\/(%26[^/?#]+)$/)
+  return m ? `/image/1024/${m[1]}?fit=inside` : null
+}
+
 const renderZoomableImage = (src, { alt = "", imgClass = "", linkClass = "", thumb = null, full = false } = {}) => {
   if (!src) return null
   zoomSeq = (zoomSeq + 1) % 1000000
   const id = `zoom-${zoomSeq}-${String(src).replace(/[^a-zA-Z0-9]/g, "").slice(-10)}`
   return [
-    a({ href: `#${id}`, id: `${id}-src`, class: linkClass ? `zoom-link ${linkClass}` : "zoom-link" }, img({ src: thumb || src, class: imgClass, alt, loading: "lazy" })),
+    a({ href: `#${id}`, id: `${id}-src`, class: linkClass ? `zoom-link ${linkClass}` : "zoom-link" }, img({ src: thumb || thumbFor(src) || src, class: imgClass, alt, loading: "lazy" })),
     div({ id, class: full ? "lightbox live-lightbox" : "lightbox" },
       a({ href: downloadHref(src), class: "lightbox-download", title: i18n.fileShareDownload || "Download" }, "⤓"),
       a({ href: `#${id}-src`, class: "lightbox-close" }, "×"),

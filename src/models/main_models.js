@@ -420,16 +420,11 @@ models.about = {
     if (isPublic && (await models.about.publicWebHosting(feedId)) === false) {
       return nullImage; 
     }
-    const timeoutPromise = (timeout) => new Promise((_, reject) => setTimeout(() => reject('Timeout'), timeout));
-
     try {
-      const raw = await Promise.race([
-        getAbout({
-          key: "image",
-          feedId,
-        }),
-        timeoutPromise(5000),
-      ]);
+      const raw = await getAbout({
+        key: "image",
+        feedId,
+      });
       if (raw == null || raw.link == null) {
         return nullImage;
       }

@@ -1,9 +1,10 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, img } = require('../server/node_modules/hyperaxe');
 const moment = require('../server/node_modules/moment');
 const { template, i18n, userLink, renderStateChip, renderModuleStatsBy, paged, renderCardTop, renderEngagement } = require('./main_views');
+const { renderScopeChip } = require('./clearnet_view');
 const { renderStyledText, safeExternalHref } = require('../backend/renderStyledText');
 
-const CourtsE2EChip = () => renderStateChip('encrypted', '🔒', i18n.encryptedChipLabel || 'E2E');
+const CourtsE2EChip = () => renderStateChip('encrypted', '🔒', i18n.encryptedChipLabel || 'E2E', 'reach');
 
 const fmt = (d) => moment(d).format('YYYY-MM-DD HH:mm:ss');
 
@@ -45,7 +46,7 @@ const presetLabel = (t) => i18n[PRESET_KEYS[t]] || t;
 const caseTitle = (title) => CASE_TITLE_PRESETS.reduce((acc, t) => acc.split(t).join(presetLabel(t)), String(title || ''));
 const statusLabel = (status) => String(i18n[`courtsStatus${String(status || '').toUpperCase()}`] || status || '').toUpperCase();
 const caseHref = (c) => `/courts/cases/${encodeURIComponent(c.id)}`;
-const caseTop = (c, chips = [CourtsE2EChip()]) => renderCardTop(null, caseHref(c), { author: c.accuser, date: c.createdAt || c.openedAt, chips });
+const caseTop = (c, chips = [CourtsE2EChip()]) => renderCardTop(null, caseHref(c), { author: c.accuser, date: c.createdAt || c.openedAt, chips: [renderScopeChip(c, i18n), ...chips] });
 const caseShare = (c) => renderEngagement(c.id, null, null, { href: caseHref(c), title: caseTitle(c.title), author: c.accuser });
 
 const FILTERS = [

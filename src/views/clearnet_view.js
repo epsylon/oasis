@@ -138,18 +138,40 @@ const renderReachChip = (isClearnet, i18nObj = {}, href = null) => {
     span({ class: 'pm-exposition-text' }, label)
   );
   if (href && isClearnet) {
-    return a({ href, target: '_blank', rel: 'noopener noreferrer', class: 'pm-exposition-chip-link' }, chip);
+    return mv().asChip('scope', a({ href, target: '_blank', rel: 'noopener noreferrer', class: 'pm-exposition-chip-link' }, chip));
   }
-  return chip;
+  return mv().asChip('scope', chip);
+};
+
+const isPrivateFlag = (v) => v === false || ['private', 'false', '0'].includes(String(v == null ? '' : v).toLowerCase());
+const tribeLevelOf = (v) => (v === 'clearnet' || v === 'oasis' ? v : 'tribe');
+const scopeOf = (item, isClearnet = !!item && item.clearnet === true) => {
+  if (!item || typeof item !== 'object') return null;
+  if (item.scope) return item.scope;
+  if (item.tribeOrigin) return tribeLevelOf(item.tribeOrigin.level);
+  if (item.tribeId) return tribeLevelOf(item.reach);
+  if (item.isPrivate === true || item.isPrivate === 'true' || item.isPrivate === 'on' || isPrivateFlag(item.isPublic) || item.isAnonymous === true) return 'private';
+  return isClearnet ? 'clearnet' : 'oasis';
+};
+const scopeStateChip = (variant, text) => mv().asChip('scope', span({ class: `pm-exposition-chip pm-exposition-${variant}` },
+  span({ class: 'pm-exposition-icon' }, '🔒'),
+  span({ class: 'pm-exposition-text' }, text)
+));
+const renderScopeChip = (item, i18nObj = {}, isClearnet = !!item && item.clearnet === true, href = null) => {
+  const scope = scopeOf(item, isClearnet);
+  if (scope === 'private') return scopeStateChip('hidden', i18nObj.privacyPrivate || 'PRIVATE');
+  if (scope === 'tribe') return scopeStateChip('encrypted', i18nObj.tribeReachTribe || 'TRIBE');
+  if (scope === 'oasis' || scope === 'clearnet') return renderReachChip(scope === 'clearnet', i18nObj, scope === 'clearnet' && !item.tribeOrigin && !item.tribeId ? href : null);
+  return null;
 };
 
 const renderTribeOriginChip = (origin) => origin && origin.title
-  ? a({ href: origin.tribeHref || origin.href, class: 'pm-exposition-chip-link' },
+  ? mv().asChip('tribe', a({ href: origin.tribeHref || origin.href, class: 'pm-exposition-chip-link' },
       span({ class: 'pm-exposition-chip pm-exposition-tribe' },
         span({ class: 'pm-exposition-icon' }, 'ꖥ'),
         span({ class: 'pm-exposition-text' }, origin.title)
       )
-    )
+    ))
   : null;
 
 const fediverseProfileUrl = (handle) => {
@@ -195,10 +217,10 @@ const normalizeLicense = (id) => (LICENSES.find(l => l.id === String(id || '').t
 const renderLicenseChip = (id) => {
   const l = licenseInfo(id);
   if (!l) return null;
-  return span({ class: 'pm-exposition-chip pm-exposition-license', title: l.name },
+  return mv().asChip('level', span({ class: 'pm-exposition-chip pm-exposition-license', title: l.name },
     span({ class: 'pm-exposition-icon' }, '\u2696'),
     span({ class: 'pm-exposition-text' }, l.label)
-  );
+  ));
 };
 
 const renderLicenseSelect = (current, i18nObj = {}) => {
@@ -217,24 +239,24 @@ const renderClearnetLicense = (id) => {
 };
 
 const renderTransportChip = (i18nObj = {}) => {
-  return span({ class: 'pm-exposition-chip pm-exposition-transport', title: 'Secret Handshake + boxstream · SHA-256' },
-    span({ class: 'pm-exposition-icon' }, '\u21C4'),
-    span({ class: 'pm-exposition-text' }, i18nObj.transportChipLabel || 'Encrypted in transit')
-  );
+  return mv().asChip('reach', span({ class: 'pm-exposition-chip pm-exposition-transport', title: 'Secret Handshake + boxstream · SHA-256' },
+    span({ class: 'pm-exposition-icon' }, '🔒'),
+    span({ class: 'pm-exposition-text' }, i18nObj.transportChipLabel || 'In transit')
+  ));
 };
 
 const renderEncryptedChip = (i18nObj = {}) => {
-  return span({ class: 'pm-exposition-chip pm-exposition-encrypted' },
+  return mv().asChip('reach', span({ class: 'pm-exposition-chip pm-exposition-encrypted' },
     span({ class: 'pm-exposition-icon' }, '🔒'),
     span({ class: 'pm-exposition-text' }, i18nObj.encryptedChipLabel || 'Encrypted')
-  );
+  ));
 };
 
 const renderDoubleEncryptionChip = (i18nObj = {}) => {
-  return span({ class: 'pm-exposition-chip pm-exposition-encrypted pm-double-enc-chip' },
+  return mv().asChip('reach', span({ class: 'pm-exposition-chip pm-exposition-encrypted pm-double-enc-chip' },
     span({ class: 'pm-exposition-icon' }, '🔒'),
     span({ class: 'pm-exposition-text' }, i18nObj.pmCrypterChip || '2xE2E')
-  );
+  ));
 };
 
 const { INTERNAL_PATHS: INTERNAL_OASIS_PATHS } = require('../backend/renderStyledText');
@@ -501,7 +523,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   </header>
   ${propagateLang(stripInternalAnchors(zoomClearnetImages(body)), langOverride)}
   <footer class="cn-footer">
-    <a href="https://wiki.solarnethub.com" target="_blank" rel="noopener"><img class="cn-footer-logo" src="/c/assets/images/snh-oasis.jpg" alt="Oasis"/></a>
+    <a href="https://wiki.solarnethub.com" target="_blank" rel="noopener"><img class="cn-footer-logo" src="/c/assets/images/snh-oasis.jpg" alt="Oasis" loading="lazy"/></a>
     <div class="cn-footer-line">${escapeHtml(cnText('cnSyncedPeers', 'Synced-peers'))}: [ <strong>${Number(sharedState.getSyncedPeerCount ? sharedState.getSyncedPeerCount() : 0) || 0}</strong> ]</div>
     <div class="cn-footer-line"><a href="https://code.03c8.net/krakenslab/oasis" target="_blank" rel="noopener">${escapeHtml(cnPkg.name || '@krakenslab/oasis')}</a> [ ${escapeHtml(cnPkg.version || '?')} ]</div>
     <div class="cn-footer-line">${escapeHtml(cnText('cnLicense', 'License'))}: <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">GPLv3</a> - ${new Date().getFullYear()}</div>
@@ -633,11 +655,11 @@ const renderClearnetMediaView = ({ kind, item }) => {
   let mediaHtml = '';
   if (blob) {
     if (kind === 'image') {
-      mediaHtml = `<img src="${blob}" alt="${title}"/>`;
+      mediaHtml = `<img src="${blob}" alt="${title}" loading="lazy"/>`;
     } else if (kind === 'audio') {
-      mediaHtml = `<audio controls preload="metadata" src="${blob}"></audio>`;
+      mediaHtml = `<audio controls preload="none" src="${blob}"></audio>`;
     } else if (kind === 'video') {
-      mediaHtml = `<video controls preload="metadata" src="${blob}"></video>`;
+      mediaHtml = `<video controls preload="none" src="${blob}"></video>`;
     } else if (kind === 'file' || kind === 'torrent') {
       const dlName = (v) => String(v || '').replace(/[\\/:*?"<>|\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120);
       const extLabel = (name) => { const m = String(name || '').match(/\.([A-Za-z0-9]{1,8})$/); return m ? m[1].toUpperCase() : 'FILE'; };
@@ -651,7 +673,7 @@ const renderClearnetMediaView = ({ kind, item }) => {
     } else if (kind === 'document') {
       mediaHtml = renderClearnetPdfFrame(blob, item.title);
     } else {
-      mediaHtml = `<img src="${blob}" alt="${title}"/>`;
+      mediaHtml = `<img src="${blob}" alt="${title}" loading="lazy"/>`;
     }
   }
   const body = `
@@ -702,15 +724,15 @@ const renderClearnetPodcastView = ({ channel, feed = '' }) => {
   const epHtml = episodes.map(ep => {
     const src = ep.media && ep.media.blobId ? blobUrl(ep.media.blobId) : null;
     const player = !src ? '' : (ep.media.kind === 'video'
-      ? `<video controls preload="metadata" src="${src}"></video>`
-      : `<audio controls preload="metadata" src="${src}"></audio>`);
+      ? `<video controls preload="none" src="${src}"></video>`
+      : `<audio controls preload="none" src="${src}"></audio>`);
     const epDate = ep.createdAt ? escapeHtml(new Date(ep.createdAt).toISOString().slice(0, 10)) : '';
     return `<div class="cn-episode"><h2>#${Number(ep.number) || 0} · ${escapeHtml(ep.title || '')}</h2><div class="cn-episode-meta">${epDate}</div>${player}${ep.description ? `<p>${renderRichText(ep.description)}</p>` : ''}${renderTagChips(ep.tags)}</div>`;
   }).join('');
   const body = `
   <div class="cn-media-meta">${renderKindTag('podcast')}${dateStr ? `<span>📅 ${dateStr}</span>` : ''}<span>🎧 ${episodes.length}</span>${channel.category ? `<span class="cn-detail">${escapeHtml(String(cnText(`podcastCategory${String(channel.category).charAt(0)}${String(channel.category).slice(1).toLowerCase()}`, channel.category)).toUpperCase())}</span>` : ''}${renderClearnetLicense(channel.license)}${feed ? `<a class="cn-license" href="${escapeHtml(feed)}">RSS</a>` : ''}</div>
   <h1 class="cn-media-title">${title}</h1>
-  ${cover ? (coverIsVideo ? `<video class="cn-podcast-cover" controls muted preload="metadata" src="${cover}"></video>` : `<img class="cn-podcast-cover" src="${cover}" alt="${title}"/>`) : ''}
+  ${cover ? (coverIsVideo ? `<video class="cn-podcast-cover" controls muted preload="none" src="${cover}"></video>` : `<img class="cn-podcast-cover" src="${cover}" alt="${title}" loading="lazy"/>`) : ''}
   ${desc ? `<p class="cn-media-desc">${desc}</p>` : ''}
   ${renderTagChips(channel.tags)}
   ${epHtml ? `<hr class="cn-sep"/>${epHtml}` : ''}
@@ -738,6 +760,7 @@ module.exports = {
   blobIdOf,
   blobUrl,
   renderReachChip,
+  renderScopeChip,
   renderTribeOriginChip,
   renderClearnetSelector,
   renderClearnetSwitch,

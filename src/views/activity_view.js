@@ -1,8 +1,255 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, herePath, i18n, paged, userLink, userLinkLabel, renderSupportButton, renderStateChip, renderPhoneChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref, RELATION_FILTERS, relationFilterLabel } = require('./main_views');
+const { template, herePath, i18n, paged, userLink, userLinkLabel, renderSupportButton, renderStateChip, renderCountChip, renderPhoneChip, renderModeChip, renderVisibilityChip, asChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref, RELATION_FILTERS, relationFilterLabel, clearnetItemHref } = require('./main_views');
+const { renderReportStatusChip, renderReportSeverityChip, renderReportCategoryChip } = require('./report_view');
+const { renderEventSummary, renderEventChips } = require('./event_view');
+const { renderTaskStatusChip, renderTaskPriorityChip } = require('./task_view');
+const { renderTransferStatusChip } = require('./transfer_view');
+const { renderProjectStatusChip } = require('./projects_view');
+const { renderChatStatusChip } = require('./chats_view');
+const { renderVoteStatusChip } = require('./vote_view');
+const { renderWikiStatusChip } = require('./wiki_view');
+const { renderCalendarStatusChip } = require('./calendars_view');
+const { renderPadStatusChip } = require('./pads_view');
+const { renderRoomStatusChip } = require('./rooms_view');
+const { renderMailingStatusChip, renderMailingTypeChip } = require('./mailing_view');
+const { renderEmergencySeverityChip, renderEmergencyStatusChip, renderEmergencyCategoryChip } = require('./emergencies_view');
+const { renderRouteKindChip, renderRouteModeChip, renderRouteStatusChip, renderRoutePriceChip } = require('./logistics_view');
+const { renderCoursePriceChip } = require('./school_view');
+const { renderFacilityStatusChip, renderBuildStatusChip } = require('./industry_view');
+const { renderCampaignStatusChip, renderCampaignOutcomeChip, renderCampaignCategoryChip, renderCampaignSignaturesChip } = require('./campaigns_view');
 const opinionCategories = require('../backend/opinion_categories');
 const { roomNumberOf } = require('../models/phone_number');
+
+const cardTitleRow = (title, href) => title ? div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, href ? a({ href }, title) : title)) : null;
+const cardTitleLink = (title, href) => title ? div({ class: 'card-field' }, href ? a({ href, class: 'card-value user-link' }, title) : span({ class: 'card-value' }, title)) : null;
+const cardMeta = (icon, ...nodes) => p({ class: 'job-meta-line' }, `${icon} `, ...nodes);
+const cardDate = (value) => value && moment(value).isValid() ? p({ class: 'time-chip' }, moment(value).format('YYYY/MM/DD HH:mm')) : null;
+const cardPrice = (text) => text ? div({ class: 'price-chip' }, text) : null;
+const statusIconOf = (s) => /CLOSED|DISCARDED|REJECTED|INVALID|CANCELLED|EXPIRED|FAILED|DISSOLVED|ARCHIVED/.test(s) ? '✗' : /PENDING|REVIEW|PROGRESS|PAUSED|PROPOSED|UNCONFIRMED|RESERVED/.test(s) ? '⧖' : '✓';
+const plainStatusChip = (raw, label = null) => {
+  const s = String(raw || '').toUpperCase();
+  if (!s) return null;
+  const icon = statusIconOf(s);
+  return renderStateChip(icon === '✗' ? 'closed' : icon === '⧖' ? 'pending' : 'mutuals', icon, String(label || s).toUpperCase(), 'status');
+};
+const upperOf = (v) => String(v || '').toUpperCase();
+const capWord = (v) => { const s = String(v || ''); return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); };
+const countOf = (v) => Array.isArray(v) ? v.length : 0;
+const isPast = (value) => { const t = Date.parse(value || ''); return Number.isFinite(t) && t <= Date.now(); };
+const dateChip = (label, value) => value && moment(value).isValid() ? renderCountChip('◷', label, moment(value).format('YYYY/MM/DD HH:mm')) : null;
+const pickOf = (list, v, fallback) => list.includes(upperOf(v)) ? upperOf(v) : fallback;
+const contentOf = (x) => (x && (x.value?.content || x.content)) || {};
+const LICENSED_TYPES = new Set(['audio', 'video', 'image', 'document', 'file', 'torrent']);
+const isUbiTransfer = (c) => (Array.isArray(c.tags) ? c.tags : []).some(t => upperOf(t) === 'UBI');
+const transferAmountText = (c) => {
+  const cat = pickOf(['ECONOMIC', 'TIME', 'TRUST'], c.category || 'ECONOMIC', 'ECONOMIC');
+  if (cat === 'TRUST') return null;
+  const n = Number(c.amount);
+  return `${Number.isFinite(n) ? n.toFixed(6) : String(c.amount ?? '')} ${cat === 'TIME' ? i18n.transfersUnitHours : i18n.transfersUnitEco}`;
+};
+const jobTypeLabelOf = (jobType) => {
+  const t = String(jobType || '').toLowerCase();
+  return t === 'exchange' ? i18n.jobTypeExchange : t === 'employee' ? i18n.jobTypeSalary : t === 'freelancer' ? i18n.jobTypeFreelance : jobType;
+};
+const forumCategoryChip = (category) => {
+  if (!category) return null;
+  const label = i18n['forumCat' + String(category).replace(/\./g, '').replace(/[\s-]/g, '').toUpperCase()];
+  const chip = renderStateChip('whole', '◇', upperOf(label || category), 'kind');
+  return label ? asChip('kind', a({ href: `/forum?filter=${encodeURIComponent(category)}`, class: 'pm-exposition-chip-link' }, chip)) : chip;
+};
+const roomPhoneChip = (number, c) => {
+  if (!number) return null;
+  if (upperOf(c.status) !== 'CLOSED' && c.line === 'SWITCHBOARD') return renderPhoneChip(number, i18n.roomNumberHint);
+  return span({ title: upperOf(c.status) === 'CLOSED' ? i18n.roomStatusClosed : i18n.roomLineDndError }, renderStateChip('whole', '✆', number, 'data'));
+};
+const forumVotesOf = (all, ids) => {
+  const votes = (all || []).filter(x => x && x.type === 'vote');
+  if (!votes.length) return null;
+  const latest = new Map();
+  for (const v of votes) {
+    const vote = contentOf(v).vote;
+    if (!vote || !ids.includes(vote.link)) continue;
+    const prev = latest.get(v.author);
+    if (!prev || (v.ts || 0) >= prev.ts) latest.set(v.author, { value: Number(vote.value) || 0, ts: v.ts || 0 });
+  }
+  const values = [...latest.values()];
+  return { positives: values.filter(v => v.value > 0).length, negatives: values.filter(v => v.value < 0).length };
+};
+const campaignStateOf = (c, signatures) => {
+  const goal = Math.max(0, Math.floor(Number(c.goal)) || 0);
+  const achieved = goal > 0 && signatures >= goal;
+  const status = upperOf(c.status) === 'CLOSED' ? 'CLOSED' : achieved ? 'ACHIEVED' : isPast(c.deadline) ? 'CLOSED' : 'OPEN';
+  return { closed: status === 'CLOSED', achieved, category: upperOf(c.category), goal, signatureCount: signatures, progress: goal > 0 ? Math.min(100, Math.round((signatures / goal) * 100)) : 0 };
+};
+
+const CLEARNET_CARD_PATHS = { audio: 'audios', video: 'videos', image: 'images', document: 'documents', file: 'files', torrent: 'torrents', bookmark: 'bookmarks', post: 'blog', feed: 'feed', wikiPage: 'wiki', podcast: 'podcasts', market: 'market', shop: 'shops', schoolCourse: 'school', job: 'jobs', event: 'events', project: 'projects', emergency: 'emergencies', campaign: 'campaigns' };
+const scopeChipOf = (type, content, action) => {
+  const c = content || {};
+  const scope = (action && action.scope) || c.scope;
+  if (!scope) return null;
+  const path = type === 'post' && c.root ? null : CLEARNET_CARD_PATHS[type];
+  return renderScopeChip({ scope, tribeId: c.tribeId, tribeOrigin: c.tribeOrigin }, i18n, scope === 'clearnet', path ? clearnetItemHref(path, c.title || c.subject || c.name || c.question || '', (action && (action.rootId || action.id || action.key)) || '') : null);
+};
+const contentChipsOf = (type, content, ctx = {}) => [scopeChipOf(type, content, ctx.action), ...moduleChipsOf(type, content, ctx)];
+const moduleChipsOf = (type, content, ctx = {}) => {
+  const c = content || {};
+  const action = ctx.action || {};
+  const all = Array.isArray(ctx.all) ? ctx.all : null;
+  if (LICENSED_TYPES.has(type)) return [(type === 'file' || type === 'torrent') && c.tribeId ? null : renderLicenseChip(c.license)];
+  switch (type) {
+    case 'tribe':
+      return [renderModeChip(c.inviteMode, i18n), renderCountChip('👥', i18n.tribeMembersCount, countOf(c.members))];
+    case 'votes': {
+      const status = (action.vote && action.vote.status) || (upperOf(c.status || 'OPEN') === 'OPEN' && isPast(c.deadline) ? 'CLOSED' : upperOf(c.status || 'OPEN'));
+      return [renderVoteStatusChip(status)];
+    }
+    case 'poll': {
+      const poll = action.poll && typeof action.poll === 'object' ? action.poll : { status: isPast(c.deadline) ? 'CLOSED' : 'OPEN', anonymous: c.anonymous === true, multiple: c.multiple === true, deadline: c.deadline };
+      return [
+        renderPollStatusChip(poll),
+        poll.anonymous ? renderStateChip('whole', '◈', i18n.pollAnonymous, 'level') : null,
+        poll.multiple ? renderStateChip('whole', '☰', i18n.pollMultiple, 'level') : null,
+        dateChip(i18n.pollDeadline, poll.deadline)
+      ];
+    }
+    case 'wikiPage':
+      return [renderWikiStatusChip(c), renderLicenseChip(c.license)];
+    case 'podcast':
+      return [c.category ? renderStateChip('whole', '◇', upperOf(i18n['podcastCategory' + capWord(c.category)] || c.category), 'kind') : null, renderLicenseChip(c.license)];
+    case 'podcastEpisode': {
+      const channel = all && c.channel ? all.find(x => x && x.type === 'podcast' && [x.id, x.key, x.rootId].includes(c.channel)) : null;
+      return channel ? [renderLicenseChip(contentOf(channel).license)] : [];
+    }
+    case 'calendar':
+      return [renderCalendarStatusChip({ isClosed: upperOf(c.status) === 'CLOSED' || isPast(c.deadline) }), renderEncryptedChip(i18n), renderCountChip('👥', i18n.calendarParticipantsLabel, countOf(c.participants))];
+    case 'pad':
+      return [renderPadStatusChip(c.status, upperOf(c.status) === 'CLOSED' || isPast(c.deadline)), renderEncryptedChip(i18n), renderCountChip('👥', i18n.padMembersLabel, countOf(c.members)), dateChip(i18n.padDeadlineLabel, c.deadline)];
+    case 'chat':
+      return [renderChatStatusChip(c.status), renderEncryptedChip(i18n), c.category ? renderStateChip('whole', '◇', upperOf(c.category), 'kind') : null, renderCountChip('👥', i18n.chatParticipants, countOf(c.members))];
+    case 'room': {
+      const closed = upperOf(c.status) === 'CLOSED';
+      const roomType = upperOf(c.status) === 'INVITE-ONLY' || (closed && c.encrypted === true && !c.tribeId) ? 'INVITE-ONLY' : 'OPEN';
+      return [renderRoomStatusChip({ isClosed: closed, type: roomType }), renderEncryptedChip(i18n), roomPhoneChip(roomNumberOf(action.rootId || action.id || action.key || ''), c), renderCountChip('👥', i18n.roomParticipants, countOf(c.members))];
+    }
+    case 'map': {
+      const mapType = upperOf(c.mapType || 'SINGLE');
+      return [renderStateChip('whole', '🗺', upperOf(i18n[`mapType${capWord(mapType)}`] || mapType), 'kind')];
+    }
+    case 'mailingList':
+      return [renderMailingTypeChip({ listType: pickOf(['OPEN', 'CLOSED'], c.listType, 'OPEN') }), renderMailingStatusChip({ status: pickOf(['ACTIVE', 'ARCHIVED'], c.status, 'ACTIVE') })];
+    case 'shop':
+      return [upperOf(c.visibility) === 'CLOSED' ? renderStateChip('hidden', '✗', i18n.shopClosed) : renderStateChip('mutuals', '✓', i18n.shopOpen)];
+    case 'emergency': {
+      const status = upperOf(c.status) === 'RESOLVED' ? 'RESOLVED' : isPast(c.expiresAt) ? 'EXPIRED' : 'ACTIVE';
+      return [renderEmergencySeverityChip(c), renderEmergencyStatusChip({ status }), c.category ? renderEmergencyCategoryChip({ category: upperOf(c.category) }) : null, dateChip(i18n.emergencyExpiresAt, c.expiresAt)];
+    }
+    case 'logisticsRoute': {
+      const route = {
+        kind: pickOf(['TRIP', 'SHIPMENT'], c.kind, 'TRIP'),
+        mode: pickOf(['OFFER', 'REQUEST'], c.mode, 'OFFER'),
+        status: upperOf(c.status) === 'CLOSED' ? 'CLOSED' : isPast(c.date) && pickOf(['NONE', 'DAILY', 'WEEKLY', 'MONTHLY'], c.recurrence, 'NONE') === 'NONE' ? 'PAST' : 'OPEN',
+        priceType: pickOf(['FREE', 'ECO', 'TIME'], c.priceType, 'FREE'),
+        price: Number(c.price) || 0
+      };
+      return [renderRouteKindChip(route), renderRouteModeChip(route), renderRouteStatusChip(route), renderRoutePriceChip(route)];
+    }
+    case 'market':
+      return [
+        upperOf(c.visibility) === 'HIDDEN' ? renderVisibilityChip('HIDDEN', i18n) : null,
+        c.item_type ? renderStateChip('whole', '◇', upperOf(c.item_type), 'kind') : null,
+        c.item_status ? renderStateChip('whole', '✧', upperOf(i18n[`marketFilter${capWord(c.item_status)}`] || c.item_status), 'level') : null,
+        plainStatusChip(c.status),
+        renderCountChip('▦', i18n.marketItemStock, c.stock || 0)
+      ];
+    case 'task':
+      return [renderTaskStatusChip(c.status), renderTaskPriorityChip(c.priority), renderCountChip('👤', i18n.taskAssignedTo, countOf(c.assignees))];
+    case 'report':
+      return [renderReportStatusChip(c.status), renderReportSeverityChip(c.severity), c.category ? renderReportCategoryChip(c.category) : null, Array.isArray(c.confirmations) ? renderCountChip('✓', i18n.reportsConfirmations, c.confirmations.length) : null];
+    case 'event':
+      return renderEventChips(c);
+    case 'schoolCourse':
+      return [
+        upperOf(c.visibility) === 'INVITE' ? renderStateChip('whole', '🔑', i18n.chatStatusInviteOnly) : null,
+        upperOf(c.status) === 'CLOSED' ? renderStateChip('hidden', '✗', i18n.schoolClosed) : renderStateChip('pending', '✓', i18n.schoolOngoing),
+        renderCoursePriceChip(c),
+        dateChip(i18n.schoolStartDate, c.startDate)
+      ];
+    case 'forum': {
+      const votes = typeof c.positiveVotes === 'number' ? { positives: c.positiveVotes, negatives: c.negativeVotes } : forumVotesOf(all, [action.id, action.key, action.tipId, action.rootId, c.key].filter(Boolean));
+      return [
+        forumCategoryChip(c.category),
+        votes ? renderCountChip('▲', null, Number(votes.positives) || 0, 'vote-up') : null,
+        votes ? renderCountChip('▼', null, Number(votes.negatives) || 0, 'vote-down') : null
+      ];
+    }
+    case 'housing': {
+      const ht = String(c.housing_type || '').toLowerCase();
+      return [
+        c.housing_type ? renderStateChip('whole', ht === 'sale' ? '🏷' : ht === 'rent' ? '🔑' : '🛋', i18n['housingType' + upperOf(c.housing_type)] || upperOf(c.housing_type), 'kind') : null,
+        c.property_type ? renderStateChip('whole', '◈', upperOf(c.property_type), 'level') : null,
+        plainStatusChip(c.status, c.status ? i18n['housingStatus' + upperOf(c.status)] : null),
+        Number(c.rooms) > 0 ? renderCountChip('🚪', i18n.housingRooms, c.rooms) : null,
+        Number(c.size) > 0 ? renderCountChip('⬚', i18n.housingSize, `${c.size} m²`) : null,
+        Number(c.capacity) > 0 ? renderCountChip('👥', i18n.housingCapacity, c.capacity) : null
+      ];
+    }
+    case 'job':
+      return [
+        c.job_type ? renderStateChip('whole', '◇', upperOf(jobTypeLabelOf(c.job_type)), 'kind') : null,
+        plainStatusChip(c.status, c.status ? i18n['jobStatus' + upperOf(c.status)] : null),
+        Number(c.vacants) > 0 ? renderCountChip('✚', i18n.jobVacants, c.vacants) : null,
+        renderCountChip('👥', i18n.jobSubscribers, countOf(c.subscribers))
+      ];
+    case 'shopProduct':
+      return [renderCountChip('▦', i18n.shopProductStock, c.stock || 0)];
+    case 'project': {
+      const ratio = c.goal ? Math.min(100, Math.round((parseFloat(c.pledged || 0) / parseFloat(c.goal)) * 100)) : 0;
+      const milestones = Array.isArray(c.milestones) ? c.milestones : [];
+      const lastMs = milestones.length ? milestones[milestones.length - 1] : null;
+      const bountyVal = typeof c.bountyAmount !== 'undefined' ? c.bountyAmount : (typeof c.bounty === 'number' ? c.bounty : null);
+      return [
+        renderProjectStatusChip(upperOf(c.status || 'ACTIVE')),
+        typeof c.progress !== 'undefined' ? renderCountChip('▰', i18n.projectProgress, `${c.progress || 0}%`) : null,
+        renderCountChip('¤', i18n.projectFunding, `${ratio}%${typeof c.pledged !== 'undefined' ? ` · ${c.pledged || 0} ECO` : ''}`),
+        renderCountChip('👥', i18n.projectFollowers, countOf(c.followers)),
+        renderCountChip('♦', i18n.projectBackers, `${countOf(c.backers)} · ${sumAmounts(c.backers || [])} ECO`),
+        milestones.length ? renderCountChip('⚑', i18n.projectMilestones, `${milestones.length}${lastMs && lastMs.title ? ' · ' + lastMs.title : ''}`) : null,
+        bountyVal != null ? renderStateChip('whole', '🏆', `${bountyVal} ${upperOf(c.bounty_currency || 'ECO')}`, 'level') : null
+      ];
+    }
+    case 'industry':
+      return [
+        renderFacilityStatusChip(c.status),
+        c.sector ? renderStateChip('whole', '🏭', upperOf(i18n[`industrySector_${c.sector}`] || c.sector), 'kind') : null,
+        c.membershipPolicy ? renderStateChip('whole', c.membershipPolicy === 'open' ? '✓' : '🔑', upperOf(i18n[`industryPolicy_${c.membershipPolicy}`] || c.membershipPolicy), 'level') : null,
+        c.memberCount != null || Array.isArray(c.members) ? renderCountChip('👥', i18n.industryMembers, c.memberCount != null ? c.memberCount : countOf(c.members)) : null
+      ];
+    case 'transfer':
+      return [
+        renderTransferStatusChip(c.status),
+        isUbiTransfer(c) ? renderStateChip('whole', '❄', upperOf(i18n.transfersFilterUBI), 'kind') : null,
+        isPast(c.deadline) ? renderStateChip('closed', '⏰', i18n.transfersExpiredBadge, 'status') : null
+      ];
+    case 'campaign': {
+      const signatures = typeof c.signatureCount === 'number' ? null : (all || []).filter(x => x && x.type === 'campaignSignature');
+      if (signatures && !signatures.length) {
+        const cp = campaignStateOf(c, 0);
+        return [renderCampaignStatusChip(cp), cp.category ? renderCampaignCategoryChip(cp) : null];
+      }
+      const cpKey = action.id || action.key || '';
+      const cp = signatures ? campaignStateOf(c, new Set(signatures.filter(x => x.content && (x.content.target === cpKey || x.content.target === (action.rootId || cpKey))).map(x => x.author)).size) : c;
+      return [renderCampaignStatusChip(cp), renderCampaignOutcomeChip(cp), cp.category ? renderCampaignCategoryChip(cp) : null, renderCampaignSignaturesChip(cp)];
+    }
+    default:
+      return [];
+  }
+};
+exports.contentChipsOf = contentChipsOf;
+exports.scopeChipOf = scopeChipOf;
+exports.transferAmountText = transferAmountText;
+exports.isUbiTransfer = isUbiTransfer;
+exports.jobTypeLabelOf = jobTypeLabelOf;
 
 const OPINION_TYPES = new Set(['bookmark','votes','feed','image','audio','video','document','torrent','file']);
 const TORRENTABLE_TYPES = CONTENT_TORRENTABLE;
@@ -19,12 +266,12 @@ const OPINION_ROUTES = {
 };
 const moment = require("../server/node_modules/moment");
 const { renderStyledText, escapeHtml, safeExternalHref } = require('../backend/renderStyledText');
-const { renderPollInline, renderVotedChip, renderPollResultsField } = require('./polls_view');
+const { renderPollInline, renderVotedChip, renderPollResultsField, renderPollStatusChip } = require('./polls_view');
 const { renderVoteInline, renderVoteVotedChip, renderVoteResultsField } = require('./vote_view');
 const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const { renderZoomableImage } = require('./gallery_view');
-const { renderTribeOriginChip } = require('./clearnet_view');
+const { renderTribeOriginChip, renderLicenseChip, renderEncryptedChip, renderScopeChip } = require('./clearnet_view');
 
 const MEDIA_MD_RE = /!?\[(?:image|video|audio|pdf|torrent)[^\]]*\]\(\s*&[^)\s]+\s*\)/g
 const stripMediaMarkdown = (text) => String(text || '').replace(MEDIA_MD_RE, '').replace(/\n{3,}/g, '\n\n').trim()
@@ -208,6 +455,7 @@ function buildActivityItemsWithPostThreads(deduped, allActions) {
       type: 'postThread',
       author: latest.author,
       ts: latest.ts,
+      scope: latest.scope || rootAction.scope || null,
       content: {
         threadId,
         rootType,
@@ -263,8 +511,9 @@ const renderTribeOpenedCard = (action, date, authorName, following = null, retur
       authorName,
       date: action.ts,
       chips: [div({ class: 'card-chips-row' },
-        span({ class: 'pm-exposition-chip pm-exposition-whole' }, span({ class: 'pm-exposition-text' }, label)),
-        renderTribeOriginChip(origin)
+        renderStateChip('whole', '▣', label, 'module'),
+        renderTribeOriginChip(origin),
+        scopeChipOf('tribeOpened', c, action)
       )]
     }),
     div({ class: 'card-section' },
@@ -382,43 +631,19 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     const type = action.type || 'unknown';
     if (type === 'tribeOpened') return renderTribeOpenedCard(action, date, (action.authorNames && action.authorNames[action.author]) || getProfile(action.author).name, extras.following, extras.returnTo);
     let skip = false;
-    let headerText;
-    if (type.startsWith('parliament')) {
-      const sub = type.replace('parliament', '');
-      headerText = `[PARLIAMENT · ${sub.toUpperCase()}]`;
-    } else if (type.startsWith('courts')) {
-      const rawSub = type.slice('courts'.length);
-      const pretty = rawSub
-        .replace(/^[_\s]+/, '')
-        .replace(/[_\s]+/g, ' · ')
-        .replace(/([a-z])([A-Z])/g, '$1 · $2');
-      const finalSub = pretty || 'EVENT';
-      headerText = `[COURTS · ${finalSub.toUpperCase()}]`;
-    } else if (type === 'taskAssignment') {
-      headerText = `[${String(i18n.typeTask || 'TASK').toUpperCase()} · ASSIGNMENT]`;
-    } else if (type === 'shopProduct') {
-      headerText = `[SHOP · PRODUCT]`;
-    } else if (type === 'pad') {
-      headerText = `[PAD · ${String(i18n.padNew || 'NEW').toUpperCase()}]`;
-    } else if (type === 'wikiPage') {
-      headerText = `[${String(i18n.typeWiki || 'WIKI').toUpperCase()}]`;
-    } else if (type === 'emergencyUpdate') {
-      headerText = `[${String(i18n.typeEmergency || 'EMERGENCY').toUpperCase()} · ${String(i18n.emergencyLastUpdate || 'LAST UPDATE').toUpperCase()}]`;
-    } else if (type === 'campaignUpdate') {
-      headerText = `[${String(i18n.typeCampaign || 'CAMPAIGN').toUpperCase()} · ${String(i18n.emergencyLastUpdate || 'LAST UPDATE').toUpperCase()}]`;
-    } else if (type === 'podcastEpisode') {
-      headerText = `[${String(i18n.typePodcast || 'PODCAST').toUpperCase()} · ${String(i18n.typePodcastEpisode || 'EPISODE').toUpperCase()}]`;
-    } else if (type === 'larpHousePost') {
-      headerText = `[${String(i18n.typeLarp || 'L.A.R.P.').toUpperCase()}]`;
-    } else if (type === 'post' && commentOf(action)) {
-      headerText = `[${String(commentLabel(commentOf(action))).toUpperCase()}]`;
-    } else {
-      const typeLabel = i18n[`type${capitalize(type)}`] || type;
-      headerText = `[${String(typeLabel).toUpperCase()}]`;
-    }
+    const moduleLabel = type === 'pad' ? `${i18n.typePad} · ${i18n.padNew}`
+      : type === 'wikiPage' ? i18n.typeWiki
+      : type === 'emergencyUpdate' ? `${i18n.typeEmergency} · ${i18n.emergencyLastUpdate}`
+      : type === 'campaignUpdate' ? `${i18n.typeCampaign} · ${i18n.emergencyLastUpdate}`
+      : type === 'podcastEpisode' ? `${i18n.typePodcast} · ${i18n.typePodcastEpisode}`
+      : type === 'larpHousePost' ? i18n.typeLarp
+      : type === 'post' && commentOf(action) ? commentLabel(commentOf(action))
+      : i18n[`type${capitalize(type)}`] || (type.startsWith('parliament') ? i18n.typeParliament : type.startsWith('courts') ? i18n.typeCourts : type);
 
     const content = action.value?.content || action.content || {};
     const cardBody = [];
+    const cardChips = [...contentChipsOf(type, content, { action, all })];
+    const titleHref = getViewDetailsAction(type, action);
 
     if (type === 'votes') {
       const { question, deadline, votes, totalVotes } = content;
@@ -428,38 +653,30 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
 
       cardBody.push(
         div({ class: 'card-section votes' },
-          div({ class: 'card-field' },
-            span({ class: 'card-value' }, voteState.question || question || '')
-          ),
-          deadline ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.deadline + ':'),
-            span({ class: 'card-value' }, moment(voteState.deadline || deadline).format("YYYY/MM/DD HH:mm"))
-          ) : null,
+          cardTitleRow(voteState.question || question || '', titleHref),
+          cardDate(voteState.deadline || deadline),
           renderVoteInline(voteState, extras.returnTo || '/activity', 'va', { voteBeforeVoters: true, afterVoters: [renderVoteResultsField(voteState)] })
         )
       );
     }
 
     if (type === 'transfer') {
-      const { from, to, concept, amount, deadline, status, confirmedBy } = content;
+      const { concept, deadline } = content;
       cardBody.push(
         div({ class: 'card-section transfer' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.concept + ':'), span({ class: 'card-value' }, concept)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.amount + ':'), span({ class: 'card-value' }, amount)),
-          deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, moment(deadline).format("YYYY/MM/DD HH:mm"))) : null,
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status))
+          cardTitleRow(concept, titleHref),
+          cardPrice(transferAmountText(content)),
+          isUbiTransfer(content) ? null : cardDate(deadline)
         )
       );
     }
 
     if (type === 'bankWallet') {
       const { address } = content;
+      cardChips.push(renderStateChip('mutuals', '❄', i18n.bankWalletConnected, 'status'));
       cardBody.push(
         div({ class: 'card-section banking-wallet' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankWalletConnected + ':' ),
-            span({ class: 'card-value' }, address)
-          )
+          cardMeta('❄', span({ class: 'wallet-address' }, address))
         )
       );
     }
@@ -479,14 +696,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'larpHousePost') {
-      const { text, house } = content;
+      const { text } = content;
       cardBody.push(
         div({ class: 'card-section post' },
-          house ? a({ href: `/larp/${encodeURIComponent(house)}`, class: 'larp-house-link' },
-            img({ src: `/assets/larp/images/${encodeURIComponent(String(house).toLowerCase())}.jpg`, alt: house, class: 'larp-house-mini' }),
-            span(`L.A.R.P · ${String(house).toUpperCase()}`)
-          ) : null,
-          text ? p({ class: 'post-text post-text-pre' }, ...renderStyledText(String(text), { zoomImages: true })) : null
+          text ? div({ class: 'feed-text activity-update-msg' }, p({ class: 'post-text' }, ...renderStyledText(String(text), { zoomImages: true }))) : null
         )
       );
     }
@@ -509,75 +722,45 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       );
     }
     if (type === 'curriculum') {
-      const { author, name, description, photo, personalSkills, oasisSkills, educationalSkills, languages, professionalSkills, status, preferences, createdAt, updatedAt} = content;
+      const { author, name, description, photo, personalSkills, oasisSkills, educationalSkills, languages, professionalSkills, status, preferences } = content;
+      const skillTags = (list) => list && list.length
+        ? div({ class: 'card-tags' }, list.map(skill => a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)))
+        : null;
+      cardChips.push(
+        status ? renderStateChip('whole', '◈', String(status).toUpperCase(), 'status') : null,
+        preferences ? renderStateChip('whole', '◇', String(preferences).toUpperCase(), 'kind') : null,
+        languages ? renderStateChip('whole', '◈', String(languages).toUpperCase(), 'level') : null
+      );
       cardBody.push(
         div({ class: 'card-section curriculum' },
-          h2(userLink(author, name)),
-          div(
-            { class: 'card-fields-container' },
-            createdAt ?
-              div(
-                { class: 'card-field' },
-                span({ class: 'card-label' }, i18n.cvCreatedAt + ':'),
-                span({ class: 'card-value' }, moment(createdAt).format('YYYY-MM-DD HH:mm:ss'))
-              )
-              : "",
-            updatedAt ?
-              div(
-                { class: 'card-field' },
-                span({ class: 'card-label' }, i18n.cvUpdatedAt + ':'),
-                span({ class: 'card-value' }, moment(updatedAt).format('YYYY-MM-DD HH:mm:ss'))
-              )
-              : ""
-          ),
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.cvStatusLabel + ':'), span({ class: 'card-value' }, status)) : "",
-          preferences ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.cvPreferencesLabel || 'Preferences') + ':'), span({ class: 'card-value' }, preferences)) : "",
-          languages ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.cvLanguagesLabel || 'Languages') + ':'), span({ class: 'card-value' }, languages.toUpperCase())) : "",
-          photo ?
-            [
-              br(),
-              renderZoomableImage(`/blob/${encodeURIComponent(photo)}`, { imgClass: 'cv-photo', linkClass: 'zoom-inline' }),
-              br()
-            ]
-            : "",
-          p(...renderStyledText(description || "")),
-          personalSkills && personalSkills.length
-            ? div({ class: 'card-tags' }, personalSkills.map(skill =>
-                a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
-              )) : "",
-          oasisSkills && oasisSkills.length
-            ? div({ class: 'card-tags' }, oasisSkills.map(skill =>
-                a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
-              )) : "",
-          educationalSkills && educationalSkills.length
-            ? div({ class: 'card-tags' }, educationalSkills.map(skill =>
-                a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
-              )) : "",
-          professionalSkills && professionalSkills.length
-            ? div({ class: 'card-tags' }, professionalSkills.map(skill =>
-                a({ href: `/search?query=%23${encodeURIComponent(skill)}`, class: "tag-link" }, `#${skill}`)
-              )) : ""
+          h2({ class: 'tribe-card-title' }, userLink(author, name)),
+          photo ? renderZoomableImage(`/blob/${encodeURIComponent(photo)}`, { imgClass: 'cv-photo', linkClass: 'zoom-inline' }) : null,
+          description ? p(...renderStyledText(description)) : null,
+          skillTags(personalSkills),
+          skillTags(oasisSkills),
+          skillTags(educationalSkills),
+          skillTags(professionalSkills)
         )
       );
     }
 
     if (type === 'image') {
-      const { url } = content;
+      const { url, title } = content;
       cardBody.push(
         div({ class: 'card-section image' },
+          cardTitleRow(String(title || '').trim(), titleHref),
           renderZoomableImage(`/blob/${encodeURIComponent(url)}`, { imgClass: 'post-image' })
         )
       );
     }
 
     if (type === 'map') {
-      const { lat, lng, mapType, title } = content;
+      const { lat, lng, title } = content;
       const mapKey = action.id || action.key || '';
       cardBody.push(
         div({ class: 'card-section map' },
           title ? div({ class: 'card-field' }, span({ class: 'card-value' }, mapKey ? a({ href: `/maps/${encodeURIComponent(mapKey)}`, class: 'user-link' }, title) : title)) : "",
           div({ class: 'map-card-info' },
-            span({ class: 'map-type-badge' }, mapType || 'SINGLE'),
             span({ class: 'map-coords' }, `${(parseFloat(lat) || 0).toFixed(4)}, ${(parseFloat(lng) || 0).toFixed(4)}`)
           ),
           content.description ? p({ class: 'map-description' }, content.description) : ""
@@ -683,29 +866,17 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'event') {
-      const { title, description, date, location, price, attendees, isPublic } = content;
-      cardBody.push(
-        div({ class: 'card-section event' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
-          date ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.date + ':'), span({ class: 'card-value' }, moment(date).format("YYYY/MM/DD HH:mm"))) : "",
-          location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.location || 'Location') + ':'), span({ class: 'card-value' }, location)) : "",
-          typeof isPublic === 'boolean' ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.isPublic || 'Public') + ':'), span({ class: 'card-value' }, isPublic ? 'Yes' : 'No')) : "",
-          Number(price) > 0 ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.price || 'Price') + ':'), span({ class: 'card-value' }, price + " ECO")) : "",
-          br(),
-          Array.isArray(attendees) ? h2({ class: 'card-label' }, (i18n.attendees || 'Attendees') + ': ' + attendees.length) : ""
-        )
-      );
+      const eventKey = action.id || action.key || '';
+      cardBody.push(div({ class: 'card-section event' }, ...renderEventSummary(content, eventKey ? `/events/${encodeURIComponent(eventKey)}` : null)));
     }
 
     if (type === 'task') {
-      const { title, startTime, endTime, priority, status, author } = content;
+      const { title, startTime, endTime } = content;
+      const taskKey = action.id || action.key || '';
       cardBody.push(
         div({ class: 'card-section task' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
-          priority ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.priority || 'Priority') + ':'), span({ class: 'card-value' }, priority)) : "",
-          startTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskStartTimeLabel || 'Start') + ':'), span({ class: 'card-value' }, moment(startTime).format("YYYY/MM/DD HH:mm"))) : "",
-          endTime ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.taskEndTimeLabel || 'End') + ':'), span({ class: 'card-value' }, moment(endTime).format("YYYY/MM/DD HH:mm"))) : "",
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : ""
+          cardTitleLink(title || taskKey, taskKey ? `/tasks/${encodeURIComponent(taskKey)}` : null),
+          startTime || endTime ? p({ class: 'post-text' }, [startTime ? moment(startTime).format("YYYY/MM/DD HH:mm") : '', endTime ? moment(endTime).format("YYYY/MM/DD HH:mm") : ''].filter(Boolean).join(' → ')) : ''
         )
       );
     }
@@ -718,22 +889,9 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             ids.map((id, i) => [i > 0 ? ', ' : '', userLink(id)]).flat();
         cardBody.push(
             div({ class: 'card-section task' },
-                div({ class: 'card-field' },
-                    span({ class: 'card-label' }, i18n.title + ':'),
-                    span({ class: 'card-value' }, title || '')
-                ),
-                addList.length
-                    ? div({ class: 'card-field' },
-                        span({ class: 'card-label' }, (i18n.taskAssignedTo || 'Assigned to') + ':'),
-                        span({ class: 'card-value' }, ...renderUserList(addList))
-                    )
-                    : '',
-                remList.length
-                    ? div({ class: 'card-field' },
-                        span({ class: 'card-label' }, (i18n.taskUnassignedFrom || 'Unassigned from') + ':'),
-                        span({ class: 'card-value' }, ...renderUserList(remList))
-                    )
-                    : ''
+                cardTitleLink(title || '', titleHref),
+                addList.length ? cardMeta('👤＋', ...renderUserList(addList)) : null,
+                remList.length ? cardMeta('👤－', ...renderUserList(remList)) : null
             )
         );
     }
@@ -745,15 +903,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const safeText = cleanFeedText(text);
       const textNodes = safeText ? renderStyledText(safeText, { zoomImages: true }) : [];
       const refeedsNum = Number(refeeds || 0) || 0;
+      if (refeedsNum > 0) cardChips.push(renderCountChip('⟳', i18n.tribeFeedRefeeds, refeedsNum));
       cardBody.push(
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text' }, ...textNodes),
-          refeedsNum > 0
-            ? h2({ class: 'card-field' },
-                span({ class: 'card-label' }, i18n.tribeFeedRefeeds + ': '),
-                span({ class: 'card-label' }, String(refeedsNum))
-              )
-            : null
+          div({ class: 'feed-text' }, ...textNodes)
         )
       );
     }
@@ -834,11 +987,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 bylineAuthor: action.author,
                 authorName: action.authorNames && action.authorNames[action.author],
                 date: action.ts,
-                chips: [div({ class: 'card-chips-row' },
-                    span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                        span({ class: 'pm-exposition-text' }, String(threadLabel).toUpperCase())
-                    )
-                )],
+                chips: [
+                    renderStateChip('whole', '▣', String(threadLabel).toUpperCase(), 'module'),
+                    scopeChipOf('post', { root: true }, action),
+                    renderCountChip('💬', i18n.blogComments, replies.length)
+                ],
                 author: c.rootAuthor || (root && root.author) || action.author,
                 reportTitle: titleText,
                 spread: spreadMap.get(threadId) || null,
@@ -847,8 +1000,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             div({ class: 'card-body' },
                 div({ class: 'card-section' },
                     div({ class: 'card-field activity-update-title' },
-                        a({ href, class: 'card-value user-link' }, titleText),
-                        span({ class: 'card-label activity-update-counts' }, `💬 ${replies.length}`)
+                        a({ href, class: 'card-value user-link' }, titleText)
                     ),
                     latest && latest.text
                         ? div({ class: 'feed-text activity-update-msg' },
@@ -876,11 +1028,12 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 bylineAuthor: action.author,
                 authorName: action.authorNames && action.authorNames[action.author],
                 date: action.ts,
-                chips: [div({ class: 'card-chips-row' },
-                    span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                        span({ class: 'pm-exposition-text' }, `${String(i18n.typeChat || 'CHAT').toUpperCase()} \u00b7 ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`)
-                    )
-                )],
+                chips: [
+                    renderStateChip('whole', '▣', `${String(i18n.typeChat || 'CHAT').toUpperCase()} \u00b7 ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`, 'module'),
+                    scopeChipOf('chatThread', c, action),
+                    renderCountChip('👥', i18n.chatParticipants, c.members || 0),
+                    renderCountChip('💬', i18n.messages, c.messageCount || show.length)
+                ],
                 author: c.chatAuthor || action.author,
                 reportTitle: chatTitle,
                 spread: spreadMap.get(chatRoot) || null,
@@ -889,8 +1042,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             div({ class: 'card-body' },
                 div({ class: 'card-section chat' },
                     div({ class: 'card-field activity-update-title' },
-                        a({ href: latestHref, class: 'card-value user-link' }, chatTitle),
-                        span({ class: 'card-label activity-update-counts' }, `👥: ${c.members || 0} · 💬 ${c.messageCount || show.length}`)
+                        a({ href: latestHref, class: 'card-value user-link' }, chatTitle)
                     ),
                     (() => {
                         const latest = show.length ? show[show.length - 1] : null;
@@ -951,6 +1103,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         const parentForum = byIdAll.get(rootId) || actions.find(a => a.type === 'forum' && !a.content?.root && (a.id === rootId || a.content?.key === rootId));
         const parentContent = parentForum ? (parentForum.value?.content || parentForum.content || {}) : {};
         const parentTitle = (parentContent?.title && String(parentContent.title).trim()) ? parentContent.title : ((rootTitle && String(rootTitle).trim()) ? rootTitle : '');
+        if (!category) cardChips.push(forumCategoryChip(parentContent.category));
         const branchId = typeof content.branch === 'string' && content.branch !== rootId && content.branch !== rootKey ? content.branch : '';
         const branchMsg = branchId ? (byIdAll.get(branchId) || actions.find(a => a.type === 'forum' && (a.id === branchId || a.content?.key === branchId))) : null;
         const repliedAuthor = branchMsg ? (branchMsg.author || '') : '';
@@ -1002,8 +1155,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       : (target?.author || '');
   const ord = spreadOrdinalById.get(safeMsgId(action)) || 0;
   const totalChron = link && spreadsByLink.has(link) ? spreadsByLink.get(link).length : 0;
-  const label = (i18n.spreadChron || 'Spread') + ':';
   const value = ord && totalChron ? `${ord}/${totalChron}` : (ord ? String(ord) : '');
+  if (value) cardChips.push(renderCountChip('⟳', i18n.spreadChron || 'Spread', value));
   const spreadExcerpt = spreadText || excerptPostText(content, 300);
   cardBody.push(
     div({ class: 'card-section vote' },
@@ -1015,12 +1168,6 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       spreadOriginalAuthor
         ? div({ class: 'card-field' },
             span({ class: 'card-value' }, userLink(spreadOriginalAuthor))
-          )
-        : '',
-      value
-        ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, label),
-            span({ class: 'card-value' }, value)
           )
         : '',
       link
@@ -1051,7 +1198,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
           div({ class: 'about-card-cols' },
             div({ class: 'about-card-col-img' },
               imgId
-                ? renderZoomableImage(`/blob/${encodeURIComponent(imgId)}`, { imgClass: 'activity-avatar', alt: name, linkClass: 'zoom-inline' })
+                ? renderZoomableImage(`/blob/${encodeURIComponent(imgId)}`, { thumb: `/image/256/${encodeURIComponent(imgId)}?fallback=avatar`, imgClass: 'activity-avatar', alt: name, linkClass: 'zoom-inline' })
                 : img({ src: '/assets/images/default-avatar.png', alt: name, class: 'activity-avatar' })
             ),
             div({ class: 'about-card-col-desc' },
@@ -1066,17 +1213,13 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'market') {
-      const { item_type, title, price, status, deadline, stock, image, auctions_poll, seller } = content;
+      const { item_type, title, price, status, deadline, image, auctions_poll, seller } = content;
       const isSeller = seller && userId && seller === userId;
       cardBody.push(
         div({ class: 'card-section market' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemTitle + ':'), span({ class: 'card-value' }, title)),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemType + ':'), span({ class: 'card-value' }, item_type.toUpperCase())),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStatus + ": " ), span({ class: 'card-value' }, status.toUpperCase())),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.deadline + ':'), span({ class: 'card-value' }, deadline ? moment(deadline).format("YYYY/MM/DD HH:mm") : "")),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.marketItemStock + ':'), span({ class: 'card-value' }, stock)),
-          div({ class: "price-chip" }, `${price} ECO`),
-          br(),
+          cardTitleRow(title, titleHref),
+          cardPrice(`${price} ECO`),
+          cardDate(deadline),
           image ? renderMediaBlob(image, '/assets/images/default-market.png') : null,
           item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? div({ class: "auction-info" },
@@ -1092,7 +1235,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                           const [bidderId, bidAmount, bidTime] = bid.split(':');
                           return tr(
                             td(moment(bidTime).format('YYYY-MM-DD HH:mm:ss')),
-                            td(a({ href: `/author/${encodeURIComponent(userId)}` }, userId)),
+                            td(userLink(bidderId)),
                             td(`${parseFloat(bidAmount).toFixed(6)} ECO`)
                           );
                         })
@@ -1104,65 +1247,50 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'shop') {
-      const { title, shortDescription, description, visibility, location } = content;
+      const { title, shortDescription, description, location } = content;
       const shopKey = action.id || action.key || '';
       const displayDesc = shortDescription || (description ? (description.length > 140 ? description.slice(0, 140) + "\u2026" : description) : "");
       cardBody.push(
         div({ class: 'card-section shop' },
-          div({ class: 'card-field' }, span({ class: 'card-value' }, shopKey ? a({ href: `/shops/${encodeURIComponent(shopKey)}`, class: 'user-link' }, title || shopKey) : (title || ''))),
-          displayDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, displayDesc)) : "",
-          location ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopLocation || 'Location') + ':'), span({ class: 'card-value' }, location)) : ""
+          cardTitleRow(title || shopKey, shopKey ? `/shops/${encodeURIComponent(shopKey)}` : null),
+          displayDesc ? p({ class: 'tribe-card-description' }, displayDesc) : null,
+          location ? cardMeta('📍', location) : null
         )
       );
     }
 
     if (type === 'shopProduct') {
-      const { title, price, stock, shopId, image: prodImage } = content;
+      const { title, price, shopId, image: prodImage } = content;
       const resolvedShopTitle = shopId ? (shopTitleById.get(shopId) || null) : null;
       const shopLabel = resolvedShopTitle || (shopId ? shopId.slice(0, 10) + '...' : '');
       const prodImageNode = renderMediaBlob(prodImage);
       cardBody.push(
         div({ class: 'card-section shop' },
-          shopId ? div({ class: 'card-field' }, span({ class: 'card-value' }, a({ href: `/shops/${encodeURIComponent(shopId)}`, class: 'user-link' }, shopLabel))) : '',
-          div({ class: 'card-field' }, span({ class: 'card-value' }, title || '')),
-          div({ class: 'price-chip' }, `${Number(price || 0).toFixed(6)} ECO`),
-          prodImageNode ? div({ class: 'card-field' }, prodImageNode) : '',
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.shopProductStock || 'Stock') + ':'), span({ class: 'card-value' }, String(stock || 0)))
+          cardTitleRow(title || '', titleHref),
+          shopId ? cardMeta('🏪', a({ href: `/shops/${encodeURIComponent(shopId)}`, class: 'user-link' }, shopLabel)) : null,
+          cardPrice(`${Number(price || 0).toFixed(6)} ECO`),
+          prodImageNode ? div({ class: 'card-field' }, prodImageNode) : null
         )
       );
     }
 
     if (type === 'industry') {
-      const { name, sector, description, image, tags, membershipPolicy, status } = content;
+      const { name, description, image, tags } = content;
       const facKey = action.id || action.key || '';
       const validTags = Array.isArray(tags) ? tags : [];
-      const statusValue = (() => {
-        const u = String(status || 'ACTIVE').toUpperCase();
-        if (u === 'PAUSED') return i18n.industryStatusPaused || 'PAUSED';
-        if (u === 'DISSOLVED') return i18n.industryStatusDissolved || 'DISSOLVED';
-        return i18n.industryStatusActive || 'WORKING';
-      })();
-      const policyValue = String(i18n[`industryPolicy_${membershipPolicy}`] || membershipPolicy || '').toUpperCase();
       cardBody.push(
         div({ class: 'card-section tribe industry' },
-          h2({ class: 'tribe-title' },
-            a({ href: `/industry/${encodeURIComponent(facKey)}`, class: "user-link" }, name || (i18n.industryTitle || 'Industry'))
-          ),
-          div({ class: 'card-field-row' },
-            sector ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industrySector || 'Sector').toUpperCase() + ':'), span({ class: 'card-value' }, String(sector).toUpperCase())) : "",
-            status ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryStatusLabel || 'Status').toUpperCase() + ':'), span({ class: 'card-value' }, statusValue)) : "",
-            membershipPolicy ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryMembershipPolicy || 'Membership policy').toUpperCase() + ':'), span({ class: 'card-value' }, policyValue)) : ""
-          ),
+          cardTitleRow(name || (i18n.industryTitle || 'Industry'), `/industry/${encodeURIComponent(facKey)}`),
           image
             ? (/^(\/|https?:)/.test(String(image))
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
-          p({ class: 'tribe-description' }, ...renderStyledText(description || '')),
+          description ? p({ class: 'tribe-description' }, ...renderStyledText(description)) : null,
           validTags.length
             ? div({ class: 'card-tags' }, validTags.map(tag =>
               a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
-            : ""
+            : null
         )
       );
     }
@@ -1171,47 +1299,40 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const { title, notes, image, startDate, endDate, buildStatus } = content;
       const buildKey = action.id || action.key || '';
       const daysLeft = endDate ? Math.max(0, Math.ceil((new Date(endDate) - Date.now()) / 86400000)) : null;
+      cardChips.push(
+        buildStatus ? renderBuildStatusChip(buildStatus) : null,
+        daysLeft != null ? renderCountChip('⧗', i18n.industryTimeLeft || 'Time left', `${daysLeft}d`) : null
+      );
       cardBody.push(
         div({ class: 'card-section tribe industry' },
-          h2({ class: 'tribe-title' },
-            a({ href: `/industry/build/${encodeURIComponent(buildKey)}`, class: "user-link" }, title || (i18n.industryBuild || 'Build'))
-          ),
-          (buildStatus || startDate || endDate) ? div({ class: 'card-field-row' },
-            buildStatus ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryStatusLabel || 'Status').toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['industryBuildStatus_' + buildStatus] || buildStatus).toUpperCase())) : "",
-            startDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildStart || 'Start date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(startDate).format("YYYY/MM/DD"))) : "",
-            endDate ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryBuildEnd || 'End date').toUpperCase() + ':'), span({ class: 'card-value' }, moment(endDate).format('YYYY-MM-DD'))) : "",
-            daysLeft != null ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryTimeLeft || 'Time left').toUpperCase() + ':'), span({ class: 'card-value' }, `${daysLeft}d`)) : ""
-          ) : null,
+          cardTitleRow(title || (i18n.industryBuild || 'Build'), `/industry/build/${encodeURIComponent(buildKey)}`),
+          startDate || endDate ? p({ class: 'time-chip' }, [startDate ? moment(startDate).format('YYYY/MM/DD') : '', endDate ? moment(endDate).format('YYYY/MM/DD') : ''].filter(Boolean).join(' → ')) : null,
           image
             ? (/^(\/|https?:)/.test(String(image))
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
-          notes ? p({ class: 'tribe-description' }, ...renderStyledText(notes)) : ""
+          notes ? p({ class: 'tribe-description' }, ...renderStyledText(notes)) : null
         )
       );
     }
 
     if (type === 'industryBlueprint') {
       const { name, facility, description, outKind, laborHours, image, estTotal } = content;
+      cardChips.push(
+        outKind ? renderStateChip('whole', outKind === 'digital' ? '💾' : '📦', String(i18n['industryKind_' + outKind] || outKind).toUpperCase(), 'kind') : null,
+        laborHours ? renderCountChip('◷', i18n.industryLaborHours || 'Labor hours', `${laborHours} h`) : null
+      );
       cardBody.push(
         div({ class: 'card-section tribe industry' },
-          h2({ class: 'tribe-title' },
-            facility
-              ? a({ href: `/industry/${encodeURIComponent(facility)}`, class: "user-link" }, name || (i18n.industryBlueprint || 'Blueprint'))
-              : (name || (i18n.industryBlueprint || 'Blueprint'))
-          ),
-          div({ class: 'card-field-row' },
-            outKind ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryOutputKind || 'Product type').toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['industryKind_' + outKind] || outKind).toUpperCase())) : "",
-            laborHours ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryLaborHours || 'Labor hours').toUpperCase() + ':'), span({ class: 'card-value' }, String(laborHours))) : "",
-            estTotal != null ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.industryEstTotal || 'Estimated price').toUpperCase() + ':'), span({ class: 'card-value' }, `${Number(estTotal).toFixed(2)} ECO`)) : ""
-          ),
+          cardTitleRow(name || (i18n.industryBlueprint || 'Blueprint'), facility ? `/industry/${encodeURIComponent(facility)}` : null),
+          estTotal != null ? cardPrice(`${Number(estTotal).toFixed(2)} ECO`) : null,
           image
             ? (/^(\/|https?:)/.test(String(image))
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
                 : renderMediaBlob(image, null))
             : null,
-          description ? p({ class: 'tribe-description' }, ...renderStyledText(description)) : ""
+          description ? p({ class: 'tribe-description' }, ...renderStyledText(description)) : null
         )
       );
     }
@@ -1220,25 +1341,20 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const { target, pot } = content;
       cardBody.push(
         div({ class: 'card-section industry' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.industryDistribution || 'Distribution') + ':'), span({ class: 'card-value' }, target ? a({ href: `/industry/build/${encodeURIComponent(target)}`, class: 'user-link' }, i18n.industryBuild || 'Build') : '')),
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.industryPot || 'Pot') + ':'), span({ class: 'card-value' }, `${Number(pot || 0).toFixed(6)} ECO`))
+          cardTitleRow(i18n.industryBuild || 'Build', target ? `/industry/build/${encodeURIComponent(target)}` : null),
+          cardPrice(`${Number(pot || 0).toFixed(6)} ECO`)
         )
       );
     }
 
     if (type === 'chat') {
-      const { title, description, image, category, status } = content;
+      const { title, description } = content;
       const chatKey = action.id || action.key || '';
       const displayDesc = description ? (description.length > 140 ? description.slice(0, 140) + "\u2026" : description) : "";
-      const chatImageNode = renderMediaBlob(image);
       cardBody.push(
         div({ class: 'card-section chat' },
-          div({ class: 'card-field' },
-            chatKey
-              ? a({ href: `/chats/${encodeURIComponent(chatKey)}#chat-latest`, class: 'card-value user-link' }, title || chatKey)
-              : span({ class: 'card-value' }, title || '')),
-          displayDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, displayDesc)) : '',
-          category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.chatCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, category)) : ''
+          cardTitleRow(title || chatKey, chatKey ? `/chats/${encodeURIComponent(chatKey)}#chat-latest` : null),
+          displayDesc ? p({ class: 'tribe-card-description' }, displayDesc) : null
         )
       );
     }
@@ -1248,8 +1364,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const padTitle = content.title || action.title || '';
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field' }, padKey ? a({ href: `/pads/${encodeURIComponent(padKey)}`, class: 'card-value user-link' }, padTitle || padKey) : span({ class: 'card-value' }, padTitle || '')),
-          content.deadline ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.padDeadlineLabel || 'Deadline') + ':'), span({ class: 'card-value' }, content.deadline)) : ''
+          cardTitleRow(padTitle || padKey, padKey ? `/pads/${encodeURIComponent(padKey)}` : null)
         )
       );
     }
@@ -1257,14 +1372,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     if (type === 'room') {
       const roomKey = action.id || action.key || '';
       const roomTitle = content.title || action.title || '';
-      const roomNumber = roomNumberOf(action.rootId || roomKey);
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field activity-room-title' },
-            roomKey ? a({ href: `/rooms/${encodeURIComponent(roomKey)}`, class: 'card-value user-link' }, roomTitle || roomKey) : span({ class: 'card-value' }, roomTitle || ''),
-            roomNumber ? renderPhoneChip(roomNumber, content.line === 'SWITCHBOARD' ? i18n.roomNumberHint : i18n.roomLineDndError) : ''
-          ),
-          content.description ? div({ class: 'card-field' }, span({ class: 'card-value' }, String(content.description).slice(0, 200))) : ''
+          cardTitleRow(roomTitle || roomKey, roomKey ? `/rooms/${encodeURIComponent(roomKey)}` : null),
+          content.description ? p({ class: 'tribe-card-description' }, String(content.description).slice(0, 200)) : null
         )
       );
     }
@@ -1274,10 +1385,9 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const emergencyTitle = content.title || action.title || '';
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field' }, emergencyKey ? a({ href: `/emergencies/${encodeURIComponent(emergencyKey)}`, class: 'card-value user-link' }, emergencyTitle || emergencyKey) : span({ class: 'card-value' }, emergencyTitle || '')),
-          content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.emergencyCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
+          cardTitleRow(emergencyTitle || emergencyKey, emergencyKey ? `/emergencies/${encodeURIComponent(emergencyKey)}` : null),
           renderMediaBlob(content.text, null),
-          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : ''
+          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : null
         )
       );
     }
@@ -1287,7 +1397,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const listTitle = content.title || action.title || '';
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field' }, listKey ? a({ href: `/mailing/${encodeURIComponent(listKey)}`, class: 'card-value user-link' }, listTitle || listKey) : span({ class: 'card-value' }, listTitle || ''))
+          cardTitleRow(listTitle || listKey, listKey ? `/mailing/${encodeURIComponent(listKey)}` : null)
         )
       );
     }
@@ -1297,12 +1407,11 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const routeTitle = content.title || action.title || '';
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field' }, routeKey ? a({ href: `/logistics/${encodeURIComponent(routeKey)}`, class: 'card-value user-link' }, routeTitle || routeKey) : span({ class: 'card-value' }, routeTitle || '')),
-          content.origin || content.destination ? div({ class: 'card-field' }, span({ class: 'card-value' }, `${content.origin || ''} → ${content.destination || ''}`)) : '',
-          content.kind ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.logisticsKindLabel || 'Type') + ':'), span({ class: 'card-value' }, `${String(content.kind).toUpperCase()} · ${String(content.mode || '').toUpperCase()}`)) : '',
-          content.date ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.logisticsDateLabel || 'Date') + ':'), span({ class: 'card-value' }, moment(content.date).format('YYYY/MM/DD HH:mm'))) : '',
+          cardTitleRow(routeTitle || routeKey, routeKey ? `/logistics/${encodeURIComponent(routeKey)}` : null),
+          content.origin || content.destination ? p({ class: 'logistics-route-line' }, span({ class: 'logistics-zone' }, content.origin || ''), ' → ', span({ class: 'logistics-zone' }, content.destination || '')) : null,
+          cardDate(content.date),
           renderMediaBlob(content.description, null),
-          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.description))) : ''
+          stripMediaMarkdown(content.description) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.description))) : null
         )
       );
     }
@@ -1315,9 +1424,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const pShortDesc = pDesc ? (pDesc.length > 140 ? pDesc.slice(0, 140) + "\u2026" : pDesc) : '';
       cardBody.push(
         div({ class: 'card-section' },
-          type === 'podcastEpisode' ? '' : div({ class: 'card-field' }, pKey ? a({ href: pHref, class: 'card-value user-link' }, pTitle || pKey) : span({ class: 'card-value' }, pTitle || '')),
-          pShortDesc ? div({ class: 'card-field' }, span({ class: 'card-value' }, pShortDesc)) : '',
-          type === 'podcast' && content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.podcastCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
+          type === 'podcastEpisode' ? null : cardTitleRow(pTitle || pKey, pKey ? pHref : null),
+          pShortDesc ? p({ class: 'tribe-card-description' }, pShortDesc) : null,
           renderMediaObject(type === 'podcast' ? content.cover : content.media, type === 'podcast' ? pHref : null)
         )
       );
@@ -1328,12 +1436,9 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const cpTitle = content.title || action.title || '';
       cardBody.push(
         div({ class: 'card-section' },
-          div({ class: 'card-field' }, cpKey ? a({ href: `/campaigns/${encodeURIComponent(cpKey)}`, class: 'card-value user-link' }, cpTitle || cpKey) : span({ class: 'card-value' }, cpTitle || '')),
-          content.category ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.campaignCategoryLabel || 'Category') + ':'), span({ class: 'card-value' }, String(content.category).toUpperCase())) : '',
-          content.status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.statusLabel || 'Status') + ':'), span({ class: 'card-value' }, String(content.status).toUpperCase())) : '',
+          cardTitleRow(cpTitle || cpKey, cpKey ? `/campaigns/${encodeURIComponent(cpKey)}` : null),
           renderMediaBlob(content.text, null),
-          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : '',
-          content.goal ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ':'), span({ class: 'card-value' }, `${new Set(all.filter(x => x && x.type === 'campaignSignature' && x.content && (x.content.target === cpKey || x.content.target === (action.rootId || cpKey))).map(x => x.author)).size} / ${content.goal}`)) : ''
+          stripMediaMarkdown(content.text) ? p({ class: 'tribe-description' }, ...renderStyledText(stripMediaMarkdown(content.text))) : null
         )
       );
     }
@@ -1420,35 +1525,17 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     }
 
     if (type === 'report') {
-      const { title, confirmations, severity, status } = content;
+      const { title } = content;
+      const reportKey = action.id || action.key || '';
       cardBody.push(
         div({ class: 'card-section report' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.title + ':'), span({ class: 'card-value' }, title)),
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.status + ':'), span({ class: 'card-value' }, status)) : "",
-          severity ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.severity || 'Severity') + ':'), span({ class: 'card-value' }, severity.toUpperCase())) : "",
-          Array.isArray(confirmations) ? h2({ class: 'card-label' }, (i18n.transfersConfirmations) + ': ' + confirmations.length) : ""
+          cardTitleLink(title || reportKey, reportKey ? `/reports/${encodeURIComponent(reportKey)}` : null)
         )
       );
     }
 
     if (type === 'project') {
-      const {
-        title, status, progress, goal, pledged,
-        deadline, followers, backers, milestones,
-        bounty, bountyAmount, bounty_currency,
-        activity, activityActor
-      } = content;
-
-      const ratio = goal ? Math.min(100, Math.round((parseFloat(pledged || 0) / parseFloat(goal)) * 100)) : 0;
-      const displayStatus = String(status || 'ACTIVE').toUpperCase();
-      const followersCount = Array.isArray(followers) ? followers.length : 0;
-      const backersCount = Array.isArray(backers) ? backers.length : 0;
-      const backersTotal = sumAmounts(backers || []);
-      const msCount = Array.isArray(milestones) ? milestones.length : 0;
-      const lastMs = Array.isArray(milestones) && milestones.length ? milestones[milestones.length - 1] : null;
-      const bountyVal = typeof bountyAmount !== 'undefined'
-        ? bountyAmount
-        : (typeof bounty === 'number' ? bounty : null);
+      const { title, goal, deadline, activity } = content;
 
       if (activity && activity.kind) {
         const tmpl =
@@ -1479,9 +1566,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             authorName: action.authorNames && action.authorNames[action.author],
             date: action.ts,
             chips: [div({ class: 'card-chips-row' },
-              span({ class: 'pm-exposition-chip pm-exposition-whole' },
-                span({ class: 'pm-exposition-text' }, (i18n.typeProject || 'PROJECT').toUpperCase())
-              )
+              renderStateChip('whole', '▣', upperOf(i18n.typeProject), 'module'),
+              scopeChipOf('project', content, action)
             )]
           }),
           div(
@@ -1493,171 +1579,47 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
 
       cardBody.push(
         div({ class: 'card-section project' },
-          title ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.title + ':'),
-            span({ class: 'card-value' }, title)
-          ) : "",
-          typeof goal !== 'undefined' ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectGoal + ':'),
-            span({ class: 'card-value' }, `${goal} ECO`)
-          ) : "",
-          typeof progress !== 'undefined' ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectProgress + ':'),
-            span({ class: 'card-value' }, `${progress || 0}%`)
-          ) : "",
-          deadline ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectDeadline + ':'),
-            span({ class: 'card-value' }, moment(deadline).format('YYYY/MM/DD HH:mm'))
-          ) : "",
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectStatus + ':'),
-            span({ class: 'card-value' }, i18n['projectStatus' + displayStatus] || displayStatus)
-          ),
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectFunding + ':'),
-            span({ class: 'card-value' }, `${ratio}%`)
-          ),
-          typeof pledged !== 'undefined' ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectPledged + ':'),
-            span({ class: 'card-value' }, `${pledged || 0} ECO`)
-          ) : "",
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectFollowers + ':'),
-            span({ class: 'card-value' }, `${followersCount}`)
-          ),
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.projectBackers + ':'),
-            span({ class: 'card-value' }, `${backersCount} · ${backersTotal} ECO`)
-          ),
-          msCount ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.projectMilestones || 'Milestones') + ':'),
-            span({ class: 'card-value' }, `${msCount}${lastMs && lastMs.title ? ' · ' + lastMs.title : ''}`)
-          ) : "",
-          bountyVal != null ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.projectBounty || 'Bounty') + ':'),
-            span({ class: 'card-value' }, `${bountyVal} ${(bounty_currency || 'ECO').toUpperCase()}`)
-          ) : ""
+          cardTitleRow(title, titleHref),
+          typeof goal !== 'undefined' ? cardPrice(`${goal} ECO`) : null,
+          cardDate(deadline)
         )
       );
     }
       
     if (type === 'karmaScore') {
       const { karmaScore } = content;
-      cardBody.push(
-        div({ class: 'card-section ai-exchange' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.bankingUserEngagementScore + ':'),
-            span({ class: 'card-value' }, karmaScore)
-          )
-        )
-      );
+      cardChips.push(renderCountChip('★', i18n.bankingUserEngagementScore, karmaScore || 0));
     }
 
     if (type === 'housing') {
-      const { title, housing_type, property_type, price, place, status, rooms, size, capacity } = content;
+      const { title, housing_type, price, place } = content;
       const isFree = String(housing_type || '').toLowerCase() === 'couchsurfing';
       cardBody.push(
-        div({ class: 'card-section report' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.title + ':'),
-            span({ class: 'card-value' }, title)
-          ),
-          housing_type ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.housingType + ':'),
-            span({ class: 'card-value' }, String(housing_type).toUpperCase())
-          ) : null,
-          property_type ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.housingProperty + ':'),
-            span({ class: 'card-value' }, String(property_type).toUpperCase())
-          ) : null,
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.housingPrice + ':'),
-            span({ class: 'card-value' }, isFree ? (i18n.housingFree || 'FREE') : `${Number(price || 0).toFixed(2)} ECO`)
-          ),
-          place ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.housingPlace + ':'),
-            span({ class: 'card-value' }, place)
-          ) : null,
-          Number(rooms) > 0 ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.housingRooms + ':'),
-            span({ class: 'card-value' }, String(rooms))
-          ) : null,
-          Number(size) > 0 ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.housingSize + ':'),
-            span({ class: 'card-value' }, `${size} m²`)
-          ) : null,
-          Number(capacity) > 0 ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.housingCapacity + ':'),
-            span({ class: 'card-value' }, String(capacity))
-          ) : null,
-          status ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.housingStatus + ':'),
-            span({ class: 'card-value' }, String(status).toUpperCase())
-          ) : null
+        div({ class: 'card-section housing' },
+          cardTitleRow(title, titleHref),
+          cardPrice(isFree ? (i18n.housingFree || 'FREE') : `${Number(price || 0).toFixed(2)} ECO`),
+          place ? cardMeta('📍', place) : null
         )
       );
     }
 
     if (type === 'schoolCourse') {
-      const { title, description, price, visibility, startDate } = content;
-      const coursePaid = Number(price) > 0;
+      const { title, description } = content;
       cardBody.push(
-        div({ class: 'card-section report' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.title + ':'),
-            span({ class: 'card-value' }, title)
-          ),
-          description ? div({ class: 'card-field' },
-            span({ class: 'card-value' }, String(description).length > 220 ? String(description).slice(0, 220) + '…' : description)
-          ) : null,
-          coursePaid ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.schoolPrice || 'Price (ECO)') + ':'),
-            span({ class: 'card-value' }, `${Number(price).toFixed(2)} ECO`)
-          ) : null,
-          startDate ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, (i18n.schoolStartDate || 'Start date') + ':'),
-            span({ class: 'card-value' }, moment(startDate).format("YYYY/MM/DD HH:mm"))
-          ) : null
+        div({ class: 'card-section school' },
+          cardTitleRow(title, titleHref),
+          description ? p({ class: 'tribe-card-description' }, String(description).length > 220 ? String(description).slice(0, 220) + '…' : description) : null
         )
       );
     }
 
     if (type === 'job') {
-      const { title, job_type, tasks, location, vacants, salary, status, subscribers } = content;
+      const { title, location, salary } = content;
       cardBody.push(
-        div({ class: 'card-section report' },
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.title + ':'),
-            span({ class: 'card-value' }, title)
-          ),
-          salary ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.jobSalary + ':'),
-            span({ class: 'card-value' }, salary + ' ECO')
-          ) : null,
-          status ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.jobStatus + ':'),
-            span({ class: 'card-value' }, String(status).toUpperCase())
-          ) : null,
-          job_type ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.jobType + ':'),
-            span({ class: 'card-value' }, String(job_type).toUpperCase())
-          ) : null,
-          location ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.jobLocation + ':'),
-            span({ class: 'card-value' }, String(location).toUpperCase())
-          ) : null,
-          Number(vacants) > 0 ? div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.jobVacants + ':'),
-            span({ class: 'card-value' }, String(vacants))
-          ) : null,
-          div({ class: 'card-field' },
-            span({ class: 'card-label' }, i18n.jobSubscribers + ':'),
-            span({ class: 'card-value' },
-              Array.isArray(subscribers) && subscribers.length > 0
-                ? `${subscribers.length}`
-                : i18n.noSubscribers.toUpperCase()
-            )
-          )
+        div({ class: 'card-section job' },
+          cardTitleRow(title, titleHref),
+          salary ? cardPrice(`${salary} ECO`) : null,
+          location ? cardMeta('📍', String(location)) : null
         )
       );
     }
@@ -1672,10 +1634,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
       ).toUpperCase();
 
+      cardChips.push(renderStateChip('whole', '◈', methodUpper, 'level'));
       cardBody.push(
         div({ class: 'card-section parliament' },
-          div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.parliamentGovMethod || 'METHOD').toUpperCase() + ':'), span({ class: 'card-value' }, methodUpper)),
-          div({ class: 'card-field' }, span({ class: 'card-value' }, link))
+          h2({ class: 'tribe-card-title' }, link)
         )
       );
     }
@@ -1692,15 +1654,14 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
 
       cardBody.push(
         div({ class: 'card-section parliament' },
-          startAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsStart.toUpperCase() || 'Elections start') + ':'), span({ class: 'card-value' }, moment(startAt).format("YYYY/MM/DD HH:mm"))) : '',
-          endAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentElectionsEnd.toUpperCase() || 'Elections end') + ':'), span({ class: 'card-value' }, moment(endAt).format("YYYY/MM/DD HH:mm"))) : '',
-          div({ class: 'card-field' }, span({ class: 'card-value' }, winnerLink))
+          h2({ class: 'tribe-card-title' }, winnerLink),
+          startAt || endAt ? p({ class: 'time-chip' }, [startAt ? moment(startAt).format("YYYY/MM/DD HH:mm") : '', endAt ? moment(endAt).format("YYYY/MM/DD HH:mm") : ''].filter(Boolean).join(' → ')) : null
         )
       );
     }
 
     if (type === 'parliamentProposal') {
-      const { title, method, status, voteId, createdAt } = content;
+      const { title, method, status, voteId } = content;
       const legacy = !content.campaignId ? String(content.description || '').match(/\n*\s*(\d+) signatures: \/campaigns\/(%[^\s]+\.sha256)\s*$/) : null;
       const description = legacy ? String(content.description || '').slice(0, legacy.index).trim() : content.description;
       const campaignId = content.campaignId || (legacy ? legacy[2] : '');
@@ -1712,35 +1673,33 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
       ).toUpperCase();
 
+      cardChips.push(
+        renderStateChip('whole', '◈', methodUpper, 'level'),
+        plainStatusChip(status),
+        campaignId ? renderCountChip('✍', i18n.campaignSignaturesLabel, `${signatures}${goal > 0 ? ` / ${goal}` : ''}`) : null
+      );
       cardBody.push(
         div({ class: 'card-section parliament' },
-          title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
+          cardTitleRow(title || campaignId, campaignId ? `/campaigns/${encodeURIComponent(campaignId)}` : null),
           renderMediaBlob(description, null),
-          stripMediaMarkdown(description) ? p({ class: 'card-section-text' }, ...renderStyledText(stripMediaMarkdown(description))) : '',
-          campaignId ? div({ class: 'card-field' }, span({ class: 'card-label' }, String(i18n.campaignSignaturesLabel || 'Signatures').toUpperCase() + ':'), span({ class: 'card-value' }, `${signatures}${goal > 0 ? ` / ${goal}` : ''}`)) : '',
-          campaignId ? div({ class: 'card-field' }, a({ href: `/campaigns/${encodeURIComponent(campaignId)}`, class: 'card-value user-link' }, title || campaignId)) : '',
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
-          createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, moment(createdAt).format("YYYY/MM/DD HH:mm"))) : '',
-          voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentStatus.toUpperCase() || 'Status') + ':'), span({ class: 'card-value' }, status)) : ''
+          stripMediaMarkdown(description) ? p({ class: 'card-section-text' }, ...renderStyledText(stripMediaMarkdown(description))) : null,
+          voteId ? cardMeta('☑', a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.parliamentOpenVote)) : null
         )
       );
     }
     
     if (type === 'parliamentRevocation') {
-      const { title, reasons, method, status, voteId, createdAt } = content;
+      const { title, reasons, method, status, voteId } = content;
       const methodUpper = String(
         i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
       ).toUpperCase();
 
+      cardChips.push(renderStateChip('whole', '◈', methodUpper, 'level'), plainStatusChip(status));
       cardBody.push(
         div({ class: 'card-section parliament' },
-          title ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentProposalTitle.toUpperCase() || 'Title') + ':'), span({ class: 'card-value' }, title)) : '',
-          reasons ? p({ class: 'card-section-text' }, reasons) : '',
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentGovMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
-          createdAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.createdAt.toUpperCase() || 'Created at') + ':'), span({ class: 'card-value' }, moment(createdAt).format("YYYY/MM/DD HH:mm"))) : '',
-          voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentOpenVote.toUpperCase() || 'Open vote') + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : '',
-          status ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentStatus.toUpperCase() || 'Status') + ':'), span({ class: 'card-value' }, status)) : ''
+          cardTitleRow(title, null),
+          reasons ? p({ class: 'card-section-text' }, reasons) : null,
+          voteId ? cardMeta('☑', a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.parliamentOpenVote)) : null
         )
       );
     }
@@ -1754,14 +1713,16 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         i18n['parliamentMethod' + String(method || '').toUpperCase()] || method
       ).toUpperCase();
 
+      cardChips.push(
+        renderStateChip('whole', '◈', methodUpper, 'level'),
+        (total || yes) ? renderCountChip('☑', i18n.parliamentLawVotes || 'Votes', `${yes}/${total}`) : null
+      );
       cardBody.push(
         div({ class: 'card-section parliament' },
-          question ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawQuestion || 'Question') + ':'), span({ class: 'card-value' }, question)) : '',
-          description ? p({ class: 'card-section-text' }, description) : '',
-          div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawMethod || 'Method') + ':'), span({ class: 'card-value' }, methodUpper)),
-          proposer ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawProposer || 'Proposer') + ':'), span({ class: 'card-value' }, userLink(proposer))) : '',
-          enactedAt ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawEnacted || 'Enacted at') + ':'), span({ class: 'card-value' }, moment(enactedAt).format("YYYY/MM/DD HH:mm"))) : '',
-          (total || yes) ? div({ class: 'card-field' }, span({ class: 'card-label' }, (i18n.parliamentLawVotes || 'Votes') + ':'), span({ class: 'card-value' }, `${yes}/${total}`)) : ''
+          cardTitleRow(question, null),
+          description ? p({ class: 'card-section-text' }, description) : null,
+          proposer ? cardMeta('👤', userLink(proposer)) : null,
+          cardDate(enactedAt)
         )
       );
     }
@@ -1769,25 +1730,27 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     if (type.startsWith('courts')) {
       if (type === 'courtsCase') {
         const { title, method, accuser, status, answerBy, evidenceBy, decisionBy, needed, yes, total, voteId } = content;
+        cardChips.push(
+          method ? renderStateChip('whole', '◈', String(i18n['courtsMethod' + String(method).toUpperCase()] || method).toUpperCase(), 'level') : null,
+          plainStatusChip(status),
+          typeof needed !== 'undefined' ? renderCountChip('◎', i18n.courtsVotesNeeded, needed) : null,
+          (typeof yes !== 'undefined' || typeof total !== 'undefined') ? renderCountChip('☑', i18n.courtsVotesSlashTotal, `${Number(yes || 0)}/${Number(total || 0)}`) : null,
+          answerBy ? renderCountChip('✉', i18n.courtsThAnswerBy, moment(answerBy).format("YYYY/MM/DD HH:mm")) : null,
+          evidenceBy ? renderCountChip('📎', i18n.courtsThEvidenceBy, moment(evidenceBy).format("YYYY/MM/DD HH:mm")) : null,
+          decisionBy ? renderCountChip('⚖', i18n.courtsThDecisionBy, moment(decisionBy).format("YYYY/MM/DD HH:mm")) : null
+        );
         cardBody.push(
           div({ class: 'card-section courts' },
-            title ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsCaseTitle.toUpperCase() + ':'), span({ class: 'card-value' }, title)) : '',
-            status ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThStatus.toUpperCase() + ':'), span({ class: 'card-value' }, status)) : '',
-            method ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsMethod.toUpperCase() + ':'), span({ class: 'card-value' }, String(i18n['courtsMethod' + String(method).toUpperCase()] || method).toUpperCase())) : '',
-            answerBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThAnswerBy + ':'), span({ class: 'card-value' }, moment(answerBy).format("YYYY/MM/DD HH:mm"))) : '',
-            evidenceBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThEvidenceBy + ':'), span({ class: 'card-value' }, moment(evidenceBy).format("YYYY/MM/DD HH:mm"))) : '',
-            decisionBy ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsThDecisionBy + ':'), span({ class: 'card-value' }, moment(decisionBy).format("YYYY/MM/DD HH:mm"))) : '',
-            accuser ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsAccuser + ':'), span({ class: 'card-value' }, userLink(accuser))) : '',
-            typeof needed !== 'undefined' ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsVotesNeeded + ':'), span({ class: 'card-value' }, String(needed))) : '',
-            (typeof yes !== 'undefined' || typeof total !== 'undefined') ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsVotesSlashTotal + ':'), span({ class: 'card-value' }, `${Number(yes || 0)}/${Number(total || 0)}`)) : '',
-            voteId ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsOpenVote + ':'), a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.viewDetails || 'View details')) : ''
+            cardTitleRow(title, null),
+            accuser ? cardMeta('👤', userLink(accuser)) : null,
+            voteId ? cardMeta('☑', a({ href: `/votes/${encodeURIComponent(voteId)}`, class: 'tag-link' }, i18n.courtsOpenVote)) : null
           )
         );
       } else if (type === 'courtsNomination') {
         const { judgeId } = content;
         cardBody.push(
           div({ class: 'card-section courts' },
-            judgeId ? div({ class: 'card-field' }, span({ class: 'card-label' }, i18n.courtsJudge + ':'), span({ class: 'card-value' }, userLink(judgeId))) : ''
+            judgeId ? cardMeta('⚖', userLink(judgeId)) : null
           )
         );
       } else {
@@ -1833,12 +1796,13 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       renderCardTop(msgId, detailHref, {
         date: action.ts,
         authorName: (action.authorNames && action.authorNames[bylineAuthorId]) || getProfile(bylineAuthorId).name,
+        msgSize: action.msgSize,
         chips: [div({ class: 'card-chips-row' },
-          span({ class: 'pm-exposition-chip pm-exposition-whole' },
-            span({ class: 'pm-exposition-text' }, String(headerText || type || '').replace(/^\[|\]$/g, ''))
-          ),
+          renderStateChip('whole', '▣', upperOf(moduleLabel), 'module'),
+          ...cardChips,
           type === 'poll' ? renderVotedChip(action.poll) : null,
-          type === 'votes' && action.vote ? renderVoteVotedChip(action.vote) : null
+          type === 'votes' && action.vote ? renderVoteVotedChip(action.vote) : null,
+          type === 'larpHousePost' && content && content.house ? a({ href: `/larp/${encodeURIComponent(content.house)}` }, renderStateChip('tribe', '⌂', String(content.house).toUpperCase(), 'tribe')) : null
         )],
         author: bylineAuthorId,
         contact: type === 'about',
@@ -1960,7 +1924,7 @@ const MODULE_OF_TYPE = Object.entries(GROUP_SUBTYPES).reduce((acc, [mod, types])
 }, { schoolCourse: 'school', mapMarker: 'map' });
 
 function rootTypeLabel(rt) {
-  return rt === 'post' ? (i18n.typePost || 'BLOG') : rt === 'poll' ? (i18n.pollsTitle || 'POLLS') : rt ? (i18n[`type${capitalize(MODULE_OF_TYPE[rt] || rt)}`] || rt) : null;
+  return rt === 'post' ? (i18n.typePost || 'BLOG') : rt === 'poll' ? (i18n.pollsTitle || 'POLLS') : rt ? (i18n[`type${capitalize(MODULE_OF_TYPE[rt] || rt)}`] || i18n[`type${capitalize(rt)}`] || rt) : null;
 }
 
 function commentLabel(comment) {

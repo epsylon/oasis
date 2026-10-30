@@ -1,6 +1,6 @@
 const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td, progress, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderLicenseSelect, renderLicenseChip } = require('./clearnet_view');
+const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderLicenseSelect, renderLicenseChip, renderScopeChip } = require('./clearnet_view');
 
 const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const moment = require("../server/node_modules/moment");
@@ -75,7 +75,7 @@ const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, param
       const row = typeof params.rowFor === "function" ? params.rowFor(t) : null;
       return tr(
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
-        td(t.title || "", t.tribeOrigin ? renderTribeOriginChip(t.tribeOrigin) : t.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('torrents', t.title, t.key)) : null, ...(row && Array.isArray(row.titleChips) ? row.titleChips.filter(Boolean) : [])),
+        td(t.title || "", t.tribeOrigin ? renderTribeOriginChip(t.tribeOrigin) : null, renderScopeChip(t, i18n, t.clearnet === true, clearnetItemHref('torrents', t.title, t.key)), ...(row && Array.isArray(row.titleChips) ? row.titleChips.filter(Boolean) : [])),
         td(formatSize(t.size)),
         td({ class: "torrent-spread-cell torrent-seeds-cell", 'data-label': i18n.seedsLabel }, t.tribeOrigin || row ? "" : span({ class: "torrent-seeds-count" }, renderTorrentSeeds(t, params.spreadMap))),
         td({ class: "torrent-spread-cell torrent-seed-action-cell" }, t.tribeOrigin || row ? "" : renderTorrentSpread(t, params.spreadMap)),
@@ -336,9 +336,6 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
 
   const tagsNode = renderTags(torrentObj.tags);
   const href = `/torrents/${encodeURIComponent(torrentObj.key)}`;
-  const createdTs = torrentObj.createdAt ? new Date(torrentObj.createdAt).getTime() : NaN;
-  const updatedTs = torrentObj.updatedAt ? new Date(torrentObj.updatedAt).getTime() : NaN;
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
   const torrentSide = div({ class: "tribe-side" },
     renderCardTop(torrentObj.key, href, { arrow: false,
@@ -346,13 +343,12 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
       date: torrentObj.createdAt,
       chips: [
         torrentObj.tribeId && torrentObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
-        clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('torrents', torrentObj.title, torrentObj.key) : null) : null,
+        renderScopeChip(torrentObj, i18n, isClearnet, clearnetItemHref('torrents', torrentObj.title, torrentObj.key)),
         torrentObj.tribeId ? null : renderLicenseChip(torrentObj.license),
         ...chips
       ],
       bylineExtra: [
-        renderEditedChip(torrentObj.key, torrentObj.rootId),
-        showUpdated ? span({ class: "votations-comment-date" }, `${i18n.torrentUpdatedAt}: ${moment(torrentObj.updatedAt).format("YYYY/MM/DD HH:mm")}`) : null
+        renderEditedChip(torrentObj.key, torrentObj.rootId, torrentObj.updatedAt)
       ],
       spreadTitle: i18n.seedAction,
       favKind: 'torrents',

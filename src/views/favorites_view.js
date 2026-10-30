@@ -1,7 +1,8 @@
-const { form, button, div, h2, p, section, input, a, span, img } = require("../server/node_modules/hyperaxe");
-
-const { template, i18n, renderCardTop, renderModuleStats, CONTENT_FAV_KIND, CONTENT_TORRENTABLE, paged } = require("./main_views");
+const { form, button, div, h2, p, section, input, a, img } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
+
+const { template, i18n, renderCardTop, renderModuleStats, CONTENT_FAV_KIND, FAV_KIND_TYPE, CONTENT_TORRENTABLE, paged, renderEditedChip, renderStateChip, renderCountChip } = require("./main_views");
+const { contentChipsOf, rootTypeLabel, transferAmountText } = require("./activity_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
 
@@ -53,46 +54,48 @@ const renderTags = (tags) => {
     : null;
 };
 
-const DETAIL_KEYS = [
-  "status", "category", "severity", "priority", "location", "place",
-  "date", "deadline", "startTime", "endTime", "price", "salary", "amount",
-  "concept", "question", "housing_type", "property_type", "item_type", "sector"
+
+const typeOfItem = (item) => {
+  const type = FAV_KIND_TYPE[item.kind] || item.kind;
+  return type === "podcast" && item.content && item.content.channelId ? "podcastEpisode" : type;
+};
+
+const moduleLabelOf = (item, type) => String(i18n["type" + type.charAt(0).toUpperCase() + type.slice(1)] || rootTypeLabel(type) || item.kind || "").toUpperCase();
+
+const DATE_FIELDS = [
+  ["date", () => i18n.eventDateLabel],
+  ["deadline", () => i18n.voteDeadlineLabel],
+  ["startTime", () => i18n.taskStartTimeLabel],
+  ["endTime", () => i18n.taskEndTimeLabel]
 ];
+const DEADLINE_IN_CHIPS = new Set(["poll", "pad"]);
 
-const fieldLabel = (key) => {
-  const camel = key.replace(/_(.)/g, (_, c) => c.toUpperCase());
-  return i18n[camel + "Label"] || i18n["search" + camel.charAt(0).toUpperCase() + camel.slice(1)] || camel.toUpperCase();
+const renderDateChips = (type, content) =>
+  DATE_FIELDS
+    .filter(([key]) => !(key === "deadline" && DEADLINE_IN_CHIPS.has(type)))
+    .map(([key, label]) => content[key] && moment(content[key]).isValid() ? renderCountChip("◷", label(), moment(content[key]).format("YYYY/MM/DD HH:mm")) : null);
+
+const priceTextOf = (type, c) => {
+  if (type === "transfer") return transferAmountText(c);
+  if (type === "housing") return String(c.housing_type || "").toLowerCase() === "couchsurfing" ? i18n.housingFree : (Number(c.price) > 0 ? `${Number(c.price).toFixed(2)} ECO` : null);
+  if (type === "job") return c.salary ? `${c.salary} ECO` : null;
+  if (["market", "shopProduct", "event"].includes(type)) return Number(c.price) > 0 ? `${c.price} ECO` : null;
+  return null;
 };
 
-const fieldValue = (v) => {
-  if (v === null || v === undefined) return "";
-  if (Array.isArray(v)) return v.filter(Boolean).join(", ");
-  if (typeof v === "object") return "";
-  return String(v).trim();
+const renderPriceAndPlace = (type, c) => {
+  const price = priceTextOf(type, c);
+  const place = safeText(c.location || c.place);
+  return [
+    price ? div({ class: "price-chip" }, price) : null,
+    place ? p({ class: "job-meta-line" }, `📍 ${place}`) : null
+  ];
 };
 
-const renderDetailFields = (item) => {
-  const content = item && item.content;
-  if (!content || typeof content !== "object") return null;
-  const rows = DETAIL_KEYS
-    .map((k) => [k, fieldValue(content[k])])
-    .filter(([, v]) => v)
-    .map(([k, v]) =>
-      div({ class: "card-field" },
-        span({ class: "card-label" }, `${fieldLabel(k)}: `),
-        span({ class: "card-value" }, v)
-      )
-    );
-  const members = ["members", "participants", "attendees", "assignees", "confirmedBy"]
-    .map((k) => [k, Array.isArray(content[k]) ? content[k].length : null])
-    .find(([, n]) => typeof n === "number" && n > 0);
-  if (members) {
-    rows.push(div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${fieldLabel(members[0])}: ${members[1]}`)
-    ));
-  }
-  return rows.length ? div({ class: "cv-card-fields" }, ...rows) : null;
-};
+const renderItemChips = (item, type, c) => [
+  ...contentChipsOf(type, c, { action: { id: item.favId, key: item.favId, rootId: c.rootId || item.favId, vote: c, poll: c, scope: item.scope } }),
+  ...renderDateChips(type, c)
+];
 
 const renderBookmarkUrl = (item) => {
   if (item.kind !== "bookmarks") return null;
@@ -126,23 +129,16 @@ const renderImagePreview = (item) => {
 const renderFavoriteCard = (item, filter, spreadMap = null) => {
   const returnTo = buildReturnTo(filter);
 
-  const title = safeText(item.title) || safeText(item.name) || safeText(item.category) || safeText(item.url) || "";
-
-  const updated = item.updatedAt && item.createdAt && moment(item.updatedAt).valueOf() !== moment(item.createdAt).valueOf()
-    ? span({ class: "card-byline-time" }, `${i18n.jobsUpdatedAt}: ${moment(item.updatedAt).format("YYYY/MM/DD HH:mm")}`)
-    : null;
-
+  const type = typeOfItem(item);
+  const c = item.content && typeof item.content === "object" ? item.content : {};
+  const title = safeText(c.title) || safeText(c.name) || safeText(c.question) || safeText(c.concept) || safeText(item.title) || safeText(item.url) || "";
   const isOwn = item.author && String(item.author) === String(userId);
   return div(
     { class: "trending-card favorites-card" + (isOwn ? " own-content" : "") },
     renderCardTop(item.favId, item.viewHref, {
       date: item.createdAt || item.updatedAt,
-      bylineExtra: [updated],
-      chips: [div({ class: 'card-chips-row' },
-        span({ class: 'pm-exposition-chip pm-exposition-whole' },
-          span({ class: 'pm-exposition-text' }, String(item.kind || '').toUpperCase())
-        )
-      )],
+      bylineExtra: [renderEditedChip(item.content && (item.content.key || item.content.id), item.content && item.content.rootId, item.updatedAt)],
+      chips: [renderStateChip('whole', '▣', moduleLabelOf(item, type), 'module'), ...renderItemChips(item, type, c)],
       author: item.author,
       spread: (spreadMap && spreadMap.get(item.favId)) || null,
       reportTitle: title,
@@ -154,7 +150,7 @@ const renderFavoriteCard = (item, filter, spreadMap = null) => {
       renderImagePreview(item),
       renderBookmarkUrl(item),
       safeText(item.description) ? p(...renderStyledText(item.description)) : null,
-      renderDetailFields(item),
+      ...renderPriceAndPlace(type, c),
       renderTags(item.tags),
       p(
         { class: "card-footer" },

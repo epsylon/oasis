@@ -17,8 +17,8 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -69,15 +69,6 @@ const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => 
   });
 };
 
-const renderVideoUpdated = (videoObj) => {
-  const createdTs = videoObj.createdAt ? new Date(videoObj.createdAt).getTime() : NaN;
-  const updatedTs = videoObj.updatedAt ? new Date(videoObj.updatedAt).getTime() : NaN;
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-  return showUpdated
-    ? span({ class: "votations-comment-date" }, `${i18n.videoUpdatedAt}: ${moment(videoObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
-    : null;
-};
-
 const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
@@ -92,12 +83,12 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
           author: videoObj.author,
           date: videoObj.createdAt,
           chips: [
-            videoObj.tribeOrigin ? renderTribeOriginChip(videoObj.tribeOrigin) : videoObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('videos', videoObj.title, videoObj.key)) : null,
+            videoObj.tribeOrigin ? renderTribeOriginChip(videoObj.tribeOrigin) : null, renderScopeChip(videoObj, i18n, videoObj.clearnet === true, clearnetItemHref('videos', videoObj.title, videoObj.key)),
             renderLicenseChip(videoObj.license),
             ...(typeof params.titleChips === "function" ? params.titleChips(videoObj) : []),
             renderLifespanChip(videoObj.lifetime, i18n)
           ],
-          bylineExtra: [renderVideoUpdated(videoObj)]
+          bylineExtra: [renderEditedChip(videoObj.key, videoObj.rootId, videoObj.updatedAt)]
         };
         const header = typeof params.headerActions === "function"
           ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(videoObj))
@@ -105,7 +96,7 @@ const renderVideoList = exports.renderVideoList = (videos, filter, params = {}) 
             ? renderCardTop(videoObj.key, videoObj.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || null, reportTitle: videoObj.title })
             : renderCardTop(videoObj.key, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(videoObj.key)) || params.spreads || null, favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title }, isFavorite: videoObj.isFavorite, reportTitle: videoObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction('video', videoObj.key) : undefined });
         const titleHref = typeof params.headerActions === "function" ? null : videoObj.tribeOrigin ? videoObj.tribeOrigin.href : href;
-        const engagement = typeof params.engagement === "function" ? params.engagement(videoObj) : null;
+        const engagement = typeof params.engagement === "function" ? params.engagement(videoObj) : titleHref && !videoObj.tribeOrigin ? renderCardMetaRow(renderOpinionsPill([videoObj.key, videoObj.rootId], titleHref), renderCommentsPill([videoObj.key, videoObj.rootId], titleHref), renderShareButton(videoObj.key, titleHref, videoObj.title || "")) : null;
         return div(
           { class: "trending-card video-card" + (isOwn ? " own-content" : "") },
           header,
@@ -281,11 +272,11 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       author: videoObj.author,
       date: videoObj.createdAt,
       chips: [
-        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('videos', videoObj.title, videoObj.key) : null),
+        renderScopeChip(videoObj, i18n, isClearnet, clearnetItemHref('videos', videoObj.title, videoObj.key)),
         renderLicenseChip(videoObj.license),
         ...chips
       ],
-      bylineExtra: [renderEditedChip(videoObj.key, videoObj.rootId), renderVideoUpdated(videoObj)],
+      bylineExtra: [renderEditedChip(videoObj.key, videoObj.rootId, videoObj.updatedAt)],
       favKind: 'videos', torrentFrom: { blobId: videoObj.url, name: videoObj.title },
       isFavorite: videoObj.isFavorite,
       spread: params.spreads || null,

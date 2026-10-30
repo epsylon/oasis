@@ -4,8 +4,8 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderPrivacyChip, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt } = require('./main_views');
-const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip } = require('./clearnet_view');
+const { template, i18n, userLink, renderSpreadButton, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt, renderCountChip, asChip } = require('./main_views');
+const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
 const { renderStyledHtml } = require('../backend/renderStyledText');
@@ -197,8 +197,13 @@ const renderThread = (nodes, level = 0, forumId, bestKey = null) => {
 
 const forumHref = (f) => `/forum/${encodeURIComponent(f.key)}`;
 
-const forumCounts = (f) => span({ class: 'card-label activity-update-counts mailing-counts' },
-  `👥: ${f.participants?.length || 1} · 💬 ${Math.max(0, (f.messagesCount || 1) - 1)} · ▲ ${f.positiveVotes || 0} · ▼ ${f.negativeVotes || 0}`);
+const forumCountChips = (f, votes = true) => [
+  renderCountChip('👥', i18n.forumParticipants, f.participants?.length || 1),
+  renderCountChip('💬', i18n.forumMessages, Math.max(0, (f.messagesCount || 1) - 1)),
+  votes ? renderCountChip('▲', null, f.positiveVotes || 0, 'vote-up') : null,
+  votes ? renderCountChip('▼', null, f.negativeVotes || 0, 'vote-down') : null
+];
+const forumCategoryLink = (category, label) => asChip('kind', a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(category)}` }, `[${label}]`));
 
 const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
   const visibleForums = (Array.isArray(forums) ? forums : []).filter(f =>
@@ -215,16 +220,17 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
             author: f.author,
             date: f.createdAt,
             chips: [
+              renderScopeChip(f, i18n),
               ALL_CATS.includes(f.category)
-                ? a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(f.category)}` }, `[${catLabel(f.category)}]`)
-                : (f.category ? span({ class: 'forum-category' }, `[${tribeCatLabel(f.category)}]`) : null),
+                ? forumCategoryLink(f.category, catLabel(f.category))
+                : (f.category ? asChip('kind', span({ class: 'forum-category' }, `[${tribeCatLabel(f.category)}]`)) : null),
               renderLifespanChip(f.lifetime, i18n),
-              renderTribeOriginChip(f.tribeOrigin)
+              renderTribeOriginChip(f.tribeOrigin),
+              ...forumCountChips(f, false)
             ]
           }),
           div({ class: 'mailing-archive-meta' },
-            a({ href: f.tribeOrigin.href, class: 'user-link' }, f.title || '—'),
-            span({ class: 'card-label activity-update-counts mailing-counts' }, `👥: ${f.participants?.length || 1} · 💬 ${Math.max(0, (f.messagesCount || 1) - 1)}`)
+            a({ href: f.tribeOrigin.href, class: 'user-link' }, f.title || '—')
           ),
           null
         );
@@ -233,19 +239,19 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
         renderCardTop(f.key, forumHref(f), {
           date: f.createdAt,
           chips: [
-            a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(f.category)}` }, `[${catLabel(f.category)}]`),
-            f.isPrivate ? renderPrivacyChip(true, i18n) : null,
+            renderScopeChip(f, i18n),
+            forumCategoryLink(f.category, catLabel(f.category)),
             f.isPrivate ? renderForumEncryptedChip(i18n) : null,
             renderLifespanChip(f.lifetime, i18n),
             f.subscriptionIn === true
-              ? renderStateChip('transport', '✉', i18n.subscriptionOn)
-              : (f.subscriptionIn === false ? renderStateChip('closed', '✉', i18n.subscriptionOff) : null)
+              ? renderStateChip('transport', '✉', i18n.subscriptionOn, 'mine')
+              : (f.subscriptionIn === false ? renderStateChip('closed', '✉', i18n.subscriptionOff, 'mine') : null),
+            ...forumCountChips(f)
           ],
           spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title, deleteAction: f.author === userId ? `/forum/delete/${encodeURIComponent(f.key)}` : null
         }),
         div({ class: 'mailing-archive-meta' },
-          a({ href: forumHref(f), class: 'user-link' }, f.title || '—'),
-          forumCounts(f)
+          a({ href: forumHref(f), class: 'user-link' }, f.title || '—')
         ),
         null
       );
@@ -346,19 +352,25 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
         renderCardTop(forum.key, forumHref(forum), { arrow: false,
           date: forum.createdAt,
           chips: [
-            a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(forum.category)}` }, `[${catLabel(forum.category)}]`),
-            forum.isPrivate ? renderPrivacyChip(true, i18n) : null,
+            renderScopeChip(forum, i18n),
             forum.isPrivate ? renderForumEncryptedChip(i18n) : null,
             renderLifespanChip(forum.lifetime, i18n),
             (forum.subscription && sharesForum)
-              ? renderStateChip(forumSubIn ? 'transport' : 'closed', '✉', forumSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
-              : null
+              ? renderStateChip(forumSubIn ? 'transport' : 'closed', '✉', forumSubIn ? i18n.subscriptionOn : i18n.subscriptionOff, 'mine')
+              : null,
+            renderCountChip('👥', i18n.forumParticipants, forum.participants?.length || 1),
+            renderCountChip('💬', i18n.forumMessages, messagesData.total),
+            renderCountChip('▲', null, messagesData.positiveVotes || 0, 'vote-up'),
+            renderCountChip('▼', null, messagesData.negativeVotes || 0, 'vote-down')
           ].filter(Boolean),
           author: forum.author, favKind: 'forum', isFavorite: forum.isFavorite, spread: params.spreads || null, reportTitle: forum.title,
           subscription: subscriptionOpts,
           deleteAction: isForumOwner ? `/forum/delete/${encodeURIComponent(forum.key)}` : undefined
         }),
-        div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, forum.title)),
+        div({ class: 'shop-title-row' },
+          a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(forum.category)}` }, `[${catLabel(forum.category)}]`),
+          h2({ class: 'tribe-card-title' }, forum.title)
+        ),
         renderDetailShare(forum.key, forumHref(forum), forum.title, subscriptionOpts, null, null, forum.author),
         forum.isPrivate
           ? div({ class: 'tribe-side-actions forum-invite-row' },
@@ -387,11 +399,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
           : null,
         renderVoteRow(
           renderVoteColumn(forum.key, messagesData.totalScore, forum.key, messagesData.positiveVotes, messagesData.negativeVotes),
-          div({ class: 'forum-body', [RAW_HTML]: sanitizeHtml(renderStyledHtml(forum.text || '')) }),
-          div({ class: 'forum-vote-stats' },
-            span({ class: 'forum-participants' }, `${i18n.forumParticipants}: ${forum.participants?.length || 1}`),
-            span({ class: 'forum-messages' }, `${i18n.forumMessages}: ${messagesData.total}`)
-          )
+          div({ class: 'forum-body', [RAW_HTML]: sanitizeHtml(renderStyledHtml(forum.text || '')) })
         )
       ),
       div({ class: 'new-message-wrapper' },

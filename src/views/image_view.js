@@ -3,8 +3,8 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
@@ -48,15 +48,6 @@ const renderImageMedia = (imgObj, filter, params = {}) => {
     : p(i18n.imageNoFile);
 };
 
-const renderImageUpdated = (imgObj) => {
-  const createdTs = imgObj.createdAt ? new Date(imgObj.createdAt).getTime() : NaN;
-  const updatedTs = imgObj.updatedAt ? new Date(imgObj.updatedAt).getTime() : NaN;
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-  return showUpdated
-    ? span({ class: "votations-comment-date" }, `${i18n.imageUpdatedAt}: ${moment(imgObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
-    : null;
-};
-
 const renderImageList = exports.renderImageList = (images, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
   return images.length
@@ -70,12 +61,12 @@ const renderImageList = exports.renderImageList = (images, filter, params = {}) 
           author: imgObj.author,
           date: imgObj.createdAt,
           chips: [
-            imgObj.tribeOrigin ? renderTribeOriginChip(imgObj.tribeOrigin) : imgObj.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('images', imgObj.title, imgObj.key)) : null,
+            imgObj.tribeOrigin ? renderTribeOriginChip(imgObj.tribeOrigin) : null, renderScopeChip(imgObj, i18n, imgObj.clearnet === true, clearnetItemHref('images', imgObj.title, imgObj.key)),
             renderLicenseChip(imgObj.license),
             ...(typeof params.titleChips === "function" ? params.titleChips(imgObj) : []),
             renderLifespanChip(imgObj.lifetime, i18n)
           ],
-          bylineExtra: [renderImageUpdated(imgObj)]
+          bylineExtra: [renderEditedChip(imgObj.key, imgObj.rootId, imgObj.updatedAt)]
         };
         const header = typeof params.headerActions === "function"
           ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(imgObj))
@@ -83,7 +74,7 @@ const renderImageList = exports.renderImageList = (images, filter, params = {}) 
             ? renderCardTop(imgObj.key, imgObj.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(imgObj.key)) || null, reportTitle: imgObj.title })
             : renderCardTop(imgObj.key, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(imgObj.key)) || params.spreads || null, favKind: 'images', torrentFrom: { blobId: imgObj.url, name: imgObj.title }, isFavorite: imgObj.isFavorite, reportTitle: imgObj.title, returnTo, deleteAction: isOwn ? contentDeleteAction("image", imgObj.key) : null });
         const titleHref = typeof params.headerActions === "function" ? null : imgObj.tribeOrigin ? imgObj.tribeOrigin.href : href;
-        const engagement = typeof params.engagement === "function" ? params.engagement(imgObj) : null;
+        const engagement = typeof params.engagement === "function" ? params.engagement(imgObj) : titleHref && !imgObj.tribeOrigin ? renderCardMetaRow(renderOpinionsPill([imgObj.key, imgObj.rootId], titleHref), renderCommentsPill([imgObj.key, imgObj.rootId], titleHref), renderShareButton(imgObj.key, titleHref, imgObj.title || "")) : null;
         return div(
           { class: "trending-card image-card" + (isOwn ? " own-content" : "") },
           header,
@@ -304,11 +295,11 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
       author: imageObj.author,
       date: imageObj.createdAt,
       chips: [
-        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('images', imageObj.title, imageObj.key) : null),
+        renderScopeChip(imageObj, i18n, isClearnet, clearnetItemHref('images', imageObj.title, imageObj.key)),
         renderLicenseChip(imageObj.license),
         ...chips
       ],
-      bylineExtra: [renderEditedChip(imageObj.key, imageObj.rootId), renderImageUpdated(imageObj)],
+      bylineExtra: [renderEditedChip(imageObj.key, imageObj.rootId, imageObj.updatedAt)],
       editAction: String(imageObj.author) === String(userId) ? `/images/edit/${encodeURIComponent(imageObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: String(imageObj.author) === String(userId) ? contentDeleteAction("image", imageObj.key) : null,
       favKind: 'images', torrentFrom: { blobId: imageObj.url, name: imageObj.title },

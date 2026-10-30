@@ -59,11 +59,32 @@ const commentsModel = ({ cooler, post }) => {
     return { rootId: id, rootType: c.type, author: msg.author, content: c };
   };
 
+  const versionChain = async (id) => {
+    const ids = [];
+    let cur = id, author = null;
+    while (isMsgId(cur) && !ids.includes(cur) && ids.length < 64) {
+      const msg = await getMsg(cur).catch(() => null);
+      if (!msg) { if (!ids.length) ids.push(cur); break; }
+      if (author && msg.author !== author) break;
+      ids.push(cur);
+      author = msg.author;
+      const c = contentOf(msg);
+      cur = c && typeof c === 'object' && typeof c.replaces === 'string' ? c.replaces : null;
+    }
+    return ids;
+  };
+
   const listFor = async (rootId) => {
     if (!isMsgId(rootId)) return [];
-    const raw = await post.topicComments(rootId);
-    return (raw || []).filter(m => { const c = contentOf(m); return isComment(c) && c.root === rootId; })
-      .sort((a, b) => (a?.value?.timestamp || 0) - (b?.value?.timestamp || 0));
+    const chain = await versionChain(rootId);
+    const lists = await Promise.all(chain.map(id => post.topicComments(id).catch(() => [])));
+    const seen = new Set();
+    return lists.flat().filter(m => {
+      const c = contentOf(m);
+      if (!isComment(c) || !chain.includes(c.root) || seen.has(m.key)) return false;
+      seen.add(m.key);
+      return true;
+    }).sort((a, b) => ((a?.value?.timestamp || 0) - (b?.value?.timestamp || 0)) || (a?.value?.author === b?.value?.author ? (a?.value?.sequence || 0) - (b?.value?.sequence || 0) : 0));
   };
 
   const listForMany = async (ids) => {

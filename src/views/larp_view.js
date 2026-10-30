@@ -204,7 +204,7 @@ const DECREE_ERRORS = { 'not-governing': 'larpDecreeErrorNotGoverning', limit: '
 const renderDecreeCard = (d) => div({ class: 'card larp-decree' },
   div({ class: 'title-with-chip' },
     h3(d.title),
-    renderStateChip(DECREE_CHIP[d.outcome] || 'whole', '', String(decreeStatusLabel(d.outcome) || '').toUpperCase())
+    renderStateChip(DECREE_CHIP[d.outcome] || 'whole', { OPEN: '⧖', APPROVED: '✓', ENACTED: '✓', REJECTED: '✗' }[d.outcome] || '⧖', String(decreeStatusLabel(d.outcome) || '').toUpperCase())
   ),
   d.description ? p(...renderStyledText(d.description)) : null,
   table({ class: 'larp-info-table' },
@@ -305,7 +305,7 @@ const renderPostsBlock = (posts, house, canPost, housesById = {}) => {
             span({ class: 'created-at' },
               userLink(entry.post.author),
               house.key === 'academia' && entry.post.authorHouse && entry.post.authorHouse !== 'academia' && housesById[entry.post.authorHouse]
-                ? [' ', a({ href: `/larp/${encodeURIComponent(entry.post.authorHouse)}` }, renderStateChip('whole', '', String(housesById[entry.post.authorHouse].name || entry.post.authorHouse).toUpperCase()))]
+                ? [' ', a({ href: `/larp/${encodeURIComponent(entry.post.authorHouse)}` }, renderStateChip('whole', '⌂', String(housesById[entry.post.authorHouse].name || entry.post.authorHouse).toUpperCase(), 'tribe'))]
                 : null,
               span(' | '),
               span({ class: 'votations-comment-date' }, `${larpDate(entry.post.createdAt)} ${moment(entry.post.createdAt).format('HH:mm')}`)

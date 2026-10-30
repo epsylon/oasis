@@ -103,7 +103,7 @@ case "$MODE" in
       echo "      For a PUB copy docs/PUB/server-config.json.example to $SERVER_CONFIG_FILE first (pub: true). See docs/PUB/deploy.md, step 4."
     fi
     cd "$CURRENT_DIR/src/backend" || exit 1
-    exec node backend.js --public --no-open --host=0.0.0.0 "$@"
+    exec node --max-old-space-size=4096 backend.js --public --no-open --host=0.0.0.0 "$@"
     ;;
   whoami|invite|invites|name|announce|follow|join|status|gossip|peers|hops)
     exec node "$CURRENT_DIR/scripts/oasis-pub.js" "$@"
@@ -119,6 +119,9 @@ case "$MODE" in
     ;;
   *)
     cd "$CURRENT_DIR/src/backend" || exit 1
+    case " $* " in
+      *" --public "*) exec node --max-old-space-size=4096 backend.js "$@" ;;
+    esac
     exec node backend.js "$@"
     ;;
 esac

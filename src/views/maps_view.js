@@ -5,8 +5,8 @@ const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/r
 
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
-const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip } = require("./main_views");
+const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
 const { searchPlaces, nearestPlace } = require("../maps/map_data");
@@ -352,7 +352,7 @@ const renderPinPopup = (mk, i, ctx = {}) => {
   const parts = [
     `<div class="map-popup-head"><span class="map-marker-idx${mk.root ? " map-marker-idx--main" : ""}">${mk.root ? "★" : i}</span>` +
       (ctx.closeHref ? `<a class="map-popup-close" href="${escapeHtml(ctx.closeHref)}">×</a>` : "") + `</div>`,
-    isBlob(mk.image) ? `<img class="map-popup-img" src="${escapeHtml(blobSrc(mk.image, base))}" alt=""/>` : "",
+    isBlob(mk.image) ? `<img class="map-popup-img" src="${escapeHtml(blobSrc(mk.image, base))}" alt="" loading="lazy"/>` : "",
     notes ? `<div class="map-popup-text">${notes}</div>` : "",
     `<span class="map-popup-coords">${lat.toFixed(4)}, ${lng.toFixed(4)}</span>`,
     `<div class="map-popup-meta">` + (ctx.readOnly ? "" : userLink(mk.author).outerHTML) +
@@ -405,10 +405,11 @@ const renderMapCard = exports.renderMapCard = (mapObj, filter, params = {}) => {
 
   const origin = mapObj.tribeOrigin || null;
   const chips = [
-    renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase()),
+    renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase(), "kind"),
     origin ? renderTribeOriginChip(origin) : renderEncryptedChip(i18n),
     renderLifespanChip(mapObj.lifetime, i18n),
-    !origin && mapObj.clearnet === true && clearnetEligible(mapObj) ? renderReachChip(true, i18n, mapClearnetHref(mapObj)) : null
+    renderScopeChip(mapObj, i18n, !origin && clearnetEligible(mapObj) && mapObj.clearnet === true, mapClearnetHref(mapObj)),
+    renderCountChip("📍", i18n.mapMarkersTitle || "Markers", markerCount)
   ].filter(Boolean);
 
   const isOwn = mapObj.author && String(mapObj.author) === String(userId);
@@ -426,9 +427,6 @@ const renderMapCard = exports.renderMapCard = (mapObj, filter, params = {}) => {
       ),
       p({ class: "job-meta-line" }, `📍 ${mapObj.lat.toFixed(4)}, ${mapObj.lng.toFixed(4)}`),
       safeText(mapObj.description) ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(mapObj.description))) : null,
-      div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.mapMarkersTitle || "Markers"}: ${markerCount}`)
-      ),
       null
     )
   );
@@ -522,16 +520,14 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
     renderCardTop(mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, { arrow: false,
       date: mapObj.createdAt,
       chips: [
-        renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase()),
+        renderStateChip("whole", "🗺", String(mapObj.mapType || "").toUpperCase(), "kind"),
         renderEncryptedChip(i18n),
         renderLifespanChip(mapObj.lifetime, i18n),
-        canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? mapClearnetHref(mapObj) : null) : null
+        renderScopeChip(mapObj, i18n, isClearnet, mapClearnetHref(mapObj)),
+        renderCountChip("📍", i18n.mapMarkersTitle || "Markers", safeArr(mapObj.markers).length + 1)
       ],
       bylineExtra: [
-        renderEditedChip(mapObj.key, mapObj.rootId),
-        mapObj.updatedAt && mapObj.updatedAt !== mapObj.createdAt
-          ? span({ class: "votations-comment-date" }, `${i18n.mapUpdatedAt}: ${moment(mapObj.updatedAt).format("YYYY/MM/DD HH:mm")}`)
-          : null
+        renderEditedChip(mapObj.key, mapObj.rootId, mapObj.updatedAt)
       ],
       author: mapObj.author,
       favKind: 'maps',
@@ -546,7 +542,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       h2({ class: "tribe-card-title" }, mapObj.title || i18n.mapAllSectionTitle)
     ),
     canClearnet && String(mapObj.author) === String(userId) ? renderClearnetSwitch("maps", mapObj.rootId || mapObj.key, isClearnet) : null,
-    renderDetailShare(mapObj.rootId || mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, mapObj.title, null, null, null, mapObj.author),
+    renderDetailShare(mapObj.rootId || mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, mapObj.title, params.subscription ? { target: mapObj.rootId || mapObj.key, scope: "maps", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(mapObj.author) === String(userId), returnTo: `/maps/${encodeURIComponent(mapObj.key)}` } : null, null, null, mapObj.author),
     renderTags(mapObj.tags)
   );
 
@@ -559,9 +555,6 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       td({ class: "tribe-info-label" }, i18n.mapLngLabel),
       td({ class: "tribe-info-value", colspan: "3" }, mapObj.lng.toFixed(6))
     )
-  );
-  const mapMembers = div({ class: "tribe-card-members" },
-    span({ class: "tribe-members-count" }, `${i18n.mapMarkersTitle || "Markers"}: ${safeArr(mapObj.markers).length + 1}`)
   );
   const mapInviteAction = (String(mapObj.author) !== String(userId) && !mapObj.tribeId && mapObj.mapType !== "OPEN")
     ? div({ class: "tribe-side-actions detail-action-row" },
@@ -605,7 +598,6 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
     safeText(mapObj.description) ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(safeText(mapObj.description)))) : null,
     mapInfo,
     mapInviteAction,
-    mapMembers,
     renderMarkersList(mapObj.markers, mapObj, { focus, view, viewHref, returnTo: pageReturnTo }),
     renderMarkerForm(mapObj, returnTo, { ...params, filter }, tribeMembers, { mkLat, mkLng, view, focus }),
     renderDocumentActions('maps', mapObj.key),
@@ -724,7 +716,7 @@ exports.clearnetMapView = async (mapObj, params = {}) => {
     const label = firstLine(mk.label);
     return `<div class="cn-map-marker${i === focus ? " cn-map-marker--focus" : ""}" id="marker-${i}">` +
       `<span class="cn-map-marker-idx${mk.root ? " cn-map-marker-idx--main" : ""}">${mk.root ? "★" : i}</span>` +
-      (isBlob(mk.image) ? `<img class="cn-map-marker-thumb" src="${esc(blobSrc(mk.image, "/c"))}" alt=""/>` : "") +
+      (isBlob(mk.image) ? `<img class="cn-map-marker-thumb" src="${esc(blobSrc(mk.image, "/c"))}" alt="" loading="lazy"/>` : "") +
       `<span class="cn-map-marker-text">${label ? `<span class="cn-map-marker-label">${esc(label)}</span>` : ""}` +
       `<span class="cn-map-marker-coords">${coord(mk.lat)}, ${coord(mk.lng)}</span>` +
       (mk.createdAt ? `<span class="cn-map-marker-date">${esc(moment(mk.createdAt).format("YYYY/MM/DD"))}</span>` : "") +

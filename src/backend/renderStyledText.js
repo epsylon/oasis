@@ -146,6 +146,7 @@ function renderStyledText(value, opts = {}) {
     lastEnd = m.index + m.length;
   }
   const blobHref = (id) => String(id).startsWith('/blob/sealed/') ? String(id) : `${opts.blobPrefix || '/blob/'}${encodeURIComponent(id)}`;
+  const thumbHref = (id) => !opts.blobPrefix && !String(id).startsWith('/blob/sealed/') ? `/image/1024/${encodeURIComponent(id)}?fit=inside` : blobHref(id);
   const linksOn = opts.links !== false;
   const internalOn = opts.internalLinks !== false;
   const plain = (value) => opts.plainUrlClass ? span({ class: opts.plainUrlClass }, value) : value;
@@ -193,14 +194,14 @@ function renderStyledText(value, opts = {}) {
       if (opts.zoomImages) {
         zoomSeq = (zoomSeq + 1) % 1000000;
         const zoomId = `rtzoom-${zoomSeq}-${String(m.blob).replace(/[^a-zA-Z0-9]/g, '').slice(-10)}`;
-        result.push(a({ href: `#${zoomId}`, id: `${zoomId}-src`, class: 'zoom-link' }, img({ src: imageSrc, alt: m.name || '', class: 'post-image' })));
+        result.push(a({ href: `#${zoomId}`, id: `${zoomId}-src`, class: 'zoom-link' }, img({ src: thumbHref(m.blob), alt: m.name || '', class: 'post-image' })));
         result.push(span({ id: zoomId, class: 'lightbox' },
           a({ href: `${imageSrc}${imageSrc.includes('?') ? '&' : '?'}download=1`, class: 'lightbox-download', title: getI18n().fileShareDownload || 'Download' }, '\u2913'),
           a({ href: `#${zoomId}-src`, class: 'lightbox-close' }, '\u00d7'),
           img({ src: imageSrc, alt: m.name || '', class: 'lightbox-image' })
         ));
       } else {
-        result.push(img({ src: imageSrc, alt: m.name || '', class: 'post-image' }));
+        result.push(img({ src: thumbHref(m.blob), alt: m.name || '', class: 'post-image' }));
       }
     } else if (m.type === 'blob-video') {
       result.push(video({ controls: true, class: 'post-video', src: blobHref(m.blob) }));

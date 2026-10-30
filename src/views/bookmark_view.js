@@ -1,9 +1,9 @@
-const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option } =
+const { form, button, div, h2, p, section, input, label, textarea, br, a, select, option } =
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip } = require("./main_views");
+const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -31,12 +31,10 @@ const renderBookmarkCommentsSection = (bookmarkId, rootId, comments = [], return
   });
 };
 
-const renderCardField = (labelText, value) =>
-  div(
-    { class: "card-field" },
-    span({ class: "card-label" }, labelText),
-    span({ class: "card-value" }, value)
-  );
+const renderLastVisitChip = (bookmark) => {
+  const lastVisit = bookmark.lastVisit ? moment(bookmark.lastVisit) : null;
+  return lastVisit && lastVisit.isValid() ? renderCountChip("◷", i18n.bookmarkLastVisitLabel, lastVisit.format("YYYY/MM/DD HH:mm")) : null;
+};
 
 const renderTags = (tags) => {
   const list = safeArr(tags).map((t) => String(t || "").trim()).filter(Boolean);
@@ -48,41 +46,24 @@ const renderTags = (tags) => {
     : null;
 };
 
-const renderBookmarkUpdated = (bookmark) => {
-  const createdTs = bookmark.createdAt ? new Date(bookmark.createdAt).getTime() : NaN;
-  const updatedTs = bookmark.updatedAt ? new Date(bookmark.updatedAt).getTime() : NaN;
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-  return showUpdated
-    ? span({ class: "votations-comment-date" }, `${i18n.bookmarkUpdatedAt}: ${moment(bookmark.updatedAt).format("YYYY/MM/DD HH:mm")}`)
-    : null;
-};
-
 const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
   return filteredBookmarks.length
     ? filteredBookmarks.map((bookmark) => {
-        const commentCount = typeof bookmark.commentCount === "number" ? bookmark.commentCount : 0;
-
-        const lastVisit = bookmark.lastVisit ? moment(bookmark.lastVisit) : null;
-        const lastVisitTxt =
-          lastVisit && lastVisit.isValid()
-            ? `${lastVisit.format("YYYY/MM/DD HH:mm")} (${lastVisit.fromNow()})`
-            : i18n.noLastVisit;
-
         const urlLink = bookmark.url
           ? a({ href: safeExternalHref(bookmark.url), target: "_blank", rel: "noreferrer noopener", class: "bookmark-url" }, bookmark.url)
           : i18n.noUrl;
 
         const isOwn = bookmark.author && String(bookmark.author) === String(userId);
         const href = `/bookmarks/${encodeURIComponent(bookmark.id)}`;
-        const reachChip = bookmark.tribeOrigin ? renderTribeOriginChip(bookmark.tribeOrigin) : bookmark.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id)) : null;
+        const reachChips = [bookmark.tribeOrigin ? renderTribeOriginChip(bookmark.tribeOrigin) : null, renderScopeChip(bookmark, i18n, bookmark.clearnet === true, clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id))];
         const extraChips = typeof params.titleChips === "function" ? params.titleChips(bookmark).filter(Boolean) : [];
         const byline = {
           author: bookmark.author,
           date: bookmark.createdAt,
-          chips: [renderLifespanChip(bookmark.lifetime, i18n), reachChip, ...extraChips],
-          bylineExtra: [renderBookmarkUpdated(bookmark)]
+          chips: [renderLifespanChip(bookmark.lifetime, i18n), ...reachChips, params.hideLastVisit ? null : renderLastVisitChip(bookmark), ...extraChips],
+          bylineExtra: [renderEditedChip(bookmark.id, bookmark.rootId, bookmark.updatedAt)]
         };
         const header = typeof params.headerActions === "function"
           ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(bookmark))
@@ -90,7 +71,7 @@ const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filt
             ? renderCardTop(bookmark.id, bookmark.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || null, reportTitle: bookmark.title || bookmark.url })
             : renderCardTop(bookmark.id, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(bookmark.id)) || params.spreads || null, favKind: 'bookmarks', isFavorite: bookmark.isFavorite, reportTitle: bookmark.title, deleteAction: isOwn ? contentDeleteAction('bookmark', bookmark.id) : undefined, returnTo });
         const titleHref = typeof params.headerActions === "function" ? null : bookmark.tribeOrigin ? bookmark.tribeOrigin.href : href;
-        const engagement = typeof params.engagement === "function" ? params.engagement(bookmark) : null;
+        const engagement = typeof params.engagement === "function" ? params.engagement(bookmark) : titleHref && !bookmark.tribeOrigin ? renderCardMetaRow(renderOpinionsPill([bookmark.id, bookmark.rootId], titleHref), renderCommentsPill([bookmark.id, bookmark.rootId], titleHref), renderShareButton(bookmark.id, titleHref, bookmark.title || "")) : null;
         return div(
           { class: "trending-card bookmark-card" + (isOwn ? " own-content" : "") },
           header,
@@ -98,7 +79,6 @@ const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filt
             { class: "card-section bookmark-card-body" },
             h2({ class: "bookmark-title" }, titleHref ? a({ href: titleHref, class: "card-title-link" }, bookmark.title || bookmark.url || "") : (bookmark.url ? urlLink : (bookmark.title || ""))),
             titleHref ? (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null) : (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null),
-            params.hideLastVisit ? null : renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(bookmark) : []),
             engagement
           )
@@ -262,19 +242,14 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
   const isAuthor = String(bookmark.author) === String(userId);
   const isClearnet = !!bookmark.clearnet;
 
-  const lastVisit = bookmark.lastVisit ? moment(bookmark.lastVisit) : null;
-  const lastVisitTxt =
-    lastVisit && lastVisit.isValid()
-      ? `${lastVisit.format("YYYY/MM/DD HH:mm")} (${lastVisit.fromNow()})`
-      : i18n.noLastVisit;
-
   const urlLink = bookmark.url
     ? a({ href: safeExternalHref(bookmark.url), target: "_blank", rel: "noreferrer noopener", class: "bookmark-url" }, bookmark.url)
     : i18n.noUrl;
 
   const chips = [
     renderLifespanChip(bookmark.lifetime, i18n),
-    bookmark.sizeBytes ? renderEcoTax(bookmark.sizeBytes, bookmark.id) : null
+    bookmark.sizeBytes ? renderEcoTax(bookmark.sizeBytes, bookmark.id) : null,
+    renderLastVisitChip(bookmark)
   ].filter(Boolean);
 
 
@@ -286,10 +261,10 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
       author: bookmark.author,
       date: bookmark.createdAt,
       chips: [
-        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id) : null),
+        renderScopeChip(bookmark, i18n, isClearnet, clearnetItemHref("bookmarks", bookmark.title || bookmark.url, bookmark.id)),
         ...chips
       ],
-      bylineExtra: [renderEditedChip(bookmark.id, bookmark.rootId), renderBookmarkUpdated(bookmark)],
+      bylineExtra: [renderEditedChip(bookmark.id, bookmark.rootId, bookmark.updatedAt)],
       favKind: 'bookmarks',
       isFavorite: bookmark.isFavorite,
       spread: params.spreads || null,
@@ -311,7 +286,6 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
       ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(bookmark.description)))
       : null,
     bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null,
-    renderCardField(i18n.bookmarkLastVisitLabel + ":", lastVisitTxt),
     renderEngagement(bookmark.id,
       renderOpinionsVoting('/bookmarks/opinions', bookmark.id, bookmark.opinions, returnTo, bookmark.opinions_inhabitants),
       renderBookmarkCommentsSection(bookmark.id, bookmark.rootId, comments, returnTo))

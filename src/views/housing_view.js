@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
-const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation } = require("./main_views")
+const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
+const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderCountChip } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -85,7 +85,7 @@ const renderTags = (tags = []) => {
 const renderTypeChip = (item) => {
   const t = String(item.housing_type || "").toUpperCase()
   const emoji = item.housing_type === "sale" ? "🏷" : item.housing_type === "rent" ? "🔑" : "🛋"
-  return renderStateChip("whole", emoji, i18n["housingType" + t] || t)
+  return renderStateChip("whole", emoji, i18n["housingType" + t] || t, "kind")
 }
 
 const renderStatusChip = (status) => {
@@ -96,7 +96,7 @@ const renderStatusChip = (status) => {
   })
 }
 
-const renderRequestedChip = () => renderStateChip("transport", "★", i18n.housingRequestedBadge || "REQUESTED")
+const renderRequestedChip = () => renderStateChip("transport", "★", i18n.housingRequestedBadge || "REQUESTED", "mine")
 
 const renderInfoTable = (item, opts = {}) => {
   const rows = []
@@ -175,7 +175,8 @@ const renderHousingList = (items, filter, params = {}) => {
         renderStatusChip(item.status),
         requested ? renderRequestedChip() : null,
         renderLifespanChip(item.lifetime, i18n),
-        item.clearnet === true && clearnetEligible(item) ? renderReachChip(true, i18n, housingClearnetHref(item)) : null
+        renderScopeChip(item, i18n, clearnetEligible(item) && item.clearnet === true, housingClearnetHref(item)),
+        renderCountChip("✉", i18n.housingRequests, item.requestCount || 0)
       ].filter(Boolean)
 
       const itemHref = `/housing/${encodeURIComponent(item.id)}`
@@ -207,9 +208,6 @@ const renderHousingList = (items, filter, params = {}) => {
                   span({ class: "card-value" }, safeText(item.place))
                 )
               : null,
-            div({ class: "tribe-card-members" },
-              span({ class: "tribe-members-count" }, `${i18n.housingRequests}: ${item.requestCount || 0}`)
-            ),
             imagesOf(item).length > 1
               ? div({ class: "card-field" },
                   span({ class: "card-label" }, `${i18n.galleryPhotos}: `),
@@ -439,7 +437,8 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     requested ? renderRequestedChip() : null,
     renderLifespanChip(item.lifetime, i18n),
     renderEcoTax(item.msgSize, item.id),
-    renderReachChip(isClearnet, i18n, isClearnet ? housingClearnetHref(item) : null)
+    renderScopeChip(item, i18n, isClearnet, housingClearnetHref(item)),
+    renderCountChip("✉", i18n.housingRequests, item.requestCount || 0)
   ].filter(Boolean)
 
   const sideActions = []
@@ -452,8 +451,8 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     ? div({ class: "tribe-side-actions shop-visibility-row housing-visibility-row" },
         span({ class: "card-label" }, `${i18n.visibilityLabel || "Visibility"}: `),
         isHidden
-          ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E")
-          : renderStateChip("mutuals", "👁", i18n.visibilityPublic || "PUBLIC"),
+          ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E", "reach")
+          : renderStateChip("mutuals", "👁", i18n.visibilityPublic || "PUBLIC", "reach"),
         form({ method: "POST", action: `/housing/visibility/${encodeURIComponent(item.id)}`, class: "inline-form" },
           input({ type: "hidden", name: "returnTo", value: returnTo }),
           input({ type: "hidden", name: "visibility", value: nextVisibility }),
@@ -464,7 +463,7 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
     : null
 
   const housingSide = div({ class: "tribe-side" },
-    renderCardTop(item.id, `/housing/${encodeURIComponent(item.id)}`, { arrow: false, date: item.createdAt, chips, bylineExtra: [renderEditedChip(item.id, item.rootId)], spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, editAction: isAuthor ? `/housing/edit/${encodeURIComponent(item.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("housing", item.id) : null }),
+    renderCardTop(item.id, `/housing/${encodeURIComponent(item.id)}`, { arrow: false, date: item.createdAt, chips, bylineExtra: [renderEditedChip(item.id, item.rootId, item.updatedAt)], spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, editAction: isAuthor ? `/housing/edit/${encodeURIComponent(item.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("housing", item.id) : null }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, safeText(item.title) || i18n.housingTitle)
     ),
@@ -549,7 +548,7 @@ exports.clearnetHousingView = async (item, params = {}) => {
     <span class="cn-price">${esc(priceLabel(item))}</span>
   </div>
   <hr class="cn-sep"/>
-  ${media.length ? `<div class="cn-housing-gallery">${media.map(m => m.video ? `<video controls preload="metadata" src="${m.src}"></video>` : `<img src="${m.src}" alt="${title}" loading="lazy"/>`).join("")}</div>` : ""}
+  ${media.length ? `<div class="cn-housing-gallery">${media.map(m => m.video ? `<video controls preload="none" src="${m.src}"></video>` : `<img src="${m.src}" alt="${title}" loading="lazy"/>`).join("")}</div>` : ""}
   ${rows.length ? `<table class="cn-housing-info">${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</table>` : ""}
   ${textSection(i18n.housingDescription, item.description)}
   ${textSection(i18n.housingRules, item.rules)}

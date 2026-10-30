@@ -1,6 +1,7 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
+const { renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, hereAt } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, hereAt, renderCountChip } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { MAX_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
@@ -45,12 +46,16 @@ const outcomeOf = (poll) => {
 };
 
 const renderStatusChip = (poll) =>
-  renderStateChip(poll.status === "OPEN" ? "mutuals" : "hidden", "◆",
+  renderStateChip(poll.status === "OPEN" ? "mutuals" : "hidden", poll.status === "OPEN" ? "✓" : "✗",
     poll.status === "OPEN" ? i18n.pollStatusOpen : i18n.pollStatusClosed);
 
+const renderDeadlineChip = (poll) => poll.deadline
+  ? renderCountChip("◷", i18n.pollDeadline, moment(poll.deadline).format("YYYY/MM/DD HH:mm"), poll.status === "OPEN" ? "whole" : "hidden")
+  : null;
+
 const renderModeChips = (poll) => [
-  poll.anonymous ? renderStateChip("whole", "◈", i18n.pollAnonymous) : null,
-  poll.multiple ? renderStateChip("whole", "☰", i18n.pollMultiple) : null
+  poll.anonymous ? renderStateChip("whole", "◈", i18n.pollAnonymous, "level") : null,
+  poll.multiple ? renderStateChip("whole", "☰", i18n.pollMultiple, "level") : null
 ].filter(Boolean);
 
 const renderResults = (poll) =>
@@ -70,7 +75,7 @@ const renderResults = (poll) =>
   );
 
 const canVoteIn = (poll) => poll.status !== "CLOSED" && !poll.hasVoted && !poll.undecryptable && !poll.scheduledAt && !poll.readOnly;
-const renderVotedChip = (poll) => poll && poll.hasVoted && !poll.readOnly ? renderStateChip("transport", "", String(i18n.pollVotedChip).toUpperCase()) : null;
+const renderVotedChip = (poll) => poll && poll.hasVoted && !poll.readOnly ? renderStateChip("transport", "☑", String(i18n.pollVotedChip).toUpperCase(), "mine") : null;
 
 const renderBallot = (poll, returnTo, basePath, extra = null) => {
   if (!canVoteIn(poll)) return null;
@@ -162,12 +167,11 @@ const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls", cardRetur
   const href = `${basePath || "/polls"}/${encodeURIComponent(poll.id)}`;
   const isOwn = String(poll.author) === String(userId);
   const chips = [
+    renderScopeChip(poll, i18n),
     renderStatusChip(poll),
     ...renderModeChips(poll),
     renderVotedChip(poll),
-    poll.deadline
-      ? renderStateChip(poll.status === "OPEN" ? "whole" : "hidden", "◷", `${i18n.pollDeadline}: ${moment(poll.deadline).format("YYYY/MM/DD HH:mm")}`)
-      : null,
+    renderDeadlineChip(poll),
     renderLifespanChip(poll.lifetime, i18n)
   ].filter(Boolean);
   return div({ class: "tribe-card poll-card" + (isOwn ? " own-content" : "") },
@@ -315,15 +319,7 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
   const basePath = "/polls";
   const href = `${basePath}/${encodeURIComponent(poll.id)}`;
   const isOwn = String(poll.author) === String(userId);
-  const chips = [renderStatusChip(poll), ...renderModeChips(poll), renderVotedChip(poll), renderLifespanChip(poll.lifetime, i18n)].filter(Boolean);
-
-  const infoRows = [];
-  const pushRow = (labelText, valueNode) =>
-    infoRows.push(tr(
-      td({ class: "tribe-info-label" }, labelText),
-      td({ class: "tribe-info-value" }, valueNode)
-    ));
-  if (poll.deadline) pushRow(i18n.pollDeadline, moment(poll.deadline).format("YYYY/MM/DD HH:mm"));
+  const chips = [renderScopeChip(poll, i18n), renderStatusChip(poll), ...renderModeChips(poll), renderVotedChip(poll), renderDeadlineChip(poll), renderLifespanChip(poll.lifetime, i18n)].filter(Boolean);
 
   const tagsNode = poll.tags.length
     ? div({ class: "card-tags" }, poll.tags.map(tag =>
@@ -345,15 +341,14 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
     : null;
 
   const pollSide = div({ class: "tribe-side" },
-    renderCardTop(poll.id, href, { arrow: false, date: poll.createdAt, chips, bylineExtra: [renderEditedChip(poll.tipId, poll.rootId)], spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, editAction, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
+    renderCardTop(poll.id, href, { arrow: false, date: poll.createdAt, chips, bylineExtra: [renderEditedChip(poll.tipId, poll.rootId, poll.updatedAt)], spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, editAction, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question)),
-    renderDetailShare(poll.id, href, poll.question, null, null, null, poll.author),
+    renderDetailShare(poll.id, href, poll.question, params.subscription ? { target: poll.rootId || poll.id, scope: "polls", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(poll.author) === String(userId), returnTo: href } : null, null, null, poll.author),
     tagsNode,
     statusRow
   );
 
   const pollMain = div({ class: "tribe-main" },
-    infoRows.length ? table({ class: "tribe-info-table jobs-info-table" }, ...infoRows) : null,
     div({ class: "job-section" },
       h2({ class: "job-section-title" }, i18n.pollParticipation),
       div({ class: "tribe-card-members" },
@@ -392,3 +387,4 @@ exports.renderResults = renderResults;
 exports.renderBallot = renderBallot;
 exports.outcomeOf = outcomeOf;
 exports.letterOf = letterOf;
+exports.renderPollStatusChip = renderStatusChip;

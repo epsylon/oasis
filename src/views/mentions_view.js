@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, input, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderCardTop, renderShareButton, renderCardMetaRow, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, renderSupportButton, hereAt } = require("./main_views");
-const { getViewDetailsAction, commentHref, commentLabel } = require("./activity_view");
+const { template, i18n, renderCardTop, renderShareButton, renderCardMetaRow, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, renderSupportButton, hereAt, renderStateChip, asChip } = require("./main_views");
+const { getViewDetailsAction, commentHref, commentLabel, rootTypeLabel, contentChipsOf, scopeChipOf } = require("./activity_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -11,7 +11,7 @@ const excerpt = (text, max = 320) => {
   return s.length > max ? s.slice(0, max) + "…" : s;
 };
 
-const typeLabel = (type) => (type === 'comment' ? i18n.typeComment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)]) || String(type || '').toUpperCase();
+const typeLabel = (type) => String((type === 'comment' ? i18n.typeComment : i18n['type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)] || rootTypeLabel(type)) || type || '').toUpperCase();
 
 const renderMentionCard = (item, readKeys, params = {}) => {
   const href = item.type === 'comment'
@@ -23,10 +23,9 @@ const renderMentionCard = (item, readKeys, params = {}) => {
     renderCardTop(item.id, href, {
       date: item.createdAt,
       chips: [div({ class: 'card-chips-row' },
-        span({ class: 'pm-exposition-chip pm-exposition-whole' },
-          span({ class: 'pm-exposition-text' }, item.comment ? String(commentLabel(item.comment)).toUpperCase() : typeLabel(item.type))
-        ),
-        read ? null : span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip))
+        renderStateChip('whole', '▣', item.comment ? String(commentLabel(item.comment)).toUpperCase() : typeLabel(item.type), 'module'),
+        ...(item.comment ? [scopeChipOf('comment', item.content, item)] : contentChipsOf(item.type, item.content, { action: { id: item.id, key: item.key, scope: item.scope } })),
+        read ? null : asChip('mine', span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-icon' }, '●'), span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip)))
       )],
       author: item.author,
       reportTitle: item.title || item.text,

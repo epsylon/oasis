@@ -160,13 +160,13 @@ const renderRecords = (pams) =>
                 td({ class: 'card-label' }, i18n.phoneDuration),
                 td({ class: 'card-value pm-subject-cell' },
                   span(clock(m.durationSec * 1000)),
-                  m.heard ? null : span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.phoneNew))
+                  m.heard ? null : span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-icon' }, '●'), span({ class: 'pm-exposition-text' }, i18n.phoneNew))
                 )
               ),
               tr(td({ class: 'card-label' }, i18n.pmEncryptionLabel || 'Encryption'), td({ class: 'card-value pm-encryption-cell' }, renderEncryptedChip(i18n)))
             ),
             m.ready === false
-              ? div({ class: 'phone-record-pending' }, span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.torrentStateDownloading)))
+              ? div({ class: 'phone-record-pending' }, span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-icon' }, '⧖'), span({ class: 'pm-exposition-text' }, i18n.torrentStateDownloading)))
               : audio({ controls: true, preload: 'metadata', src: `/phone/pam/${encodeURIComponent(m.key)}/audio` }),
             div({ class: 'pm-actions' },
               renderCallButton(m.from, { upper: true, cls: 'pm-btn' }),

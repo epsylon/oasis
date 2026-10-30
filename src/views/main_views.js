@@ -62,9 +62,11 @@ const renderCreatedRows = (createdAt, author, updatedAt) => {
 };
 exports.renderCreatedRows = renderCreatedRows;
 
-const renderEditedChip = (tipId, rootId) => tipId && rootId && String(tipId) !== String(rootId)
-  ? a({ href: `/versions/${encodeURIComponent(tipId)}`, class: 'edited-chip', title: i18n.wikiHistory }, `✎ ${String(i18n.edited || 'edited').toUpperCase()}`)
-  : null;
+const renderEditedChip = (tipId, rootId, updatedAt = null) => {
+  if (!(tipId && rootId && String(tipId) !== String(rootId))) return null;
+  const when = updatedAt && moment(updatedAt).isValid() ? moment(updatedAt).format('YYYY/MM/DD') : '';
+  return a({ href: `/versions/${encodeURIComponent(tipId)}`, class: 'edited-chip', title: i18n.wikiHistory }, `${String(i18n.edited || 'edited').toUpperCase()}${when ? `: ${when}` : ''}`);
+};
 exports.renderEditedChip = renderEditedChip;
 
 const renderMediaLockNote = (item) => (item && item.mediaLocked === true) || require('../backend/opinion_categories').hasOpinions(item)
@@ -194,7 +196,7 @@ const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, retu
   }
   const parts = [
     total && !compact ? span({ class: 'card-label' }, `${i18n.subscriptionTitle} (${total})${isOwner ? '' : ':'}`) : null,
-    compact && isOwner && total ? renderStateChip('transport', '🔔', `${i18n.subscriptionTitle}${countSuffix}`) : null,
+    compact && isOwner && total ? renderStateChip('transport', '🔔', `${i18n.subscriptionTitle}${countSuffix}`, 'mine') : null,
     span({ class: 'subscription-actions' },
       isOwner
         ? null
@@ -216,44 +218,75 @@ const renderSubscriptionBox = ({ target, scope, subscribed, count, isOwner, retu
 };
 exports.renderSubscriptionBox = renderSubscriptionBox;
 
-const renderStateChip = (variant, icon, text) =>
+const CHIP_ORDER = ['module', 'tribe', 'scope', 'reach', 'kind', 'level', 'status', 'data', 'eco', 'lifespan', 'mine', 'relation'];
+const asChip = (role, node) => {
+  if (role && node && typeof node === 'object') node.chipRole = role;
+  return node;
+};
+const chipRoleOf = (node, depth = 0) => {
+  if (!node || typeof node !== 'object') return null;
+  if (node.chipRole) return node.chipRole;
+  if (depth > 2 || !node.childNodes) return null;
+  for (const child of Array.from(node.childNodes)) {
+    const role = chipRoleOf(child, depth + 1);
+    if (role) return role;
+  }
+  return null;
+};
+const chipRank = (node) => {
+  const i = CHIP_ORDER.indexOf(chipRoleOf(node));
+  return i < 0 ? CHIP_ORDER.indexOf('status') : i;
+};
+const sortChips = (nodes) => [].concat(nodes || []).filter(Boolean)
+  .map((node, i) => [node, i])
+  .sort((x, y) => chipRank(x[0]) - chipRank(y[0]) || x[1] - y[1])
+  .map(([node]) => node);
+const renderChipsRow = (...nodes) => div({ class: 'card-chips-row' }, ...sortChips(nodes.flat()));
+exports.asChip = asChip;
+exports.sortChips = sortChips;
+exports.chipRoleOf = chipRoleOf;
+exports.renderChipsRow = renderChipsRow;
+
+const renderStateChip = (variant, icon, text, role = null) => asChip(role,
   span({ class: `pm-exposition-chip pm-exposition-${variant}` },
     icon ? span({ class: "pm-exposition-icon" }, icon) : null,
     span({ class: "pm-exposition-text" }, String(text || ""))
-  );
+  ));
+
+const renderCountChip = (icon, label, value, variant = 'whole') => asChip('data',
+  span({ class: `pm-exposition-chip pm-exposition-${variant}`, ...(label ? { title: String(label) } : {}) },
+    span({ class: "pm-exposition-icon" }, icon),
+    span({ class: "pm-exposition-text" }, typeof value === 'string' ? value : String(Number(value) || 0))
+  ));
+exports.renderCountChip = renderCountChip;
 
 const renderPhoneCallForm = (to, inner, title) => !phoneOn() || !to
   ? inner
   : form({ method: 'POST', action: '/phone/call', class: 'phone-chip-form' },
       input({ type: 'hidden', name: 'to', value: String(to) }),
       button({ type: 'submit', class: 'phone-chip-btn', title: title || i18n.phoneCallButton }, inner));
-const renderPhoneChip = (number, title) => number ? renderPhoneCallForm(number, renderStateChip('whole', '✆', number), title) : null;
+const renderPhoneChip = (number, title) => number ? renderPhoneCallForm(number, renderStateChip('whole', '✆', number, 'data'), title) : null;
 exports.renderPhoneChip = renderPhoneChip;
 
 const renderOpenClosedChip = (status, i18nObj) => {
   const s = String(status || "").toUpperCase();
   const isOpen = s === "OPEN";
   const label = (i18nObj && i18nObj["statusChip" + s]) || s;
-  return renderStateChip(isOpen ? "mutuals" : "closed", isOpen ? "✓" : "✗", label);
+  return renderStateChip(isOpen ? "mutuals" : "hidden", isOpen ? "✓" : "✗", label);
 };
 
 const renderVisibilityChip = (visibility, i18nObj) => {
   const v = String(visibility || "").toUpperCase();
   if (v === "HIDDEN") {
-    return renderStateChip("hidden", "🙈", (i18nObj && i18nObj.visibilityHidden) || "HIDDEN");
+    return renderStateChip("hidden", "🙈", (i18nObj && i18nObj.visibilityHidden) || "HIDDEN", "status");
   }
-  return renderStateChip("mutuals", "👁", (i18nObj && i18nObj.visibilityPublic) || "PUBLIC");
+  return renderStateChip("mutuals", "👁", (i18nObj && i18nObj.visibilityPublic) || "PUBLIC", "status");
 };
-
-const renderPrivacyChip = (isPrivate, i18nObj) =>
-  isPrivate
-    ? renderStateChip("hidden", "🔒", (i18nObj && i18nObj.privacyPrivate) || "PRIVATE")
-    : renderStateChip("mutuals", "🌐", (i18nObj && i18nObj.privacyPublic) || "PUBLIC");
 
 const renderModeChip = (mode, i18nObj) => {
   const m = String(mode || "").toLowerCase();
-  if (m === "strict") return renderStateChip("closed", null, (i18nObj && i18nObj.tribeStrict) || "STRICT");
-  return renderStateChip("mutuals", null, (i18nObj && i18nObj.tribeOpen) || "OPEN");
+  if (m === "strict") return renderStateChip("closed", "🔑", (i18nObj && i18nObj.tribeStrict) || "STRICT", "level");
+  return renderStateChip("mutuals", "✓", (i18nObj && i18nObj.tribeOpen) || "OPEN", "level");
 };
 
 const renderLifespanChip = (lifetime, i18nObj) => {
@@ -262,14 +295,15 @@ const renderLifespanChip = (lifetime, i18nObj) => {
   const range = lt.contentRange || lt.range || "";
   const bucket = lt.contentBucket || lt.bucket;
   if (range) {
-    return span({ class: `pm-exposition-chip pm-exposition-lifespan-${bucket}` },
+    return asChip('lifespan', span({ class: `pm-exposition-chip pm-exposition-lifespan-${bucket}` },
+      span({ class: "pm-exposition-icon" }, "⧗"),
       span({ class: "pm-exposition-text" }, range)
-    );
+    ));
   }
-  return span({ class: `pm-exposition-chip pm-exposition-lifespan-${lt.bucket}` },
+  return asChip('lifespan', span({ class: `pm-exposition-chip pm-exposition-lifespan-${lt.bucket}` },
     span({ class: `activity-dot ${lt.bucket}` }, "●"),
     span({ class: "pm-exposition-text" }, (i18nObj && i18nObj.lifespanLabel) || "Lifespan")
-  );
+  ));
 };
 
 const DATE_TIME_FORMAT = "YYYY/MM/DD HH:mm";
@@ -524,9 +558,11 @@ const renderCardByline = (opts = {}) => {
   let chipsRow = null;
   if (chipNodes.length === 1 && isChipsRow(chipNodes[0]) && typeof chipNodes[0].appendChild === 'function') {
     chipsRow = chipNodes[0];
-    for (const c of extraChips) chipsRow.appendChild(c);
+    const kids = Array.from(chipsRow.childNodes);
+    for (const c of kids) chipsRow.removeChild(c);
+    for (const c of sortChips(kids.concat(extraChips))) chipsRow.appendChild(c);
   } else if (chipNodes.length || extraChips.length) {
-    chipsRow = div({ class: 'card-chips-row' }, ...chipNodes, ...extraChips);
+    chipsRow = renderChipsRow(...chipNodes, ...extraChips);
   }
   const extra = [].concat(opts.bylineExtra || [], chipsRow).filter(Boolean);
   if (!author && !time && !extra.length) return span();
@@ -540,16 +576,19 @@ const renderCardByline = (opts = {}) => {
   );
 };
 const relationSets = () => { const st = listScope(); return st && st.relationSets ? st.relationSets : null; };
+const msgSizeFor = (id) => { const st = listScope(); return id && st && st.msgSizes instanceof Map ? st.msgSizes.get(String(id)) || 0 : 0; };
 const renderCardTop = (msgId, viewHref, opts = {}) => {
   const o = (opts && typeof opts === 'object') ? opts : {};
   const rs = relationSets();
   const cardAuthor = typeof o.bylineAuthor === 'string' && o.bylineAuthor.startsWith('@') ? o.bylineAuthor : o.author;
   const supportedChip = renderSupportedChip(cardAuthor, rs && rs.following);
   const replicating = (o.spread && o.spread.alreadySpread === true) || o.replicated === true || !!(rs && rs.replicated && typeof msgId === 'string' && rs.replicated.has(msgId));
-  const spreadingChip = replicating ? renderStateChip('transport', '', String(i18n.spreadingChip || '').toUpperCase()) : null;
+  const spreadingChip = replicating ? renderStateChip('transport', '⟳', String(i18n.spreadingChip || '').toUpperCase(), 'relation') : null;
+  const givenChips = [].concat(o.chips || []).flatMap((n) => (n && n.childNodes && String(n.class || n.className || '').split(/\s+/).includes('card-chips-row') ? Array.from(n.childNodes) : [n]));
+  const ecoChip = givenChips.some((n) => chipRoleOf(n) === 'eco') ? null : renderEcoTax(msgSizeFor(msgId) || o.msgSize, msgId);
   const anchor = anchorFor(msgId);
   return div({ class: 'card-header activity-card-header card-top', ...(anchor ? { id: anchor } : {}) },
-    renderCardByline({ ...o, extraChips: [].concat(o.extraChips || [], supportedChip, spreadingChip).filter(Boolean) }),
+    renderCardByline({ ...o, extraChips: [].concat(o.extraChips || [], ecoChip, supportedChip, spreadingChip).filter(Boolean) }),
     renderContentActions(msgId, viewHref, { ...o, share: false, menu: true })
   );
 };
@@ -566,8 +605,7 @@ const renderCommentsPill = (id, viewHref) => {
   const scope = listScope() || {};
   try { if (scope.path && decodeURIComponent(href.split(/[?#]/)[0]) === decodeURIComponent(String(scope.path))) return null; } catch (_) {}
   const counts = scope.commentCounts instanceof Map ? scope.commentCounts : null;
-  const hit = counts ? counts.get(String(id)) : null;
-  const total = hit ? hit.count : 0;
+  const total = counts ? [...new Set([].concat(id).filter(Boolean).map(String))].reduce((n, k) => n + ((counts.get(k) || {}).count || 0), 0) : 0;
   return a({ href: commentsOpenHref(href.split('#')[0], total), class: total ? 'comments-summary engage-on comments-link' : 'comments-summary comments-link', title: i18n.commentsGoToLast || i18n.voteNewCommentLabel || 'Comments' },
     span({ class: 'comments-summary-icon' }, COMMENTS_GLYPH),
     counts ? span({ class: 'comments-summary-count' }, `(${total})`) : null
@@ -657,6 +695,7 @@ const CONTENT_DELETE_ROUTE = {
 };
 const contentDeleteAction = (type, id) => CONTENT_DELETE_ROUTE[type] && id ? `/${CONTENT_DELETE_ROUTE[type]}/delete/${encodeURIComponent(id)}` : undefined;
 exports.CONTENT_FAV_KIND = CONTENT_FAV_KIND;
+exports.FAV_KIND_TYPE = Object.entries(CONTENT_FAV_KIND).reduce((acc, [type, kind]) => (acc[kind] ? acc : { ...acc, [kind]: type }), {});
 exports.CONTENT_SPREADABLE = CONTENT_SPREADABLE;
 exports.CONTENT_TORRENTABLE = CONTENT_TORRENTABLE;
 exports.contentDeleteAction = contentDeleteAction;
@@ -744,14 +783,15 @@ exports.renderRelationshipBlock = renderRelationshipBlock;
 exports.renderStateChip = renderStateChip;
 exports.renderOpenClosedChip = renderOpenClosedChip;
 exports.renderVisibilityChip = renderVisibilityChip;
-exports.renderPrivacyChip = renderPrivacyChip;
 exports.renderModeChip = renderModeChip;
 exports.renderLifespanChip = renderLifespanChip;
+
+const carbonGramsOf = (bytes) => ((Number(bytes) || 0) / (1024 * 1024)) * 0.095;
 
 const formatCarbon = (bytes) => {
   const n = Number(bytes) || 0;
   if (!n) return '0 µg CO₂';
-  const grams = (n / (1024 * 1024)) * 0.095;
+  const grams = carbonGramsOf(n);
   if (grams >= 1) return `${grams.toFixed(2)} g CO₂`;
   const mg = grams * 1000;
   if (mg >= 1) return `${mg.toFixed(2)} mg CO₂`;
@@ -766,28 +806,12 @@ const renderEcoTax = (sizeBytes, blockId) => {
   const href = blockId
     ? `/blockexplorer?inspect=${encodeURIComponent(blockId)}#inspect`
     : '/blockexplorer#inspect';
-  let band = 'low';
-  let reducer = 1;
-  let rawRatio = 0;
-  let inhabitants = 1;
-  try {
-    const maxObserved = sharedState.getMaxBlockBytes ? Number(sharedState.getMaxBlockBytes()) : 0;
-    const max = maxObserved > 0 ? maxObserved : n;
-    rawRatio = max > 0 ? Math.min(1, n / max) : 0;
-    inhabitants = Math.max(1, (sharedState.getInhabitantCount && sharedState.getInhabitantCount()) || 1);
-    reducer = 1 + Math.log10(inhabitants);
-    const adjusted = rawRatio / reducer;
-    if (adjusted >= 0.66) band = 'high';
-    else if (adjusted >= 0.33) band = 'mid';
-    else band = 'low';
-  } catch (_) {}
-  const reducerNote = inhabitants > 1
-    ? ` · reducer ×${reducer.toFixed(2)} (${inhabitants} inhabitants)`
-    : '';
-  const title = `${label} · ${formatCarbon(sizeBytes)}${reducerNote}`;
-  return a({ href, class: `eco-tax-chip eco-tax-chip-${band}`, title },
+  const ratio = n / ((config.blobs && Number(config.blobs.max)) || 75 * 1024 * 1024);
+  const band = ratio >= 0.66 ? 'high' : ratio >= 0.33 ? 'mid' : 'low';
+  const title = `${label} · ${formatCarbon(n)}`;
+  return asChip('eco', a({ href, class: `eco-tax-chip eco-tax-chip-${band}`, title },
     span({ class: 'eco-tax-chip-value' }, formatCarbon(sizeBytes))
-  );
+  ));
 };
 
 exports.formatCarbon = formatCarbon;
@@ -1158,7 +1182,7 @@ const renderSupportButton = (author, following, returnTo = null) => {
 };
 const renderSupportedChip = (author, following) =>
   supportableAuthor(author) && following instanceof Set && following.has(author)
-    ? renderStateChip('transport', '', String(i18n.supportedChip || '').toUpperCase())
+    ? renderStateChip('transport', '♥', String(i18n.supportedChip || '').toUpperCase(), 'relation')
     : null;
 exports.renderSupportedChip = renderSupportedChip;
 const RELATION_FILTERS = ['supported', 'replicated'];
@@ -3342,6 +3366,7 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
         articleElement
     );
 
+    const { renderScopeChip } = require('./clearnet_view');
     const postKind = msg.value?.meta?.postType;
     const kindLabel = postKind === "comment" ? i18n.typeComment : postKind === "subtopic" ? i18n.subtopic : postKind === "post" ? i18n.typePost : null;
     const cardTitle = (hasContentWarning && msg.value.content.contentWarning)
@@ -3358,7 +3383,8 @@ const post = ({ msg, aside = false, preview = false, spreadInfo = null }) => {
             authorName: msg.value?.meta?.author?.name,
             date: iso,
             chips: [div({ class: "card-chips-row" },
-                kindLabel ? span({ class: "pm-exposition-chip pm-exposition-whole" }, span({ class: "pm-exposition-text" }, String(kindLabel).toUpperCase())) : null,
+                renderScopeChip({ scope: isPrivate ? 'private' : 'oasis' }, i18n),
+                kindLabel ? renderStateChip("whole", "◇", String(kindLabel).toUpperCase(), "kind") : null,
                 isPrivate ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
                 ...(isPrivate ? recps : [])
             )],
@@ -3665,10 +3691,10 @@ const renderClearnetHubCard = (modulePath, it) => {
   const mediaSrc = it.media && it.media.blobId ? cnBlob(it.media.blobId) : null;
   const player = mediaSrc
     ? (it.media.kind === 'video'
-        ? `<video class="cn-hub-player" controls preload="metadata" src="${mediaSrc}"></video>`
+        ? `<video class="cn-hub-player" controls preload="none" src="${mediaSrc}"></video>`
         : it.media.kind === 'image'
           ? `<a href="${href}"><img class="cn-hub-player" src="${mediaSrc}" alt="" loading="lazy"/></a>`
-          : `<audio class="cn-hub-player" controls preload="metadata" src="${mediaSrc}"></audio>`)
+          : `<audio class="cn-hub-player" controls preload="none" src="${mediaSrc}"></audio>`)
     : '';
   const price = it.price ? `<span class="cn-price">${esc(String(it.price))} ECO</span>` : '';
   return `<div class="cn-hub-card">
@@ -3842,13 +3868,13 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
 `;
   const body = `
   <div class="cn-profile">
-    <a href="/c/inhabitant/${encodeURIComponent(feedId)}"><img class="cn-avatar" src="${avatarSrc}" alt="${displayName}"/></a>
+    <a href="/c/inhabitant/${encodeURIComponent(feedId)}"><img class="cn-avatar" src="${avatarSrc}" alt="${displayName}" loading="lazy"/></a>
     <div class="cn-profile-body">
       <h1 class="cn-name">${displayName}</h1>
       <div class="cn-id">${esc(feedId)}</div>
       ${desc ? `<p class="cn-desc">${desc}</p>` : ''}
     </div>
-    ${qrSrc ? `<div class="cn-qr-col"><img class="cn-qr-img" src="${qrSrc}" alt="QR"/></div>` : ''}
+    ${qrSrc ? `<div class="cn-qr-col"><img class="cn-qr-img" src="${qrSrc}" alt="QR" loading="lazy"/></div>` : ''}
   </div>
   ${totalCount > 0 ? sections : noResults}
 `;
@@ -3935,7 +3961,7 @@ const renderUserSensors = (u, opts = {}) => {
       isMe || dnd
         ? span({ class: 'wallet-address phone-number-value', title: isMe ? i18n.profileVisibilityPhone : i18n.phoneRecipientRefuses }, number)
         : renderPhoneCallForm(u.id, span({ class: 'wallet-address phone-number-value' }, number), i18n.phoneCallButton),
-      renderStateChip(dnd ? 'hidden' : 'mutuals', null, String(dnd ? i18n.phoneDnd : i18n.phoneOpen).toUpperCase()),
+      renderStateChip(dnd ? 'hidden' : 'mutuals', dnd ? '✗' : '✓', String(dnd ? i18n.phoneDnd : i18n.phoneOpen).toUpperCase()),
       isMe && opts.dndToggle !== false ? form({ method: 'POST', action: '/phone/dnd', class: 'phone-dnd-form' },
         input({ type: 'hidden', name: 'dnd', value: dnd ? '0' : '1' }),
         button({ type: 'submit', class: 'tribe-action-btn' }, String(dnd ? i18n.phoneOpen : i18n.phoneDnd).toUpperCase())
@@ -4282,42 +4308,6 @@ exports.commentView = async (
   );
 };
 
-const renderMessage = (msg) => {
-  const content = lodash.get(msg, "value.content", {});
-  const authorId = msg.value.author || "Anonymous";
-  const mentionsText = content.text || '';
-  const isTribe = content.type === 'tribe-content';
-  const visitUrl = isTribe
-    ? `/tribe/${encodeURIComponent(content.tribeId)}`
-    : content.root
-      ? `/thread/${encodeURIComponent(content.root)}#${encodeURIComponent(msg.key)}`
-      : msg.key
-        ? `/thread/${encodeURIComponent(msg.key)}#${encodeURIComponent(msg.key)}`
-        : null;
-  const badge = isTribe && content.tribeName
-    ? span({ class: 'tribe-badge' }, content.tribeName)
-    : null;
-  const typeLabel = isTribe ? 'TRIBE' : 'POST';
-
-  return div({ class: 'card card-rpg mention-card' },
-    renderCardTop(msg.key, visitUrl, {
-      author: authorId,
-      date: msg.value.timestamp,
-      chips: [div({ class: 'card-chips-row' },
-        span({ class: 'pm-exposition-chip pm-exposition-whole' }, span({ class: 'pm-exposition-text' }, typeLabel)),
-        badge
-      )],
-      reportTitle: mentionsText
-    }),
-    div({ class: 'card-body' },
-      div({ class: 'card-section' },
-        p({ class: 'post-text' }, ...renderStyledText(mentionsText || '[No content]'))
-      ),
-      renderEngagement(msg.key, null, null, { href: visitUrl, title: mentionsText, author: msg.value && msg.value.author })
-    )
-  );
-};
-
 
 
 const { botOf: inboxBotOf, INBOX_BOTS } = require('../models/pm_model');
@@ -4416,7 +4406,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
         td({ class: 'card-label' }, i18n.pmSubjectLabel || 'Subject:'),
         td({ class: 'card-value pm-subject-cell' },
           span(subject || i18n.pmNoSubject || '(no subject)'),
-          isUnreadKey(msgKey) ? span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip)) : null
+          isUnreadKey(msgKey) ? span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-icon' }, '●'), span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip)) : null
         )
       ),
       ecoChip

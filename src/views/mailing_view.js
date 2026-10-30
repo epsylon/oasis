@@ -1,6 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
+const { renderScopeChip } = require("./clearnet_view");
 const { TEXT_CAP } = require('../backend/long_text');
-const { template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views");
 const { renderStyledText } = require("../backend/renderStyledText");
 const { config } = require("../server/SSB_server.js");
 
@@ -19,27 +20,16 @@ const historyLabel = (m) => String(i18n[`mailingHistory${cap(m)}`] || m).toUpper
 const listHref = (list) => `/mailing/${encodeURIComponent(list.id)}`;
 
 const statusChip = (list) => renderStateChip(list.status === "ACTIVE" ? "mutuals" : "hidden", list.status === "ACTIVE" ? "✓" : "✗", statusLabel(list.status));
-const countsLine = (list) => span({ class: "card-label activity-update-counts mailing-counts" }, `👥: ${list.participantCount || 0} · 💬 ${list.messageCount || 0}`);
-
-const subscribeForm = (list, returnTo) => {
-  if (list.isOwner) return null;
-  if (list.closed) {
-    return list.isMember
-      ? form({ method: "POST", action: `/mailing/leave/${encodeURIComponent(list.id)}` }, button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.subscriptionUnsubscribe).toUpperCase()))
-      : null;
-  }
-  return form({ method: "POST", action: "/subscriptions/toggle" },
-    input({ type: "hidden", name: "target", value: list.id }),
-    input({ type: "hidden", name: "scope", value: "mailing" }),
-    input({ type: "hidden", name: "on", value: list.isMember ? "0" : "1" }),
-    input({ type: "hidden", name: "returnTo", value: returnTo }),
-    button({ type: "submit", class: list.isMember ? "tribe-action-btn danger-btn" : "tribe-action-btn" }, String(list.isMember ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe).toUpperCase())
-  );
+const countChips = (list) => [renderCountChip("👥", i18n.mailingSubscribers, list.participantCount || 0), renderCountChip("💬", i18n.mailingMessagesLabel, list.messageCount || 0)];
+const listTypeChip = (list) => {
+  const isOpen = String(list.listType || "").toUpperCase() === "OPEN";
+  return renderStateChip(isOpen ? "mutuals" : "closed", isOpen ? "🔓" : "🔑", typeLabel(isOpen ? "OPEN" : "CLOSED"), "level");
 };
 
-const writeForm = (list) => (list.status === "ACTIVE" && (!list.closed || list.isMember))
-  ? form({ method: "GET", action: `${listHref(list)}#compose` }, input({ type: "hidden", name: "write", value: "1" }), button({ type: "submit", class: "tribe-action-btn" }, String(i18n.mailingWriteButton).toUpperCase()))
+const leaveForm = (list) => !list.isOwner && list.closed && list.isMember
+  ? form({ method: "POST", action: `/mailing/leave/${encodeURIComponent(list.id)}` }, button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.subscriptionUnsubscribe).toUpperCase()))
   : null;
+
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
   ? div({ class: "card-tags" }, ...tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`)))
@@ -64,15 +54,16 @@ const renderArchiveItem = (list, params = {}) =>
     renderCardTop(list.id, listHref(list), {
       date: list.createdAt,
       chips: [
-        renderOpenClosedChip(list.listType, { statusChipOPEN: typeLabel("OPEN"), statusChipCLOSED: typeLabel("CLOSED") }),
+        renderScopeChip(list, i18n),
+        listTypeChip(list),
         statusChip(list),
-        list.isMember && !list.isOwner ? renderStateChip("transport", "✉", i18n.subscriptionOn) : null
+        ...countChips(list),
+        list.isMember && !list.isOwner ? renderStateChip("transport", "✉", i18n.subscriptionOn, "mine") : null
       ],
       author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: (params.spreadMap && params.spreadMap.get(list.id)) || null, deleteAction: String(list.author) === String(userId) ? contentDeleteAction("mailingList", list.id) : null
     }),
     div({ class: "mailing-archive-meta" },
-      a({ href: listHref(list), class: "user-link" }, list.title || "—"),
-      countsLine(list)
+      a({ href: listHref(list), class: "user-link" }, list.title || "—")
     ),
     null
   );
@@ -168,7 +159,6 @@ const renderMessage = (list, m, opts = {}) =>
       list.canWrite && !opts.noReply
         ? div({ class: "tribe-side-actions emergency-update-actions" },
             form({ method: "GET", action: `${listHref(list)}#compose`, class: "mailing-reply-form" },
-              input({ type: "hidden", name: "write", value: "1" }),
               input({ type: "hidden", name: "reply", value: m.mid }),
               input({ type: "hidden", name: "history", value: opts.mode || "DATE" }),
               button({ type: "submit", class: "tribe-action-btn" }, String(i18n.pmReply || "Reply").toUpperCase())
@@ -224,16 +214,20 @@ const renderCompose = (list, params) => {
   const draft = params.draft || null;
   const subject = draft ? String(draft.subject || "") : parent ? (/^\s*RE:/i.test(parent.subject) ? parent.subject : `RE: ${parent.subject}`) : "";
   const thread = parent ? parent.thread : draft ? String(draft.thread || "") : "";
-  return div({ class: "div-center audio-form mailing-compose", id: "compose" },
-    h2(parent ? i18n.mailingReplyTitle : i18n.mailingWriteTitle),
+  return div({ class: "chat-message-form mailing-compose", id: "compose" },
+    parent
+      ? div({ class: "chat-replying-banner" },
+          span({ class: "chat-reply-arrow" }, "↩ "),
+          span({ class: "chat-reply-text" }, ` ${parent.subject || i18n.pmNoSubject}`),
+          a({ href: `${listHref(list)}#compose`, class: "chat-reply-cancel", title: i18n.chatReplyCancel || "✕" }, "✕")
+        )
+      : null,
     form({ method: "POST", action: `/mailing/${encodeURIComponent(list.id)}/message` },
       thread ? input({ type: "hidden", name: "thread", value: thread }) : null,
       params.returnTo ? input({ type: "hidden", name: "returnTo", value: params.returnTo }) : null,
-      label(i18n.pmSubject), br(),
-      input({ type: "text", name: "subject", maxlength: "150", placeholder: i18n.pmSubjectHint, value: subject }), br(), br(),
-      label(i18n.pmText), br(),
-      textarea({ name: "text", rows: 8, maxlength: String(TEXT_CAP), required: true, autofocus: true, placeholder: parent ? parent.text.split("\n").map(l => `> ${l}`).join("\n") : i18n.mailingTextPlaceholder }, draft ? String(draft.text || "") : ""), br(), br(),
-      button({ type: "submit", class: "create-button" }, i18n.mailingSend)
+      input({ type: "text", name: "subject", maxlength: "150", placeholder: i18n.pmSubjectHint, value: subject }), br(),
+      textarea({ name: "text", rows: 3, maxlength: String(TEXT_CAP), required: true, placeholder: parent ? parent.text.split("\n").map(l => `> ${l}`).join("\n") : i18n.mailingTextPlaceholder }, draft ? String(draft.text || "") : ""), br(),
+      button({ type: "submit", class: "filter-btn" }, i18n.mailingSend)
     )
   );
 };
@@ -255,15 +249,12 @@ exports.singleMailingView = async (list, params = {}) => {
         ))
       )
     : null;
-  const sideActions = [subscribeForm(list, href)].filter(Boolean);
+  const sideActions = [leaveForm(list)].filter(Boolean);
   const side = div({ class: "tribe-side" },
-    renderCardTop(list.id, href, { arrow: false, date: list.createdAt, chips: [renderOpenClosedChip(list.listType, { statusChipOPEN: typeLabel("OPEN"), statusChipCLOSED: typeLabel("CLOSED") }), statusChip(list)], author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null, editAction: isAuthor ? `/mailing?filter=edit&id=${encodeURIComponent(list.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("mailingList", list.id) : null }),
+    renderCardTop(list.id, href, { arrow: false, date: list.createdAt, chips: [renderScopeChip(list, i18n), listTypeChip(list), statusChip(list), ...countChips(list)], author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null, editAction: isAuthor ? `/mailing?filter=edit&id=${encodeURIComponent(list.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("mailingList", list.id) : null }),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, list.title)),
-    renderDetailShare(list.id, href, list.title, null, null, null, list.author),
+    renderDetailShare(list.id, href, list.title, params.subscription && !list.closed ? { target: list.id, scope: "mailing", subscribed: !!(params.subscription.subscribed || list.isMember), count: list.participantCount || params.subscription.count, isOwner: isAuthor, returnTo: href } : null, null, null, list.author),
     list.description ? p({ class: "tribe-side-description" }, ...renderStyledText(list.description)) : null,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.mailingSubscribers}: ${list.participantCount || 0}`)
-    ),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     isAuthor
       ? div({ class: "tribe-side-actions housing-status-row" },
@@ -275,10 +266,6 @@ exports.singleMailingView = async (list, params = {}) => {
           )
         )
       : null,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.mailingMessagesLabel}: ${list.messageCount || 0}`)
-    ),
-    writeForm(list) ? div({ class: "tribe-side-actions" }, writeForm(list)) : null,
     div({ class: "doc-export-actions" },
       form({ method: "GET", action: `${href}/pdf` }, button({ type: "submit", class: "filter-btn" }, i18n.mailingGenerateReport)),
       form({ method: "POST", action: `${href}/share` }, button({ type: "submit", class: "filter-btn" }, i18n.sharePm))
@@ -287,7 +274,7 @@ exports.singleMailingView = async (list, params = {}) => {
     null
   );
   const main = div({ class: "tribe-main" },
-    params.write && list.status === "ACTIVE" && (!list.closed || list.isMember) ? renderCompose(list, params) : null,
+    list.status === "ACTIVE" && (!list.closed || list.isMember) ? renderCompose(list, params) : null,
     div({ class: "card-section mailing-history", id: "history" },
       historyChips,
       history.length
@@ -306,3 +293,5 @@ exports.singleMailingView = async (list, params = {}) => {
     section(div({ class: "tribe-details" }, side, main))
   );
 };
+exports.renderMailingStatusChip = statusChip;
+exports.renderMailingTypeChip = listTypeChip;

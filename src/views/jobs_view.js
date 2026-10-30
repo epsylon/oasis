@@ -1,13 +1,13 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderCountChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapEmbed, renderMapLocationVisitLabel } = require("./maps_view")
 const { resolvePhoto } = require("./inhabitants_view")
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
+const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
 
 const renderMediaBlob = (value, attrs = {}) => {
   if (!value) return null
@@ -127,7 +127,7 @@ const renderJobStatusChip = (status) => {
 }
 
 const renderJobAppliedChip = () =>
-  renderStateChip("transport", "★", i18n.jobsAppliedBadge)
+  renderStateChip("transport", "★", i18n.jobsAppliedBadge, "mine")
 
 const renderJobHiddenChip = () =>
   renderVisibilityChip("HIDDEN", i18n)
@@ -239,9 +239,10 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
         renderJobStatusChip(job.status),
         isHidden ? renderJobHiddenChip() : null,
         isSubscribed ? renderJobAppliedChip() : null,
-        job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
+        job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase(), "kind")) : null,
         renderLifespanChip(job.lifetime, i18n),
-        job.clearnet === true && clearnetEligible(job) ? renderReachChip(true, i18n, clearnetItemHref('jobs', job.title, job.id)) : null
+        renderScopeChip(job, i18n, clearnetEligible(job) && job.clearnet === true, clearnetItemHref('jobs', job.title, job.id)),
+        renderCountChip("✉", i18n.jobSubscribers, subs.length)
       ].filter(Boolean)
       const isExchange = String(job.job_type || "").toLowerCase() === "exchange"
       const compensationText = isExchange
@@ -261,9 +262,6 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
               )
             ),
             div({ class: "price-chip" }, compensationText),
-            div({ class: "tribe-card-members" },
-              span({ class: "tribe-members-count" }, `${i18n.jobSubscribers}: ${subs.length}`)
-            ),
             null
           )
         )
@@ -632,13 +630,12 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
     renderJobStatusChip(job.status),
     visibility === 'HIDDEN' ? renderJobHiddenChip() : null,
     isSubscribed ? renderJobAppliedChip() : null,
-    job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
+    job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase(), "kind")) : null,
     renderLifespanChip(job.lifetime, i18n),
     renderEcoTax(job.msgSize, job.id),
-    renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('jobs', job.title, job.id) : null)
+    renderScopeChip(job, i18n, isClearnet, clearnetItemHref('jobs', job.title, job.id)),
+    renderCountChip("✉", i18n.jobSubscribers, subs.length)
   ].filter(Boolean)
-  const updatedAt = job.updatedAt ? moment(job.updatedAt) : null
-  const showUpdated = updatedAt && updatedAt.isValid() && updatedAt.valueOf() !== new Date(job.createdAt).getTime()
 
   const nextVisibility = visibility === 'PUBLIC' ? 'HIDDEN' : 'PUBLIC'
   const visibilityRow = isAuthor
@@ -659,8 +656,7 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
       date: job.createdAt,
       chips,
       bylineExtra: [
-        renderEditedChip(job.id, job.rootId),
-        showUpdated ? span({ class: "card-byline-time" }, `${i18n.jobsUpdatedAt}: ${updatedAt.format("YYYY/MM/DD HH:mm")}`) : null
+        renderEditedChip(job.id, job.rootId, job.updatedAt)
       ],
       spread: params.spreads || null, author: job.author, favKind: 'jobs', isFavorite: job.isFavorite, reportTitle: job.title, returnTo, editAction: isAuthor ? `/jobs/edit/${encodeURIComponent(job.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("job", job.id) : null
     }),
@@ -764,7 +760,7 @@ exports.clearnetJobView = async (job) => {
     ${compensation ? `<span class="cn-price">${compensation}</span>` : ''}
   </div>
   <hr class="cn-sep"/>
-  ${jobImg ? `<img class="cn-job-img" src="${jobImg}" alt="${title}"/>` : ''}
+  ${jobImg ? `<img class="cn-job-img" src="${jobImg}" alt="${title}" loading="lazy"/>` : ''}
   ${desc ? `<div class="cn-job-section"><h2>${esc(i18n.description)}</h2><p>${desc}</p></div>` : ''}
   ${req ? `<div class="cn-job-section"><h2>${esc(i18n.jobRequirements)}</h2><p>${req}</p></div>` : ''}
   ${tasks ? `<div class="cn-job-section"><h2>${esc(i18n.jobTasks)}</h2><p>${tasks}</p></div>` : ''}

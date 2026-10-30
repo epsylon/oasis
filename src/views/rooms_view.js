@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare, RELATION_FILTERS, relationFilterLabel, hasRelation } = require("./main_views")
-const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch } = require("./clearnet_view")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare, RELATION_FILTERS, relationFilterLabel, hasRelation, renderCountChip } = require("./main_views")
+const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -29,17 +29,17 @@ const renderRoomStatusChip = (room) => {
 const renderRoomNumberChip = (room, occ, inside) => {
   if (!room.number) return null
   if (room.line === "SWITCHBOARD" && !inside && occ && Number(occ.count) > 0) return renderPhoneChip(room.number, i18n.roomNumberHint)
-  return span({ title: room.line !== "SWITCHBOARD" ? i18n.roomLineDndError : inside ? i18n.roomYouAreIn : i18n.roomNobodyInside }, renderStateChip("whole", "✆", room.number))
+  return span({ title: room.line !== "SWITCHBOARD" ? i18n.roomLineDndError : inside ? i18n.roomYouAreIn : i18n.roomNobodyInside }, renderStateChip("whole", "✆", room.number, "data"))
 }
 const renderRoomLineChip = (room) => room.isClosed || String(room.author) === String(userId)
   ? null
-  : renderStateChip(room.line === "SWITCHBOARD" ? "mutuals" : "hidden", null, String(room.line === "SWITCHBOARD" ? i18n.roomLineSwitchboard : i18n.phoneDnd).toUpperCase())
+  : renderStateChip(room.line === "SWITCHBOARD" ? "mutuals" : "hidden", '✆', String(room.line === "SWITCHBOARD" ? i18n.roomLineSwitchboard : i18n.phoneDnd).toUpperCase(), 'data')
 
 const renderLiveChip = (occ) => {
   if (!occ) return null
   const count = Number(occ.count) || 0
   const max = occ.max || ROOM_MAX
-  return count > 0 ? renderStateChip("mutuals", "●", `${i18n.roomLiveChip} ${count}/${max}`) : renderStateChip("whole", "●", `${count}/${max}`)
+  return count > 0 ? renderStateChip("mutuals", "●", `${i18n.roomLiveChip} ${count}/${max}`, "data") : renderStateChip("whole", "●", `${count}/${max}`, "data")
 }
 
 const roomChips = (room, occ, inside = false) => [
@@ -91,14 +91,14 @@ const renderRoomItem = (room, params = {}) => {
       date: room.createdAt,
       chips: [
         ...roomChips(room, occ, inside),
-        room.clearnet === true && clearnetEligible(room) ? renderReachChip(true, i18n, roomClearnetHref(room)) : null,
-        inside ? renderStateChip("transport", "ꘒ", String(i18n.roomYouAreIn).toUpperCase()) : null
+        renderScopeChip(room, i18n, clearnetEligible(room) && room.clearnet === true, roomClearnetHref(room)),
+        inside ? renderStateChip("transport", "ꘒ", String(i18n.roomYouAreIn).toUpperCase(), "mine") : null,
+        renderCountChip("👥", i18n.roomParticipants, safeArr(room.members).length)
       ],
       spread: (params.spreadMap && params.spreadMap.get(room.rootId)) || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, reportTitle: room.title, deleteAction: String(room.author) === String(userId) ? contentDeleteAction("room", room.rootId) : undefined
     }),
     div({ class: "mailing-archive-meta" },
-      a({ href: roomHref(room), class: "user-link" }, room.title || "—"),
-      span({ class: "card-label activity-update-counts mailing-counts" }, `👥: ${safeArr(room.members).length}`)
+      a({ href: roomHref(room), class: "user-link" }, room.title || "—")
     ),
     null
   )
@@ -378,7 +378,8 @@ exports.singleRoomView = async (room, params = {}) => {
       date: room.createdAt,
       chips: [
         ...roomChips(room, live ? { count: live.count, max: live.max } : occ, !!live),
-        canClearnet ? renderReachChip(isClearnet, i18n, isClearnet ? roomClearnetHref(room) : null) : null
+        renderScopeChip(room, i18n, isClearnet, roomClearnetHref(room)),
+        renderCountChip("👥", i18n.roomParticipants, safeArr(room.members).length)
       ],
       spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title, editAction: isAuthor ? `/rooms?filter=edit&id=${encodeURIComponent(room.rootId)}` : undefined, leaveAction: !isAuthor && !room.tribeId && safeArr(room.members).includes(me) ? `/rooms/leave/${encodeURIComponent(room.rootId)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("room", room.rootId) : undefined
     }),
@@ -387,16 +388,11 @@ exports.singleRoomView = async (room, params = {}) => {
     restricted ? null : renderCover(room, "tribe-detail-image"),
     renderDetailShare(room.rootId, roomHref(room), room.title, null, null, null, room.author),
     restricted || !room.description ? null : p({ class: "tribe-side-description" }, ...renderStyledText(room.description)),
-    live || restricted
-      ? div({ class: "tribe-card-members" },
-          span({ class: "tribe-members-count" }, `${i18n.roomParticipants}: ${safeArr(room.members).length}`)
-        )
-      : null,
     inviteActions.length ? div({ class: "tribe-side-actions" }, ...inviteActions) : null,
     isAuthor && !room.isClosed
       ? div({ class: "tribe-side-actions housing-status-row" },
           span({ class: "card-label" }, `${i18n.statusLabel || "Status"}: `),
-          renderStateChip(room.line === "SWITCHBOARD" ? "mutuals" : "hidden", "✆", String(room.line === "SWITCHBOARD" ? i18n.roomLineSwitchboard : i18n.phoneDnd).toUpperCase()),
+          renderStateChip(room.line === "SWITCHBOARD" ? "mutuals" : "hidden", "✆", String(room.line === "SWITCHBOARD" ? i18n.roomLineSwitchboard : i18n.phoneDnd).toUpperCase(), 'data'),
           form({ method: "POST", action: `/rooms/line/${encodeURIComponent(room.rootId)}`, class: "inline-form" },
             button({ class: "tribe-action-btn", type: "submit", name: "line", value: room.line === "SWITCHBOARD" ? "DND" : "SWITCHBOARD" },
               String(room.line === "SWITCHBOARD" ? i18n.phoneDnd : i18n.roomLineSwitchboard).toUpperCase())
@@ -482,7 +478,7 @@ exports.clearnetRoomView = async (room, { live = false, sound = true, base = "" 
     ${room.number ? `<span class="pm-exposition-chip pm-exposition-whole cn-room-number"><span class="pm-exposition-icon">✆</span><span class="pm-exposition-text">${esc(room.number)}</span></span>` : ""}
     ${room.createdAt ? `<span class="cn-detail">📅 ${esc(moment(room.createdAt).format("YYYY/MM/DD"))}</span>` : ""}
   </div>
-  ${cover ? `<img class="cn-room-img" src="${cover}" alt="${esc(name)}"/>` : ""}
+  ${cover ? `<img class="cn-room-img" src="${cover}" alt="${esc(name)}" loading="lazy"/>` : ""}
   ${desc ? `<p class="cn-room-desc">${desc}</p>` : ""}
   ${renderTagChips(room.tags)}
   ${live && base ? `<section class="cn-room-live">
@@ -537,3 +533,4 @@ exports.roomStreamMatchesView = ({ files, returnTo }) => template(
     )))
   )
 )
+exports.renderRoomStatusChip = renderRoomStatusChip

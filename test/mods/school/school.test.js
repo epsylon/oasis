@@ -470,13 +470,13 @@ describe('school: star ratings by students', (t) => {
 });
 
 describe('school: course chat and dates', (t) => {
-  t('creating a course creates its chat with the Course: title template', async () => {
+  t('creating a course creates its chat titled with the course icon and title', async () => {
     const net = makeNetwork(); const A = makePeer(net); A.setActor();
     const r = await A.use('school').createCourse(course({ title: 'Herbs' }));
     const c = await A.use('school').getCourseById(r.key, A.keypair.id);
     ok(c.chatId);
     const chat = await A.use('chats').getChatById(c.chatId);
-    eq(chat.title, 'Course: Herbs');
+    eq(chat.title, '🎓 Herbs');
     eq(chat.status, 'OPEN');
   });
 

@@ -698,9 +698,9 @@ const rulesBlock = (rules, taxRules) => {
     ),
     p({ class: "bank-rules-note" }, i18n.bankRulesEcoTaxNote || "ECO Tax is deducted only from the surplus that the network generates above the immovable floor — the base UBI (floor_user) is never reduced. The deducted ECO are not redistributed in this epoch; they remain in the pub balance and feed the next epoch's pool through reserveMin / alpha caps."),
     h2(i18n.bankRulesChipTitle || "ECO Tax chip color band"),
-    p({ class: "bank-rules-note" }, i18n.bankRulesChipNote || "Each item's chip is colored relative to the largest message ever observed in the network and softened by the number of active inhabitants — a larger network distributes the load and pushes more items into the green band."),
+    p({ class: "bank-rules-note" }, i18n.bankRulesChipNote || "Each item's chip is colored by its real footprint (the message plus the files it carries, at 0.095 g CO₂ per MB: 0.0002 kWh/MB × 475 g CO₂/kWh, the same basis as Stats) compared with the heaviest item the network accepts: the 75 MB blob limit, about 7.1 g CO₂."),
     p({ class: "bank-rules-formula" },
-      strong(i18n.bankRulesChipFormula || "band = ratio / reducer, where ratio = sizeBytes / maxBlockBytes, reducer = 1 + log10(inhabitants). high ≥ 0.66, mid ≥ 0.33, otherwise low.")
+      strong(i18n.bankRulesChipFormula || "band = sizeBytes / blob limit (75 MB). high ≥ 0.66 (from about 50 MB), mid ≥ 0.33 (from about 25 MB), otherwise low.")
     ),
 
     h2(i18n.bankRulesArchTaxTitle || "ARCH Tax"),

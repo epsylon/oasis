@@ -124,6 +124,8 @@ Everything else is the standard PUB shape: `pub: true`, no LAN discovery, the fr
 
 `./oasis.sh server` runs the Oasis Sbot together with the read-only web HUB (`backend.js --public`, listening on all interfaces, no browser tab; see step 15). It never runs the AI: every launch switches `aiMod` and `aiNavMod` off in `src/configs/oasis-config.json`. Everything else in that file applies, together with `src/configs/server-config.json`.
 
+In public mode (`./oasis.sh server`, or `oasis.sh` with `--public`) the launcher starts Node with `--max-old-space-size=4096`: a PUB keeps the indexes of every feed it replicates in the same process, and Node's default limit (about a quarter of the RAM) can be reached on a busy PUB. Give the VPS at least 6 GB of RAM, or lower that value in `oasis.sh` to fit yours.
+
 The repo ships a ready-to-use systemd unit at `docs/PUB/oasis-pub.service`. Copy it, edit the `YOUR_USER` placeholder, then enable it:
 
 ```

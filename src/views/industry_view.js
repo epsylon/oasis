@@ -1,6 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
+const { renderScopeChip } = require("./clearnet_view")
 const { renderZoomableImage } = require("./gallery_view")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation } = require("./main_views")
+const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -75,6 +76,7 @@ const safeText = (v) => String(v || "").trim()
 
 const sectorLabel = (key) => i18n[`industrySector_${key}`] || key
 const policyLabel = (key) => i18n[`industryPolicy_${key}`] || key
+const renderPolicyChip = (key) => renderStateChip("whole", key === "open" ? "✓" : "🔑", policyLabel(key), "level")
 
 const renderStatusChip = (status) => {
   const s = String(status || "ACTIVE").toUpperCase()
@@ -117,14 +119,16 @@ const renderFacilityList = exports.renderFacilityList = (facilities, filter, spr
       const memberCount = fc.memberCount != null ? fc.memberCount : safeArr(fc.members).length
       const href = `/industry/${encodeURIComponent(fc.id)}`
       const chips = [
+        renderScopeChip(fc, i18n),
         renderStatusChip(fc.status),
-        renderStateChip("whole", "🏭", sectorLabel(fc.sector)),
-        renderStateChip("whole", "⚖", policyLabel(fc.membershipPolicy)),
-        isMember ? renderStateChip("transport", "★", i18n.industryMemberBadge || "MEMBER") : null,
+        renderStateChip("whole", "🏭", sectorLabel(fc.sector), "kind"),
+        renderPolicyChip(fc.membershipPolicy),
+        isMember ? renderStateChip("transport", "★", i18n.industryMemberBadge || "MEMBER", "mine") : null,
         renderLifespanChip(fc.lifetime, i18n),
         fc.subscriptionIn === true
-          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
-          : (fc.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn, "mine")
+          : (fc.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff, "mine") : null),
+        renderCountChip("👥", i18n.industryMembers || "Members", memberCount)
       ].filter(Boolean)
       return div({ class: "trending-card tribes-card industry-card" + (isOwn ? " own-content" : "") },
         renderCardTop(fc.id || fc.key, href, { date: fc.createdAt, chips, spread: spreadMap.get(fc.id || fc.key) || null, author: fc.steward, reportTitle: fc.name, deleteAction: isOwn && memberCount <= 1 ? `/industry/delete/${encodeURIComponent(fc.id)}` : null }),
@@ -137,9 +141,6 @@ const renderFacilityList = exports.renderFacilityList = (facilities, filter, spr
               h2({ class: "tribe-card-title" }, a({ href }, safeText(fc.name) || (i18n.industryTitle || "Industry")))
             ),
             fc.description ? p({ class: "tribe-card-description" }, safeText(fc.description).slice(0, 220)) : null,
-            div({ class: "tribe-card-members" },
-              span({ class: "tribe-members-count" }, `${i18n.industryMembers || "Members"}: ${memberCount}`)
-            ),
             null
           )
         )
@@ -221,8 +222,9 @@ const renderGlobalBlueprints = (blueprints, spreadMap = new Map()) => {
       renderCardTop(bp.id, "/industry/blueprint/" + encodeURIComponent(bp.id), {
         date: bp.createdAt,
         chips: [
-          renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
-          renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase())
+          renderScopeChip(bp, i18n),
+          renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind, "kind"),
+          renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase(), "level")
         ],
         spread: spreadMap.get(bp.id) || null, author: bp.author, reportTitle: bp.name
       }),
@@ -275,10 +277,11 @@ const renderBuildGovernActions = (b, isMember, returnTo) => {
 const renderBuildCard = (b, opts = {}) => {
   const href = `/industry/build/${encodeURIComponent(b.id)}`
   const chips = [
+    renderScopeChip(b, i18n),
     renderBuildStatusChip(b.status),
     ...((b.blueprintKind && opts.withBlueprintChips !== false) ? [
-      renderStateChip("whole", b.blueprintKind === "digital" ? "💾" : "📦", i18n["industryKind_" + b.blueprintKind] || b.blueprintKind),
-      renderStateChip("license", "⚖", String(b.blueprintLicense || "copyleft").toUpperCase())
+      renderStateChip("whole", b.blueprintKind === "digital" ? "💾" : "📦", i18n["industryKind_" + b.blueprintKind] || b.blueprintKind, "kind"),
+      renderStateChip("license", "⚖", String(b.blueprintLicense || "copyleft").toUpperCase(), "level")
     ] : [])
   ]
   const card = div({ class: "industry-blueprint-card" + (b.proposer === userId ? " own-content" : "") },
@@ -522,8 +525,9 @@ const renderBlueprintsSection = (fc, blueprints, isMember, spreadMap = new Map()
       renderCardTop(bp.id, `/industry/blueprint/${encodeURIComponent(bp.id)}`, {
         date: bp.createdAt,
         chips: [
-          renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
-          renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase())
+          renderScopeChip(bp, i18n),
+          renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind, "kind"),
+          renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase(), "level")
         ],
         spread: spreadMap.get(bp.id) || null, author: bp.author, reportTitle: bp.name
       }),
@@ -617,7 +621,7 @@ const renderFacilityJobsSection = (fc, jobs) => {
   const rows = list.map((j) => li(
     a({ href: `/jobs/${encodeURIComponent(j.id || j.key)}` }, safeText(j.title) || (i18n.jobsTitle || "Job")),
     j.salary ? span({ class: "industry-hint" }, ` · ${j.salary} ECO · `) : span({ class: "industry-hint" }, " · "),
-    renderStateChip(String(j.status || "OPEN").toUpperCase() === "OPEN" ? "mutuals" : "hidden", "", String(j.status || "OPEN").toUpperCase())
+    renderStateChip(String(j.status || "OPEN").toUpperCase() === "OPEN" ? "mutuals" : "hidden", String(j.status || "OPEN").toUpperCase() === "OPEN" ? "✓" : "✗", String(j.status || "OPEN").toUpperCase())
   ))
   return div({ class: "industry-section" },
     h2(i18n.industryJobs || "Jobs"),
@@ -630,15 +634,19 @@ const renderFacilityChips = (fc) => {
   const isMember = safeArr(fc.members).includes(userId)
   const isOwner = String(fc.steward || fc.author) === String(userId)
   return [
-    renderStateChip("whole", "🏭", sectorLabel(fc.sector)),
-    renderStateChip("whole", "⚖", policyLabel(fc.membershipPolicy)),
+    renderScopeChip(fc, i18n),
+    renderStatusChip(fc.status),
+    renderStateChip("whole", "🏭", sectorLabel(fc.sector), "kind"),
+    renderPolicyChip(fc.membershipPolicy),
+    isMember ? renderStateChip("transport", "★", i18n.industryMemberBadge || "MEMBER", "mine") : null,
     renderLifespanChip(fc.lifetime, i18n),
     renderEcoTax(fc.msgSize, fc.id || fc.key),
     (isSteward || isMember)
       ? ((isOwner || (fc.subscription && fc.subscription.subscribed === true))
-          ? renderStateChip("transport", "✉", i18n.subscriptionOn)
-          : renderStateChip("closed", "✉", i18n.subscriptionOff))
-      : null
+          ? renderStateChip("transport", "✉", i18n.subscriptionOn, "mine")
+          : renderStateChip("closed", "✉", i18n.subscriptionOff, "mine"))
+      : null,
+    renderCountChip("👥", i18n.industryMembers || "Members", fc.memberCount != null ? fc.memberCount : safeArr(fc.members).length)
   ].filter(Boolean)
 }
 
@@ -669,7 +677,6 @@ const renderFacilitySide = (fc, returnTo, params = {}, cardTop = null, subscript
       ? div({ class: "tribe-side-tags" }, safeArr(fc.tags).map(tag => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`)))
       : null,
     renderStatusBlock(fc, returnTo),
-    h2({ class: "tribe-members-count" }, `${i18n.industryMembers || "Members"}: ${memberCount}`),
     renderInviteSection(fc, returnTo),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     renderDissolveBlock(fc, returnTo)
@@ -684,7 +691,7 @@ exports.singleFacilityView = async (facility, filter, params = {}) => {
   const memberCount = fc.memberCount != null ? fc.memberCount : safeArr(fc.members).length
   const subscriptionOpts = (fc.subscription && (fc.steward === userId || isMember)) ? { target: fc.rootId || fc.id, scope: "industry", subscribed: fc.subscription.subscribed === true, count: fc.subscription.count, isOwner: String(fc.steward || fc.author) === String(userId), returnTo: returnTo } : null
   const facilitySide = renderFacilitySide(fc, returnTo, params,
-    renderCardTop(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, { arrow: false, date: fc.createdAt, chips: renderFacilityChips(fc), bylineExtra: [renderEditedChip(fc.id, fc.root)], spread: params.spreads || null, author: fc.steward, reportTitle: fc.name, subscription: subscriptionOpts, editAction: fc.steward === userId ? `/industry/edit/${encodeURIComponent(fc.id)}` : undefined, leaveAction: safeArr(fc.members).includes(userId) && fc.steward !== userId ? `/industry/leave/${encodeURIComponent(fc.id)}` : undefined, deleteAction: fc.steward === userId && memberCount <= 1 ? `/industry/delete/${encodeURIComponent(fc.id)}` : null }),
+    renderCardTop(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, { arrow: false, date: fc.createdAt, chips: renderFacilityChips(fc), bylineExtra: [renderEditedChip(fc.id, fc.root, fc.updatedAt)], spread: params.spreads || null, author: fc.steward, reportTitle: fc.name, subscription: subscriptionOpts, editAction: fc.steward === userId ? `/industry/edit/${encodeURIComponent(fc.id)}` : undefined, leaveAction: safeArr(fc.members).includes(userId) && fc.steward !== userId ? `/industry/leave/${encodeURIComponent(fc.id)}` : undefined, deleteAction: fc.steward === userId && memberCount <= 1 ? `/industry/delete/${encodeURIComponent(fc.id)}` : null }),
     subscriptionOpts
   )
 
@@ -721,7 +728,7 @@ exports.singleFacilityView = async (facility, filter, params = {}) => {
 exports.blueprintEditView = async (bp, fc) => template(
   i18n.industryTitle || "Industry",
   section(
-    renderCardTop(bp.id, `/industry/blueprint/${encodeURIComponent(bp.id)}`, { date: bp.createdAt, author: bp.author, reportTitle: bp.name }),
+    renderCardTop(bp.id, `/industry/blueprint/${encodeURIComponent(bp.id)}`, { date: bp.createdAt, chips: [renderScopeChip(bp, i18n)], author: bp.author, reportTitle: bp.name }),
     div({ class: "tags-header module-header-line" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
     div({ class: "filters" },
       form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
@@ -736,7 +743,7 @@ exports.blueprintEditView = async (bp, fc) => template(
 exports.buildEditView = async (b, fc) => template(
   i18n.industryTitle || "Industry",
   section(
-    renderCardTop(b.id, `/industry/build/${encodeURIComponent(b.id)}`, { date: b.createdAt, author: b.proposer, reportTitle: b.title }),
+    renderCardTop(b.id, `/industry/build/${encodeURIComponent(b.id)}`, { date: b.createdAt, chips: [renderScopeChip(b, i18n)], author: b.proposer, reportTitle: b.title }),
     div({ class: "tags-header module-header-line" }, h2(i18n.industryTitle || "Industry"), p(i18n.industryDescription || "Network-owned production facilities.")),
     div({ class: "filters" },
       form({ method: "GET", action: "/industry", class: "ui-toolbar ui-toolbar--filters" },
@@ -771,10 +778,11 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
         renderCardTop(bp.id, returnTo, { arrow: false,
           date: bp.createdAt,
           chips: [
-            renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind),
-            renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase())
+            renderScopeChip(bp, i18n),
+            renderStateChip("whole", bp.outKind === "digital" ? "💾" : "📦", i18n["industryKind_" + bp.outKind] || bp.outKind, "kind"),
+            renderStateChip("license", "⚖", String(bp.license || "copyleft").toUpperCase(), "level")
           ],
-          bylineExtra: [renderEditedChip(bp.id, bp.rootId)],
+          bylineExtra: [renderEditedChip(bp.id, bp.rootId, bp.updatedAt)],
           spread: params.spreads || null, author: bp.author, reportTitle: bp.name || bp.title
         }),
         p({ class: "industry-facility-line" }, span({ class: "industry-meta-label" }, `${i18n.industryFacility || "Facility"}: `), a({ href: facilityHref }, safeText(bp.facilityName))),
@@ -956,7 +964,7 @@ exports.singleBuildView = async (build, params = {}) => {
     ),
     section(
       div({ class: "shop-detail" },
-        renderCardTop(b.id, returnTo, { arrow: false, date: b.createdAt, chips: [renderBuildStatusChip(status)], spread: params.spreads || null, author: b.proposer, reportTitle: b.title }),
+        renderCardTop(b.id, returnTo, { arrow: false, date: b.createdAt, chips: [renderScopeChip(b, i18n), renderBuildStatusChip(status), ...(b.blueprintKind ? [renderStateChip("whole", b.blueprintKind === "digital" ? "💾" : "📦", i18n["industryKind_" + b.blueprintKind] || b.blueprintKind, "kind"), renderStateChip("license", "⚖", String(b.blueprintLicense || "copyleft").toUpperCase(), "level")] : [])], spread: params.spreads || null, author: b.proposer, reportTitle: b.title }),
         b.image ? div({ class: "shop-detail-media" }, renderMediaBlob(b.image, { class: "post-image" })) : null,
         renderDetailShare(b.id, returnTo, b.title, null, null, null, b.author),
         h2(safeText(b.title) || (i18n.industryBuild || "Build")),
@@ -991,3 +999,5 @@ exports.singleBuildView = async (build, params = {}) => {
     )
   )
 }
+exports.renderFacilityStatusChip = renderStatusChip
+exports.renderBuildStatusChip = renderBuildStatusChip

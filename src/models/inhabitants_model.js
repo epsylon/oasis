@@ -79,10 +79,9 @@ module.exports = ({ cooler, tribesModel = null, dataModel = null }) => {
     return { bucket: 'red', range: '≥6m' };
   }
 
-  const timeoutPromise = (timeout) => new Promise((_, reject) => setTimeout(() => reject('Timeout'), timeout));
   const fetchUserImageUrl = async (feedId, size=256) => {
     try{
-      const img = await Promise.race([about.image(feedId), timeoutPromise(5000)]);
+      const img = await about.image(feedId);
       const id = typeof img === 'string' ? img : (img && (img.link || img.url));
       return toImageUrl(id, size);
     }catch{

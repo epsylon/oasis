@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, span, textarea, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, hasRelation, renderRelationFilters, RELATION_FILTERS, relationFilterLabel, hereAt } = require("./main_views");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, hasRelation, renderRelationFilters, RELATION_FILTERS, relationFilterLabel, hereAt } = require("./main_views");
+const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -129,10 +129,10 @@ const renderFeedCard = exports.renderFeedCard = (feed, spreadMap = null, opts = 
     const cardTop = opts.headerActions !== undefined
         ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), opts.headerActions)
         : feed.tribeOrigin
-            ? renderCardTop(feed.key, feed.tribeOrigin.href, { ...byline, chips: [renderTribeOriginChip(feed.tribeOrigin)], spread: (spreadMap && spreadMap.get(feed.key)) || null, reportTitle: safeText })
+            ? renderCardTop(feed.key, feed.tribeOrigin.href, { ...byline, chips: [renderTribeOriginChip(feed.tribeOrigin), renderScopeChip(feed, i18n)], spread: (spreadMap && spreadMap.get(feed.key)) || null, reportTitle: safeText })
             : renderCardTop(feed.key, feedHref, {
                 ...byline,
-                chips: feed.clearnet === true ? [renderReachChip(true, i18n, clearnetItemHref("feed", "", feed.key))] : [],
+                chips: [renderScopeChip(feed, i18n, feed.clearnet === true, clearnetItemHref("feed", "", feed.key))],
                 spread: (spreadMap && spreadMap.get(feed.key)) || null,
                 reportTitle: safeText,
                 ...(((signerId && String(signerId) === String(me)) || (authorId && String(authorId) === String(me))) ? { deleteAction: `/feed/delete/${encodeURIComponent(feed.key)}` } : {})
@@ -140,7 +140,7 @@ const renderFeedCard = exports.renderFeedCard = (feed, spreadMap = null, opts = 
     const chipsRow = opts.chips !== undefined ? opts.chips : null;
     const engagement = opts.engagement !== undefined
         ? opts.engagement
-        : null;
+        : feed.tribeOrigin ? null : renderCardMetaRow(renderOpinionsPill([feed.key], feedHref), renderCommentsPill([feed.key], feedHref), renderShareButton(feed.key, feedHref, ""));
 
     return div(
         { class: "trending-card feed-card" + (authorId && String(authorId) === String(me) ? " own-content" : "") },
@@ -330,7 +330,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
         renderCardTop(feed.key, feedHref, { arrow: false,
           date: feedDateOf(feed),
           bylineExtra: [renderEditedBadge(content)],
-          chips: [renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("feed", "", feed.key) : null)],
+          chips: [renderScopeChip(feed, i18n, isClearnet, clearnetItemHref("feed", "", feed.key))],
           spread: params.spreads || null,
           author: authorId,
           reportTitle: safeText,

@@ -1,6 +1,6 @@
 const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, select, label, option, table, tr, th, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip } = require('./clearnet_view');
+const { renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip, renderScopeChip } = require('./clearnet_view');
 
 const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const moment = require("../server/node_modules/moment");
@@ -72,7 +72,7 @@ const renderFileTable = exports.renderFileTable = (files, filter, params = {}) =
     files.map((t) =>
       tr(
         td(moment(t.createdAt).format("YYYY/MM/DD HH:mm")),
-        td(t.title || "", t.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('files', t.title, t.key)) : null),
+        td(t.title || "", renderScopeChip(t, i18n, t.clearnet === true, clearnetItemHref('files', t.title, t.key))),
         td(formatSize(t.size)),
         td({ class: "torrent-spread-cell torrent-seeds-cell", 'data-label': i18n.seedsLabel }, span({ class: "torrent-seeds-count" }, renderFileSeeds(t, params.spreadMap))),
         td({ class: "torrent-spread-cell torrent-seed-action-cell" }, renderFileSpread(t, params.spreadMap)),
@@ -275,9 +275,6 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
 
   const tagsNode = renderTags(fileObj.tags);
   const href = `/files/${encodeURIComponent(fileObj.key)}`;
-  const createdTs = fileObj.createdAt ? new Date(fileObj.createdAt).getTime() : NaN;
-  const updatedTs = fileObj.updatedAt ? new Date(fileObj.updatedAt).getTime() : NaN;
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
 
   const fileSide = div({ class: "tribe-side" },
     renderCardTop(fileObj.key, href, { arrow: false,
@@ -285,13 +282,12 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
       date: fileObj.createdAt,
       chips: [
         fileObj.tribeId && fileObj.cipher ? renderEncryptedChip(i18n) : renderTransportChip(i18n),
-        clearnetAllowed ? renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('files', fileObj.title, fileObj.key) : null) : null,
+        renderScopeChip(fileObj, i18n, isClearnet, clearnetItemHref('files', fileObj.title, fileObj.key)),
         fileObj.tribeId ? null : renderLicenseChip(fileObj.license),
         ...chips
       ],
       bylineExtra: [
-        renderEditedChip(fileObj.key, fileObj.rootId),
-        showUpdated ? span({ class: "votations-comment-date" }, `${i18n.fileUpdatedAt}: ${moment(fileObj.updatedAt).format("YYYY/MM/DD HH:mm")}`) : null
+        renderEditedChip(fileObj.key, fileObj.rootId, fileObj.updatedAt)
       ],
       spreadTitle: i18n.seedAction,
       editAction: String(fileObj.author) === String(userId) ? `/files/edit/${encodeURIComponent(fileObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,

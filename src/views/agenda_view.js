@@ -1,6 +1,9 @@
-const { div, h2, p, section, button, form, input, a, span } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, input, a } = require("../server/node_modules/hyperaxe");
 const { safeExternalHref } = require("../backend/renderStyledText");
-const { template, i18n, userLink, renderCardTop, renderModuleStats, renderStateChip, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged } = require('./main_views');
+const { template, i18n, userLink, renderCardTop, renderModuleStats, renderStateChip, chipRoleOf, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged, renderCountChip } = require('./main_views');
+const { contentChipsOf, scopeChipOf, transferAmountText, isUbiTransfer, jobTypeLabelOf } = require('./activity_view');
+const { renderProjectStatusChip } = require('./projects_view');
+const { renderBuildStatusChip } = require('./industry_view');
 const moment = require('../server/node_modules/moment');
 const { config } = require('../server/SSB_server.js');
 
@@ -38,12 +41,13 @@ const agendaDeleteAction = (item) => {
   return contentDeleteAction(item.type, item.id);
 };
 
-const chip = (text, kind = "whole", icon = null) => (text === null || text === undefined || text === "") ? null : renderStateChip(kind, icon, String(text).toUpperCase());
+const chip = (text, kind = "whole", icon = null, role = null) => (text === null || text === undefined || text === "") ? null : renderStateChip(kind, icon || (role === 'status' ? (kind === 'hidden' ? '✗' : '✓') : null), String(text).toUpperCase(), role);
 const timeChip = (value, fmt = "YYYY/MM/DD HH:mm") => value ? p({ class: "time-chip" }, moment(value).format(fmt)) : null;
 const metaLine = (text) => text && String(text).trim() ? p({ class: "job-meta-line" }, String(text)) : null;
 const priceChip = (text) => text ? div({ class: "price-chip" }, text) : null;
-const countLine = (labelText, value) => div({ class: "tribe-card-members" }, span({ class: "tribe-members-count" }, `${labelText}: ${value}`));
 const statusKind = (status) => String(status || "").toUpperCase() === "CLOSED" ? "hidden" : "mutuals";
+const AGENDA_TYPE_KEYS = { calendarDate: 'typeCalendar' };
+const moduleLabelOf = (type) => String(i18n[AGENDA_TYPE_KEYS[type] || 'type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)] || type || '').toUpperCase();
 
 const renderAgendaItem = (item, userId, filter, extras = {}) => {
   const author = item.seller || item.organizer || item.from || item.author || '';
@@ -66,65 +70,77 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
   ));
 
   if (item.type === 'market') {
-    chips.push(chip(item.item_type), chip(item.status, statusKind(item.status)), chip(`${i18n.marketItemStock}: ${item.stock}`), item.includesShipping ? chip(i18n.marketItemIncludesShipping, 'whole', '✓') : null);
+    chips.push(...contentChipsOf('market', item), item.includesShipping ? chip(String(i18n.marketItemIncludesShipping).replace(/\?$/, ''), 'whole', '📦', 'level') : null);
     if (String(item.item_type || '').toLowerCase() === 'auction') {
       const bids = Array.isArray(item.auctions_poll) ? item.auctions_poll.map(bid => parseFloat(String(bid).split(':')[1])).filter(n => !isNaN(n)) : [];
       const maxBid = bids.length ? Math.max(...bids) : 0;
-      chips.push(chip(`${i18n.marketItemHighestBid}: ${maxBid} ECO`, 'whole', '▲'));
+      chips.push(renderCountChip('▲', i18n.marketItemHighestBid, `${maxBid} ECO`));
     }
     body.push(priceChip(`${item.price} ECO`), timeChip(item.deadline));
   }
 
   if (item.type === 'tribe') {
-    chips.push(item.isAnonymous ? chip(i18n.agendaAnonymousLabel, 'hidden') : null, chip(item.inviteMode ? item.inviteMode : i18n.noInviteMode));
-    body.push(metaLine(item.location || i18n.noLocation), countLine(i18n.agendaMembersLabel, Array.isArray(item.members) ? item.members.length : 0));
+    chips.push(...contentChipsOf('tribe', item));
+    body.push(metaLine(item.location || i18n.noLocation));
   }
 
   if (item.type === 'report') {
-    chips.push(chip(item.status || i18n.noStatus, statusKind(item.status)), chip(item.category || i18n.noCategory), chip(item.severity || i18n.noSeverity, 'closed'));
+    chips.push(...contentChipsOf('report', item));
   }
 
   if (item.type === 'event') {
+    chips.push(...contentChipsOf('event', item));
     body.push(timeChip(item.date), metaLine(item.location), parseFloat(item.price || 0) > 0 ? priceChip(`${item.price} ECO`) : null,
       item.url ? p({ class: 'job-meta-line' }, a({ href: safeExternalHref(item.url), target: "_blank", rel: "noopener noreferrer" }, item.url)) : null);
   }
 
   if (item.type === 'task') {
-    chips.push(chip(item.status, statusKind(item.status)), chip(item.priority, 'closed'));
+    chips.push(...contentChipsOf('task', item));
     body.push(timeChip(item.startTime), timeChip(item.endTime), metaLine(item.location));
   }
 
   if (item.type === 'transfer') {
-    body.push(metaLine(item.concept), priceChip(`${item.amount} ECO`), timeChip(item.deadline),
-      item.to ? p({ class: 'job-meta-line' }, `${i18n.to}: `, userLink(item.to)) : null);
+    const sent = String(item.from) === String(userId);
+    const other = sent ? item.to : item.from;
+    chips.push(...contentChipsOf('transfer', item));
+    body.push(priceChip(transferAmountText(item)), isUbiTransfer(item) ? null : timeChip(item.deadline),
+      other ? p({ class: 'job-meta-line' }, `${sent ? '→' : '←'} `, userLink(other)) : null);
   }
 
   if (item.type === 'project') {
-    chips.push(chip(item.status || i18n.noStatus, statusKind(item.status)), chip(`${item.progress || 0}%`, 'whole'));
+    chips.push(renderProjectStatusChip(String(item.status || 'ACTIVE').toUpperCase()), renderCountChip('▰', i18n.projectProgress, `${item.progress || 0}%`));
     body.push(priceChip(`${item.pledged || 0} / ${item.goal} ECO`), item.deadline ? timeChip(item.deadline) : metaLine(i18n.noDeadline));
   }
 
   if (item.type === 'calendar') {
-    chips.push(chip(item.isClosed ? (i18n.calendarStatusClosed || 'CLOSED') : (i18n.calendarStatusOpen || 'OPEN'), item.isClosed ? 'hidden' : 'mutuals'));
-    body.push(timeChip(item.deadline), countLine(i18n.calendarParticipantsLabel || 'Participants', Array.isArray(item.participants) ? item.participants.length : 0));
+    chips.push(...contentChipsOf('calendar', item));
+    body.push(timeChip(item.deadline));
+  }
+
+  if (item.type === 'calendarDate') {
+    body.push(timeChip(item.date));
   }
 
   if (item.type === 'campaign') {
-    chips.push(chip(`${i18n.campaignSignaturesLabel}: ${item.signatureCount || 0} / ${item.goal || 0}`, 'whole', '✍'));
+    chips.push(...contentChipsOf('campaign', item));
     body.push(timeChip(item.deadline));
   }
 
   if (item.type === 'logisticsRoute') {
-    chips.push(chip(item.kind), chip(item.mode));
+    chips.push(...contentChipsOf('logisticsRoute', item));
     body.push(metaLine(`${item.origin || ''} → ${item.destination || ''}`), timeChip(item.date));
+  }
+
+  if (item.type === 'schoolCourse') {
+    chips.push(...contentChipsOf('schoolCourse', item), renderCountChip('👥', i18n.schoolStudents, Array.isArray(item.students) ? item.students.length : 0));
   }
 
   if (item.type === 'housing') {
     const isOwner = String(item.author) === String(userId);
     const requestCount = Number(item.requestCount) || 0;
-    chips.push(chip(i18n["housingType" + String(item.housing_type || '').toUpperCase()] || item.housing_type),
-      chip(String(item.status || '').toUpperCase() === 'CLOSED' ? i18n.housingStatusCLOSED : i18n.housingStatusOPEN, statusKind(item.status)),
-      isOwner ? chip(`${i18n.housingRequests}: ${requestCount}`) : chip(i18n.housingRequestedBadge || 'REQUESTED', 'transport', '✓'));
+    chips.push(chip(i18n["housingType" + String(item.housing_type || '').toUpperCase()] || item.housing_type, 'whole', item.housing_type === "sale" ? "🏷" : item.housing_type === "rent" ? "🔑" : "🛋", 'kind'),
+      chip(String(item.status || '').toUpperCase() === 'CLOSED' ? i18n.housingStatusCLOSED : i18n.housingStatusOPEN, statusKind(item.status), null, 'status'),
+      isOwner ? renderCountChip('✉', i18n.housingRequests, requestCount) : chip(i18n.housingRequestedBadge || 'REQUESTED', 'transport', '★', 'mine'));
     body.push(metaLine(item.place), priceChip(String(item.housing_type) === 'couchsurfing' ? (i18n.housingFree || 'FREE') : `${item.price} ECO`), timeChip(item.availableFrom, 'YYYY/MM/DD'));
   }
 
@@ -134,13 +150,14 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
       : (typeof item.subscribers === 'string'
           ? item.subscribers.split(',').map(s => s.trim()).filter(Boolean)
           : (item.subscribers && typeof item.subscribers.length === 'number' ? Array.from(item.subscribers) : []));
-    chips.push(chip(item.status, statusKind(item.status)), chip(item.job_type), chip(item.languages), chip(`${i18n.jobVacants}: ${item.vacants}`));
-    body.push(metaLine(item.location), priceChip(`${item.salary} ECO`), countLine(i18n.jobSubscribers, subs.length));
+    const jobStatus = String(item.status || '').toUpperCase();
+    chips.push(chip(jobStatus ? (i18n['jobStatus' + jobStatus] || jobStatus) : null, statusKind(jobStatus), null, 'status'), chip(item.job_type ? jobTypeLabelOf(item.job_type) : null, 'whole', '◇', 'kind'), chip(item.languages, 'whole', '◈', 'level'),
+      renderCountChip('✚', i18n.jobVacants, item.vacants || 0), renderCountChip('👥', i18n.jobSubscribers, subs.length));
+    body.push(metaLine(item.location), priceChip(`${item.salary} ECO`));
   }
 
   if (item.type === 'industry') {
-    const st = String(item.status || 'PROPOSED').toUpperCase();
-    chips.push(chip(i18n['industryBuildStatus_' + st] || st, statusKind(st)));
+    chips.push(renderBuildStatusChip(item.status));
     body.push(metaLine(item.facilityName));
   }
 
@@ -154,10 +171,9 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     renderCardTop(item.id, href, {
       date: item.createdAt,
       chips: [
-        span({ class: 'pm-exposition-chip pm-exposition-whole' },
-          span({ class: 'pm-exposition-text' }, String(item.type || '').toUpperCase())
-        ),
-        chips.filter(Boolean).length ? div({ class: 'card-chips-row' }, ...chips.filter(Boolean)) : null
+        renderStateChip('whole', '▣', moduleLabelOf(item.type), 'module'),
+        chips.some(ch => chipRoleOf(ch) === 'scope') ? null : scopeChipOf(item.type, item),
+        ...chips.filter(Boolean)
       ],
       author,
       reportTitle: title,

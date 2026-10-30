@@ -1,13 +1,13 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderPrivacyChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, renderCountChip } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
 const { renderMapEmbed } = require("./maps_view");
-const { renderReachChip, renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require("./clearnet_view");
+const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 
 const userId = config.keys.id;
 
@@ -109,30 +109,50 @@ const renderEventStatusChip = (status) => {
   return renderOpenClosedChip(status, { statusChipOPEN: localized, statusChipCLOSED: localized });
 };
 
+
+const renderEventSummary = exports.renderEventSummary = (e, href) => [
+  div({ class: "shop-title-row" },
+    h2({ class: "tribe-card-title" },
+      href ? a({ href }, e.title || i18n.eventsTitle) : (e.title || i18n.eventsTitle)
+    )
+  ),
+  e.location && String(e.location).trim()
+    ? div({ class: "card-field card-field-mb" },
+        span({ class: "card-label" }, `${String(i18n.eventLocation).toUpperCase()}: `),
+        span({ class: "card-value" }, String(e.location))
+      )
+    : null,
+  e.date ? p({ class: "time-chip" }, moment(e.date).format("YYYY/MM/DD HH:mm")) : null,
+  parseFloat(e.price || 0) > 0 ? div({ class: "price-chip" }, `${parseFloat(e.price).toFixed(6)} ECO`) : null
+];
+
+const renderEventChips = exports.renderEventChips = (e) => [
+  renderEventStatusChip(normalizeEventStatus(e.status)),
+  renderCountChip("👥", i18n.eventAttendees, safeArray(e.attendees).length),
+  safeArray(e.attendees).includes(userId) ? renderStateChip("transport", "★", i18n.eventAttended, "mine") : null
+];
+
 const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo, opts = {}) => {
   const currentFilter = filter || "all";
   const attendees = safeArray(e.attendees);
-  const isPrivate = normalizePrivacy(e.isPublic) === "private";
   const isAttending = attendees.includes(userId);
-  const price = parseFloat(e.price || 0);
   const origin = e.tribeOrigin || null;
   const href = opts.href !== undefined ? opts.href : (origin ? origin.href : `/events/${encodeURIComponent(e.id)}`);
 
   const chips = [
-    renderPrivacyChip(isPrivate, i18n),
     renderEventStatusChip(e.status),
-    e.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E") : null,
-    isAttending ? renderStateChip("transport", "★", i18n.eventAttended) : null,
+    e.encrypted ? renderStateChip("encrypted", "🔒", i18n.encryptedChipLabel || "E2E", "reach") : null,
+    isAttending ? renderStateChip("transport", "★", i18n.eventAttended, "mine") : null,
     renderLifespanChip(e.lifetime, i18n),
-    !origin && e.clearnet === true && clearnetEligible(e) ? renderReachChip(true, i18n, clearnetItemHref('events', e.title, e.id)) : null,
+    renderScopeChip(e, i18n, !origin && clearnetEligible(e) && e.clearnet === true, clearnetItemHref('events', e.title, e.id)),
     origin ? null : e.subscriptionIn === true
-      ? renderStateChip("transport", "✉", i18n.subscriptionOn)
-      : (e.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null),
+      ? renderStateChip("transport", "✉", i18n.subscriptionOn, "mine")
+      : (e.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff, "mine") : null),
     origin ? renderTribeOriginChip(origin) : null,
+    origin ? null : renderCountChip("👥", i18n.eventAttendees, attendees.length),
     ...(Array.isArray(opts.extraChips) ? opts.extraChips : [])
   ].filter(Boolean);
 
-  const dateText = e.date ? moment(e.date).format("YYYY/MM/DD HH:mm") : "";
 
   const isOwn = e.organizer && String(e.organizer) === String(userId);
   const byline = { author: e.organizer || e.author, date: e.createdAt, chips: e.scheduledAt ? [renderScheduledChip(e.scheduledAt)] : chips.length ? [div({ class: "card-chips-row" }, ...chips)] : [] };
@@ -147,24 +167,7 @@ const renderEventItem = exports.renderEventItem = (e, filter, spreadInfo, opts =
   return div({ class: "trending-card event-card" + (isOwn ? " own-content" : "") },
     cardTop,
     div({ class: "card-section event-card-body" },
-      div({ class: "shop-title-row" },
-        h2({ class: "tribe-card-title" },
-          href ? a({ href }, e.title || i18n.eventsTitle) : (e.title || i18n.eventsTitle)
-        )
-      ),
-      e.location && String(e.location).trim()
-        ? div({ class: "card-field card-field-mb" },
-            span({ class: "card-label" }, `${String(i18n.eventLocation).toUpperCase()}: `),
-            span({ class: "card-value" }, String(e.location))
-          )
-        : null,
-      dateText ? p({ class: "time-chip" }, dateText) : null,
-      price > 0
-        ? div({ class: "price-chip" }, `${price.toFixed(6)} ECO`)
-        : null,
-      origin ? null : div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.eventAttendees}: ${attendees.length}`)
-      ),
+      ...renderEventSummary(e, href),
       ...(Array.isArray(opts.bodyExtra) ? opts.bodyExtra.filter(Boolean) : []),
       null
     )
@@ -459,15 +462,16 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   const returnToSelf = `/events/${encodeURIComponent(event.id)}?filter=${encodeURIComponent(currentFilter)}`;
 
   const chips = [
-    renderPrivacyChip(isPrivate, i18n),
+    renderScopeChip(event, i18n, isClearnet, clearnetItemHref('events', event.title, event.id)),
     renderEventStatusChip(event.status),
-    isEncrypted ? renderEncryptedChip(i18n) : renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('events', event.title, event.id) : null),
-    isAttending ? renderStateChip("transport", "★", i18n.eventAttended) : null,
+    isEncrypted ? renderEncryptedChip(i18n) : null,
+    isAttending ? renderStateChip("transport", "★", i18n.eventAttended, "mine") : null,
     renderLifespanChip(event.lifetime, i18n),
     renderEcoTax(event.msgSize, event.id),
     (event.subscription && sharesEvent)
-      ? renderStateChip(eventSubIn ? "transport" : "closed", "✉", eventSubIn ? i18n.subscriptionOn : i18n.subscriptionOff)
-      : null
+      ? renderStateChip(eventSubIn ? "transport" : "closed", "✉", eventSubIn ? i18n.subscriptionOn : i18n.subscriptionOff, 'mine')
+      : null,
+    renderCountChip("👥", i18n.eventAttendees, attendees.length)
   ].filter(Boolean);
 
   const sideActions = [];
@@ -512,11 +516,11 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
 
   const subscriptionOpts = event.subscription ? { target: event.id, scope: "events", subscribed: event.subscription.subscribed === true, count: event.subscription.count, isOwner: isEventOwner, returnTo: returnToSelf } : null;
   const eventSide = div({ class: "tribe-side" },
-    renderCardTop(event.id, returnToSelf, { arrow: false, date: event.createdAt, chips, bylineExtra: [renderEditedChip(event.id, event.rootId)], spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, subscription: subscriptionOpts, editAction: isOrganizer && normalizeEventStatus(event.status) === "OPEN" ? `/events/edit/${encodeURIComponent(event.id)}?returnTo=${encodeURIComponent(returnToSelf)}` : undefined, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` }),
+    renderCardTop(event.id, returnToSelf, { arrow: false, date: event.createdAt, chips, bylineExtra: [renderEditedChip(event.id, event.rootId, event.updatedAt)], spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, subscription: subscriptionOpts, editAction: isOrganizer && normalizeEventStatus(event.status) === "OPEN" ? `/events/edit/${encodeURIComponent(event.id)}?returnTo=${encodeURIComponent(returnToSelf)}` : undefined, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, event.title)
     ),
-    renderDetailShare(event.id, returnToSelf, event.title, subscriptionOpts, null, null, event.organizer || event.author),
+    renderDetailShare(event.id, returnToSelf, event.title, subscriptionOpts),
     isOrganizer && canClearnet ? renderClearnetSwitch('events', event.rootId || event.id, isClearnet) : null,
     tagsNode
   );

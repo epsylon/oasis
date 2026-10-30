@@ -3,8 +3,8 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const moment = require("../server/node_modules/moment");
-const { renderLicenseChip, renderLicenseSelect, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip } = require('./clearnet_view');
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -42,15 +42,6 @@ const renderDocumentCommentsSection = (documentKey, rootId, comments = [], retur
   });
 };
 
-const renderDocumentUpdated = (doc) => {
-  const createdTs = doc.createdAt ? new Date(doc.createdAt).getTime() : NaN;
-  const updatedTs = doc.updatedAt ? new Date(doc.updatedAt).getTime() : NaN;
-  const showUpdated = Number.isFinite(updatedTs) && (!Number.isFinite(createdTs) || updatedTs !== createdTs);
-  return showUpdated
-    ? span({ class: "votations-comment-date" }, `${i18n.documentUpdatedAt}: ${moment(doc.updatedAt).format("YYYY/MM/DD HH:mm")}`)
-    : null;
-};
-
 const renderDocumentList = exports.renderDocumentList = (documents, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
 
@@ -65,12 +56,12 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
           author: doc.author,
           date: doc.createdAt,
           chips: [
-            doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : doc.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref('documents', doc.title, doc.key)) : null,
+            doc.tribeOrigin ? renderTribeOriginChip(doc.tribeOrigin) : null, renderScopeChip(doc, i18n, doc.clearnet === true, clearnetItemHref('documents', doc.title, doc.key)),
             renderLicenseChip(doc.license),
             ...(typeof params.titleChips === "function" ? params.titleChips(doc) : []),
             renderLifespanChip(doc.lifetime, i18n)
           ],
-          bylineExtra: [renderDocumentUpdated(doc)]
+          bylineExtra: [renderEditedChip(doc.key, doc.rootId, doc.updatedAt)]
         };
         const header = typeof params.headerActions === "function"
           ? div({ class: "card-header activity-card-header card-top" }, renderCardByline(byline), params.headerActions(doc))
@@ -78,7 +69,7 @@ const renderDocumentList = exports.renderDocumentList = (documents, filter, para
             ? renderCardTop(doc.key, doc.tribeOrigin.href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(doc.key)) || null, reportTitle: doc.title })
             : renderCardTop(doc.key, href, { ...byline, spread: (params.spreadMap && params.spreadMap.get(doc.key)) || params.spreads || null, favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title }, isFavorite: doc.isFavorite, reportTitle: doc.title, deleteAction: isOwn ? contentDeleteAction('document', doc.key) : undefined, returnTo });
         const titleHref = typeof params.headerActions === "function" ? null : doc.tribeOrigin ? doc.tribeOrigin.href : href;
-        const engagement = typeof params.engagement === "function" ? params.engagement(doc) : null;
+        const engagement = typeof params.engagement === "function" ? params.engagement(doc) : titleHref && !doc.tribeOrigin ? renderCardMetaRow(renderOpinionsPill([doc.key, doc.rootId], titleHref), renderCommentsPill([doc.key, doc.rootId], titleHref), renderShareButton(doc.key, titleHref, doc.title || "")) : null;
         return div(
           { class: "trending-card document-card" + (isOwn ? " own-content" : "") },
           header,
@@ -243,11 +234,11 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
       author: doc.author,
       date: doc.createdAt,
       chips: [
-        renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref('documents', doc.title, doc.key) : null),
+        renderScopeChip(doc, i18n, isClearnet, clearnetItemHref('documents', doc.title, doc.key)),
         renderLicenseChip(doc.license),
         ...chips
       ],
-      bylineExtra: [renderEditedChip(doc.key, doc.rootId), renderDocumentUpdated(doc)],
+      bylineExtra: [renderEditedChip(doc.key, doc.rootId, doc.updatedAt)],
       favKind: 'documents', torrentFrom: { blobId: doc.url, name: doc.title },
       isFavorite: doc.isFavorite,
       spread: params.spreads || null,

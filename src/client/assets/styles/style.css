@@ -1455,7 +1455,6 @@ button.create-button:hover {
   gap: 8px;
   width: auto;
 }
-.inhabitant-left .profile-reach .invite-qr-card { margin: 0; }
 
 .inhabitant-left > a:first-of-type {
   display: block;
@@ -1732,6 +1731,7 @@ body.pdf-embed {
   flex-shrink: 0;
   margin-top: 1rem;
   margin-bottom: 0;
+  text-align: center;
 }
 .pdf-viewer-container .pdf-controls a,
 .pdf-viewer-container .pdf-controls span {
@@ -2246,6 +2246,8 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
 }
 .edited-chip {
   display: inline-flex;
+  width: max-content;
+  max-width: 100%;
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
@@ -4018,7 +4020,7 @@ a.pm-btn:hover { text-decoration: none }
 .melody-note-chip-link{text-decoration:none;transition:border-color 0.15s,background 0.15s}
 .melody-note-chip-link:hover{border-color:#FFA500;background:#1f1500}
 .melody-note-chip-unavailable{opacity:0.45;cursor:not-allowed;border-style:dashed}
-.eco-tax-chip{display:inline-flex;align-items:baseline;gap:4px;font-size:12px;border:1px solid;border-radius:10px;padding:2px 8px;text-decoration:none}
+.eco-tax-chip,.eco-tax-chip:hover{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:14px;border:1px solid;border-radius:10px;padding:2px 8px;text-decoration:none}
 .eco-tax-chip-label{text-transform:uppercase;letter-spacing:.5px;font-weight:600}
 .eco-tax-chip-value{font-family:monospace}
 .eco-tax-chip-low{background:#0e2a16;border-color:#3a7f4c;color:#9aff9a}
@@ -4621,20 +4623,6 @@ a.pm-btn:hover { text-decoration: none }
 }
 .tribe-open-invite-panel { margin: 6px 0; }
 .profile-side-version { margin: 4px 0 8px; font-size: 0.9em; text-align: center; }
-.larp-house-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-  margin: 0 0 6px;
-}
-.larp-house-mini {
-  width: 48px;
-  height: 48px;
-  object-fit: cover;
-  border-radius: 8px;
-  flex: 0 0 auto;
-}
 
 .invite-qr-card {
   display: flex;
@@ -5158,17 +5146,6 @@ a.pm-btn:hover { text-decoration: none }
   flex-wrap: wrap;
   margin-bottom: 8px;
   border: 0px;
-}
-
-.map-type-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  background-color: #FFA500;
-  color: #000;
 }
 
 .map-coords {
@@ -6268,7 +6245,6 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .pad-history{max-height:40vh;overflow:auto}
 .pad-history-item{width:100%;box-sizing:border-box}
 .pad-line-placeholder{color:#888;font-style:italic}
-.pad-page .tribe-side .pad-meta{flex-basis:auto}
 .pad-history-item{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:.85rem;border-bottom:1px solid rgba(128,128,128,.15);min-width:0}
 .pad-history-item .pad-version-link{color:#aaa;text-decoration:none;font-family:monospace;white-space:nowrap}
 .pad-history-item .pad-version-link.active{color:#FFA500}
@@ -6277,7 +6253,6 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .pad-page .tribe-side{width:100%;flex-direction:column;align-items:stretch;gap:10px;padding:12px 16px;box-sizing:border-box}
 .pad-page .pad-title-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;border:none;background:transparent;padding:0;margin:0}
 .pad-page .pad-title-row .shop-title-row,.pad-page .pad-title-row .detail-share{margin:0 !important}
-.pad-page .pad-title-row .pad-meta{display:inline-flex;align-items:center;gap:4px;margin:0;padding:0;border:none;background:transparent}
 .pad-page .pad-actions-row{justify-content:flex-start;margin:0}
 .pad-page .tribe-side > *{margin:0}
 .pad-page .tribe-side > div:not(.tribe-info-table),.pad-page .tribe-side > form{border:none;background:transparent;padding:2px}
@@ -6299,8 +6274,6 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .pad-page .pad-workspace .pad-editor-wrap .pad-editor{margin:0;min-height:0;padding:12px;line-height:1.45;font-size:.95rem}
 .pad-page .pad-workspace .pad-attribution{margin-top:10px}
 .pad-workspace .pad-document,.pad-workspace .pad-readonly-colored{background:#fff}
-.pad-meta{display:flex;align-items:center;gap:6px 10px;flex-wrap:wrap;font-size:.9em}
-.pad-meta .user-link{display:inline-block;width:auto}
 .pad-page .tribe-side .pad-members-details{flex-basis:100%;border:none;background:transparent;padding:0}
 .pad-members-details summary{cursor:pointer;display:inline-block}
 .pad-members-chips{display:flex;flex-wrap:wrap;gap:6px 12px;padding:8px 0 2px;max-height:150px;overflow:auto;border:none;background:transparent}
@@ -6369,7 +6342,6 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .calendar-date-delete{position:absolute;top:12px;right:12px;margin:0}
 .calendar-date-delete button{padding:4px 10px;font-size:0.8rem}
 .calendar-date-item-header{color:#FFA500;font-weight:bold;margin-bottom:6px;width:auto;overflow-wrap:anywhere}
-.calendar-participants-count{color:#FFA500;font-weight:bold}
 .calendar-day-notes{margin-top:16px}
 .pad-viewer-back{margin-bottom:12px}
 
@@ -6981,13 +6953,17 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .search-submit-row button{padding:8px 18px}
 .pm-exposition{display:flex;border:0;}
 .pm-exposition-label{color:#ffa500;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:0.5px}
-.pm-exposition-chip{display:inline-flex;align-items:center;gap:4px;border-radius:10px;font-size:12px;font-weight:600;border:1px solid;padding:2px 8px}
+.pm-exposition-chip{display:inline-flex;align-items:baseline;gap:4px;border-radius:10px;font-size:12px;font-weight:600;border:1px solid;padding:2px 8px}
+.pm-exposition-chip,.edited-chip,.time-chip,.room-stream-chip,.pad-member-chip{text-transform:uppercase}
 .pm-exposition-whole{background:#3a2300;color:#ffd700;border-color:#a39134}
 .pm-exposition-mutuals{background:#1a3a1a;color:#7fff7f;border-color:#3a7f4c}
 .pm-exposition-encrypted{background:#0e3320;color:#7fff7f;border-color:#3a7f4c}
 .pm-exposition-transport{background:#132433;color:#8fc7ff;border-color:#35648f}
 .pm-exposition-license{background:#251f33;color:#c8b8ec;border-color:#6a5a96}
-.pm-exposition-tribe{background:#2b1d0a;color:#ffb347;border-color:#a8692a}
+.pm-exposition-tribe{background:#0d2b2b;color:#6fe3d6;border-color:#2f8f86}
+.pm-exposition-vote-up{background:#0f2a1a;color:#2ecc71;border-color:#2ecc71}
+.pm-exposition-vote-down{background:#2e1212;color:#e74c3c;border-color:#e74c3c}
+.pm-exposition-vote-up .pm-exposition-icon,.pm-exposition-vote-down .pm-exposition-icon{font-size:1em}
 .phone-action-form{display:inline-block;margin:0;padding:0}
 .phone-call-panel{border:1px solid #ffa500;border-radius:8px;padding:14px;margin:12px 0}
 .phone-call-panel div{background:transparent}
@@ -7123,8 +7099,8 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .comments-list{margin-top:12px}
 .title-with-chip{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:transparent !important;border:0 !important;padding:0 !important}
 .title-with-chip h2{margin:0}
-.pm-exposition-icon{font-size:14px;line-height:1}
-.pm-exposition-text{line-height:1;}
+.pm-exposition-icon{font-size:1em;line-height:1}
+.pm-exposition-text{line-height:14px}
 .shop-title-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;padding:0;background:transparent;border-radius:0;box-shadow:none}
 .shop-title-row h2{margin:0}
 .card-chips-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px 0;padding:0;border:none;background:transparent;border-radius:0;box-shadow:none}
@@ -7133,8 +7109,10 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .tribe-card-body .job-card-view-btn{margin-top:8px;margin-bottom:0}
 .transfer-block-card{border:none;background:transparent;padding:0;margin:0 0 12px 0}
 .tribe-main .job-section{border:none;background:transparent}
-.profile-reach{display:flex;flex-direction:column;align-items:center;gap:8px;margin:12px 0;text-align:center;border:none !important;background:none !important}
+.profile-reach{display:flex;flex-direction:column;align-items:center;gap:8px;margin:12px 0;padding:0;text-align:center;border:none !important;background:none !important}
+.profile-reach .invite-qr-card{margin:0}
 .profile-reach .shop-clearnet-url{margin:0;text-align:center;border:none !important;background:none !important}
+.profile-side > *{margin-top:0;margin-bottom:0}
 
 /* Unified item card aesthetic — applied to per-module containers that previously had no card styling. Existing rules (.market-card, .feed-card, .tribe-card, etc.) keep their own look via cascade. */
 .card,
@@ -7843,9 +7821,6 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 }
 
 .chat-poll-form {
-    border: 1px solid rgba(128, 128, 128, .4);
-    border-radius: 6px;
-    padding: 8px 12px;
     margin-bottom: 12px;
     background: transparent !important;
 }
@@ -8572,7 +8547,6 @@ details[open] > .chat-poll-summary::after { content: " \25B4"; }
 .filters .filter-btn,.filters .create-button,.ui-toolbar--filters .filter-btn,.ui-toolbar--filters .create-button{margin:0}
 .activity-subchip-label{color:#ffa300;font-weight:bold}
 .transfers-subfilters{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 0;background:transparent !important;border:0 !important;padding:0 !important}
-.activity-update-counts{white-space:nowrap}
 .activity-update-msg{margin:10px 15px 0 0}
 .activity-update-msg .post-text{margin:0}
 .school-exam-question p{margin:2px 0}
@@ -8616,11 +8590,6 @@ details[open] > .school-unit-summary::after{content:" \25B4"}
 .wiki-version-current{border-left:3px solid #ffa500}
 .wiki-change-summary{margin:4px 0;opacity:.9}
 
-.emergency-severity{display:inline-block;font-size:.72em;font-weight:bold;letter-spacing:.06em;padding:2px 9px;border-radius:12px;border:1px solid transparent;white-space:nowrap}
-.emergency-severity-unverified{color:#fff;border-color:#c0392b;background:#c0392b}
-.emergency-severity-low{color:#111;background:#f1c40f;border-color:#f1c40f}
-.emergency-severity-medium{color:#111;background:#e67e22;border-color:#e67e22}
-.emergency-severity-high{color:#fff;background:#e74c3c;border-color:#e74c3c}
 .emergency-card-low{border-left:3px solid #f1c40f}
 .emergency-card-medium{border-left:3px solid #e67e22}
 .emergency-card-high{border-left:3px solid #e74c3c}
@@ -8637,7 +8606,6 @@ details[open] > .school-unit-summary::after{content:" \25B4"}
 .emergency-banner-medium{border-color:#e67e22}
 .emergency-banner .update-banner-icon{color:#e74c3c}
 
-.mailing-counts{margin:0;opacity:.85}
 .mailing-archive{list-style:none;margin:0;padding:0;background:transparent !important;border:0 !important}
 .mailing-archive-item{margin:0 0 12px 0;padding:12px 14px !important;border-left:2px solid #ffa300}
 .mailing-archive-head{margin:0 0 8px 0}
@@ -9114,10 +9082,11 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 }
 .card-byline-time::before{content:"\2022";margin-right:6px}
 .card-byline .card-chips-row{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;margin:0 !important;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none !important}
-.card-byline>.card-chips-row{display:flex;flex:0 0 100%;margin-top:2px !important}
+.card-byline>.card-chips-row{display:flex;flex:0 1 auto}
 .card-byline .card-byline-time{flex:0 0 auto}
-.card-byline .pm-exposition-chip{font-size:11px;padding:1px 8px}
-.card-byline :is(.emergency-severity,.edited-chip,.eco-tax-chip){font-size:11px;padding:1px 8px;margin:0;line-height:16px}
+.card-byline :is(.pm-exposition-chip,.eco-tax-chip,.edited-chip),.card-chips-row :is(.price-chip,.forum-category){box-sizing:border-box;height:20px;display:inline-flex;align-items:baseline;font-size:11px;line-height:14px;padding:2px 8px;margin:0}
+.card-byline :is(.pm-exposition-chip,.eco-tax-chip,.edited-chip) span,.card-chips-row :is(.price-chip,.forum-category) span{padding-top:0;padding-bottom:0}
+.card-chips-row .forum-category{border:1px solid transparent;border-radius:10px}
 .card-byline :is(.edited-badge,.votations-comment-date){font-size:12px;opacity:.65;margin:0}
 .card-top>.content-actions{display:flex;flex:0 0 auto;flex-wrap:nowrap;align-items:center;gap:4px;margin:0 0 0 auto !important;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none !important;overflow:visible !important}
 .card-top .btn-singleview.btn-content{min-width:32px;height:32px;padding:0 8px;font-size:.95em}
@@ -9199,7 +9168,8 @@ div:has(>.card-top):not(.tribe-side){padding:8px 16px 12px !important;border-rad
 .link-lightbox > .lightbox-close::before { content: ""; position: fixed; inset: 0; z-index: 0; cursor: default; }
 .link-lightbox > .link-box { position: relative; z-index: 1; }
 .pm-exposition-scheduled{background:rgba(128,128,128,.15);color:#bbb;border-color:#666}
-.pm-exposition-scheduled .btn-icon{display:inline-flex;width:14px;height:14px}
+.pm-exposition-scheduled .pm-exposition-icon{align-self:center}
+.pm-exposition-scheduled .btn-icon{display:inline-flex;width:1em;height:1em}
 .pm-exposition-scheduled .btn-icon svg{display:block;width:100%;height:100%}
 .blockexplorer-inspect .blockexplorer-search-row{flex-wrap:nowrap}
 .blockexplorer-inspect .blockexplorer-search-pair{flex:1 1 auto;min-width:0}
@@ -9265,7 +9235,6 @@ div:has(>.card-top):not(.tribe-side){padding:8px 16px 12px !important;border-rad
 .forum-vote-counts .votes-count{color:#2ecc71}
 .forum-vote-counts .votes-count-negative{margin-left:0;color:#e74c3c}
 .forum-main{flex:1 1 auto;min-width:0}
-.forum-vote-stats{display:flex;gap:12px;font-size:.85em;opacity:.85;flex-wrap:wrap;margin:10px 0 0 0;padding:8px 0 0 0;border-top:1px solid rgba(128,128,128,.25)}
 .forum-comment{display:block}
 .forum-reply-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 6px 0}
 .forum-reply-text p{margin:0 0 6px 0}

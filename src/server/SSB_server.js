@@ -288,7 +288,7 @@ const startServerOnly = () => {
   }
 
   const { printMetadata, colors } = require('./ssb_metadata');
-  printMetadata('OASIS Server Only', colors.cyan, null);
+  printMetadata('OASIS Server Only', colors.cyan, null, 'localhost', false, server);
 
   setTimeout(() => {
     try {

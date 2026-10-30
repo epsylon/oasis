@@ -447,7 +447,7 @@ module.exports = ({ cooler, transfersModel, schoolCrypto, chatsModel }) => {
       const published = await new Promise((res, rej) => ssbClient.publish(toPublish, (e, m) => e ? rej(e) : res(m)))
       if (published && published.key && chatsModel) {
         try {
-          await chatsModel.createChat(`Course: ${title}`, description, blobId, "school", protectedCourse ? "INVITE-ONLY" : "OPEN", normalizeTags(data.tags), null, { courseId: published.key })
+          await chatsModel.createChat(`🎓 ${title}`, description, blobId, "school", protectedCourse ? "INVITE-ONLY" : "OPEN", normalizeTags(data.tags), null, { courseId: published.key })
         } catch {}
       }
       if (published && published.key) {

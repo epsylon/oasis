@@ -1,8 +1,8 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt, renderCountChip } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
-const { renderTribeOriginChip } = require("./clearnet_view");
+const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -90,7 +90,8 @@ const renderReportStatusChip = (status) => {
     s === "INVALID" ? i18n.reportsStatusInvalid :
     s === "CLOSED" ? (i18n.reportsStatusClosed || "CLOSED") :
     s;
-  return renderStateChip(variant, "", localized);
+  const icon = s === "UNDER_REVIEW" ? "↻" : (s === "INVALID" || s === "CLOSED") ? "✗" : "✓";
+  return renderStateChip(variant, icon, localized);
 };
 
 const renderReportSeverityChip = (severity) => {
@@ -105,7 +106,7 @@ const renderReportSeverityChip = (severity) => {
     s === "high" ? i18n.reportsSeverityHigh :
     s === "medium" ? i18n.reportsSeverityMedium :
     i18n.reportsSeverityLow;
-  return renderStateChip(variant, "⚑", localized);
+  return renderStateChip(variant, "⚑", localized, 'level');
 };
 
 const renderReportCategoryChip = (category) => {
@@ -116,7 +117,7 @@ const renderReportCategoryChip = (category) => {
     c === "ABUSE" ? i18n.reportsCategoryAbuse :
     c === "CONTENT" ? i18n.reportsCategoryContent :
     c;
-  return renderStateChip("encrypted", "", localized);
+  return renderStateChip("whole", "◇", localized, "kind");
 };
 
 const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => {
@@ -124,11 +125,13 @@ const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => 
   const origin = report.tribeOrigin || null;
 
   const chips = [
+    renderScopeChip(report, i18n),
     renderReportStatusChip(report.status),
     renderReportSeverityChip(report.severity),
     origin && !report.category ? null : renderReportCategoryChip(report.category),
     renderLifespanChip(report.lifetime, i18n),
-    origin ? renderTribeOriginChip(origin) : null
+    origin ? renderTribeOriginChip(origin) : null,
+    origin ? null : renderCountChip("✓", i18n.reportsConfirmations, confirmations.length)
   ].filter(Boolean);
 
   const href = `/reports/${encodeURIComponent(report.id)}`;
@@ -141,9 +144,6 @@ const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => 
         h2({ class: "tribe-card-title" },
           a({ href: origin ? origin.href : href }, report.title || i18n.reportsTitle)
         )
-      ),
-      origin ? null : div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
       ),
       null
     )
@@ -372,11 +372,13 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
   const isAuthor = String(report.author) === String(userId);
 
   const chips = [
+    renderScopeChip(report, i18n),
     renderReportStatusChip(report.status),
     renderReportSeverityChip(report.severity),
     renderReportCategoryChip(report.category),
     renderLifespanChip(report.lifetime, i18n),
-    renderEcoTax(report.msgSize, report.id)
+    renderEcoTax(report.msgSize, report.id),
+    renderCountChip("✓", i18n.reportsConfirmations, confirmations.length)
   ].filter(Boolean);
 
   const sideActions = [];
@@ -409,11 +411,11 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
     : null;
 
   const reportSide = div({ class: "tribe-side" },
-    renderCardTop(report.id, `/reports/${encodeURIComponent(report.id)}`, { arrow: false, date: report.createdAt, chips, bylineExtra: [renderEditedChip(report.id, report.rootId)], spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, returnTo: `/reports/${encodeURIComponent(report.id)}`, editAction: isAuthor ? `/reports/edit/${encodeURIComponent(report.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('report', report.id) : undefined }),
+    renderCardTop(report.id, `/reports/${encodeURIComponent(report.id)}`, { arrow: false, date: report.createdAt, chips, bylineExtra: [renderEditedChip(report.id, report.rootId, report.updatedAt)], spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, returnTo: `/reports/${encodeURIComponent(report.id)}`, editAction: isAuthor ? `/reports/edit/${encodeURIComponent(report.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('report', report.id) : undefined }),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, report.title)
     ),
-    renderDetailShare(report.id, `/reports/${encodeURIComponent(report.id)}`, report.title, null, null, null, report.author),
+    renderDetailShare(report.id, `/reports/${encodeURIComponent(report.id)}`, report.title, params.subscription ? { target: report.rootId || report.id, scope: "reports", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(report.author) === String(userId), returnTo: `/reports/${encodeURIComponent(report.id)}` } : null, null, null, report.author),
     tagsNode,
     statusRow
   );
@@ -430,9 +432,6 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
       : null,
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     sideActions.length ? div({ class: "tribe-side-actions detail-action-row report-confirm-actions" }, ...sideActions) : null,
-    div({ class: "tribe-card-members" },
-      span({ class: "tribe-members-count" }, `${i18n.reportsConfirmations}: ${confirmations.length}`)
-    ),
     renderDocumentActions('reports', report.id, [
       a({ href: "/tasks?filter=create", class: "filter-btn" }, i18n.reportsCreateTaskButton)
     ]),
@@ -474,4 +473,6 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
     )
   );
 };
-
+exports.renderReportStatusChip = renderReportStatusChip;
+exports.renderReportSeverityChip = renderReportSeverityChip;
+exports.renderReportCategoryChip = renderReportCategoryChip;

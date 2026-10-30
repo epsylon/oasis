@@ -1,8 +1,8 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views")
-const { renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderEncryptedChip } = require("./clearnet_view")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip } = require("./main_views")
+const { renderClearnetSelector, renderClearnetSwitch, renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -104,7 +104,6 @@ const buildReturnTo = (filter, q, minPrice, maxPrice, sort) => {
   return `/market${params.length ? `?${params.join("&")}` : ""}`
 }
 
-
 const sumCats = (opinions = {}, cats = []) => (cats || []).reduce((acc, c) => acc + (Number((opinions || {})[c]) || 0), 0)
 
 const renderStarRating = (opinions, voterCount) => {
@@ -115,22 +114,20 @@ const renderStarRating = (opinions, voterCount) => {
   return span({ class: "shop-product-stars" }, "★".repeat(full) + "☆".repeat(5 - full) + ` (${voterCount})`)
 }
 
-const renderCardField = (labelText, value = "") =>
-  div({ class: "card-field" }, span({ class: "card-label" }, labelText), span({ class: "card-value" }, ...renderStyledText(String(value))))
+const stockNumbers = (stockValue, maxValue) => {
+  const s = Math.max(0, Number(stockValue || 0))
+  return { s, m: Math.max(1, Number(maxValue || s || 1)) }
+}
 
-const renderCardFieldRich = (labelText, parts) =>
-  div({ class: "card-field" }, span({ class: "card-label" }, labelText), span({ class: "card-value" }, ...(Array.isArray(parts) ? parts : [parts])))
+const renderStockChip = (stockValue, maxValue) => {
+  const { s, m } = stockNumbers(stockValue, maxValue)
+  return renderCountChip("▦", i18n.marketItemStock, s > 0 ? `${s}/${m}` : i18n.marketOutOfStock, s > 0 ? "whole" : "closed")
+}
 
 const renderStockBar = (stockValue, maxValue) => {
-  const s = Math.max(0, Number(stockValue || 0))
-  const m = Math.max(1, Number(maxValue || s || 1))
+  const { s, m } = stockNumbers(stockValue, maxValue)
   return div(
     { class: "confirmations-block stock-block" },
-    div(
-      { class: "card-field" },
-      span({ class: "card-label" }, `${i18n.marketItemStock}: `),
-      span({ class: "card-value" }, s > 0 ? `${s}/${m}` : i18n.marketOutOfStock)
-    ),
     progress({ class: "confirmations-progress stock-progress", value: Math.min(s, m), max: m })
   )
 }
@@ -162,13 +159,21 @@ const auctionCountdownParts = (deadline) => {
   return { label: i18n.marketAuctionEnded, rel }
 }
 
-const renderCountdownField = (item) => {
+const renderCountdownChip = (item) => {
   const cd = item && (item.item_type === "auction" || item.item_type === "exchange") ? auctionCountdownParts(item.deadline) : null
   if (!cd) return null
-  return renderCardFieldRich(`${cd.label}:`, [span({ class: "time-chip" }, cd.rel)])
+  return renderCountChip("◷", cd.label, cd.rel)
 }
 
 const normStatus = (s) => String(s || "").toUpperCase().replace(/_/g, " ").replace(/\s+/g, " ").trim()
+
+const renderMarketStatusChip = (status) => {
+  const cur = normStatus(status || "FOR SALE")
+  if (cur === "SOLD") return renderStateChip("hidden", "✓", i18n.marketFilterSold)
+  if (cur === "RESERVED") return renderStateChip("pending", "⧖", String(i18n.statsMarketReserved || "RESERVED").toUpperCase())
+  if (cur === "DISCARDED") return renderStateChip("closed", "✗", i18n.marketFilterDiscarded)
+  return renderStateChip("mutuals", "✓", i18n.marketFilterForSale)
+}
 
 const renderMarketOwnerActions = (item, returnTo) => {
   const polls = Array.isArray(item.auctions_poll) ? item.auctions_poll : []
@@ -484,12 +489,13 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
                       date: item.createdAt,
                       chips: [
                         String(item.visibility || "PUBLIC").toUpperCase() === "HIDDEN" ? renderVisibilityChip("HIDDEN", i18n) : null,
-                        renderStateChip("whole", "", String(item.item_type || "").toUpperCase()),
-                        item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
-                        item.includesShipping ? renderStateChip("whole", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
-                        item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
+                        renderMarketStatusChip(item.status),
+                        renderStateChip("whole", "◇", String(item.item_type || "").toUpperCase(), "kind"),
+                        item.item_status ? renderStateChip("whole", "✧", String(item.item_status).toUpperCase(), "level") : null,
+                        item.includesShipping ? renderStateChip("whole", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase(), "level") : null,
+                        item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase(), "kind")) : null,
                         renderLifespanChip(item.lifetime, i18n),
-                        item.clearnet === true ? renderReachChip(true, i18n, clearnetItemHref("market", item.title, item.id)) : null
+                        renderScopeChip(item, i18n, item.clearnet === true, clearnetItemHref("market", item.title, item.id))
                       ],
                       spread: (params.spreadMap && params.spreadMap.get(item.id)) || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, deleteAction: isOwner ? contentDeleteAction('market', item.id) : undefined
                     }),
@@ -558,14 +564,17 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         const isHidden = String(item.visibility || 'PUBLIC').toUpperCase() === 'HIDDEN'
         const isClearnet = !!item.clearnet
         const chips = [
-          renderReachChip(isClearnet, i18n, isClearnet ? clearnetItemHref("market", item.title, item.id) : null),
+          renderScopeChip(item, i18n, isClearnet, clearnetItemHref("market", item.title, item.id)),
           isHidden ? renderVisibilityChip("HIDDEN", i18n) : null,
-          renderStateChip("whole", "", String(item.item_type || "").toUpperCase()),
-          item.item_status ? renderStateChip("whole", "", String(item.item_status).toUpperCase()) : null,
-          item.includesShipping ? renderStateChip("whole", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase()) : null,
-          item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase())) : null,
+          renderMarketStatusChip(item.status),
+          renderStateChip("whole", "◇", String(item.item_type || "").toUpperCase(), "kind"),
+          item.item_status ? renderStateChip("whole", "✧", String(item.item_status).toUpperCase(), "level") : null,
+          item.includesShipping ? renderStateChip("whole", "📦", String(i18n.marketItemIncludesShipping || "Shipping").replace(/\?$/, "").toUpperCase(), "level") : null,
+          item.industry ? a({ href: `/industry/${encodeURIComponent(item.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase(), "kind")) : null,
           renderLifespanChip(item.lifetime, i18n),
-          renderEcoTax(item.msgSize, item.id)
+          renderEcoTax(item.msgSize, item.id),
+          renderStockChip(item.stock, maxStock),
+          renderCountdownChip(item)
         ].filter(Boolean)
 
         const tagsNode = item.tags && item.tags.length
@@ -600,20 +609,16 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
 
         const marketActions = String(item.seller) === String(userId) ? renderMarketOwnerActions(item, `/market/${encodeURIComponent(item.id)}`) : []
         const statusRow = String(item.seller) === String(userId)
-          ? (() => {
-              const cur = normStatus(item.status || "FOR SALE")
-              const statusText = cur === "SOLD" ? i18n.marketFilterSold : cur === "DISCARDED" ? i18n.marketFilterDiscarded : i18n.marketFilterForSale
-              return div({ class: "tribe-side-actions housing-status-row" },
-                span({ class: "card-label" }, `${i18n.statusLabel}: `),
-                renderStateChip(cur === "FOR SALE" ? "mutuals" : cur === "SOLD" ? "hidden" : "closed", cur === "FOR SALE" ? "👁" : cur === "SOLD" ? "✓" : "✗", statusText),
-                ...marketActions
-              )
-            })()
+          ? div({ class: "tribe-side-actions housing-status-row" },
+              span({ class: "card-label" }, `${i18n.statusLabel}: `),
+              renderMarketStatusChip(item.status),
+              ...marketActions
+            )
           : null
         const canUpdateItem = String(item.seller) === String(userId) && item.status !== "SOLD" && item.status !== "DISCARDED" && !(Array.isArray(item.auctions_poll) && item.auctions_poll.length)
 
         const itemSide = div({ class: "tribe-side" },
-          renderCardTop(item.id, `/market/${encodeURIComponent(item.id)}`, { arrow: false, date: item.createdAt, chips, bylineExtra: [renderEditedChip(item.id, item.rootId)], spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo: `/market/${encodeURIComponent(item.id)}`, editAction: canUpdateItem ? `/market/edit/${encodeURIComponent(item.id)}?returnTo=${encodeURIComponent(`/market/${encodeURIComponent(item.id)}`)}` : undefined, deleteAction: String(item.seller) === String(userId) ? contentDeleteAction('market', item.id) : undefined }),
+          renderCardTop(item.id, `/market/${encodeURIComponent(item.id)}`, { arrow: false, date: item.createdAt, chips, bylineExtra: [renderEditedChip(item.id, item.rootId, item.updatedAt)], spread: params.spreads || null, author: item.seller, favKind: 'market', isFavorite: item.isFavorite, reportTitle: item.title, returnTo: `/market/${encodeURIComponent(item.id)}`, editAction: canUpdateItem ? `/market/edit/${encodeURIComponent(item.id)}?returnTo=${encodeURIComponent(`/market/${encodeURIComponent(item.id)}`)}` : undefined, deleteAction: String(item.seller) === String(userId) ? contentDeleteAction('market', item.id) : undefined }),
           div({ class: "shop-title-row" },
             h2({ class: "tribe-card-title" }, item.title)
           ),
@@ -628,7 +633,6 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
         const itemMain = div({ class: "tribe-main" },
           renderMediaBlob(item.image, "/assets/images/default-market.png"),
           renderStockBar(item.stock, maxStock),
-          renderCountdownField(item),
           item.description
             ? div({ class: "job-section" },
                 h2({ class: "job-section-title" }, i18n.marketItemDescription),
@@ -712,3 +716,4 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
   )
 }
 
+exports.renderMarketStatusChip = renderMarketStatusChip

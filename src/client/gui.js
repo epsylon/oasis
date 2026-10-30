@@ -115,13 +115,13 @@ module.exports = ({ offline, port = 3000, host = 'localhost', isPublic = false }
       return new Promise((resolve, reject) => {
         if (internalSSB) {
           const { printMetadata, colors } = require('../server/ssb_metadata');
-          printMetadata('OASIS UX', colors.yellow, port, host, isPublic);
+          printMetadata('OASIS UX', colors.yellow, port, host, isPublic, internalSSB);
           return resolve(windowLogStream(internalSSB));
         }
         if (internalOpen) {
           return internalOpen().then((srv) => {
             const { printMetadata, colors } = require('../server/ssb_metadata');
-            printMetadata('OASIS UX', colors.yellow, port, host, isPublic);
+            printMetadata('OASIS UX', colors.yellow, port, host, isPublic, srv);
             resolve(windowLogStream(srv));
           }).catch(reject);
         }
@@ -138,7 +138,7 @@ module.exports = ({ offline, port = 3000, host = 'localhost', isPublic = false }
             reject(new Error("Closing Oasis"));
           } else {
             const { printMetadata, colors } = require('../server/ssb_metadata');
-            printMetadata('OASIS UX', colors.yellow, port, host, isPublic);
+            printMetadata('OASIS UX', colors.yellow, port, host, isPublic, ssb);
             resolve(ssb);
           }
         }).catch(reject);

@@ -1,6 +1,6 @@
 const { div, h2, h4, p, section, button, form, a, span, textarea, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel } = require("./main_views")
-const { renderEncryptedChip } = require("./clearnet_view")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
+const { renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 
@@ -102,12 +102,15 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
 
 const renderPadCard = exports.renderPadCard = (pad, filter, spreadInfo) => {
   const chips = [
+    renderScopeChip(pad, i18n),
     renderPadStatusChip(pad.status, pad.isClosed),
     renderEncryptedChip(i18n),
     renderLifespanChip(pad.lifetime, i18n),
     pad.subscriptionIn === true
-      ? renderStateChip("transport", "✉", i18n.subscriptionOn)
-      : (pad.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff) : null)
+      ? renderStateChip("transport", "✉", i18n.subscriptionOn, "mine")
+      : (pad.subscriptionIn === false ? renderStateChip("closed", "✉", i18n.subscriptionOff, "mine") : null),
+    renderCountChip("👥", i18n.padMembersLabel || "Members", pad.members.length),
+    pad.deadline ? renderCountChip("◷", i18n.padDeadlineLabel || "Deadline", moment(pad.deadline).format("YYYY/MM/DD HH:mm")) : null
   ].filter(Boolean)
   const href = `/pads/${encodeURIComponent(pad.rootId)}`
   return div({ class: "tribe-card" },
@@ -117,10 +120,6 @@ const renderPadCard = exports.renderPadCard = (pad, filter, spreadInfo) => {
         h2({ class: "tribe-card-title" },
           a({ href }, pad.title || "\u2014")
         )
-      ),
-      p({ class: "job-meta-line" }, `${i18n.padDeadlineLabel || "Deadline"}: ${pad.deadline ? moment(pad.deadline).format("YYYY/MM/DD HH:mm") : "-"}`),
-      div({ class: "tribe-card-members" },
-        span({ class: "tribe-members-count" }, `${i18n.padMembersLabel || "Members"}: ${pad.members.length}`)
       ),
       null
     )
@@ -227,12 +226,15 @@ exports.singlePadView = async (pad, entries, params) => {
   const sharesPad = isAuthor || (pad.members || []).includes(userId)
   const subscriptionIn = isAuthor || (pad.subscription && pad.subscription.subscribed === true)
   const detailChips = [
+    renderScopeChip(pad, i18n),
     renderPadStatusChip(pad.status, padClosed),
     renderEncryptedChip(i18n),
     renderLifespanChip(pad.lifetime, i18n),
     sharesPad
-      ? renderStateChip(subscriptionIn ? "transport" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff)
-      : null
+      ? renderStateChip(subscriptionIn ? "transport" : "closed", "✉", subscriptionIn ? i18n.subscriptionOn : i18n.subscriptionOff, 'mine')
+      : null,
+    renderCountChip("👥", i18n.padMembersLabel || "Members", pad.members.length),
+    (isRestrictedInviteOnly || !pad.deadline) ? null : renderCountChip("◷", i18n.padDeadlineLabel || "Deadline", moment(pad.deadline).format("YYYY/MM/DD HH:mm"))
   ].filter(Boolean)
   const inviteActions = [
     isAuthor && pad.status === "INVITE-ONLY"
@@ -295,11 +297,7 @@ exports.singlePadView = async (pad, entries, params) => {
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, pad.title || "\u2014")
       ),
-      renderDetailShare(pad.rootId, returnTo, pad.title, subscriptionOpts, null, null, pad.author),
-      (isRestrictedInviteOnly || !pad.deadline) ? null : div({ class: "pad-meta" },
-        span({ class: "card-label" }, `${i18n.padDeadlineLabel || "Deadline"}: `),
-        span(moment(pad.deadline).format("YYYY/MM/DD HH:mm"))
-      )
+      renderDetailShare(pad.rootId, returnTo, pad.title, subscriptionOpts, null, null, pad.author)
     ),
     tags,
     topButtons.length || (!isRestrictedInviteOnly && inviteActions.length)
@@ -423,3 +421,4 @@ exports.singlePadView = async (pad, entries, params) => {
     section(div({ class: "tribe-details pad-page" }, padSide, padMain))
   )
 }
+exports.renderPadStatusChip = renderPadStatusChip

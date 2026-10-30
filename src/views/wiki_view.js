@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, span, br, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel } = require("./main_views");
-const { renderEncryptedChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect, renderTribeOriginChip } = require("./clearnet_view");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views");
+const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { renderCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
@@ -67,19 +67,16 @@ const renderDiff = (oldText, newText) =>
     )
   );
 
-const reachChip = (page) =>
-  page.tribeId || page.encrypted
-    ? null
-    : renderReachChip(!!page.clearnet, i18n, page.clearnet ? clearnetItemHref('wiki', page.title, page.id) : null);
+const reachChip = (page) => renderScopeChip(page, i18n, !page.encrypted && page.clearnet === true, clearnetItemHref('wiki', page.title, page.id));
 
 const statusChip = (page) =>
-  renderStateChip(page.editPolicy === "author" ? "hidden" : "mutuals", "", page.editPolicy === "author" ? i18n.wikiStatusClosed : i18n.wikiStatusOpen);
+  renderStateChip(page.editPolicy === "author" ? "hidden" : "mutuals", page.editPolicy === "author" ? "✗" : "✓", page.editPolicy === "author" ? i18n.wikiStatusClosed : i18n.wikiStatusOpen);
 
 const pageChips = (page, params = {}, { withStatus = true } = {}) => [
   page.encrypted ? renderEncryptedChip(i18n) : null,
   withStatus ? statusChip(page) : null,
-  page.versionCount > 1 ? renderStateChip("whole", "", `${page.versionCount} ${i18n.wikiVersions || "versions"}`) : null,
-  page.isLinked ? renderStateChip("whole", "", i18n.wikiLinkedChip || "Linked") : null
+  page.versionCount > 1 ? renderCountChip("✎", i18n.wikiVersions || "versions", page.versionCount) : null,
+  page.isLinked ? renderStateChip("whole", "⛓", i18n.wikiLinkedChip || "Linked", "level") : null
 ].filter(Boolean);
 
 const renderTags = (tags) => (Array.isArray(tags) && tags.length)
@@ -89,7 +86,7 @@ const renderTags = (tags) => (Array.isArray(tags) && tags.length)
 const renderPageCard = (page, params = {}) => {
   const origin = page.tribeOrigin || null;
   const href = origin ? origin.href : pageHref(page.tribeId ? page.id : page.slug, page.tribeId);
-  const chips = [...(origin ? [renderTribeOriginChip(origin)] : pageChips(page)), !origin && page.clearnet === true ? reachChip(page) : null, renderLicenseChip(page.license)];
+  const chips = [...(origin ? [renderTribeOriginChip(origin)] : pageChips(page)), reachChip(page), renderLicenseChip(page.license)];
   return div({ class: "tribe-card wiki-card" },
     renderCardTop(page.id, href, origin
       ? { date: page.createdAt, chips, author: page.author, reportTitle: page.title }
@@ -250,7 +247,7 @@ const versionRow = (page, v, idx, current, tribeId) => {
   return div({ class: "card-section wiki-version" + (isCurrent ? " wiki-version-current" : "") },
     div({ class: "card-field" },
       span({ class: "card-label" }, `${i18n.wikiVersion} ${idx + 1}`),
-      isCurrent ? span({ class: "card-value" }, renderStateChip("whole", "", i18n.wikiCurrentVersion)) : span({ class: "card-value" })
+      isCurrent ? span({ class: "card-value" }, renderStateChip("whole", "✓", i18n.wikiCurrentVersion, "data")) : span({ class: "card-value" })
     ),
     v.summary ? [br(), p({ class: "wiki-change-summary" }, v.summary.startsWith("restore:") ? i18n.wikiRestoredSummary : v.summary), br()] : null,
     div({ class: "tribe-side-actions wiki-version-actions" },
@@ -367,3 +364,4 @@ exports.renderTribeWikiSection = (tribe, pages, toolbar = null, wrap = (pg, card
 
 exports.renderWikiBody = renderWikiBody;
 exports.diffLines = diffLines;
+exports.renderWikiStatusChip = statusChip;
