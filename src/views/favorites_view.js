@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, a, img } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 
-const { template, i18n, renderCardTop, renderModuleStats, CONTENT_FAV_KIND, FAV_KIND_TYPE, CONTENT_TORRENTABLE, paged, renderEditedChip, renderStateChip, renderCountChip } = require("./main_views");
+const { template, i18n, renderLayoutSwitch, renderLayoutItems, renderCardTop, renderModuleStats, CONTENT_FAV_KIND, FAV_KIND_TYPE, CONTENT_TORRENTABLE, paged, renderEditedChip, renderStateChip, renderCountChip, renderSearchButton } = require("./main_views");
 const { contentChipsOf, rootTypeLabel, transferAmountText } = require("./activity_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -138,7 +138,7 @@ const renderFavoriteCard = (item, filter, spreadMap = null) => {
     renderCardTop(item.favId, item.viewHref, {
       date: item.createdAt || item.updatedAt,
       bylineExtra: [renderEditedChip(item.content && (item.content.key || item.content.id), item.content && item.content.rootId, item.updatedAt)],
-      chips: [renderStateChip('whole', '▣', moduleLabelOf(item, type), 'module'), ...renderItemChips(item, type, c)],
+      chips: [renderStateChip('whole', null, moduleLabelOf(item, type), 'module'), ...renderItemChips(item, type, c)],
       author: item.author,
       spread: (spreadMap && spreadMap.get(item.favId)) || null,
       reportTitle: title,
@@ -152,19 +152,27 @@ const renderFavoriteCard = (item, filter, spreadMap = null) => {
       safeText(item.description) ? p(...renderStyledText(item.description)) : null,
       ...renderPriceAndPlace(type, c),
       renderTags(item.tags),
-      p(
-        { class: "card-footer" },
+      div(
+        { class: "agenda-card-actions card-actions" },
         form(
           { method: "POST", action: `/favorites/remove/${encodeURIComponent(item.kind)}/${encodeURIComponent(item.favId)}`, class: "phone-action-form" },
           input({ type: "hidden", name: "returnTo", value: returnTo }),
-          button({ type: "submit", class: "tribe-action-btn" }, String(i18n.agendaDiscardButton).toUpperCase())
+          button({ type: "submit", class: "tribe-action-btn danger-btn" }, String(i18n.agendaDiscardButton).toUpperCase())
         )
       )
     )
   );
 };
 
+const favFilterButton = (params, active, text) =>
+  form({ method: "GET", action: "/favorites" },
+    ...Object.entries(params).filter(([, v]) => v).map(([name, value]) => input({ type: "hidden", name, value })),
+    button({ type: "submit", class: active ? "filter-btn active" : "filter-btn" }, text));
+
 exports.favoritesView = async (items, filter = "all", counts = {}, q = "", params = {}) => {
+  const kindValues = FILTER_KINDS.map((k) => k.value);
+  const scope = kindValues.includes(filter) ? "all" : filter;
+  const kind = kindValues.includes(filter) ? filter : (kindValues.includes(params.type) ? params.type : "");
   const c = counts || {};
   const total = typeof c.all === "number" ? c.all : safeArr(items).length;
   const emptyFav = total === 0 && !String(q || "").trim();
@@ -174,40 +182,34 @@ exports.favoritesView = async (items, filter = "all", counts = {}, q = "", param
     section(
       div({ class: "tags-header module-header-line" }, h2(i18n.favoritesTitle), p(i18n.favoritesDescription)),
       emptyFav ? null : div(
-        { class: "filters" },
-        form(
-          { method: "GET", action: "/favorites", class: "ui-toolbar ui-toolbar--filters" },
-          button(
-            { type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" },
-            `${i18n.favoritesFilterAll} (${total})`
-          ),
-          (c.recent || 0) > 0 || filter === "recent"
-            ? button(
-                { type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" },
-                `${i18n.favoritesFilterRecent} (${c.recent || 0})`
-              )
-            : null,
-          ...FILTER_KINDS.filter((k) => (c[k.value] || 0) > 0).map((k) =>
-            button(
-              { type: "submit", name: "filter", value: k.value, class: filter === k.value ? "filter-btn active" : "filter-btn" },
-              `${k.label()} (${c[k.value] || 0})`
-            )
-          )
+        { class: "mode-buttons-row" },
+        favFilterButton({ filter: "all", type: kind }, scope === "all", `${i18n.favoritesFilterAll} (${total})`),
+        (c.recent || 0) > 0 || scope === "recent"
+          ? favFilterButton({ filter: "recent", type: kind }, scope === "recent", `${i18n.favoritesFilterRecent} (${c.recent || 0})`)
+          : null,
+        ...FILTER_KINDS.filter((k) => (c[k.value] || 0) > 0 || kind === k.value).map((k) =>
+          favFilterButton({ filter: scope, type: kind === k.value ? "" : k.value }, kind === k.value, `${k.label()} (${c[k.value] || 0})`)
         )
       ),
       emptyFav ? null : div(
         { class: "filters activity-filter-chips activity-toolbar-row" },
+          emptyFav ? null : renderLayoutSwitch("filters"),
           renderModuleStats(items.length),
         form(
           { method: "GET", action: "/favorites", class: "filter-box" },
-          input({ type: "hidden", name: "filter", value: filter }),
+          input({ type: "hidden", name: "filter", value: scope }),
+          kind ? input({ type: "hidden", name: "type", value: kind }) : null,
           input({ type: "text", name: "q", value: q, placeholder: i18n.favoritesSearchPlaceholder, class: "filter-box__input" }),
           div({ class: "filter-box__controls" },
-            button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+            renderSearchButton(i18n.searchButton)
           )
         )
       ),
-      div({ class: "bookmark-list" }, safeArr(items).length ? paged(safeArr(items)).map((it) => renderFavoriteCard(it, filter, params.spreadMap)) : p(i18n.favoritesNoItems))
+      (() => {
+        const pageItems = paged(safeArr(items));
+        if (!pageItems.length) return div({ class: "bookmark-list" }, p(i18n.favoritesNoItems));
+        return renderLayoutItems(() => div({ class: "bookmark-list" }, pageItems.map((it) => renderFavoriteCard(it, filter, params.spreadMap))));
+      })()
     )
   );
 };

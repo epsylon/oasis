@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, input, a } = require("../server/node_modules/hyperaxe");
 const { safeExternalHref } = require("../backend/renderStyledText");
-const { template, i18n, userLink, renderCardTop, renderModuleStats, renderStateChip, chipRoleOf, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged, renderCountChip } = require('./main_views');
+const { template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderCardTop, renderModuleStats, renderStateChip, chipRoleOf, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged, renderCountChip, renderSearchButton } = require('./main_views');
 const { contentChipsOf, scopeChipOf, transferAmountText, isUbiTransfer, jobTypeLabelOf } = require('./activity_view');
 const { renderProjectStatusChip } = require('./projects_view');
 const { renderBuildStatusChip } = require('./industry_view');
@@ -61,7 +61,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     );
   } else {
     actionButton = form({ method: 'POST', action: `/agenda/discard/${encodeURIComponent(item.id)}`, class: 'phone-action-form' },
-      button({ type: 'submit', class: 'tribe-action-btn' }, String(i18n.agendaDiscardButton).toUpperCase())
+      button({ type: 'submit', class: 'tribe-action-btn danger-btn' }, String(i18n.agendaDiscardButton).toUpperCase())
     );
   }
   const extraActions = [];
@@ -171,7 +171,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     renderCardTop(item.id, href, {
       date: item.createdAt,
       chips: [
-        renderStateChip('whole', '▣', moduleLabelOf(item.type), 'module'),
+        renderStateChip('whole', null, moduleLabelOf(item.type), 'module'),
         chips.some(ch => chipRoleOf(ch) === 'scope') ? null : scopeChipOf(item.type, item),
         ...chips.filter(Boolean)
       ],
@@ -185,12 +185,20 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     div({ class: 'card-section agenda-card-body' },
       div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, a({ href }, title))),
       ...body.filter(Boolean),
-      div({ class: 'agenda-card-actions' }, actionButton, ...extraActions)
+      div({ class: 'agenda-card-actions card-actions' }, actionButton, ...extraActions)
     )
   );
 };
 
+const AGENDA_KIND_FILTERS = ['events', 'tasks', 'reports', 'tribes', 'jobs', 'market', 'projects', 'industry', 'housing', 'school', 'campaigns', 'logistics', 'calendars', 'transfers'];
+const agendaFilterButton = (params, active, labelText) =>
+  form({ method: 'GET', action: '/agenda' },
+    ...Object.entries(params).filter(([, v]) => v).map(([name, value]) => input({ type: 'hidden', name, value })),
+    button({ type: 'submit', class: active ? 'filter-btn active' : 'filter-btn' }, String(labelText).toUpperCase()));
+
 exports.agendaView = async (data, filter, q = '', extras = {}) => {
+  const scope = AGENDA_KIND_FILTERS.includes(filter) ? 'all' : filter;
+  const kind = AGENDA_KIND_FILTERS.includes(filter) ? filter : (AGENDA_KIND_FILTERS.includes(extras.type) ? extras.type : '');
   const { items = [], counts: _c = {} } = data || {};
   const counts = { all: 0, open: 0, closed: 0, events: 0, tasks: 0, reports: 0, tribes: 0, jobs: 0, market: 0, projects: 0, transfers: 0, calendars: 0, housing: 0, discarded: 0, ..._c };
   const emptyAgenda = Number(counts.all || 0) === 0 && !String(q || '').trim();
@@ -224,27 +232,31 @@ exports.agendaView = async (data, filter, q = '', extras = {}) => {
             ['calendars', i18n.agendaFilterCalendars || 'CALENDARS'],
             ['transfers', i18n.agendaFilterTransfers],
             ['discarded', 'DISCARDED']
-          ].filter(([value]) => value === 'all' || filter === value || Number(counts[value] || 0) > 0)
-            .map(([value, labelText]) =>
-              form({ method: 'GET', action: '/agenda' },
-                input({ type: 'hidden', name: 'filter', value }),
-                button({ type: 'submit', class: filter === value ? 'filter-btn active' : 'filter-btn' }, String(labelText).toUpperCase())))
+          ].filter(([value]) => value === 'all' || scope === value || kind === value || Number(counts[value] || 0) > 0)
+            .map(([value, labelText]) => AGENDA_KIND_FILTERS.includes(value)
+              ? agendaFilterButton({ filter: scope, type: kind === value ? '' : value }, kind === value, labelText)
+              : agendaFilterButton({ filter: value, type: kind }, scope === value, labelText))
       ),
       emptyAgenda ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+        emptyAgenda ? null : renderLayoutSwitch('mode-buttons-row'),
         renderModuleStats(items.length, [
           ['today', i18n.agendaFilterToday || 'TODAY'], ['upcoming', i18n.agendaFilterUpcoming || 'UPCOMING'], ['overdue', i18n.agendaFilterOverdue || 'OVERDUE'],
           ['open', i18n.agendaFilterOpen], ['closed', i18n.agendaFilterClosed], ['discarded', 'DISCARDED']
         ].map(([value, label]) => ({ label: String(label).toUpperCase(), count: Number(counts[value] || 0) }))),
         form({ method: 'GET', action: '/agenda', class: 'filter-box' },
-          input({ type: 'hidden', name: 'filter', value: filter }),
+          input({ type: 'hidden', name: 'filter', value: scope }),
+          kind ? input({ type: 'hidden', name: 'type', value: kind }) : null,
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.agendaSearchPlaceholder, class: 'filter-box__input' }),
           div({ class: 'filter-box__controls' },
-            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+            renderSearchButton(i18n.searchButton)
           )
         )
       ),
       items.length
-        ? div({ class: 'jobs-grid agenda-list' }, ...paged(items).map(item => renderAgendaItem(item, userId, filter, extras || {})))
+        ? (() => {
+            const pageItems = paged(items);
+            return renderLayoutItems(() => div({ class: 'jobs-grid agenda-list' }, ...pageItems.map(item => renderAgendaItem(item, userId, scope, extras || {}))));
+          })()
         : div({ class: 'no-content-box' }, p({ class: 'no-content' }, i18n.agendaNoItems))
     )
   );

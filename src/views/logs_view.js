@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, span, table, thead, tbody, tr, th, td, input, textarea, br, option, select, a, label } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderModuleStatsBy, paged } = require("./main_views");
+const { template, i18n, renderModuleStatsBy, paged, renderSearchButton } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -63,7 +63,7 @@ const renderSearchBox = (current, search, items = null) => {
           option({ value: 'manual', ...(q.type === 'manual' ? { selected: true } : {}) }, i18n.logsModeManual || 'Manual'),
           option({ value: 'ai', ...(q.type === 'ai' ? { selected: true } : {}) }, i18n.logsModeAI || 'AI')
         ),
-        button({ type: "submit", class: "filter-box__button" }, i18n.logsSearchButton || 'Search')
+        renderSearchButton(i18n.logsSearchButton || 'Search')
       )
     )
   );

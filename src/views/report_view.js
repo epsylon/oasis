@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt, renderCountChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -135,7 +135,7 @@ const renderReportCard = (report, userId, currentFilter = "all", spreadInfo) => 
   ].filter(Boolean);
 
   const href = `/reports/${encodeURIComponent(report.id)}`;
-  return div({ class: "tribe-card report-card" },
+  return div({ class: "tribe-card report-card" + (String(report.author) === String(userId) ? " own-content" : "") },
     origin
       ? renderCardTop(report.id, origin.href, { author: report.author, date: report.createdAt, chips, spread: spreadInfo || null, reportTitle: report.title })
       : renderCardTop(report.id, href, { date: report.createdAt, chips, spread: spreadInfo || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, deleteAction: String(report.author) === String(userId) ? contentDeleteAction('report', report.id) : undefined }),
@@ -155,7 +155,7 @@ const reportChipFor = (filter, censusReports) => (mode) => {
   if (!Array.isArray(censusReports)) return true;
   if (mode === "top") return censusReports.length > 0;
   if (mode === "mine") return censusReports.some((r) => r.author === userId);
-  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusReports);
+  if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, censusReports);
   if (mode === "recent") return censusReports.length > 0;
   if (mode === "confirmed") return censusReports.some((r) => Array.isArray(r.confirmations) && r.confirmations.includes(userId));
   if (CATEGORY_BY_FILTER[mode]) return censusReports.some((r) => normU(r.category) === CATEGORY_BY_FILTER[mode]);
@@ -175,6 +175,8 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
     filtered = filtered.filter((r) => r.author === userId);
   } else if (filter === "supported" || filter === "replicated") {
     filtered = filtered.filter((r) => filter === "supported" ? r.isSupported : r.isReplicated);
+  } else if (filter === "favorites") {
+    filtered = filtered.filter((r) => r.isFavorite);
   } else if (filter === "recent") {
     filtered = filtered.filter((r) => new Date(r.createdAt).getTime() >= dayAgoReports);
   } else if (filter === "confirmed") {
@@ -217,6 +219,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
   const selectedCategory = ["FEATURES", "BUGS", "CONTENT"].includes(rawCategory) ? rawCategory : "FEATURES";
 
   const sev = String(formData.severity || "low");
+  const pageReports = filter === "edit" || filter === "create" || !filtered.length ? [] : paged(filtered);
 
   return template(
     title,
@@ -235,6 +238,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
           ...chipBtn("mine", i18n.reportsFilterMine),
           ...chipBtn("supported", i18n.filterSupported),
           ...chipBtn("replicated", i18n.filterReplicated),
+          ...chipBtn("favorites", i18n.favoritesTitle),
           ...chipBtn("top", i18n.reportsFilterTop),
           ...chipBtn("features", i18n.reportsFilterFeatures),
           ...chipBtn("bugs", i18n.reportsFilterBugs),
@@ -259,12 +263,13 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
       filter === "edit" || filter === "create"
         ? null
         : emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          filter === "edit" || filter === "create" || emptyMod ? null : renderLayoutSwitch("filters"),
           renderModuleStatsBy(filtered, r => normalizeStatus(r.status || 'OPEN'), [{ value: 'OPEN', label: i18n.reportsStatusOpen }, { value: 'UNDER_REVIEW', label: i18n.reportsStatusUnderReview }, { value: 'RESOLVED', label: i18n.reportsStatusResolved }, { value: 'CLOSED', label: i18n.reportsStatusClosed }, { value: 'INVALID', label: i18n.reportsStatusInvalid }]),
             form({ method: "GET", action: "/reports", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.reportsSearchPlaceholder, class: "filter-box__input" }),
               div({ class: "filter-box__controls" },
-                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+                renderSearchButton(i18n.searchButton)
               )
             )
           )
@@ -359,7 +364,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                 ]
           )
         : filtered.length > 0
-          ? div({ class: "jobs-grid" }, paged(filtered).map((r) => renderReportCard(r, userId, filter, params.spreadMap && params.spreadMap.get(r.id))))
+          ? renderLayoutItems(() => div({ class: "jobs-grid" }, pageReports.map((r) => renderReportCard(r, userId, filter, params.spreadMap && params.spreadMap.get(r.id)))))
           : div({ class: "no-content-box" }, p(i18n.reportsNoItems))
     )
   );
@@ -449,7 +454,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
           button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
           ...(reportChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: btnClass("recent") }, String(i18n.reportsFilterRecent).toUpperCase())] : []),
           ...(reportChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase())] : []),
-          ...renderRelationFilters(filter, reportChip),
+          ...renderRelationFilters(filter, reportChip, { favorites: true }),
           button({ type: "submit", name: "filter", value: "top", class: btnClass("top") }, String(i18n.reportsFilterTop).toUpperCase()),
           ...(reportChip("features") ? [button({ type: "submit", name: "filter", value: "features", class: btnClass("features") }, String(i18n.reportsFilterFeatures).toUpperCase())] : []),
           ...(reportChip("bugs") ? [button({ type: "submit", name: "filter", value: "bugs", class: btnClass("bugs") }, String(i18n.reportsFilterBugs).toUpperCase())] : []),

@@ -1,5 +1,5 @@
 const { div, a, span, img, video, input, button, label, br } = require("../server/node_modules/hyperaxe")
-const { i18n, renderIcon, renderMediaLockNote } = require("./main_views")
+const { i18n, renderIcon, renderMediaLockNote, blobAttr, blobOfHref } = require("./main_views")
 const { MAX_IMAGES } = require("../models/media_gallery")
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
@@ -60,7 +60,7 @@ const renderZoomableImage = (src, { alt = "", imgClass = "", linkClass = "", thu
 }
 
 const renderDownloadButton = (src, name = "") => src
-  ? a({ href: `${downloadHref(src)}${name ? `&name=${encodeURIComponent(name)}` : ""}`, class: "filter-btn media-download-btn" }, `⤓ ${i18n.fileShareDownload || "Download"}`)
+  ? a({ href: `${downloadHref(src)}${name ? `&name=${encodeURIComponent(name)}` : ""}`, class: "filter-btn media-download-btn", ...blobAttr(blobOfHref(src)) }, `\u2B07 ${i18n.torrentOasisButton || "LOCAL"}`)
   : null
 
 const renderPhotoGallery = (item, scope = "media") => {

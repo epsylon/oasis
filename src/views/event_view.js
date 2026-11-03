@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, renderCountChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -116,13 +116,12 @@ const renderEventSummary = exports.renderEventSummary = (e, href) => [
       href ? a({ href }, e.title || i18n.eventsTitle) : (e.title || i18n.eventsTitle)
     )
   ),
-  e.location && String(e.location).trim()
-    ? div({ class: "card-field card-field-mb" },
-        span({ class: "card-label" }, `${String(i18n.eventLocation).toUpperCase()}: `),
-        span({ class: "card-value" }, String(e.location))
+  e.date || (e.location && String(e.location).trim())
+    ? div({ class: "card-chip-line card-content" },
+        e.date ? renderCountChip("📅", i18n.eventDateLabel, moment(e.date).format("YYYY/MM/DD HH:mm")) : null,
+        e.location && String(e.location).trim() ? renderCountChip("📍", i18n.eventLocation, String(e.location)) : null
       )
     : null,
-  e.date ? p({ class: "time-chip" }, moment(e.date).format("YYYY/MM/DD HH:mm")) : null,
   parseFloat(e.price || 0) > 0 ? div({ class: "price-chip" }, `${parseFloat(e.price).toFixed(6)} ECO`) : null
 ];
 
@@ -179,7 +178,7 @@ const eventChipFor = (currentFilter, censusEvents) => (mode) => {
   if (!Array.isArray(censusEvents)) return true;
   const pubE = (e) => normalizePrivacy(e.isPublic) === "public";
   if (mode === "mine") return censusEvents.some((e) => e.organizer === userId);
-  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusEvents);
+  if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, censusEvents);
   if (mode === "recent") return censusEvents.length > 0;
   if (mode === "today") return censusEvents.some((e) => pubE(e) && moment(e.date).isSame(moment(), "day"));
   if (mode === "week") return censusEvents.some((e) => pubE(e) && moment(e.date).isBetween(moment(), moment().add(7, "days"), null, "[]"));
@@ -219,6 +218,8 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
     filtered = visible.filter((e) => e.organizer === userId);
   } else if (currentFilter === "supported" || currentFilter === "replicated") {
     filtered = visible.filter((e) => currentFilter === "supported" ? e.isSupported : e.isReplicated);
+  } else if (currentFilter === "favorites") {
+    filtered = visible.filter((e) => e.isFavorite);
   } else if (currentFilter === "today") {
     filtered = visible.filter((e) => normalizePrivacy(e.isPublic) === "public" && moment(e.date).isSame(moment(), "day"));
   } else if (currentFilter === "week") {
@@ -234,6 +235,8 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   }
 
   filtered = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const pageEvents = currentFilter === "edit" || currentFilter === "create" || !filtered.length ? [] : paged(filtered);
 
   const minCreate = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm");
 
@@ -265,7 +268,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
           button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
           ...(eventChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterRecent).toUpperCase())] : []),
           ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
-          ...renderRelationFilters(currentFilter, eventChipVisible),
+          ...renderRelationFilters(currentFilter, eventChipVisible, { favorites: true }),
           ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),
           ...(eventChipVisible("week") ? [button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase())] : []),
           ...(eventChipVisible("month") ? [button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase())] : []),
@@ -278,12 +281,13 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
       currentFilter === "edit" || currentFilter === "create"
         ? null
         : emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          currentFilter === "edit" || currentFilter === "create" || emptyMod ? null : renderLayoutSwitch("filters"),
           renderModuleStatsBy(filtered, e => normalizeEventStatus(e.status), [{ value: 'OPEN', label: i18n.eventStatusOpen }, { value: 'CLOSED', label: i18n.eventStatusClosed }]),
             form({ method: "GET", action: "/events", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: currentFilter }),
               input({ type: "text", name: "q", value: params.q || "", placeholder: i18n.eventSearchPlaceholder, class: "filter-box__input" }),
               div({ class: "filter-box__controls" },
-                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+                renderSearchButton(i18n.searchButton)
               )
             )
           )
@@ -408,7 +412,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
             )
           )
         : filtered.length > 0
-          ? div({ class: "jobs-grid" }, paged(filtered).map((e) => renderEventItem(e, currentFilter, params.spreadMap && params.spreadMap.get(e.id))))
+          ? renderLayoutItems(() => div({ class: "jobs-grid" }, pageEvents.map((e) => renderEventItem(e, currentFilter, params.spreadMap && params.spreadMap.get(e.id)))))
           : div({ class: "no-content-box" }, p(i18n.noevents))
     )
   );
@@ -433,7 +437,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
       ...(eventChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterRecent).toUpperCase())] : []),
       ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
-      ...renderRelationFilters(currentFilter, eventChipVisible),
+      ...renderRelationFilters(currentFilter, eventChipVisible, { favorites: true }),
       ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),
       ...(eventChipVisible("week") ? [button({ type: "submit", name: "filter", value: "week", class: currentFilter === "week" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterWeek).toUpperCase())] : []),
       ...(eventChipVisible("month") ? [button({ type: "submit", name: "filter", value: "month", class: currentFilter === "month" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMonth).toUpperCase())] : []),

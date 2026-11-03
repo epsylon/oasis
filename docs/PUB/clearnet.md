@@ -83,6 +83,8 @@ server {
 
 Match these paths exactly as written. A plain prefix such as `/c` or `/qr` also matches `/chats`, `/campaigns` or `/qr-action/…`, and would publish the private interface of the node. Never forward the whole backend port to the web, nor through a Tor hidden service.
 
+Settings and the other admin pages of the PUB only answer requests made on the server itself: open `http://localhost:3000` there, or through an SSH tunnel (`ssh -L 3000:localhost:3000 <server>`). Keep `proxy_set_header Host $host` as above, so nothing that comes through the proxy is ever taken as local.
+
 Then launch the PUB allowing your domain (with the systemd unit of the [deploy guide](./deploy.md), add these options to its `ExecStart` line):
 
 ```

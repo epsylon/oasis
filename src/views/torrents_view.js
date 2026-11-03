@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderLicenseSelect, renderLicenseChip, renderScopeChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderStateChip, listLayout, renderSearchButton } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -53,6 +53,26 @@ const renderTorrentSeeds = (t, spreadMap) => {
   return String(info && typeof info.count === "number" ? info.count : (info && Array.isArray(info.voters) ? info.voters.length : 0));
 };
 const renderTorrentSpread = (t, spreadMap) => String(t.author) === String(userId) ? "—" : renderSpreadButton(t.key, spreadInfoOf(t, spreadMap), i18n.seedAction, false);
+
+const renderTorrentCard = (t, params = {}) => {
+  const href = t.tribeOrigin ? t.tribeOrigin.href : `/torrents/${encodeURIComponent(t.key)}`;
+  return div({ class: "trending-card torrent-card" + (String(t.author) === String(userId) ? " own-content" : "") },
+    renderCardTop(t.key, href, {
+      author: t.author,
+      date: t.createdAt,
+      chips: [t.tribeOrigin ? renderTribeOriginChip(t.tribeOrigin) : null, renderScopeChip(t, i18n, t.clearnet === true, clearnetItemHref('torrents', t.title, t.key)), renderStateChip("whole", null, formatSize(t.size), "data")],
+      spread: t.tribeOrigin ? null : spreadInfoOf(t, params.spreadMap),
+      reportTitle: t.title
+    }),
+    div({ class: "card-section" },
+      h2({ class: "torrent-title" }, a({ href }, t.title || "")),
+      div({ class: "torrent-card-actions" },
+        renderTorrentSourceDownload(t.key, t.source),
+        t.url ? renderTorrentDownload(t.cipher ? `/torrents/${encodeURIComponent(t.key)}/file` : torrentDownloadHref(t.url, t.title), { blob: t.url }) : null
+      )
+    )
+  );
+};
 
 const renderTorrentTable = exports.renderTorrentTable = (torrents, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
@@ -217,7 +237,7 @@ const renderOasisDownload = (torrentObj, params = {}) => {
       a({ href: "/torrents?filter=downloads", class: "filter-btn" }, i18n.torrentDownloads)
     );
   } else {
-    action = renderTorrentSourceDownload(torrentObj.key, torrentObj.source);
+    action = renderTorrentSourceDownload(torrentObj.key, torrentObj.source, { notice: true });
   }
   return div({ class: "torrent-oasis torrent-detail-section" },
     h3({ class: "torrent-section-title" }, i18n.torrentOriginalSection || "Original"),
@@ -233,7 +253,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
-  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;
 };
@@ -249,6 +269,9 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
   const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const torrentToEdit = torrentId ? list.find((t) => t.key === torrentId) : null;
+  const isForm = filter === "create" || filter === "edit";
+  const pageTorrents = isForm || filter === "downloads" ? [] : paged(list);
+  const torrentCards = () => div({ class: "audios-list" }, listLayout() === "cards" ? renderTorrentTable(pageTorrents, filter, { q, sort, spreadMap: params.spreadMap }) : pageTorrents.map((t) => renderTorrentCard(t, { spreadMap: params.spreadMap })));
 
   return template(
     title,
@@ -280,13 +303,14 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
       )
     ),
     section(
-      filter === "create" || filter === "edit"
+      isForm
         ? renderTorrentForm(filter, torrentId, torrentToEdit, { ...params, filter })
         : filter === "downloads"
         ? section(renderDownloads(params.downloads))
         : section(
             emptyMod ? null : div(
               { class: "audios-search activity-filter-chips activity-toolbar-row" },
+                isForm || emptyMod || filter === "downloads" ? null : renderLayoutSwitch("filters"),
                 renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/torrents", class: "filter-box" },
@@ -306,11 +330,11 @@ exports.torrentsView = async (torrents, filter = "all", torrentId = null, params
                     option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.torrentSortOldest),
                     option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.torrentSortTop)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.torrentSearchButton)
+                  renderSearchButton(i18n.torrentSearchButton)
                 )
               )
             ),
-            div({ class: "audios-list" }, renderTorrentTable(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
+            pageTorrents.length ? renderLayoutItems(torrentCards) : torrentCards()
           )
     )
   );
@@ -391,7 +415,7 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
                   ul(...params.torrentInfo.files.map(f => li(span(f.path), " · ", span({ class: "votations-comment-date" }, formatSize(f.length)))))
                 )
               : null,
-            renderTorrentDownload(torrentObj.cipher ? `/torrents/${encodeURIComponent(torrentObj.key)}/file` : torrentDownloadHref(torrentObj.url, torrentObj.title)),
+            renderTorrentDownload(torrentObj.cipher ? `/torrents/${encodeURIComponent(torrentObj.key)}/file` : torrentDownloadHref(torrentObj.url, torrentObj.title), { blob: torrentObj.url }),
             params.torrentInfo && params.torrentInfo.magnet
               ? a({ href: params.torrentInfo.magnet, class: "filter-btn torrent-magnet-link", rel: "noopener" }, `\u2B07 ${i18n.torrentMagnet}`)
               : null

@@ -14,6 +14,7 @@ const pullSort = require("../server/node_modules/pull-sort");
 
 const path = require('path');
 const fs = require('fs/promises');
+const { existsSync } = require('fs');
 
 const ssbRef = require("../server/node_modules/ssb-ref");
 const nameCache = require('../backend/nameCache');
@@ -531,8 +532,10 @@ function blobIdToHexPath(blobId) {
   const b64 = m[1];
   const buf = Buffer.from(b64, 'base64');
   const hex = buf.toString('hex');
-  const prefix = hex.slice(0, 2);
-  return path.join(ssbConfig.path, 'blobs', 'sha256', prefix, hex);
+  const dir = path.join(ssbConfig.path, 'blobs', 'sha256', hex.slice(0, 2));
+  const stored = path.join(dir, hex.slice(2));
+  const legacy = path.join(dir, hex);
+  return !existsSync(stored) && existsSync(legacy) ? legacy : stored;
 }
 
 async function checkLocalBlob(blobId) {
@@ -565,19 +568,7 @@ models.blob = {
       return null;
     }
     return new Promise((resolve) => {
-      pull(
-        ssb.blobs.get(blobId),
-        pull.collect(async (err, bufs) => {
-          if (err || !bufs || !bufs.length) return resolve(null);
-          const buffer = Buffer.concat(bufs);
-          try {
-            const filePath = blobIdToHexPath(blobId);
-            await fs.mkdir(path.dirname(filePath), { recursive: true });
-            await fs.writeFile(filePath, buffer);
-          } catch (e) {}
-          resolve(buffer);
-        })
-      );
+      pull(ssb.blobs.get(blobId), pull.collect((err, bufs) => resolve(err || !bufs || !bufs.length ? null : Buffer.concat(bufs))));
     });
   },
   getResolved: async ({ blobId, timeout = 30000 }) => {
@@ -593,20 +584,10 @@ models.blob = {
     if (!arrived) return null;
     return new Promise((resolve, reject) => {
       let timer = setTimeout(() => resolve(null), timeout);
-      pull(
-        ssb.blobs.get(blobId),
-        pull.collect(async (err, bufs) => {
-          clearTimeout(timer);
-          if (err || !bufs || !bufs.length) return resolve(null);
-          const buffer = Buffer.concat(bufs);
-          try {
-            const filePath = blobIdToHexPath(blobId);
-            await fs.mkdir(path.dirname(filePath), { recursive: true });
-            await fs.writeFile(filePath, buffer);
-          } catch (e) {}
-          resolve(buffer);
-        })
-      );
+      pull(ssb.blobs.get(blobId), pull.collect((err, bufs) => {
+        clearTimeout(timer);
+        resolve(err || !bufs || !bufs.length ? null : Buffer.concat(bufs));
+      }));
     });
   },
   want: async ({ blobId }) => {

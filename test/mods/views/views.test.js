@@ -7,6 +7,7 @@ const REGISTRY = [
   ['blog_view', 'blogView', () => [[], 'ALL', {}]],
   ['bookmark_view', 'bookmarkView', () => [[], 'all', null, {}]],
   ['calendars_view', 'calendarsView', () => [[], 'all', null, {}]],
+  ['changelog_view', 'changelogView', () => [[{ date: '2026-11-02', version: '1.4.1', changes: ['One change.'] }]]],
   ['chats_view', 'chatsView', () => [[], 'all', null, {}]],
   ['data_view', 'dataView', () => [{ filter: 'ALL', matches: [], hasProfile: true }]],
   ['document_view', 'documentView', () => [[], 'all', null, {}]],

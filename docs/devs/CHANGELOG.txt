@@ -1,0 +1,12 @@
+2026-11-02 · OASIS 1.4.1
+- Oasis opens again where you left it.
+- Changelog in TOOLS.
+- Filters combine with content types.
+- Inbox: unread tab.
+- Audio and podcasts keep playing while you browse.
+- Melody: an image of your blockchain that can be published with a hidden message, like the audio.
+- Polls: election, survey and collaboration.
+- Votes: required majority and quorum.
+- Downloads as LOCAL and EXTERNAL.
+- Tidier node folders and fewer disk writes.
+- CARDS, LIST and GRID views in every module.

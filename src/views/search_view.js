@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, label, select, option, table, td, tr } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderModuleStats, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel } = require('./main_views');
+const { template, i18n, renderLayoutSwitch, renderModuleStats, paged, currentPerPage, LIST_PAGE_SIZES, pageSizeLabel, renderIcon } = require('./main_views');
 const { config } = require("../server/SSB_server.js");
 const userId = config.keys.id;
 
@@ -50,7 +50,7 @@ const renderSearchForm = ({ action, query = "", queryName = "query", hidden = []
       )
     ),
     div({ class: "search-submit-row" },
-      button({ type: "submit" }, i18n.searchSubmit)
+      button({ type: "submit" }, renderIcon("search"), i18n.searchSubmit)
     )
   );
 };
@@ -108,6 +108,7 @@ const searchView = ({ messages = [], blobs = {}, query = "", type = "", types = 
     ),
     section(
       resultStats ? div({ class: 'filters activity-filter-chips activity-toolbar-row search-stats-row' }, resultStats) : null,
+      resultStats ? renderLayoutSwitch('filters') : null,
       resultSection
     )
   );

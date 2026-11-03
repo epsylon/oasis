@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
+const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views")
 const { renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
-const { renderPollInline, outcomeOf } = require("./polls_view")
+const { renderPollInline, outcomeOf, pollTypeLabel, renderPollTypeSelect } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -186,7 +186,7 @@ const renderChatPoll = (poll, chat) => {
     div({ class: "chat-poll-head" },
       span({ class: "chat-poll-tag" }, i18n.pollInChat),
       poll.anonymous ? span({ class: "chat-poll-tag" }, i18n.pollAnonymous) : null,
-      poll.multiple ? span({ class: "chat-poll-tag" }, i18n.pollMultiple) : null,
+      span({ class: "chat-poll-tag" }, pollTypeLabel(poll)),
       poll.status === "CLOSED" ? span({ class: "chat-poll-tag" }, i18n.pollStatusClosed) : null,
       poll.hasVoted ? renderStateChip("transport", "☑", String(i18n.pollVotedChip).toUpperCase(), "mine") : null
     ),
@@ -198,6 +198,7 @@ const renderChatPoll = (poll, chat) => {
             const canClose = String(poll.author) === String(userId) && poll.status === "OPEN";
             const canVote = poll.status !== "CLOSED" && !poll.hasVoted;
             const closeFormId = `poll-close-${String(poll.id).replace(/[^a-zA-Z0-9]/g, "")}`;
+            const outcome = showResults ? outcomeOf(poll) : null;
             return [
               div({ class: "chat-poll-actions" },
                 renderPollInline(poll, `/chats/${encodeURIComponent(chat.key)}`, "pchat", {
@@ -205,10 +206,10 @@ const renderChatPoll = (poll, chat) => {
                   extra: canClose && canVote ? [button({ type: "submit", form: closeFormId, class: "danger-btn" }, i18n.pollCloseButton)] : null
                 })
               ),
-              showResults
+              outcome
                 ? div({ class: "chat-poll-meta" },
                     span({ class: "card-label" }, `${i18n.pollOutcome}: `),
-                    span({ class: "card-value" }, outcomeOf(poll))
+                    span({ class: "card-value" }, outcome)
                   )
                 : null,
               canClose
@@ -328,6 +329,7 @@ exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
   const isForm = filter === "create" || filter === "edit"
 
   const headerText = i18n.chatsTitle
+  const pageItems = !isForm && list.length && !params.workspace ? paged(list) : []
 
   if (params.workspace && !isForm) {
     return template(
@@ -355,12 +357,13 @@ exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
     !isForm && !emptyMod
       ? section(
           div({ class: "filters activity-filter-chips activity-toolbar-row" },
+            isForm || emptyMod ? null : renderLayoutSwitch("tribe-mode-buttons"),
             renderModuleStatsBy(list, c => String(c.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.chatStatusOpen }, { value: 'INVITE-ONLY', label: i18n.chatStatusInviteOnly }, { value: 'CLOSED', label: i18n.chatStatusClosed }]),
             form({ method: "GET", action: "/chats", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", placeholder: i18n.chatSearchPlaceholder, value: q, class: "filter-box__input" }),
               div({ class: "filter-box__controls" },
-                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+                renderSearchButton(i18n.searchButton)
               )
             )
           )
@@ -369,11 +372,9 @@ exports.chatsView = async (chats, filter, chatToEdit = null, params = {}) => {
     section(
       isForm
         ? renderChatForm(filter, filter === "edit" ? (chatToEdit || {}) : {}, params)
-        : div({ class: "tribe-grid" },
-            list.length
-              ? paged(list).map(chat => renderChatCard(chat, filter, { q, spread: params.spreadMap && params.spreadMap.get(chat.key) }))
-              : p(i18n.chatNoItems)
-          )
+        : list.length
+          ? renderLayoutItems(() => div({ class: "tribe-grid" }, pageItems.map(chat => renderChatCard(chat, filter, { q, spread: params.spreadMap && params.spreadMap.get(chat.key) }))))
+          : div({ class: "tribe-grid" }, p(i18n.chatNoItems))
     )
   )
 }
@@ -555,6 +556,8 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
           summary({ class: "chat-poll-summary" }, i18n.pollChatCreate),
           form({ method: "POST", action: `/chats/${encodeURIComponent(chat.key)}/polls/create` },
             input({ type: "hidden", name: "returnTo", value: `/chats/${encodeURIComponent(chat.key)}` }),
+            span(i18n.pollType), br(),
+            renderPollTypeSelect(), br(), br(),
             span(i18n.pollQuestion), br(),
             input({ type: "text", name: "question", required: true, maxlength: "300", placeholder: i18n.pollQuestionPlaceholder }), br(), br(),
             span(i18n.pollOptions), br(),
@@ -562,10 +565,6 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
             div({ class: "poll-switch" },
               input({ type: "hidden", name: "anonymous", value: "0" }),
               label(input({ type: "checkbox", name: "anonymous", value: "1" }), " ", i18n.pollAnonymousLabel)
-            ),
-            div({ class: "poll-switch" },
-              input({ type: "hidden", name: "multiple", value: "0" }),
-              label(input({ type: "checkbox", name: "multiple", value: "1" }), " ", i18n.pollMultipleLabel)
             ),
             button({ type: "submit", class: "filter-btn" }, i18n.pollPublishButton)
           )

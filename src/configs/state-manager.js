@@ -15,8 +15,12 @@ const FOLDERS = {
   'banking-confirm-notice.json': 'banking',
   'banking-ubi-paid.json': 'banking',
   'banking-funds-history.json': 'banking',
+  'banking-rebalance-pending.json': 'banking',
   'content_favorites.json': 'content',
   'blob-access.json': 'content',
+  'blob-pins.json': 'content',
+  'list-layouts.json': 'content',
+  'last-page.json': 'content',
   'follow_state.json': 'content',
   'supporters-seen.json': 'content',
   'larp-seen.json': 'content',
@@ -30,6 +34,7 @@ const FOLDERS = {
   'nextcloud-account.json': 'multiverse',
   'oasis-backup.json': 'backup',
   'oasis-first-contact': 'flags',
+  'clearnet-since.json': 'flags',
   'oasis-mentions-seen': 'flags',
   'oasis-inbox-read': 'flags',
   'oasis-inbox-archived': 'flags',
@@ -66,7 +71,7 @@ const statePath = (name) => {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     if (!fs.existsSync(target)) {
       const candidates = [name, ...(ALIASES[name] || [])]
-        .flatMap(n => [path.join(ssbDir(), n), path.join(LEGACY_CONFIG_DIR, n)]);
+        .flatMap(n => [path.join(ssbDir(), ROOT, n), path.join(ssbDir(), n), path.join(LEGACY_CONFIG_DIR, n)]);
       const legacy = candidates.find(p => fs.existsSync(p));
       if (legacy) {
         try { fs.renameSync(legacy, target); }
@@ -96,8 +101,8 @@ const migrateAll = () => {
   for (const name of Object.keys(FOLDERS)) {
     try {
       const legacy = [name, ...(ALIASES[name] || [])]
-        .flatMap(n => [path.join(ssbDir(), n), path.join(LEGACY_CONFIG_DIR, n)])
-        .find(p => fs.existsSync(p));
+        .flatMap(n => [path.join(ssbDir(), ROOT, n), path.join(ssbDir(), n), path.join(LEGACY_CONFIG_DIR, n)])
+        .find(p => p !== path.join(stateDir(name), name) && fs.existsSync(p));
       if (legacy) statePath(name);
     } catch (_) {}
   }

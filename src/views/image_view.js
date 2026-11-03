@@ -2,9 +2,8 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
@@ -41,10 +40,17 @@ const renderImageMedia = (imgObj, filter, params = {}) => {
   const src = imgObj?.url ? blobUrlOf(imgObj.url) : "";
 
   return imgObj?.url
-    ? div(
-        { class: "image-container image-container-row" },
-        renderZoomableImage(src, { alt: imgObj.title || "", imgClass: "post-image", thumb: thumbOf(imgObj.url) })
-      )
+    ? [
+        div(
+          { class: "image-container image-container-row" },
+          renderZoomableImage(src, { alt: imgObj.title || "", imgClass: "post-image", thumb: thumbOf(imgObj.url) })
+        ),
+        imgObj.isBcs && !params.skipTranscode
+          ? form({ method: "GET", action: `/melody/transcode-image/${encodeURIComponent(imgObj.key)}`, class: "audio-transcode-form" },
+              button({ type: "submit", class: "filter-btn" }, i18n.audioTranscodeButton || "TRANSCODE")
+            )
+          : null
+      ]
     : p(i18n.imageNoFile);
 };
 
@@ -186,7 +192,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
-  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;
 };
@@ -202,6 +208,9 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
   const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const imageToEdit = imageId ? list.find((im) => im.key === imageId) : null;
+  const isForm = filter === "create" || filter === "edit";
+  const pageImages = isForm ? [] : paged(list);
+  const imageCards = () => div({ class: "images-list" }, renderImageList(pageImages, filter, { q, sort, spreadMap: params.spreadMap }));
 
   return template(
     title,
@@ -230,17 +239,19 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
             { type: "submit", name: "filter", value: "gallery", class: filter === "gallery" ? "filter-btn active" : "filter-btn" },
             String(i18n.imageFilterGallery).toUpperCase()
           )] : []),
+          ...(mediaChip("bcs") ? [button({ type: "submit", name: "filter", value: "bcs", class: filter === "bcs" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterBcs || "BCS")] : []),
           ]),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.imageCreateButton)
         )
       )
     ),
     section(
-      filter === "create" || filter === "edit"
+      isForm
         ? renderImageForm(filter, imageId, imageToEdit, { ...params, filter })
         : section(
             emptyMod ? null : div(
               { class: "images-search activity-filter-chips activity-toolbar-row" },
+                isForm || emptyMod || filter === "gallery" ? null : renderLayoutSwitch("filters"),
                 renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/images", class: "filter-box" },
@@ -260,14 +271,14 @@ exports.imageView = async (images, filter = "all", imageId = null, params = {}) 
                     option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.imageSortOldest),
                     option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.imageSortTop)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.imageSearchButton)
+                  renderSearchButton(i18n.imageSearchButton)
                 )
               )
             ),
-            filter === "gallery" ? renderGallery(paged(list)) : div({ class: "images-list" }, renderImageList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
+            filter === "gallery" ? renderGallery(pageImages) : pageImages.length ? renderLayoutItems(imageCards) : imageCards()
           )
     ),
-    ...(filter === "gallery" ? renderLightbox(paged(list)) : [])
+    ...(filter === "gallery" ? renderLightbox(pageImages) : [])
   );
 };
 
@@ -359,6 +370,7 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
             { type: "submit", name: "filter", value: "gallery", class: filter === "gallery" ? "filter-btn active" : "filter-btn" },
             String(i18n.imageFilterGallery).toUpperCase()
           )] : []),
+          ...(mediaChip("bcs") ? [button({ type: "submit", name: "filter", value: "bcs", class: filter === "bcs" ? "filter-btn active" : "filter-btn" }, i18n.audioFilterBcs || "BCS")] : []),
           button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.imageCreateButton)
         )
       ),
@@ -367,3 +379,35 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
   );
 };
 
+exports.imageTranscodeDetailView = async ({ image, decoded = false, stegoPayload = null, availableIds = null }) => {
+  const { renderTranscodeResult } = require("./melody_view");
+  const title = i18n.audioTranscodeDetailTitle || "Transcode";
+  const href = `/images/${encodeURIComponent(image.key)}`;
+  return template(
+    title,
+    section(
+      div({ class: "tags-header module-header-line" },
+        h2(title),
+        p(i18n.audioTranscodeDetailDescription || "Decode the embedded payload and the original blockchain composition map.")
+      ),
+      div({ class: "filters" },
+        form({ method: "GET", action: "/images", class: "ui-toolbar ui-toolbar--filters" },
+          input({ type: "hidden", name: "filter", value: "bcs" }),
+          button({ type: "submit", class: "filter-btn" }, i18n.audioBackToBcs || "Back to BCS")
+        )
+      ),
+      div({ class: "bookmark-item card" },
+        renderCardTop(image.key, href, { author: image.author, date: image.createdAt, chips: [renderScopeChip(image, i18n, image.clearnet === true, clearnetItemHref("images", image.title, image.key))] }),
+        image.title ? h2(image.title) : null,
+        renderImageMedia(image, "all", { skipTranscode: true }),
+        form({ method: "POST", action: `/melody/transcode-image/${encodeURIComponent(image.key)}`, class: "audio-transcode-run-form audio-transcode-form" },
+          button({ type: "submit", class: "create-button" }, i18n.audioTranscodeButton || "TRANSCODE")
+        ),
+        br(),
+        decoded
+          ? renderTranscodeResult({ stegoPayload, composition: image.bcsComposition, availableIds, notFound: i18n.imageTranscodeStegoNotFound, empty: i18n.imageTranscodeCompositionEmpty })
+          : null
+      )
+    )
+  );
+};

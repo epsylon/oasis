@@ -12,9 +12,10 @@ const POLL_TYPE = 'poll';
 const VOTE_TYPE = 'pollVote';
 const OPINION_TYPE = 'pollOpinion';
 
-const { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH } = require('./polls_model_limits');
+const { MAX_OPTIONS, MIN_OPTIONS, MAX_OPTION_LENGTH, POLL_KINDS, pollKindOf } = require('./polls_model_limits');
 
 const clean = (v) => String(v == null ? '' : v).trim();
+const flag = (v) => v === true || v === 'true' || v === '1';
 
 const normalizeOptions = (raw) => {
   const list = Array.isArray(raw) ? raw : String(raw || '').split('\n');
@@ -153,7 +154,8 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
     }
 
     const counts = {};
-    for (const o of options) counts[o] = 0;
+    const chosenBy = {};
+    for (const o of options) { counts[o] = 0; chosenBy[o] = []; }
     let totalVoters = 0;
     const voters = [];
     let myChoices = [];
@@ -167,12 +169,13 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
       if (!picked.length) continue;
       totalVoters += 1;
       voters.push(author);
-      for (const o of picked) counts[o] += 1;
+      for (const o of picked) { counts[o] += 1; chosenBy[o].push(author); }
       if (viewerId && author === viewerId) myChoices = picked;
     }
 
     const closed = idx.closedRoots.has(`${node.author}|${rootId}`) || isExpired(c);
     const op = idx.opinionsByRoot.get(rootId) || { counts: {}, voters: [] };
+    const pollType = pollKindOf(c.pollType, c.multiple === true);
 
     return {
       id: rootId,
@@ -184,8 +187,9 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
       encrypted: !!c.encryptedQuestion,
       undecryptable,
       chatId: c.chatId || null,
+      pollType,
       anonymous: c.anonymous === true,
-      multiple: c.multiple === true,
+      multiple: pollType !== 'election',
       deadline: c.deadline || '',
       tags: normalizeTags(c.tags),
       tribeId: c.tribeId || null,
@@ -197,6 +201,7 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
       totalVoters,
       voters: c.anonymous === true ? [] : voters,
       votersHidden: c.anonymous === true,
+      votersByOption: c.anonymous !== true && pollType === 'collaboration' ? chosenBy : {},
       myChoices,
       hasVoted: myChoices.length > 0,
       commentCount: idx.commentsByRoot.get(rootId) || 0,
@@ -236,12 +241,15 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
     return { list, idx, viewerId: viewerId || ssbClient.id };
   };
 
-  const scheduledPoll = (entry) => ({
-    id: entry.id, tipId: entry.id, author: entry.author,
-    question: entry.data.question, options: entry.data.options || [], anonymous: entry.data.anonymous === true, multiple: entry.data.multiple === true,
-    deadline: entry.data.deadline || '', tags: entry.data.tags || [], createdAt: entry.createdAt, scheduledAt: entry.publishAt,
-    status: 'OPEN', votes: {}, voters: [], totalVoters: 0, myChoices: [], opinions: {}, opinions_inhabitants: []
-  });
+  const scheduledPoll = (entry) => {
+    const pollType = pollKindOf(entry.data.pollType, entry.data.multiple === true);
+    return {
+      id: entry.id, tipId: entry.id, author: entry.author,
+      question: entry.data.question, options: entry.data.options || [], pollType, anonymous: entry.data.anonymous === true, multiple: pollType !== 'election',
+      deadline: entry.data.deadline || '', tags: entry.data.tags || [], createdAt: entry.createdAt, scheduledAt: entry.publishAt,
+      status: 'OPEN', votes: {}, voters: [], votersByOption: {}, totalVoters: 0, myChoices: [], opinions: {}, opinions_inhabitants: []
+    };
+  };
 
   return {
     POLL_TYPE,
@@ -271,6 +279,7 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
         const fav = new Set((opts.favorites || []).map(String));
         out = out.filter(p => fav.has(String(p.id)));
       }
+      else if (POLL_KINDS.includes(f.toLowerCase())) out = out.filter(p => p.pollType === f.toLowerCase());
 
       const q = clean(opts.q).toLowerCase();
       if (q) out = out.filter(p =>
@@ -324,7 +333,7 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
       if (options.length < MIN_OPTIONS) throw new Error(`A poll needs at least ${MIN_OPTIONS} options`);
       const deadline = clean(data.deadline);
       if (deadline && !(Date.parse(publishAt || '') < Date.parse(deadline))) throw new Error('The publish date must be before the deadline');
-      const stored = { question, options, anonymous: data.anonymous === true || data.anonymous === 'true' || data.anonymous === '1', multiple: data.multiple === true || data.multiple === 'true' || data.multiple === '1', deadline, tags: normalizeTags(data.tags) };
+      const stored = { question, options, pollType: pollKindOf(data.pollType, flag(data.multiple)), anonymous: flag(data.anonymous), deadline, tags: normalizeTags(data.tags) };
       return scheduledPoll(await scheduler.schedule(SCHEDULED_KIND, stored, publishAt));
     },
 
@@ -336,7 +345,7 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
       if (options.length < MIN_OPTIONS) throw new Error(`A poll needs at least ${MIN_OPTIONS} options`);
       const deadline = clean(data.deadline);
       if (deadline && !(Date.parse(publishAt || '') < Date.parse(deadline))) throw new Error('The publish date must be before the deadline');
-      const stored = { question, options, anonymous: data.anonymous === true || data.anonymous === 'true' || data.anonymous === '1', multiple: data.multiple === true || data.multiple === 'true' || data.multiple === '1', deadline, tags: normalizeTags(data.tags) };
+      const stored = { question, options, pollType: pollKindOf(data.pollType, flag(data.multiple)), anonymous: flag(data.anonymous), deadline, tags: normalizeTags(data.tags) };
       return scheduledPoll(await scheduler.update(id, stored, publishAt));
     },
 
@@ -379,10 +388,12 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
         if (t <= Date.now()) throw new Error('Deadline must be in the future');
       }
       const ssbClient = await openSsb();
+      const pollType = pollKindOf(data.pollType, flag(data.multiple));
       const content = {
         type: POLL_TYPE,
-        anonymous: data.anonymous === true || data.anonymous === 'true' || data.anonymous === '1',
-        multiple: data.multiple === true || data.multiple === 'true' || data.multiple === '1',
+        pollType,
+        anonymous: flag(data.anonymous),
+        multiple: pollType !== 'election',
         deadline,
         tags: normalizeTags(data.tags),
         createdAt: new Date().toISOString(),
@@ -418,15 +429,15 @@ module.exports = ({ cooler, isPublic = false, cryptoModel = null, chatsModel = n
       }
       const question = data.question !== undefined ? clean(data.question) : poll.question;
       opinionRules.assertMediaKept(poll, question !== poll.question || JSON.stringify(options) !== JSON.stringify(poll.options));
+      const pollType = data.pollType !== undefined || data.multiple !== undefined
+        ? pollKindOf(data.pollType, flag(data.multiple))
+        : poll.pollType;
       const content = {
         type: POLL_TYPE,
         replaces: poll.tipId,
-        anonymous: data.anonymous !== undefined
-          ? (data.anonymous === true || data.anonymous === 'true' || data.anonymous === '1')
-          : poll.anonymous,
-        multiple: data.multiple !== undefined
-          ? (data.multiple === true || data.multiple === 'true' || data.multiple === '1')
-          : poll.multiple,
+        pollType,
+        anonymous: data.anonymous !== undefined ? flag(data.anonymous) : poll.anonymous,
+        multiple: pollType !== 'election',
         deadline,
         tags: data.tags !== undefined ? normalizeTags(data.tags) : poll.tags,
         createdAt: poll.createdAt,

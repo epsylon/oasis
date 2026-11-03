@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -30,6 +30,7 @@ const FILTERS = [
   { key: "MINE", i18n: "projectFilterMine", title: "projectMineTitle" },
   { key: "SUPPORTED", i18n: "filterSupported", title: "projectAllTitle" },
   { key: "REPLICATED", i18n: "filterReplicated", title: "projectAllTitle" },
+  { key: "FAVORITES", i18n: "favoritesTitle", title: "projectAllTitle" },
   { key: "APPLIED", i18n: "projectFilterApplied", title: "projectAppliedTitle" },
   { key: "ACTIVE", i18n: "projectFilterActive", title: "projectActiveTitle" },
   { key: "PAUSED", i18n: "projectFilterPaused", title: "projectPausedTitle" },
@@ -533,7 +534,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
     if (m === f) return true;
     if (m === "TOP") return censusP.length > 0;
     if (m === "MINE") return censusP.some(pr => String(pr.author) === String(userId));
-    if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusP);
+    if (m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusP);
     if (m === "APPLIED") return censusP.some(pr => String(pr.author) !== String(userId) && [pr.members, pr.participants, pr.applicants].some(l => Array.isArray(l) && l.includes(userId)));
     if (m === "ACTIVE" || m === "PAUSED" || m === "COMPLETED") return censusP.some(pr => String(pr.status || "ACTIVE").toUpperCase() === m);
     if (m === "FOLLOWING") return censusP.some(pr => Array.isArray(pr.followers) && pr.followers.includes(userId));
@@ -560,12 +561,13 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
       f === "CREATE" || f === "EDIT"
         ? null
         : emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          emptyMod || f === "CREATE" || f === "EDIT" || f === "BACKERS" ? null : renderLayoutSwitch("filters"),
           renderModuleStatsBy(projectsOrForm, pr => String(pr.status || 'ACTIVE').toUpperCase(), [{ value: 'ACTIVE', label: i18n.projectStatusACTIVE }, { value: 'PAUSED', label: i18n.projectStatusPAUSED }, { value: 'COMPLETED', label: i18n.projectStatusCOMPLETED }, { value: 'CANCELLED', label: i18n.projectStatusCANCELLED }]),
             form({ method: "GET", action: "/projects", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: f }),
               input({ type: "text", name: "q", value: safeText(params.q), placeholder: i18n.projectSearchPlaceholder, class: "filter-box__input" }),
               div({ class: "filter-box__controls" },
-                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+                renderSearchButton(i18n.searchButton)
               )
             )
           ),
@@ -576,7 +578,10 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
           })()
         : (f === "BACKERS"
             ? renderBackersLeaderboard(projectsOrForm)
-            : div({ class: "projects-list" }, renderProjectList(paged(projectsOrForm), f, params.spreadMap))
+            : (() => {
+                const shownProjects = paged(projectsOrForm)
+                return div({ class: "projects-list" }, safeArr(shownProjects).length ? renderLayoutItems(() => renderProjectList(shownProjects, f, params.spreadMap)) : renderProjectList(shownProjects, f, params.spreadMap))
+              })()
           )
     )
   )

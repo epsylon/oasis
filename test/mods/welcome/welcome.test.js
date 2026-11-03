@@ -246,11 +246,6 @@ describe('welcome: the first visit picks the language', (t) => {
     notOk(firstRunLanguage({ fresh: true, configured: 'en', supported }).settled);
   });
 
-  t('a language already chosen in this browser wins over the browser default', () => {
-    eq(firstRunLanguage({ fresh: true, configured: 'en', cookie: 'eu', header: 'es-ES', supported }).language, 'eu');
-    eq(firstRunLanguage({ fresh: true, configured: 'en', cookie: 'xx', header: 'fr', supported }).language, 'fr', 'an unknown cookie is ignored');
-  });
-
   t('a node that already greeted, was configured or is public keeps its language', () => {
     eq(firstRunLanguage({ fresh: false, configured: 'en', header: 'es', supported }).language, '');
     eq(firstRunLanguage({ fresh: true, configured: 'it', header: 'es', supported }).language, '');

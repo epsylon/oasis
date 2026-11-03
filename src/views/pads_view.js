@@ -1,5 +1,5 @@
 const { div, h2, h4, p, section, button, form, a, span, textarea, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
+const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton } = require("./main_views")
 const { renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -85,11 +85,11 @@ const renderPadStatusChip = (status, isClosed) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "supported", "replicated", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
+    ["all", "recent", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) || f === "favorites" ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/pads" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" },
-          (RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`padFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
+          (RELATION_FILTERS.includes(f) || f === "favorites" ? relationFilterLabel(f) : i18n[`padFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
       )
     ),
     ]),
@@ -181,6 +181,7 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
   const filteredPads = q
     ? pads.filter(pd => String(pd.title || "").toLowerCase().includes(q.toLowerCase()))
     : pads
+  const pagePads = !isForm && filteredPads.length ? paged(filteredPads) : []
 
   const body = section(
     div({ class: "tags-header module-header-line" },
@@ -190,12 +191,13 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
     renderModeButtons(filter, emptyMod, (params && params.modesAvail) || null),
     !isForm && !emptyMod
       ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
+        isForm || emptyMod ? null : renderLayoutSwitch("tribe-mode-buttons"),
         renderModuleStatsBy(filteredPads, pd => pd.isClosed ? 'CLOSED' : String(pd.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.padStatusOpen }, { value: 'INVITE-ONLY', label: i18n.padStatusInviteOnly }, { value: 'CLOSED', label: i18n.padStatusClosed }]),
           form({ method: "GET", action: "/pads", class: "filter-box" },
             input({ type: "hidden", name: "filter", value: filter }),
             input({ type: "text", name: "q", placeholder: i18n.padSearchPlaceholder || "Search pads...", value: q, class: "filter-box__input" }),
             div({ class: "filter-box__controls" },
-              button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+              renderSearchButton(i18n.searchButton)
             )
           )
         )
@@ -205,7 +207,7 @@ exports.padsView = async (pads, filter, padToEdit, params) => {
       : div(
           filteredPads.length === 0
             ? p({ class: "no-content" }, i18n.padsNoItems || "No pads found.")
-            : div({ class: "tribe-grid pads-grid" }, ...paged(filteredPads).map(pd => renderPadCard(pd, filter, params && params.spreadMap && params.spreadMap.get(pd.rootId))))
+            : renderLayoutItems(() => div({ class: "tribe-grid pads-grid" }, ...pagePads.map(pd => renderPadCard(pd, filter, params && params.spreadMap && params.spreadMap.get(pd.rootId)))))
         )
   )
 

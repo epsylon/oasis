@@ -2507,7 +2507,7 @@ article {
   padding-left: 0 !important;
   padding-right: 0 !important;
 }
-.main-column :is([class$="-card"], [class*="-card "], .card).own-content {
+.main-column .own-content {
   box-shadow: inset 3px 0 0 #ffa300 !important;
 }
 
@@ -2851,6 +2851,9 @@ body > .header {
   font-weight: 600 !important;
   opacity: 1 !important;
   text-decoration: none !important;
+  text-transform: none !important;
+  white-space: normal !important;
+  line-height: normal !important;
 }
 .main-content .oasis-nav-list li a .emoji {
   width: auto !important;
@@ -4141,20 +4144,20 @@ body > .header {
 .main-column .pm-card .pm-subject-cell > .pm-exposition-chip { order: -2 !important; margin: 0 !important; }
 .main-column .pm-card .pm-subject-cell > span:not(.pm-exposition-chip) { flex: 1 1 0 !important; min-width: 0 !important; }
 
-.main-column .card-header.card-top { display: flex !important; flex-wrap: nowrap !important; align-items: flex-start !important; justify-content: space-between !important; gap: 8px !important; width: auto !important; min-height: 0 !important; margin: 0 0 6px !important; padding: 0 !important; }
-.main-column .card-header.card-top > .card-byline { display: flex !important; flex: 1 1 auto !important; flex-wrap: wrap !important; align-items: center !important; gap: 4px 6px !important; min-width: 0 !important; min-height: 32px !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
-.main-column .card-header.card-top .card-byline-avatar { display: inline-flex !important; flex: 0 0 auto !important; align-items: center !important; width: 24px !important; height: 32px !important; min-width: 0 !important; padding: 0 !important; margin: 0 !important; }
-.main-column .card-header.card-top .card-byline-avatar img { width: 24px !important; height: 24px !important; min-height: 0 !important; max-height: 24px !important; border-radius: 50% !important; object-fit: cover !important; margin: 0 !important; }
-.main-column .card-header.card-top .card-byline a.user-link { display: block !important; flex: 0 1 auto !important; width: auto !important; height: auto !important; min-width: min(72px, 100%) !important; max-width: calc(100% - 150px) !important; padding: 0 !important; margin: 0 !important; font-size: 12px !important; line-height: 16px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
-.main-column .card-header.card-top .card-byline-time { flex: 0 0 auto !important; white-space: nowrap !important; }
-.main-column .card-header.card-top .card-byline-who { display: inline-flex !important; flex: 0 1 auto !important; flex-wrap: nowrap !important; align-items: center !important; gap: 6px !important; min-width: 0 !important; max-width: 100% !important; }
-.main-column .card-header.card-top .card-byline-who a.user-link { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
-.main-column .card-header.card-top > .card-byline > .card-chips-row { flex: 0 0 100% !important; display: flex !important; flex-wrap: wrap !important; gap: 4px !important; min-width: 0 !important; margin: 2px 0 0 0 !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) { display: flex !important; flex-wrap: nowrap !important; align-items: flex-start !important; justify-content: space-between !important; gap: 8px !important; width: auto !important; min-height: 0 !important; margin: 0 0 6px !important; padding: 0 !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) > .card-byline { display: flex !important; flex: 1 1 auto !important; flex-wrap: wrap !important; align-items: center !important; gap: 4px 6px !important; min-width: 0 !important; min-height: 32px !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) .card-byline-avatar { display: inline-flex !important; flex: 0 0 auto !important; align-items: center !important; width: 24px !important; height: 32px !important; min-width: 0 !important; padding: 0 !important; margin: 0 !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) .card-byline-avatar img { width: 24px !important; height: 24px !important; min-height: 0 !important; max-height: 24px !important; border-radius: 50% !important; object-fit: cover !important; margin: 0 !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) .card-byline a.user-link { display: block !important; flex: 0 1 auto !important; width: auto !important; height: auto !important; min-width: min(72px, 100%) !important; max-width: calc(100% - 150px) !important; padding: 0 !important; margin: 0 !important; font-size: 12px !important; line-height: 16px !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) .card-byline-time { flex: 0 0 auto !important; white-space: nowrap !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) .card-byline-who { display: inline-flex !important; flex: 0 1 auto !important; flex-wrap: nowrap !important; align-items: center !important; gap: 6px !important; min-width: 0 !important; max-width: 100% !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) .card-byline-who a.user-link { overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) > .card-byline > .card-chips-row { flex: 0 0 100% !important; display: flex !important; flex-wrap: wrap !important; gap: 4px !important; min-width: 0 !important; margin: 2px 0 0 0 !important; }
 .main-column .tribe-side > .card-header.card-top + .shop-title-row { margin-top: -10px !important; }
 .main-column .tribe-side > .card-header.card-top + .pad-title-row { margin-top: -12px !important; }
 .main-column .calendar-details > .tribe-side > .card-header.card-top + .shop-title-row { margin-top: -6px !important; }
 .main-column .forum-thread-card > .card-header.card-top + .shop-title-row { margin-top: -5px !important; }
-.main-column .card-header.card-top > .content-actions { display: flex !important; flex: 0 0 auto !important; flex-wrap: nowrap !important; align-items: center !important; gap: 4px !important; width: auto !important; margin: 0 0 0 auto !important; padding: 0 !important; }
+.main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) > .content-actions { display: flex !important; flex: 0 0 auto !important; flex-wrap: nowrap !important; align-items: center !important; gap: 4px !important; width: auto !important; margin: 0 0 0 auto !important; padding: 0 !important; }
 .main-column .card-header.card-top > .content-actions > .card-menu { display: block !important; width: auto !important; margin: 0 !important; }
 .main-column .card-header.card-top > .content-actions .btn-singleview:not(.card-menu-items *) { width: auto !important; min-width: 32px !important; height: 32px !important; margin: 0 !important; }
 .main-column .card-header.card-top .card-menu > .card-menu-toggle.btn-singleview { background: #2a2a2a !important; border-radius: 50% !important; }
@@ -4260,3 +4263,9 @@ body > .header {
 .main-column table.larp-info-table td, .main-column table.larp-info-table tr > td[class] { padding: 8px 10px !important; vertical-align: middle !important; }
 .main-column .larp-decree table.larp-info-table td.card-label { white-space: nowrap !important; }
 .main-column .larp-posts-block > h2:first-child { margin-top: 0 !important; }
+.main-column .layout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+.main-column .layout-list :is(div, li):has(> .card-top) > .card-top > .content-actions { position: absolute !important; top: 8px !important; right: 12px !important; width: auto !important; flex: 0 0 auto !important; margin: 0 !important; }
+.main-column .layout-list :is(div, li):has(> .card-top) > .card-top .card-byline-time { display: flex !important; align-items: center !important; flex: 1 1 100% !important; min-height: 32px !important; padding-right: 84px !important; box-sizing: border-box !important; }
+.main-column .layout-list :is(div, li):has(> .card-top) > .card-top .card-chips-row { flex: 1 1 100% !important; flex-wrap: wrap !important; overflow: visible !important; -webkit-mask-image: none !important; mask-image: none !important; }
+.main-column .changelog-grid { grid-template-columns: minmax(0, 1fr) !important; }
+.main-column .changelog-current { padding: 16px !important; }

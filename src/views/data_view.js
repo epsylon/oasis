@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, input, span, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderModuleStats, paged, renderIcon } = require("./main_views");
+const { template, i18n, userLink, renderModuleStats, paged, renderIcon, renderSearchButton, renderFilterFold } = require("./main_views");
 
 const KIND_LABEL = {
   inhabitants: () => i18n.dataKindInhabitants,
@@ -61,27 +61,29 @@ const FILTER_COLUMNS = [
 
 const kindLabel = (kind) => (KIND_LABEL[kind] ? KIND_LABEL[kind]() : String(kind || '').toUpperCase());
 
-const reasonButton = (value, label, current, filter) =>
+const reasonButton = (value, label, current, filter, type) =>
   form({ method: "GET", action: "/data" },
     filter && filter !== "ALL" ? input({ type: "hidden", name: "filter", value: filter }) : null,
-    value ? input({ type: "hidden", name: "reason", value }) : null,
+    type ? input({ type: "hidden", name: "type", value: type }) : null,
+    input({ type: "hidden", name: "reason", value }),
     button({ type: "submit", class: current === value ? "filter-btn active" : "filter-btn" }, String(label).toUpperCase())
   );
 
-const filterButton = (value, label, current, reason) =>
-  form({ method: "GET", action: "/data" },
-    input({ type: "hidden", name: "filter", value }),
-    reason ? input({ type: "hidden", name: "reason", value: reason }) : null,
-    button({ type: "submit", class: current === value ? "filter-btn active" : "filter-btn" }, String(label).toUpperCase())
-  );
+const dataHref = (filter, reason, type) => {
+  const qs = new URLSearchParams({ ...(filter && filter !== "ALL" ? { filter } : {}), ...(type ? { type } : {}), ...(reason ? { reason } : {}) }).toString();
+  return qs ? `/data?${qs}` : "/data";
+};
 
 const sectionId = (kind) => `data-${String(kind || '').toLowerCase()}`;
 
 const renderFilters = (q, payload = {}, kindsPresent = []) => {
   const matches = Array.isArray(payload.matches) ? payload.matches : [];
   const reason = String(payload.reason || "");
-  const filter = String(payload.filter || "ALL").toUpperCase();
-  const isKindFilter = !FILTER_COLUMNS[0].includes(filter);
+  const asked = String(payload.filter || "ALL").toUpperCase();
+  const filter = FILTER_COLUMNS[0].includes(asked) ? asked : "ALL";
+  const askedType = String(payload.type || "").toUpperCase();
+  const kind = !FILTER_COLUMNS[0].includes(asked) ? asked : (FILTER_COLUMNS.slice(1).flat().includes(askedType) ? askedType : "");
+  const isKindFilter = !!kind;
   if (!matches.length && !String(q || "").trim() && !reason && !isKindFilter) return null;
   const avail = (Array.isArray(payload.reasonsAvail) ? payload.reasonsAvail : []).filter(r => REASON_LABEL[r]);
   const present = new Set(kindsPresent);
@@ -91,25 +93,17 @@ const renderFilters = (q, payload = {}, kindsPresent = []) => {
       .filter(col => col.length)
   );
   return section(
-    div({ class: "activity-sub-filter" },
-      reasonButton("", i18n.dataFilterAll, reason, filter),
-      ...avail.map(r => reasonButton(r, REASON_LABEL[r](), reason, filter))
-    ),
-    div({ class: "activity-filter-grid" },
-      ...columns.map(col =>
-        div({ class: "activity-filter-col" },
-          ...col.map(k => filterButton(k, FILTER_COLUMNS[0].includes(k) ? (i18n[k + "Button"] || k) : kindLabel(k.toLowerCase()), filter, reason))
-        )
-      )
-    ),
+    renderFilterFold("data-filters-more", columns.flat().map(k => ({ value: k, label: String(FILTER_COLUMNS[0].includes(k) ? (i18n[k + "Button"] || k) : kindLabel(k.toLowerCase())).toUpperCase(), href: FILTER_COLUMNS[0].includes(k) ? dataHref(k, reason, kind) : dataHref(filter, reason, k === kind ? "" : k) })), kind ? [filter, kind] : [filter]),
+    avail.length ? div({ class: "activity-sub-filter" }, ...avail.map(r => reasonButton(r, REASON_LABEL[r](), reason, filter, kind))) : null,
     div({ class: "data-search activity-filter-chips activity-toolbar-row" },
       renderModuleStats(matches.length),
       form({ method: "GET", action: "/data", class: "filter-box" },
         reason ? input({ type: "hidden", name: "reason", value: reason }) : null,
         filter !== "ALL" ? input({ type: "hidden", name: "filter", value: filter }) : null,
+        kind ? input({ type: "hidden", name: "type", value: kind }) : null,
         input({ type: "text", name: "q", value: q || "", placeholder: i18n.dataSearchPlaceholder, class: "filter-box__input" }),
         div({ class: "filter-box__controls" },
-          button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+          renderSearchButton(i18n.searchButton)
         )
       )
     )

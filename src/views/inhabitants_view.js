@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, img, a, textarea, input, span, strong } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
-const { renderCallButton, template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock, renderModuleStats, paged } = require('./main_views');
+const { renderCallButton, template, i18n, userLink, renderUserSensors, renderContentActions, renderRelationshipBlock, renderModuleStats, paged, renderSearchButton } = require('./main_views');
 const { renderZoomableImage } = require('./gallery_view');
 const { renderContentStats } = require('./clearnet_view');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -294,7 +294,7 @@ exports.inhabitantsView = (inhabitants, filter, query, currentUserId, fediverseC
                   input({ type: 'text', name: 'skills', placeholder: i18n.filterSkills, value: (query && query.skills) || '', class: 'filter-box__number' })
                 ]
               : null,
-            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+            renderSearchButton(i18n.searchButton)
           )
         )
       ),

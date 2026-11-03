@@ -219,10 +219,16 @@ module.exports = ({ audiosModel, bookmarksModel, documentsModel, imagesModel, vi
   return {
     async listAll(opts = {}) {
       const filter = safeText(opts.filter || "all").toLowerCase();
+      const type = safeText(opts.type || "").toLowerCase();
       const { byKind, recentFlat, counts } = await loadAll();
 
       if (filter === "recent") {
-        return { items: recentFlat, counts };
+        return { items: kindOrder.includes(type) ? recentFlat.filter((x) => x.kind === type) : recentFlat, counts };
+      }
+      if (kindOrder.includes(type)) {
+        const items = (byKind[type] || []).slice()
+          .sort((a, b) => (toTs(b.updatedAt) || toTs(b.createdAt)) - (toTs(a.updatedAt) || toTs(a.createdAt)));
+        return { items, counts };
       }
 
       if (kindOrder.includes(filter)) {

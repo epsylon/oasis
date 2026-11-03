@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, input, span, pre, table, tr, td, strong } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, paged, renderIcon } = require("../views/main_views");
+const { template, i18n, userLink, paged, renderIcon, renderSearchButton } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
@@ -490,7 +490,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
 		input({ type: 'datetime-local', name: 'to', value: toVal, class: 'blockexplorer-search-input' })
 	      ),
 	      div({ class: 'blockexplorer-search-actions' },
-		div({ class: 'filter-box__controls' }, button({ type: 'submit', class: 'filter-box__button' }, i18n.searchSubmit))
+		div({ class: 'filter-box__controls' }, renderSearchButton(i18n.searchSubmit))
 	      )
 	    )
 	  )

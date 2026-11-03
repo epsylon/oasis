@@ -2,9 +2,8 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -135,7 +134,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
-  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;
 };
@@ -151,6 +150,9 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
   const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const docToEdit = documentId ? list.find((d) => d.key === documentId) : null;
+  const isForm = filter === "create" || filter === "edit";
+  const pageDocs = isForm ? [] : paged(list);
+  const documentCards = () => div({ class: "documents-list" }, renderDocumentList(pageDocs, filter, { q, sort, spreadMap: params.spreadMap }));
 
   const tpl = template(
     title,
@@ -180,11 +182,12 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
       )
     ),
     section(
-      filter === "create" || filter === "edit"
+      isForm
         ? renderDocumentForm(filter, documentId, docToEdit || {}, { ...params, filter })
         : section(
             emptyMod ? null : div(
               { class: "documents-search activity-filter-chips activity-toolbar-row" },
+                isForm || emptyMod ? null : renderLayoutSwitch("filters"),
                 renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/documents", class: "filter-box" },
@@ -198,11 +201,11 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
                     option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.documentSortOldest),
                     option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.documentSortTop)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.documentSearchButton)
+                  renderSearchButton(i18n.documentSearchButton)
                 )
               )
             ),
-            div({ class: "documents-list" }, renderDocumentList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
+            pageDocs.length ? renderLayoutItems(documentCards) : documentCards()
           )
     )
   );
@@ -210,8 +213,34 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
   return tpl;
 };
 
-exports.singleDocumentView = async (doc, filter = "all", comments = [], params = {}) => {
+const renderDocumentsHeader = exports.renderDocumentsHeader = (filter = "all", params = {}) => {
   const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : null);
+  return [
+    div({ class: "tags-header module-header-line" },
+      h2(i18n.documentAllSectionTitle || i18n.documentTitle),
+      p(i18n.documentDescription)
+    ),
+    div(
+      { class: "filters" },
+      form(
+        { method: "GET", action: "/documents", class: "ui-toolbar ui-toolbar--filters" },
+        input({ type: "hidden", name: "sort", value: safeText(params.sort || "recent") }),
+        button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
+        ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),
+        ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
+        ...renderRelationFilters(filter, mediaChip),
+        ...(mediaChip("favorites") ? [button(
+          { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
+          String(i18n.documentFilterFavorites).toUpperCase()
+        )] : []),
+        button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterTop).toUpperCase()),
+        button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.documentCreateButton)
+      )
+    )
+  ];
+};
+
+exports.singleDocumentView = async (doc, filter = "all", comments = [], params = {}) => {
   const q = safeText(params.q || "");
   const sort = safeText(params.sort || "recent");
   const returnTo = safeText(params.returnTo) || buildReturnTo(filter, { q, sort });
@@ -270,27 +299,7 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
   const tpl = template(
     i18n.documentTitle,
     section(
-      div({ class: "tags-header module-header-line" },
-        h2(i18n.documentAllSectionTitle || i18n.documentTitle),
-        p(i18n.documentDescription)
-      ),
-      div(
-        { class: "filters" },
-        form(
-          { method: "GET", action: "/documents", class: "ui-toolbar ui-toolbar--filters" },
-          input({ type: "hidden", name: "sort", value: sort }),
-          button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
-          ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),
-          ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
-          ...renderRelationFilters(filter, mediaChip),
-          ...(mediaChip("favorites") ? [button(
-            { type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" },
-            String(i18n.documentFilterFavorites).toUpperCase()
-          )] : []),
-          button({ type: "submit", name: "filter", value: "top", class: filter === "top" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterTop).toUpperCase()),
-          button({ type: "submit", name: "filter", value: "create", class: "create-button" }, i18n.documentCreateButton)
-        )
-      ),
+      ...renderDocumentsHeader(filter, { sort, censusList: params.censusList }),
       div({ class: "tribe-details" }, docSide, docMain)
     )
   );

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, hasRelation, renderRelationFilters, RELATION_FILTERS, relationFilterLabel, hereAt } = require("./main_views");
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, hasRelation, renderRelationFilters, RELATION_FILTERS, relationFilterLabel, hereAt, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -162,7 +162,7 @@ const renderFeedCard = exports.renderFeedCard = (feed, spreadMap = null, opts = 
             ),
             div(
                 { class: "feed-main" },
-                div({ class: "feed-text" }, ...styledNodes),
+                div({ class: "feed-text card-excerpt" }, ...styledNodes),
                 chipsRow
             )
         ),
@@ -236,6 +236,7 @@ exports.feedView = (feeds, opts = "ALL") => {
   const emptyMod = moduleIsEmpty(feeds, filter, "ALL", q || tag);
   const censusF = Array.isArray(opts.censusList) ? opts.censusList : feeds;
   const feedChip = feedChipFor(filter, censusF);
+  const pageFeeds = filter !== "CREATE" && feeds && feeds.length > 0 ? paged(feeds.filter((feed) => String((feed.value.content || {}).text || "").trim())) : [];
 
   const centerContent = section(
     header,
@@ -247,6 +248,7 @@ exports.feedView = (feeds, opts = "ALL") => {
     ),
     emptyMod ? null : div(
       { class: "feed-tools-row activity-filter-chips activity-toolbar-row" },
+        emptyMod || filter === "CREATE" ? null : renderLayoutSwitch("mode-buttons-row"),
         renderModuleStats(feeds.length),
       form(
         { method: "GET", action: "/feed", class: "filter-box" },
@@ -254,7 +256,7 @@ exports.feedView = (feeds, opts = "ALL") => {
         tag ? input({ type: "hidden", name: "tag", value: tag }) : null,
         input({ type: "text", name: "q", value: q, placeholder: i18n.feedSearchPlaceholder || i18n.searchPlaceholder || "Search", class: "filter-box__input" }),
         div({ class: "filter-box__controls" },
-          button({ type: "submit", class: "filter-box__button" }, i18n.searchButton || "Search")
+          renderSearchButton(i18n.searchButton || "Search")
         )
       )
     ),
@@ -262,7 +264,7 @@ exports.feedView = (feeds, opts = "ALL") => {
       filter === "CREATE"
         ? renderFeedComposer({ rows: 4, mastodon: opts.mastodon === true })
         : feeds && feeds.length > 0
-          ? div({ class: "feed-container" }, paged(feeds.filter((feed) => String((feed.value.content || {}).text || "").trim())).map((feed) => renderFeedCard(feed, spreadMap)).filter(Boolean))
+          ? renderLayoutItems(() => div({ class: "feed-container" }, pageFeeds.map((feed) => renderFeedCard(feed, spreadMap)).filter(Boolean)))
           : div({ class: "no-results" }, p(i18n.noFeedsFound))
     )
   );

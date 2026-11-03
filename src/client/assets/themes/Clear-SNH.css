@@ -335,6 +335,7 @@ a.user-link:focus, button.user-link:focus {
 
 /* Tribes */
 .tribe-card { background: #FFFFFF !important; border-color: #E0E0E0 !important; }
+:is(div,li,article):has(> .card-top):not(.tribe-side) { background: #FFFFFF !important; }
 .tribe-card:hover { border-color: #007BFF !important; }
 .tribe-card-title { color: #2D2D2D !important; }
 .tribe-card-description { color: #555 !important; }

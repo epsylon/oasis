@@ -94,6 +94,7 @@ module.exports = ({ cooler }) => {
   const buildImage = (node, rootId, viewerId, agg) => {
     const c = node.c || {};
     const voters = agg ? agg.voters : safeArr(c.opinions_inhabitants);
+    const composition = Array.isArray(c.bcsComposition) ? c.bcsComposition : null;
     return {
       key: node.key,
       rootId,
@@ -109,7 +110,9 @@ module.exports = ({ cooler }) => {
       opinions: agg ? agg.opinions : (c.opinions || {}),
       opinions_inhabitants: voters,
       hasVoted: viewerId ? voters.includes(viewerId) : false,
-      sizeBytes: node.sizeBytes || 0
+      sizeBytes: node.sizeBytes || 0,
+      bcsComposition: composition,
+      isBcs: (composition && composition.length > 0) || safeArr(c.tags).some((t) => String(t).toLowerCase() === 'bcs')
     };
   };
 
@@ -159,6 +162,38 @@ module.exports = ({ cooler }) => {
 
       return new Promise((resolve, reject) => {
         ssbClient.publish(content, (err, res) => (err ? reject(err) : resolve(res)));
+      });
+    },
+
+    async createBcsImage(blobId, title, description, composition) {
+      const ssbClient = await openSsb();
+      const now = new Date().toISOString();
+      const notes = safeArr(composition)
+        .map((n) => ({ t: String(n.type || n.t || ''), n: String(n.name || n.n || ''), d: Number(n.durMs || n.d || 0), id: typeof n.id === 'string' ? n.id : null }))
+        .filter((n) => n.t && n.n);
+      const baseContent = {
+        type: "image",
+        url: blobId,
+        createdAt: now,
+        updatedAt: null,
+        author: ssbClient.id,
+        tags: ["bcs"],
+        title: title || "",
+        description: description || "",
+        mapUrl: "",
+        bcsComposition: [],
+        opinions: {},
+        opinions_inhabitants: []
+      };
+      const SSB_MAX_BYTES = 8000;
+      const sizeOf = (content) => Buffer.byteLength(JSON.stringify({ previous: "%0000000000000000000000000000000000000000000=.sha256", sequence: 999999, author: ssbClient.id, timestamp: Date.now(), hash: "sha256", content, signature: "0".repeat(88) + "==.sig.ed25519" }, null, 2), 'utf8');
+      const fitted = [];
+      for (const note of notes) {
+        fitted.push(note);
+        if (sizeOf({ ...baseContent, bcsComposition: fitted }) > SSB_MAX_BYTES) { fitted.pop(); break; }
+      }
+      return new Promise((resolve, reject) => {
+        ssbClient.publish({ ...baseContent, bcsComposition: fitted }, (err, res) => (err ? reject(err) : resolve(res)));
       });
     },
 
@@ -238,6 +273,7 @@ module.exports = ({ cooler }) => {
       const now = Date.now();
 
       if (filter === "mine") list = list.filter((im) => String(im.author) === String(viewerId));
+      else if (filter === "bcs") list = list.filter((im) => im.isBcs === true);
       else if (filter === "recent") list = list.filter((im) => new Date(im.createdAt).getTime() >= now - 86400000);
       else if (filter === "top") {
         list = list

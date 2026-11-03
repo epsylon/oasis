@@ -1,13 +1,13 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, herePath, i18n, paged, userLink, userLinkLabel, renderSupportButton, renderStateChip, renderCountChip, renderPhoneChip, renderModeChip, renderVisibilityChip, asChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref, RELATION_FILTERS, relationFilterLabel, clearnetItemHref } = require('./main_views');
+const { template, herePath, i18n, paged, listLayout, renderLayoutItems, renderLayoutSwitch, userLink, userLinkLabel, renderSupportButton, renderStateChip, renderCountChip, renderPhoneChip, renderModeChip, renderVisibilityChip, asChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref, clearnetItemHref, renderSearchButton, renderFilterFold, isFavoriteItem } = require('./main_views');
 const { renderReportStatusChip, renderReportSeverityChip, renderReportCategoryChip } = require('./report_view');
 const { renderEventSummary, renderEventChips } = require('./event_view');
 const { renderTaskStatusChip, renderTaskPriorityChip } = require('./task_view');
 const { renderTransferStatusChip } = require('./transfer_view');
 const { renderProjectStatusChip } = require('./projects_view');
 const { renderChatStatusChip } = require('./chats_view');
-const { renderVoteStatusChip } = require('./vote_view');
+const { renderVoteStatusChip, renderVoteRuleChips } = require('./vote_view');
 const { renderWikiStatusChip } = require('./wiki_view');
 const { renderCalendarStatusChip } = require('./calendars_view');
 const { renderPadStatusChip } = require('./pads_view');
@@ -24,7 +24,8 @@ const { roomNumberOf } = require('../models/phone_number');
 const cardTitleRow = (title, href) => title ? div({ class: 'shop-title-row' }, h2({ class: 'tribe-card-title' }, href ? a({ href }, title) : title)) : null;
 const cardTitleLink = (title, href) => title ? div({ class: 'card-field' }, href ? a({ href, class: 'card-value user-link' }, title) : span({ class: 'card-value' }, title)) : null;
 const cardMeta = (icon, ...nodes) => p({ class: 'job-meta-line' }, `${icon} `, ...nodes);
-const cardDate = (value) => value && moment(value).isValid() ? p({ class: 'time-chip' }, moment(value).format('YYYY/MM/DD HH:mm')) : null;
+const cardChipLine = (icon, text) => text ? div({ class: 'card-chip-line' }, renderCountChip(icon, null, String(text))) : null;
+const cardDate = (value) => value && moment(value).isValid() ? cardChipLine('◷', moment(value).format('YYYY/MM/DD HH:mm')) : null;
 const cardPrice = (text) => text ? div({ class: 'price-chip' }, text) : null;
 const statusIconOf = (s) => /CLOSED|DISCARDED|REJECTED|INVALID|CANCELLED|EXPIRED|FAILED|DISSOLVED|ARCHIVED/.test(s) ? '✗' : /PENDING|REVIEW|PROGRESS|PAUSED|PROPOSED|UNCONFIRMED|RESERVED/.test(s) ? '⧖' : '✓';
 const plainStatusChip = (raw, label = null) => {
@@ -102,14 +103,14 @@ const moduleChipsOf = (type, content, ctx = {}) => {
       return [renderModeChip(c.inviteMode, i18n), renderCountChip('👥', i18n.tribeMembersCount, countOf(c.members))];
     case 'votes': {
       const status = (action.vote && action.vote.status) || (upperOf(c.status || 'OPEN') === 'OPEN' && isPast(c.deadline) ? 'CLOSED' : upperOf(c.status || 'OPEN'));
-      return [renderVoteStatusChip(status)];
+      return [renderVoteStatusChip(status), ...renderVoteRuleChips(action.vote || { ...c, status }, !!action.vote)];
     }
     case 'poll': {
-      const poll = action.poll && typeof action.poll === 'object' ? action.poll : { status: isPast(c.deadline) ? 'CLOSED' : 'OPEN', anonymous: c.anonymous === true, multiple: c.multiple === true, deadline: c.deadline };
+      const poll = action.poll && typeof action.poll === 'object' ? action.poll : { status: isPast(c.deadline) ? 'CLOSED' : 'OPEN', pollType: c.pollType, anonymous: c.anonymous === true, multiple: c.multiple === true, deadline: c.deadline };
       return [
         renderPollStatusChip(poll),
+        renderPollTypeChip(poll),
         poll.anonymous ? renderStateChip('whole', '◈', i18n.pollAnonymous, 'level') : null,
-        poll.multiple ? renderStateChip('whole', '☰', i18n.pollMultiple, 'level') : null,
         dateChip(i18n.pollDeadline, poll.deadline)
       ];
     }
@@ -266,7 +267,7 @@ const OPINION_ROUTES = {
 };
 const moment = require("../server/node_modules/moment");
 const { renderStyledText, escapeHtml, safeExternalHref } = require('../backend/renderStyledText');
-const { renderPollInline, renderVotedChip, renderPollResultsField, renderPollStatusChip } = require('./polls_view');
+const { renderPollInline, renderVotedChip, renderPollResultsField, renderPollStatusChip, renderPollTypeChip } = require('./polls_view');
 const { renderVoteInline, renderVoteVotedChip, renderVoteResultsField } = require('./vote_view');
 const { getConfig } = require("../configs/config-manager.js");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
@@ -511,7 +512,7 @@ const renderTribeOpenedCard = (action, date, authorName, following = null, retur
       authorName,
       date: action.ts,
       chips: [div({ class: 'card-chips-row' },
-        renderStateChip('whole', '▣', label, 'module'),
+        renderStateChip('whole', null, label, 'module'),
         renderTribeOriginChip(origin),
         scopeChipOf('tribeOpened', c, action)
       )]
@@ -633,8 +634,8 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
     let skip = false;
     const moduleLabel = type === 'pad' ? `${i18n.typePad} · ${i18n.padNew}`
       : type === 'wikiPage' ? i18n.typeWiki
-      : type === 'emergencyUpdate' ? `${i18n.typeEmergency} · ${i18n.emergencyLastUpdate}`
-      : type === 'campaignUpdate' ? `${i18n.typeCampaign} · ${i18n.emergencyLastUpdate}`
+      : type === 'emergencyUpdate' ? `${i18n.typeEmergency} · ${i18n.activityUpdateLabel}`
+      : type === 'campaignUpdate' ? `${i18n.typeCampaign} · ${i18n.activityUpdateLabel}`
       : type === 'podcastEpisode' ? `${i18n.typePodcast} · ${i18n.typePodcastEpisode}`
       : type === 'larpHousePost' ? i18n.typeLarp
       : type === 'post' && commentOf(action) ? commentLabel(commentOf(action))
@@ -699,7 +700,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       const { text } = content;
       cardBody.push(
         div({ class: 'card-section post' },
-          text ? div({ class: 'feed-text activity-update-msg' }, p({ class: 'post-text' }, ...renderStyledText(String(text), { zoomImages: true }))) : null
+          text ? div({ class: 'feed-text activity-update-msg card-excerpt' }, p({ class: 'post-text' }, ...renderStyledText(String(text), { zoomImages: true }))) : null
         )
       );
     }
@@ -836,7 +837,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section' },
           title?.trim() ? h2({ class: 'torrent-title' }, title) : "",
-          url ? renderFileDownloads(action.tipId || action.id || action.key, torrentUrl, fileName || title) : null
+          url ? renderFileDownloads(action.tipId || action.id || action.key, torrentUrl, fileName || title, { blob: url }) : null
         )
       );
     }
@@ -906,7 +907,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       if (refeedsNum > 0) cardChips.push(renderCountChip('⟳', i18n.tribeFeedRefeeds, refeedsNum));
       cardBody.push(
         div({ class: 'card-section feed' },
-          div({ class: 'feed-text' }, ...textNodes)
+          div({ class: 'feed-text card-excerpt' }, ...textNodes)
         )
       );
     }
@@ -930,7 +931,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             );
        bodyNode = div({ class: 'feed-text post-text post-text-clamped', [RAW_HTML]: sanitizeHtml(linkified) });
       } else {
-        bodyNode = div({ class: 'feed-text' },
+        bodyNode = div({ class: 'feed-text card-excerpt' },
           p({ class: 'post-text post-text-pre post-text-clamped' }, ...renderStyledText(displayText, { zoomImages: true }))
         );
       }
@@ -988,7 +989,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 authorName: action.authorNames && action.authorNames[action.author],
                 date: action.ts,
                 chips: [
-                    renderStateChip('whole', '▣', String(threadLabel).toUpperCase(), 'module'),
+                    renderStateChip('whole', null, String(threadLabel).toUpperCase(), 'module'),
                     scopeChipOf('post', { root: true }, action),
                     renderCountChip('💬', i18n.blogComments, replies.length)
                 ],
@@ -1003,7 +1004,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                         a({ href, class: 'card-value user-link' }, titleText)
                     ),
                     latest && latest.text
-                        ? div({ class: 'feed-text activity-update-msg' },
+                        ? div({ class: 'feed-text activity-update-msg card-excerpt' },
                             p({ class: 'post-text post-text-pre' }, ...renderStyledText(latest.text, { zoomImages: true }))
                           )
                         : ''
@@ -1029,7 +1030,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 authorName: action.authorNames && action.authorNames[action.author],
                 date: action.ts,
                 chips: [
-                    renderStateChip('whole', '▣', `${String(i18n.typeChat || 'CHAT').toUpperCase()} \u00b7 ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`, 'module'),
+                    renderStateChip('whole', null, `${String(i18n.typeChat || 'CHAT').toUpperCase()} \u00b7 ${String(i18n.activityUpdateLabel || 'UPDATE').toUpperCase()}`, 'module'),
                     scopeChipOf('chatThread', c, action),
                     renderCountChip('👥', i18n.chatParticipants, c.members || 0),
                     renderCountChip('💬', i18n.messages, c.messageCount || show.length)
@@ -1117,7 +1118,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                 a({ href: `/forum/${encodeURIComponent(hrefKey)}#${forumReplyAnchor(action.tipId || action.id)}`, class: 'tag-link' }, repliedAuthor ? i18n.inReplyTo : i18n.forumInThread),
                 repliedAuthor ? span(' ', userLink(repliedAuthor, repliedName)) : ''
               ),
-              parentTitle ? p({ class: 'post-text reply-context-text' }, parentTitle) : ''
+              parentTitle ? div({ class: 'card-field' }, a({ href: `/forum/${encodeURIComponent(hrefKey)}`, class: 'card-value user-link' }, parentTitle)) : ''
             ),
             div({ class: 'card-field forum-reply-body' },
               p({ class: 'forum-reply-text' }, ...renderStyledText(text, { zoomImages: true }))
@@ -1254,7 +1255,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section shop' },
           cardTitleRow(title || shopKey, shopKey ? `/shops/${encodeURIComponent(shopKey)}` : null),
           displayDesc ? p({ class: 'tribe-card-description' }, displayDesc) : null,
-          location ? cardMeta('📍', location) : null
+          location ? cardChipLine('📍', location) : null
         )
       );
     }
@@ -1306,7 +1307,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section tribe industry' },
           cardTitleRow(title || (i18n.industryBuild || 'Build'), `/industry/build/${encodeURIComponent(buildKey)}`),
-          startDate || endDate ? p({ class: 'time-chip' }, [startDate ? moment(startDate).format('YYYY/MM/DD') : '', endDate ? moment(endDate).format('YYYY/MM/DD') : ''].filter(Boolean).join(' → ')) : null,
+          startDate || endDate ? cardChipLine('◷', [startDate ? moment(startDate).format('YYYY/MM/DD') : '', endDate ? moment(endDate).format('YYYY/MM/DD') : ''].filter(Boolean).join(' → ')) : null,
           image
             ? (/^(\/|https?:)/.test(String(image))
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
@@ -1512,6 +1513,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             totalVoters: Number(action.pollVoters) || 0,
             myChoices: [],
             readOnly: true,
+            pollType: content.pollType,
             multiple: content.multiple === true
           };
       cardBody.push(
@@ -1566,7 +1568,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
             authorName: action.authorNames && action.authorNames[action.author],
             date: action.ts,
             chips: [div({ class: 'card-chips-row' },
-              renderStateChip('whole', '▣', upperOf(i18n.typeProject), 'module'),
+              renderStateChip('whole', null, upperOf(i18n.typeProject), 'module'),
               scopeChipOf('project', content, action)
             )]
           }),
@@ -1598,7 +1600,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section housing' },
           cardTitleRow(title, titleHref),
           cardPrice(isFree ? (i18n.housingFree || 'FREE') : `${Number(price || 0).toFixed(2)} ECO`),
-          place ? cardMeta('📍', place) : null
+          place ? cardChipLine('📍', place) : null
         )
       );
     }
@@ -1619,7 +1621,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section job' },
           cardTitleRow(title, titleHref),
           salary ? cardPrice(`${salary} ECO`) : null,
-          location ? cardMeta('📍', String(location)) : null
+          location ? cardChipLine('📍', location) : null
         )
       );
     }
@@ -1655,7 +1657,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section parliament' },
           h2({ class: 'tribe-card-title' }, winnerLink),
-          startAt || endAt ? p({ class: 'time-chip' }, [startAt ? moment(startAt).format("YYYY/MM/DD HH:mm") : '', endAt ? moment(endAt).format("YYYY/MM/DD HH:mm") : ''].filter(Boolean).join(' → ')) : null
+          startAt || endAt ? cardChipLine('◷', [startAt ? moment(startAt).format("YYYY/MM/DD HH:mm") : '', endAt ? moment(endAt).format("YYYY/MM/DD HH:mm") : ''].filter(Boolean).join(' → ')) : null
         )
       );
     }
@@ -1798,7 +1800,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         authorName: (action.authorNames && action.authorNames[bylineAuthorId]) || getProfile(bylineAuthorId).name,
         msgSize: action.msgSize,
         chips: [div({ class: 'card-chips-row' },
-          renderStateChip('whole', '▣', upperOf(moduleLabel), 'module'),
+          renderStateChip('whole', null, upperOf(moduleLabel), 'module'),
           ...cardChips,
           type === 'poll' ? renderVotedChip(action.poll) : null,
           type === 'votes' && action.vote ? renderVoteVotedChip(action.vote) : null,
@@ -1848,14 +1850,15 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       })()
     );
   };
-  const cards = items.map(action => {
+  const buildCards = () => items.map(action => {
     const anchor = cardAnchorOf(action);
     const node = renderCardFor(action, anchor);
     if (node && typeof node.setAttribute === 'function') node.setAttribute('id', anchor);
     return node;
-  });
+  }).filter(Boolean);
 
-  const filteredCards = cards.filter(Boolean);
+  if (extras.layout !== false && listLayout() !== 'cards') return [renderLayoutItems(buildCards)];
+  const filteredCards = buildCards();
   if (!filteredCards.length) {
     return div({ class: "no-actions" }, p(i18n.noActions));
   }
@@ -2025,7 +2028,9 @@ exports.rootTypeLabel = rootTypeLabel;
 
 exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const spreadMap = (extras && extras.spreadMap) || new Map();
-  const title = filter === 'mine' ? i18n.yourActivity : i18n.globalActivity;
+  const ACTIVITY_SCOPES = ['all', 'recent', 'mine', 'supported', 'replicated', 'favorites', 'top'];
+  const scope = ACTIVITY_SCOPES.includes(filter) ? filter : 'all';
+  const title = scope === 'mine' ? i18n.yourActivity : i18n.globalActivity;
   const desc = i18n.activityDesc;
 
   const activityTypes = [
@@ -2034,6 +2039,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'mine',      label: i18n.mineButton },
     { type: 'supported', label: i18n.filterSupported },
     { type: 'replicated', label: i18n.filterReplicated },
+    { type: 'favorites', label: String(i18n.favoritesTitle).toUpperCase() },
     { type: 'top',       label: i18n.typeTop },
     { type: 'inhabitants', label: i18n.typeInhabitants },
     { type: 'tribe',     label: i18n.typeTribe },
@@ -2074,7 +2080,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'video',     label: i18n.typeVideo }
   ];
 
-  const FILTER_META = new Set(['all', 'mine', 'supported', 'replicated', 'recent']);
+  const FILTER_META = new Set(['all', 'mine', 'supported', 'replicated', 'favorites', 'recent']);
   const ALLOWED_TYPES = new Set(['tribeOpened']);
   for (const { type } of activityTypes) {
     if (FILTER_META.has(type)) continue;
@@ -2084,68 +2090,76 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const rawActions = actions;
   actions = actions.filter(action => ALLOWED_TYPES.has(action.type));
 
+  const requestedKind = String((extras && extras.type) || '');
+  const kind = ACTIVITY_SCOPES.includes(filter) ? (activityTypes.some(t => t.type === requestedKind && !ACTIVITY_SCOPES.includes(t.type)) ? requestedKind : 'all') : filter;
+  const opinionTotal = (action) => Object.values((action.value?.content || action.content || {}).opinions || {}).reduce((n, v) => n + (Number(v) || 0), 0);
+  const inScope = (action) => {
+    if (scope === 'mine') return action.author === userId;
+    if (scope === 'supported') return !!action.isSupported;
+    if (scope === 'replicated') return !!action.isReplicated;
+    if (scope === 'favorites') return isFavoriteItem(extras && extras.favIndex, action);
+    if (scope === 'recent') return !!action.ts && Date.now() - action.ts < 24 * 60 * 60 * 1000;
+    if (scope === 'top') return opinionTotal(action) > 0;
+    return true;
+  };
+  const scoped = actions.filter(action => action.type !== 'tombstone' && inScope(action));
+
   let filteredActions;
-  if (filter === 'mine') {
-    filteredActions = actions.filter(action => action.author === userId && action.type !== 'tombstone');
-  } else if (filter === 'supported' || filter === 'replicated') {
-    const flag = filter === 'supported' ? 'isSupported' : 'isReplicated';
-    filteredActions = actions.filter(action => action[flag] && action.type !== 'tombstone');
-  } else if (filter === 'recent') {
-    const now = Date.now();
-    filteredActions = actions.filter(action => action.type !== 'tombstone' && action.ts && now - action.ts < 24 * 60 * 60 * 1000);
-  } else if (filter === 'banking') {
+  if (kind === 'all') {
+    filteredActions = scoped;
+  } else if (kind === 'banking') {
     filteredActions = [];
-  } else if (filter === 'tribe') {
-    filteredActions = actions.filter(action => action.type === 'tribe' || action.type === 'tribeOpened');
-  } else if (filter === 'larp') {
-    filteredActions = actions.filter(action => action.type === 'larpHousePost');
-  } else if (filter === 'inhabitants') {
-    filteredActions = actions.filter(action => action.type === 'about');
-  } else if (filter === 'parliament') {
-    filteredActions = actions.filter(action => ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(action.type));
-  } else if (filter === 'courts') {
-    filteredActions = actions.filter(action => {
+  } else if (kind === 'tribe') {
+    filteredActions = scoped.filter(action => action.type === 'tribe' || action.type === 'tribeOpened');
+  } else if (kind === 'larp') {
+    filteredActions = scoped.filter(action => action.type === 'larpHousePost');
+  } else if (kind === 'inhabitants') {
+    filteredActions = scoped.filter(action => action.type === 'about');
+  } else if (kind === 'parliament') {
+    filteredActions = scoped.filter(action => ['parliamentCandidature','parliamentTerm','parliamentProposal','parliamentRevocation','parliamentLaw'].includes(action.type));
+  } else if (kind === 'courts') {
+    filteredActions = scoped.filter(action => {
       const t = String(action.type || '').toLowerCase();
       return t === 'courtscase' || t === 'courtsnomination' || t === 'courtsnominationvote';
     });
-  } else if (filter === 'task') {
-    filteredActions = actions.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment' || openedIn(action, 'task')));
-  } else if (filter === 'torrent') {
-    filteredActions = actions.filter(action => action.type === 'torrent' || openedIn(action, 'torrent'));
-  } else if (filter === 'file') {
-    filteredActions = actions.filter(action => action.type === 'file');
-  } else if (filter === 'chat') {
-    filteredActions = actions.filter(action => (action.type === 'chat' || action.type === 'chatThread') && action.type !== 'tombstone');
-  } else if (filter === 'wiki') {
-    filteredActions = actions.filter(action => action.type === 'wikiPage');
-  } else if (filter === 'emergency') {
-    filteredActions = actions.filter(action => action.type === 'emergency' || action.type === 'emergencyUpdate');
-  } else if (filter === 'mailing') {
-    filteredActions = actions.filter(action => action.type === 'mailingList');
-  } else if (filter === 'room') {
-    filteredActions = actions.filter(action => action.type === 'room');
-  } else if (filter === 'logistics') {
-    filteredActions = actions.filter(action => action.type === 'logisticsRoute');
-  } else if (filter === 'podcast') {
-    filteredActions = actions.filter(action => action.type === 'podcast' || action.type === 'podcastEpisode');
-  } else if (filter === 'campaign') {
-    filteredActions = actions.filter(action => action.type === 'campaign' || action.type === 'campaignUpdate');
-  } else if (filter === 'industry') {
-    filteredActions = actions.filter(action => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(action.type) && action.type !== 'tombstone');
+  } else if (kind === 'task') {
+    filteredActions = scoped.filter(action => action.type !== 'tombstone' && (action.type === 'task' || action.type === 'taskAssignment' || openedIn(action, 'task')));
+  } else if (kind === 'torrent') {
+    filteredActions = scoped.filter(action => action.type === 'torrent' || openedIn(action, 'torrent'));
+  } else if (kind === 'file') {
+    filteredActions = scoped.filter(action => action.type === 'file');
+  } else if (kind === 'chat') {
+    filteredActions = scoped.filter(action => (action.type === 'chat' || action.type === 'chatThread') && action.type !== 'tombstone');
+  } else if (kind === 'wiki') {
+    filteredActions = scoped.filter(action => action.type === 'wikiPage');
+  } else if (kind === 'emergency') {
+    filteredActions = scoped.filter(action => action.type === 'emergency' || action.type === 'emergencyUpdate');
+  } else if (kind === 'mailing') {
+    filteredActions = scoped.filter(action => action.type === 'mailingList');
+  } else if (kind === 'room') {
+    filteredActions = scoped.filter(action => action.type === 'room');
+  } else if (kind === 'logistics') {
+    filteredActions = scoped.filter(action => action.type === 'logisticsRoute');
+  } else if (kind === 'podcast') {
+    filteredActions = scoped.filter(action => action.type === 'podcast' || action.type === 'podcastEpisode');
+  } else if (kind === 'campaign') {
+    filteredActions = scoped.filter(action => action.type === 'campaign' || action.type === 'campaignUpdate');
+  } else if (kind === 'industry') {
+    filteredActions = scoped.filter(action => ['industry', 'industryBuild', 'industryBlueprint', 'industryAllocation'].includes(action.type) && action.type !== 'tombstone');
   } else {
-    filteredActions = actions.filter(action =>
-      ((action.type === filter && !(filter === 'post' && commentOf(action) && commentOf(action).rootType !== 'post'))
-        || filter === 'all'
-        || openedIn(action, filter)
-        || (filter === 'shop' && action.type === 'shopProduct')
-        || (filter === 'votes' && action.type === 'poll'))
+    filteredActions = scoped.filter(action =>
+      ((action.type === kind && !(kind === 'post' && commentOf(action) && commentOf(action).rootType !== 'post'))
+        || openedIn(action, kind)
+        || (kind === 'shop' && action.type === 'shopProduct')
+        || (kind === 'votes' && action.type === 'poll'))
       && action.type !== 'tombstone');
   }
-  if (!FILTER_META.has(filter) && filter !== 'post') {
-    const kinds = new Set(GROUP_SUBTYPES[filter] || [filter]);
+  if (kind !== 'all' && kind !== 'post') {
+    const kinds = new Set(GROUP_SUBTYPES[kind] || [kind]);
     const listed = new Set(filteredActions);
-    filteredActions = filteredActions.concat(actions.filter(a => !listed.has(a) && commentOf(a) && kinds.has(commentOf(a).rootType)));
+    filteredActions = filteredActions.concat(scoped.filter(a => !listed.has(a) && commentOf(a) && kinds.has(commentOf(a).rootType)));
   }
+  if (scope === 'top') filteredActions = filteredActions.slice().sort((x, y) => opinionTotal(y) - opinionTotal(x));
 
   const larpEarliest = new Map();
   for (const action of filteredActions) {
@@ -2207,71 +2221,6 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     });
   }
 
-  const MODULE_SUB_FILTERS = {
-    audio:   { url: '/audios',     filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
-    video:   { url: '/videos',     filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
-    image:   { url: '/images',     filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
-    document:{ url: '/documents',  filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
-    bookmark:{ url: '/bookmarks',  filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
-    torrent: { url: '/torrents',   filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
-    file: { url: '/files',   filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top', 'favorites'] },
-    map:     { url: '/maps',       filters: ['all', 'recent', 'mine', 'supported', 'replicated'] },
-    forum:   { url: '/forum',      filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'top'] },
-    event:   { url: '/events',     filters: ['all', 'recent', 'mine', 'supported', 'replicated'] },
-    task:    { url: '/tasks',      filters: ['all', 'mine', 'supported', 'replicated', 'assigned', 'open', 'closed'] },
-    votes:   { url: '/votes',      filters: ['all', 'recent', 'mine', 'supported', 'replicated', 'open', 'closed'] },
-    transfer:{ url: '/transfers',  filters: ['all', 'mine', 'supported', 'replicated', 'pending', 'unconfirmed', 'closed'] },
-    market:  { url: '/market',     filters: ['all', 'mine', 'supported', 'replicated', 'exchange', 'auctions', 'for sale', 'sold'] },
-    shop:    { url: '/shops',      filters: ['all', 'recent', 'mine', 'supported', 'replicated'] },
-    job:     { url: '/jobs',       filters: ['ALL', 'MINE', 'SUPPORTED', 'REPLICATED', 'REMOTE', 'PRESENCIAL', 'OPEN', 'CLOSED'] },
-    project: { url: '/projects',   filters: ['all', 'mine', 'supported', 'replicated', 'active', 'completed'] },
-    industry:{ url: '/industry',   filters: ['ALL', 'MINE', 'SUPPORTED', 'REPLICATED', 'ACTIVE', 'PAUSED', 'DISSOLVED', 'BLUEPRINTS', 'BUILDS', 'MEMBER', 'RULES'] },
-    chat:    { url: '/chats',      filters: ['all', 'mine', 'supported', 'replicated'] },
-    pad:     { url: '/pads',       filters: ['all', 'mine', 'supported', 'replicated'] },
-    calendar:{ url: '/calendars',  filters: ['all', 'mine', 'supported', 'replicated'] },
-    report:  { url: '/reports',    filters: ['all', 'recent', 'mine', 'supported', 'replicated'] },
-    curriculum:{ url: '/cv',       filters: ['view', 'edit'] }
-  };
-
-  const SUB_LABEL_PREFIX = { audio: 'audioFilter', video: 'videoFilter', image: 'imageFilter', document: 'documentFilter', bookmark: 'bookmarkFilter', torrent: 'torrentFilter', file: 'fileFilter', map: 'mapFilter', forum: 'forumFilter', event: 'eventFilter', task: 'taskFilter', votes: 'voteFilter', transfer: 'transfersFilter', market: 'marketFilter', shop: 'shopFilter', job: 'jobsFilter', project: 'projectFilter', industry: 'industryFilter', chat: 'chatFilter', pad: 'padFilter', calendar: 'calendarFilter', report: 'reportsFilter' };
-  const SUB_LABEL_KEY = { 'market:exchange': 'marketFilterItems' };
-  const subLabel = (f) => {
-    const m = String(f).toLowerCase();
-    if (RELATION_FILTERS.includes(m)) return relationFilterLabel(m);
-    const key = SUB_LABEL_KEY[`${filter}:${m}`] || `${SUB_LABEL_PREFIX[filter] || ''}${m.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('')}`;
-    return String(i18n[key] || f).toUpperCase();
-  };
-  const subItems = (() => {
-    const kinds = new Set(filter === 'votes' ? ['votes'] : (GROUP_SUBTYPES[filter] || [filter]));
-    return actions.filter(a2 => kinds.has(a2.type) && !commentOf(a2));
-  })();
-  const subHas = (f) => {
-    const m = String(f).toLowerCase();
-    const cOf = (a2) => a2.value?.content || a2.content || {};
-    const st = (a2) => String(cOf(a2).status || '').toUpperCase();
-    const favIndex = extras.favIndex instanceof Map ? extras.favIndex : null;
-    switch (m) {
-      case 'all': case 'view': case 'edit': case 'rules': return true;
-      case 'recent': return subItems.some(a2 => a2.ts && Date.now() - a2.ts < 86400000);
-      case 'mine': return subItems.some(a2 => a2.author === userId);
-      case 'supported': return subItems.some(a2 => a2.isSupported);
-      case 'replicated': return subItems.some(a2 => a2.isReplicated);
-      case 'top': return subItems.length > 0;
-      case 'favorites': return !!favIndex && subItems.some(a2 => [a2.id, a2.rootId, a2.key].some(k => k && favIndex.has(String(k))));
-      case 'assigned': return subItems.some(a2 => (Array.isArray(cOf(a2).assignees) ? cOf(a2).assignees : []).includes(userId));
-      case 'pending': return subItems.some(a2 => st(a2) === 'UNCONFIRMED' && cOf(a2).to === userId);
-      case 'unconfirmed': return subItems.some(a2 => st(a2) === 'UNCONFIRMED');
-      case 'exchange': return subItems.some(a2 => cOf(a2).item_type === 'exchange' && st(a2) === 'FOR SALE');
-      case 'auctions': return subItems.some(a2 => cOf(a2).item_type === 'auction' && st(a2) === 'FOR SALE');
-      case 'remote': case 'presencial': return subItems.some(a2 => String(cOf(a2).location || '').toUpperCase() === m.toUpperCase());
-      case 'blueprints': return subItems.some(a2 => a2.type === 'industryBlueprint');
-      case 'builds': return subItems.some(a2 => a2.type === 'industryBuild');
-      case 'member': return subItems.some(a2 => (Array.isArray(cOf(a2).members) ? cOf(a2).members : []).includes(userId) || cOf(a2).steward === userId);
-      default: return subItems.some(a2 => st(a2) === m.toUpperCase());
-    }
-  };
-  const sub = MODULE_SUB_FILTERS[filter];
-  const subFilters = sub ? sub.filters.filter(subHas) : [];
   const emptyAct = actions.length === 0 && !qs;
 
   let html = template(
@@ -2281,10 +2230,9 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
         h2(i18n.activityList),
         p(desc)
       ),
-      emptyAct ? null : div({ class: 'activity-filter-chips' },
-        (() => {
+      emptyAct ? null : (() => {
           const ORDER = [
-            'all', 'recent', 'mine', 'supported', 'replicated', 'top',
+            'all', 'recent', 'mine', 'supported', 'replicated', 'favorites', 'top',
             'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts', 'emergency',
             'votes', 'event', 'calendar', 'task', 'report', 'campaign',
             'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'logistics',
@@ -2294,32 +2242,26 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
           const byType = new Map(activityTypes.map(t => [t.type, t]));
           const placed = new Set(ORDER);
           const presentActionTypes = new Set(actions.map(a2 => a2.type));
-          const metaKeep = new Set(['all', 'mine', 'recent', 'top']);
+          const metaKeep = new Set(['all', 'mine', 'recent', 'replicated', 'favorites', 'top']);
           const hasContentFor = (type) =>
             metaKeep.has(type)
-            || (type === 'supported' ? (filter === type || actions.some(a2 => a2.isSupported))
-              : type === 'replicated' ? (filter === type || actions.some(a2 => a2.isReplicated))
+            || (type === 'supported' ? (scope === type || actions.some(a2 => a2.isSupported))
               : (GROUP_SUBTYPES[type] || [type]).some(t2 => presentActionTypes.has(t2)));
           const ordered = ORDER.map(type => byType.get(type)).filter(Boolean)
             .concat(activityTypes.filter(t => !placed.has(t.type)))
             .filter(({ type }) => hasContentFor(type));
-          return ordered.map(({ type, label }) =>
-            a({
-              href: `/activity?filter=${encodeURIComponent(type)}`,
-              class: filter === type ? 'activity-chip active' : 'activity-chip'
-            }, label)
-          );
-        })()
-      ),
+          const hrefFor = (s0, k0) => `/activity?${new URLSearchParams([['filter', s0], ...(k0 !== 'all' ? [['type', k0]] : [])]).toString()}`;
+          return renderFilterFold('activity-filters-more', ordered.map(({ type, label: text }) => ({ value: type, label: text, href: ACTIVITY_SCOPES.includes(type) ? hrefFor(type, kind) : hrefFor(scope, type === kind ? 'all' : type) })), kind === 'all' ? [scope] : [scope, kind]);
+        })(),
       emptyAct ? null : div({ class: 'activity-filter-chips activity-toolbar-row' },
+        emptyAct ? null : renderLayoutSwitch('activity-filter-chips', 'activity-chip'),
         renderModuleStats(filteredActions.length, [], null, { showInhabitants: true, showTribes: true }),
-        subFilters.length ? span({ class: 'activity-subchip-label' }, '\u21b3') : '',
-        subFilters.map(f => a({ href: `${sub.url}?filter=${encodeURIComponent(f)}`, class: 'activity-chip' }, subLabel(f))),
         form({ method: 'GET', action: '/activity', class: 'filter-box' },
-          input({ type: 'hidden', name: 'filter', value: filter }),
+          input({ type: 'hidden', name: 'filter', value: scope }),
+          kind !== 'all' ? input({ type: 'hidden', name: 'type', value: kind }) : null,
           input({ type: 'text', name: 'q', value: qs, placeholder: i18n.activitySearchPlaceholder, class: 'filter-box__input' }),
           div({ class: 'filter-box__controls' },
-            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+            renderSearchButton(i18n.searchButton)
           )
         )
       ),

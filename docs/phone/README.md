@@ -106,6 +106,14 @@ A room meets on a PUB that accepts its creator, chosen when it is opened, or on 
 
 ---
 
+## Playing while you browse
+
+Next to the player of an audio or a podcast episode, the headphones button hands it over to Oasis, which plays it on the speakers of the device where it runs, the same way it plays a call. Moving to another page does not cut it: a bar at the top of every page shows the title and the time, with **⇤** previous and **⇥** next (for songs from Audios), **«** and **»** to go back or forward 15 seconds, **‖** pause / **▸** resume and **×** close; each button shows its name when the pointer rests on it. When an audio from Audios ends, the next one of the list plays; when there is no next one, or for podcast episodes, the same one plays again until **CLOSE**. While it plays, the page reloads by itself when the track ends so the bar shows what comes next, except on pages with a text box, so nothing being written is lost.
+
+It needs `ffmpeg` and `ffprobe` (`OASIS_FFMPEG` and `OASIS_FFPROBE` point to other binaries) and PulseAudio, PipeWire or ALSA (`pacat`, `pw-play` or `aplay`). Without them the button is not shown. Only plain blobs that are already on the device can be followed; tribe media, which is encrypted, plays only in the page. On Android it stays hidden until the app provides a 48 kHz stereo output through `media_player.setOutputFactory`.
+
+---
+
 ## For PUB operators
 
 What a PUB relays for calls and rooms, and how to turn it off, is in the [deploy guide](../PUB/deploy.md) (step 19). Over Tor it works the same way: [TOR.md](../PUB/TOR.md).

@@ -23,7 +23,36 @@ const isVoteEditLocked = (v) => !!v && (
 );
 const lockedError = () => Object.assign(new Error('Vote locked'), { code: 'VOTE_LOCKED' });
 
-module.exports = ({ cooler, scheduler = null }) => {
+const VOTE_MAJORITIES = ['SIMPLE', 'TWO_THIRDS', 'THREE_QUARTERS', 'UNANIMITY'];
+const VOTE_QUORUMS = [0, 10, 25, 50, 75];
+const MAJORITY_SHARE = { SIMPLE: [1, 2], TWO_THIRDS: [2, 3], THREE_QUARTERS: [3, 4], UNANIMITY: [1, 1] };
+const voteMajorityOf = (m) => VOTE_MAJORITIES.includes(String(m || '').toUpperCase()) ? String(m).toUpperCase() : 'SIMPLE';
+const voteQuorumOf = (q) => { const n = parseInt(q, 10); return VOTE_QUORUMS.includes(n) ? n : 0; };
+const hasVoteRules = (v) => {
+  const options = Array.isArray(v && v.options) ? v.options : [];
+  const tags = Array.isArray(v && v.tags) ? v.tags : [];
+  return !!v && v.contentType !== 'votation' && options.includes('YES') && options.includes('NO') && !tags.some(t => INSTITUTIONAL_VOTE_TAG.test(String(t)) || t === 'decree');
+};
+const voteResultOf = (v) => {
+  const majority = voteMajorityOf(v && v.majority);
+  const quorum = voteQuorumOf(v && v.quorum);
+  const eligible = Math.max(0, parseInt(v && v.eligible, 10) || 0);
+  const counts = (v && v.votes) || {};
+  const yes = Math.max(0, Number(counts.YES) || 0);
+  const no = Math.max(0, Number(counts.NO) || 0);
+  const voters = Math.max(0, parseInt(v && v.totalVotes, 10) || Object.values(counts).reduce((s, n) => s + (Number(n) || 0), 0));
+  const required = Math.max(1, Math.ceil(eligible * quorum / 100));
+  const [num, den] = MAJORITY_SHARE[majority];
+  const quorumMet = voters >= required;
+  const majorityMet = yes > 0 && (majority === 'SIMPLE' ? yes * den > (yes + no) * num : yes * den >= (yes + no) * num);
+  return {
+    majority, quorum, eligible, voters, yes, no, required, quorumMet, majorityMet,
+    participation: eligible > 0 ? Math.min(100, Math.floor(voters * 100 / eligible)) : null,
+    outcome: !quorumMet ? 'NO_QUORUM' : majorityMet ? 'APPROVED' : 'REJECTED'
+  };
+};
+
+module.exports = ({ cooler, scheduler = null, countInhabitants = null }) => {
   let ssb;
   const openSsb = async () => {
     if (!ssb) ssb = await cooler.open();
@@ -186,8 +215,15 @@ module.exports = ({ cooler, scheduler = null }) => {
     return cur;
   }
 
+  const countEligible = async () => {
+    if (typeof countInhabitants !== 'function') return 0;
+    try { return Math.max(0, (Number(await countInhabitants()) || 0) - 1); } catch (_) { return 0; }
+  };
+  const rulesOf = async (rules, eligible) => ({ majority: voteMajorityOf(rules.majority), quorum: voteQuorumOf(rules.quorum), eligible: Number.isInteger(eligible) && eligible >= 0 ? eligible : await countEligible() });
+
   const scheduledVote = (entry) => ({
     id: entry.id, latestId: entry.id, question: entry.data.question, options: entry.data.options || [], deadline: entry.data.deadline,
+    majority: voteMajorityOf(entry.data.majority), quorum: voteQuorumOf(entry.data.quorum),
     createdBy: entry.author, status: 'OPEN', votes: (entry.data.options || []).reduce((acc, o) => { acc[o] = 0; return acc; }, {}), totalVotes: 0, voters: [],
     tags: entry.data.tags || [], createdAt: entry.createdAt, scheduledAt: entry.publishAt, opinions: {}, opinions_inhabitants: [], commentCount: 0
   });
@@ -195,7 +231,7 @@ module.exports = ({ cooler, scheduler = null }) => {
   return {
     MIN_VOTE_DAYS,
 
-    async scheduleVote(question, deadline, options = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'], tagsRaw = [], publishAt) {
+    async scheduleVote(question, deadline, options = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'], tagsRaw = [], publishAt, rules = {}) {
       if (!scheduler) throw new Error('Scheduling is not available');
       if (!String(question || '').trim()) throw new Error('Question is required');
       const parsedDeadline = moment(deadline, moment.ISO_8601, true);
@@ -206,10 +242,10 @@ module.exports = ({ cooler, scheduler = null }) => {
         throw err;
       }
       const tags = Array.isArray(tagsRaw) ? tagsRaw.filter(Boolean) : String(tagsRaw || '').split(',').map(t => t.trim()).filter(Boolean);
-      return scheduledVote(await scheduler.schedule(SCHEDULED_KIND, { question, deadline: parsedDeadline.toISOString(), options, tags }, publishAt));
+      return scheduledVote(await scheduler.schedule(SCHEDULED_KIND, { question, deadline: parsedDeadline.toISOString(), options, tags, majority: voteMajorityOf(rules.majority), quorum: voteQuorumOf(rules.quorum) }, publishAt));
     },
 
-    async updateScheduledVote(id, question, deadline, options, tagsRaw = [], publishAt) {
+    async updateScheduledVote(id, question, deadline, options, tagsRaw = [], publishAt, rules = {}) {
       if (!scheduler) throw new Error('Scheduling is not available');
       if (!String(question || '').trim()) throw new Error('Question is required');
       const parsedDeadline = moment(deadline, moment.ISO_8601, true);
@@ -222,7 +258,7 @@ module.exports = ({ cooler, scheduler = null }) => {
       const current = await scheduler.get(id);
       if (!current || current.kind !== SCHEDULED_KIND) throw new Error('Vote not found');
       const tags = Array.isArray(tagsRaw) ? tagsRaw.filter(Boolean) : String(tagsRaw || '').split(',').map(t => t.trim()).filter(Boolean);
-      return scheduledVote(await scheduler.update(id, { question, deadline: parsedDeadline.toISOString(), options: Array.isArray(options) && options.length ? options : current.data.options, tags }, publishAt));
+      return scheduledVote(await scheduler.update(id, { question, deadline: parsedDeadline.toISOString(), options: Array.isArray(options) && options.length ? options : current.data.options, tags, majority: voteMajorityOf(rules.majority !== undefined ? rules.majority : current.data.majority), quorum: voteQuorumOf(rules.quorum !== undefined ? rules.quorum : current.data.quorum) }, publishAt));
     },
 
     async listScheduledVotes() {
@@ -240,7 +276,7 @@ module.exports = ({ cooler, scheduler = null }) => {
       const published = [];
       for (const entry of await scheduler.due(SCHEDULED_KIND, now)) {
         try {
-          const res = await this.createVote(entry.data.question, entry.data.deadline, entry.data.options, entry.data.tags);
+          const res = await this.createVote(entry.data.question, entry.data.deadline, entry.data.options, entry.data.tags, { majority: entry.data.majority, quorum: entry.data.quorum });
           await scheduler.remove(entry.id);
           published.push({ res, entry });
         } catch (e) {
@@ -251,7 +287,7 @@ module.exports = ({ cooler, scheduler = null }) => {
       return published;
     },
 
-    async createVote(question, deadline, options = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'], tagsRaw = []) {
+    async createVote(question, deadline, options = ['YES', 'NO', 'ABSTENTION', 'CONFUSED', 'FOLLOW_MAJORITY', 'NOT_INTERESTED'], tagsRaw = [], rules = null) {
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const parsedDeadline = moment(deadline, moment.ISO_8601, true);
@@ -265,6 +301,7 @@ module.exports = ({ cooler, scheduler = null }) => {
       const tags = Array.isArray(tagsRaw)
         ? tagsRaw.filter(Boolean)
         : String(tagsRaw || '').split(',').map(t => t.trim()).filter(Boolean);
+      const ruleFields = rules ? await rulesOf(rules) : {};
 
       const content = {
         type: TYPE,
@@ -280,6 +317,7 @@ module.exports = ({ cooler, scheduler = null }) => {
         totalVotes: 0,
         voters: [],
         tags,
+        ...ruleFields,
         opinions: {},
         opinions_inhabitants: [],
         createdAt: new Date().toISOString(),
@@ -312,7 +350,7 @@ module.exports = ({ cooler, scheduler = null }) => {
     },
 
     async updateVoteById(id, payload) {
-      const { question, deadline, options, tags } = payload || {};
+      const { question, deadline, options, tags, majority, quorum } = payload || {};
       const ssbClient = await openSsb();
       const userId = ssbClient.id;
       const tipId = await resolveCurrentId(id);
@@ -370,6 +408,9 @@ module.exports = ({ cooler, scheduler = null }) => {
       } else if (typeof tags === 'string') {
         newTags = tags.split(',').map(t => t.trim()).filter(Boolean);
       }
+      const ruleFields = majority !== undefined || quorum !== undefined
+        ? await rulesOf({ majority: majority !== undefined ? majority : c.majority, quorum: quorum !== undefined ? quorum : c.quorum }, c.eligible)
+        : {};
 
       const updated = {
         ...c,
@@ -380,6 +421,7 @@ module.exports = ({ cooler, scheduler = null }) => {
         votes: newVotesMap,
         totalVotes: newTotalVotes,
         tags: newTags,
+        ...ruleFields,
         updatedAt: new Date().toISOString()
       };
 
@@ -469,3 +511,9 @@ module.exports = ({ cooler, scheduler = null }) => {
 };
 module.exports.isVoteLocked = isVoteLocked;
 module.exports.isVoteEditLocked = isVoteEditLocked;
+module.exports.VOTE_MAJORITIES = VOTE_MAJORITIES;
+module.exports.VOTE_QUORUMS = VOTE_QUORUMS;
+module.exports.voteMajorityOf = voteMajorityOf;
+module.exports.voteQuorumOf = voteQuorumOf;
+module.exports.hasVoteRules = hasVoteRules;
+module.exports.voteResultOf = voteResultOf;

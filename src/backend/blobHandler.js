@@ -1,6 +1,9 @@
 const pull = require('../server/node_modules/pull-stream');
 const FileType = require("../server/node_modules/file-type");
 const promisesFs = require('fs').promises;
+const { createReadStream, existsSync } = require('fs');
+const path = require('path');
+const ssbConfig = require('../server/ssb_config');
 const ssb = require("../client/gui");
 const config = require("../server/SSB_server").config;
 const cooler = ssb({ offline: config.offline });
@@ -390,6 +393,70 @@ const sendBlobBuffer = (ctx, buffer) => {
   }
 };
 
+const setBlobHeaders = (ctx, raw, mime) => {
+  const isSvg = mime === 'image/svg+xml';
+  const qName = ctx.query.name ? String(ctx.query.name).replace(/["\r\n\\]/g, '').trim() : '';
+  const safeRaw = String(raw).replace(/["\r\n\\]/g, '');
+  const wantsDownload = String(ctx.query.download || '') === '1';
+  const extByMime = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'video/mp4': 'mp4', 'video/webm': 'webm', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'application/pdf': 'pdf', 'application/x-bittorrent': 'torrent' };
+  const ext = extByMime[mime] || String(mime.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'bin';
+  const filename = qName || (mime === 'application/x-bittorrent' ? 'download.torrent' : (wantsDownload ? `oasis-${safeRaw.replace(/^&/, '').slice(0, 8)}.${ext}` : safeRaw));
+  const disposition = isSvg || wantsDownload ? 'attachment' : 'inline';
+  ctx.type = mime;
+  ctx.set('Content-Disposition', contentDisposition(disposition, filename));
+  ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
+};
+
+const blobFileOf = (blobId) => {
+  const m = /^&([A-Za-z0-9+/=]+)\.sha256$/.exec(blobId);
+  if (!m) return null;
+  const hex = Buffer.from(m[1], 'base64').toString('hex');
+  const dir = path.join(ssbConfig.path, 'blobs', 'sha256', hex.slice(0, 2));
+  const stored = path.join(dir, hex.slice(2));
+  const legacy = path.join(dir, hex);
+  return !existsSync(stored) && existsSync(legacy) ? legacy : stored;
+};
+
+const streamLocalMedia = async (ctx, raw, blobId) => {
+  const file = blobFileOf(blobId);
+  if (!file) return false;
+  let st;
+  try { st = await promisesFs.stat(file); } catch (_) { return false; }
+  if (!st.isFile() || !st.size) return false;
+  let head;
+  try {
+    const fh = await promisesFs.open(file, 'r');
+    try { head = Buffer.alloc(Math.min(65536, st.size)); await fh.read(head, 0, head.length, 0); } finally { await fh.close(); }
+  } catch (_) { return false; }
+  let mime = null;
+  try { const ft = await FileType.fromBuffer(head); mime = ft && ft.mime; } catch (_) {}
+  if (mime === 'application/ogg') mime = oggMime(head);
+  if (!mime || !/^(video|audio)\//.test(mime)) return false;
+  setBlobHeaders(ctx, raw, mime);
+  const size = st.size;
+  ctx.set('Accept-Ranges', 'bytes');
+  const range = ctx.headers.range;
+  if (range) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+    const start = match && match[1] ? parseInt(match[1], 10) : 0;
+    const end = match && match[2] ? Math.min(parseInt(match[2], 10), size - 1) : size - 1;
+    if (!match || Number.isNaN(start) || Number.isNaN(end) || start > end || start >= size) {
+      ctx.status = 416;
+      ctx.set('Content-Range', `bytes */${size}`);
+      return true;
+    }
+    ctx.status = 206;
+    ctx.set('Content-Range', `bytes ${start}-${end}/${size}`);
+    ctx.set('Content-Length', String(end - start + 1));
+    ctx.body = createReadStream(file, { start, end });
+    return true;
+  }
+  ctx.status = 200;
+  ctx.set('Content-Length', String(size));
+  ctx.body = createReadStream(file);
+  return true;
+};
+
 const serveBlob = async function (ctx) {
   const encodedParam = (ctx.params.id || ctx.params.blobId || '').trim();
   const raw = decodeURIComponent(encodedParam);
@@ -401,6 +468,8 @@ const serveBlob = async function (ctx) {
   }
 
   const blobId = raw.startsWith('&') ? raw : `&${raw}`;
+
+  if (await streamLocalMedia(ctx, raw, blobId)) return;
 
   const ssbClient = await cooler.open();
 
@@ -451,20 +520,10 @@ const serveBlob = async function (ctx) {
 
   if (mime === 'application/ogg') mime = oggMime(buffer);
 
-  const isSvg = mime === 'image/svg+xml';
-  const qName = ctx.query.name ? String(ctx.query.name).replace(/["\r\n\\]/g, '').trim() : '';
-  const safeRaw = String(raw).replace(/["\r\n\\]/g, '');
-  const wantsDownload = String(ctx.query.download || '') === '1';
-  const extByMime = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'video/mp4': 'mp4', 'video/webm': 'webm', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'application/pdf': 'pdf', 'application/x-bittorrent': 'torrent' };
-  const ext = extByMime[mime] || String(mime.split('/')[1] || 'bin').replace(/[^a-z0-9]/gi, '').slice(0, 8) || 'bin';
-  const filename = qName || (mime === 'application/x-bittorrent' ? 'download.torrent' : (wantsDownload ? `oasis-${safeRaw.replace(/^&/, '').slice(0, 8)}.${ext}` : safeRaw));
-  const disposition = isSvg || wantsDownload ? 'attachment' : 'inline';
-  ctx.type = mime;
-  ctx.set('Content-Disposition', contentDisposition(disposition, filename));
-  ctx.set('Cache-Control', 'public, max-age=31536000, immutable');
+  setBlobHeaders(ctx, raw, mime);
 
   sendBlobBuffer(ctx, buffer);
 };
 
-module.exports = { handleBlobUpload, handleBlobUploads, serveBlob, sendBlobBuffer, contentDisposition, oggMime, FileTooLargeError, WrongFileTypeError, stripImageMetadata, stripFileMetadata };
+module.exports = { handleBlobUpload, handleBlobUploads, serveBlob, sendBlobBuffer, contentDisposition, oggMime, blobFileOf, FileTooLargeError, WrongFileTypeError, stripImageMetadata, stripFileMetadata };
 

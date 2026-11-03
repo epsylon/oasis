@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderCountChip } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -31,6 +31,7 @@ const FILTERS = [
   { key: "MINE", i18n: "jobsFilterMine", title: "jobsMineTitle" },
   { key: "SUPPORTED", i18n: "filterSupported", title: "jobsAllTitle" },
   { key: "REPLICATED", i18n: "filterReplicated", title: "jobsAllTitle" },
+  { key: "FAVORITES", i18n: "favoritesTitle", title: "jobsAllTitle" },
   { key: "TOP", i18n: "jobsFilterTop", title: "jobsTopTitle" },
   { key: "APPLIED", i18n: "jobsFilterApplied", title: "jobsAppliedTitle" },
   { key: "REMOTE", i18n: "jobsFilterRemote", title: "jobsRemoteTitle" },
@@ -206,7 +207,7 @@ const jobChipFor = (filter, censusJ, params = {}) => (x) => {
   if (m === filter) return true;
   if (m === "TOP") return censusJ.length > 0;
   if (m === "MINE") return censusJ.some(j => String(j.author) === String(userId));
-  if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusJ);
+  if (m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusJ);
   if (m === "RECENT") return censusJ.length > 0;
   if (m === "APPLIED") return censusJ.some(j => safeArr(j.subscribers).includes(userId));
   if (m === "REMOTE") return censusJ.some(j => String(j.location || "").toLowerCase() === "remote");
@@ -515,7 +516,10 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
               )
             ),
             br(),
-            renderCVList(paged(jobsOrCVs))
+            (() => {
+              const shownCVs = paged(jobsOrCVs)
+              return safeArr(shownCVs).length ? renderLayoutItems(() => renderCVList(shownCVs)) : renderCVList(shownCVs)
+            })()
           )
         : filter === "CREATE" || filter === "EDIT"
           ? (() => {
@@ -534,6 +538,7 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
           : section(
               emptyMod ? null : div(
                 { class: "jobs-search activity-filter-chips activity-toolbar-row" },
+                  emptyMod || filter === "CREATE" || filter === "EDIT" ? null : renderLayoutSwitch("filters"),
                   renderModuleStatsBy(jobsOrCVs, j => String(j.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.jobsFilterOpen }, { value: 'CLOSED', label: i18n.jobsFilterClosed }]),
                 form(
                   { method: "GET", action: "/jobs", class: "filter-box" },
@@ -547,10 +552,14 @@ exports.jobsView = async (jobsOrCVs, filter = "ALL", params = {}) => {
                     option({ value: "salary", ...(sort === "salary" ? { selected: true } : {})}, i18n.jobsSortSalary),
                     option({ value: "subscribers", ...(sort === "subscribers" ? { selected: true } : {})}, i18n.jobsSortSubscribers)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.jobsSearchButton)
+                  renderSearchButton(i18n.jobsSearchButton)
                 )
               ),
-              div({ class: "jobs-list" }, renderJobList(paged(jobsOrCVs), filter, { ...params, search, minSalary, maxSalary, sort }))
+              (() => {
+                const shownJobs = paged(jobsOrCVs)
+                const listParams = { ...params, search, minSalary, maxSalary, sort }
+                return div({ class: "jobs-list" }, safeArr(shownJobs).length ? renderLayoutItems(() => renderJobList(shownJobs, filter, listParams)) : renderJobList(shownJobs, filter, listParams))
+              })()
             )
     )
   )

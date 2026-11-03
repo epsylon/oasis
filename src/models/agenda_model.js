@@ -128,7 +128,7 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
   };
 
   return {
-    async listAgenda(filter = 'all') {
+    async listAgenda(filter = 'all', type = '') {
       const agendaConfig = readAgendaConfig();
       const discardedItems = agendaConfig.discardedItems || [];
       const removedItems = agendaConfig.removedItems || [];
@@ -271,51 +271,37 @@ module.exports = ({ cooler, campaignsModel = null, logisticsModel = null, calend
         ...calendarDates
       ].filter(i => !removedItems.includes(i.id));
 
-      let filtered;
-      if (filter === 'discarded') {
-        filtered = combined.filter(i => discardedItems.includes(i.id));
-      } else {
-        filtered = combined.filter(i => !discardedItems.includes(i.id));
-        if (filter === 'tasks') filtered = filtered.filter(i => i.type === 'task');
-        else if (filter === 'events') filtered = filtered.filter(i => i.type === 'event');
-        else if (filter === 'transfers') filtered = filtered.filter(i => i.type === 'transfer');
-        else if (filter === 'tribes') filtered = filtered.filter(i => i.type === 'tribe');
-        else if (filter === 'market') filtered = filtered.filter(i => i.type === 'market');
-        else if (filter === 'reports') filtered = filtered.filter(i => i.type === 'report');
-        else if (filter === 'open') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'OPEN');
-        else if (filter === 'closed') filtered = filtered.filter(i => String(i.status).toUpperCase() === 'CLOSED');
-        else if (filter === 'jobs') filtered = filtered.filter(i => i.type === 'job');
-        else if (filter === 'projects') filtered = filtered.filter(i => i.type === 'project');
-        else if (filter === 'industry') filtered = filtered.filter(i => i.type === 'industry');
-        else if (filter === 'housing') filtered = filtered.filter(i => i.type === 'housing');
-        else if (filter === 'school') filtered = filtered.filter(i => i.type === 'schoolCourse');
-        else if (filter === 'campaigns') filtered = filtered.filter(i => i.type === 'campaign');
-        else if (filter === 'logistics') filtered = filtered.filter(i => i.type === 'logisticsRoute');
-        else if (filter === 'calendars') filtered = filtered.filter(i => i.type === 'calendar' || i.type === 'calendarDate');
-        else if (filter === 'today') {
-          const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-          const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999);
-          filtered = filtered.filter(i => {
-            const d = new Date(i.date || i.startTime || i.deadline || 0).getTime();
-            return d >= startOfDay.getTime() && d <= endOfDay.getTime();
-          });
-        }
-        else if (filter === 'upcoming') {
-          const now = Date.now();
-          filtered = filtered.filter(i => {
-            const d = new Date(i.date || i.startTime || i.deadline || 0).getTime();
-            return d > now;
-          });
-        }
-        else if (filter === 'overdue') {
-          const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
-          filtered = filtered.filter(i => {
-            const d = new Date(i.date || i.startTime || i.deadline || 0).getTime();
-            const open = String(i.status || 'OPEN').toUpperCase() === 'OPEN';
-            return d > 0 && d < startOfDay.getTime() && open;
-          });
-        }
-      }
+      const AGENDA_KINDS = {
+        tasks: i => i.type === 'task',
+        events: i => i.type === 'event',
+        transfers: i => i.type === 'transfer',
+        tribes: i => i.type === 'tribe',
+        market: i => i.type === 'market',
+        reports: i => i.type === 'report',
+        jobs: i => i.type === 'job',
+        projects: i => i.type === 'project',
+        industry: i => i.type === 'industry',
+        housing: i => i.type === 'housing',
+        school: i => i.type === 'schoolCourse',
+        campaigns: i => i.type === 'campaign',
+        logistics: i => i.type === 'logisticsRoute',
+        calendars: i => i.type === 'calendar' || i.type === 'calendarDate'
+      };
+      const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(); dayEnd.setHours(23, 59, 59, 999);
+      const dateOf = (i) => new Date(i.date || i.startTime || i.deadline || 0).getTime();
+      const AGENDA_SCOPES = {
+        open: i => String(i.status).toUpperCase() === 'OPEN',
+        closed: i => String(i.status).toUpperCase() === 'CLOSED',
+        today: i => dateOf(i) >= dayStart.getTime() && dateOf(i) <= dayEnd.getTime(),
+        upcoming: i => dateOf(i) > Date.now(),
+        overdue: i => dateOf(i) > 0 && dateOf(i) < dayStart.getTime() && String(i.status || 'OPEN').toUpperCase() === 'OPEN'
+      };
+      const scope = AGENDA_KINDS[filter] ? 'all' : filter;
+      const kind = AGENDA_KINDS[filter] ? filter : (AGENDA_KINDS[type] ? type : '');
+      let filtered = combined.filter(i => scope === 'discarded' ? discardedItems.includes(i.id) : !discardedItems.includes(i.id));
+      if (AGENDA_SCOPES[scope]) filtered = filtered.filter(AGENDA_SCOPES[scope]);
+      if (kind) filtered = filtered.filter(AGENDA_KINDS[kind]);
 
       filtered.sort((a, b) => {
         const dateA = a.date || a.startTime || a.deadline || a.createdAt || 0;

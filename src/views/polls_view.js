@@ -1,10 +1,10 @@
-const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td, select, option } = require("../server/node_modules/hyperaxe");
 const { renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, hereAt, renderCountChip } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, hereAt, renderCountChip, userLink, renderLayoutSwitch, renderLayoutItems, renderSearchButton } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
-const { MAX_OPTIONS, MAX_OPTION_LENGTH } = require("../models/polls_model_limits");
+const { MAX_OPTIONS, MAX_OPTION_LENGTH, POLL_KINDS, pollKindOf } = require("../models/polls_model_limits");
 
 const userId = config.keys.id;
 
@@ -14,10 +14,14 @@ const FILTERS = [
   { key: "MINE", i18n: "pollFilterMine" },
   { key: "SUPPORTED", i18n: "filterSupported" },
   { key: "REPLICATED", i18n: "filterReplicated" },
+  { key: "FAVORITES", i18n: "favoritesTitle" },
   { key: "TOP", i18n: "pollFilterTop" },
   { key: "VOTED", i18n: "pollFilterVoted" },
   { key: "OPEN", i18n: "pollFilterOpen" },
-  { key: "CLOSED", i18n: "pollFilterClosed" }
+  { key: "CLOSED", i18n: "pollFilterClosed" },
+  { key: "ELECTION", i18n: "pollTypeElection" },
+  { key: "SURVEY", i18n: "pollTypeSurvey" },
+  { key: "COLLABORATION", i18n: "pollTypeCollaboration" }
 ];
 
 const safeArr = (v) => (Array.isArray(v) ? v : []);
@@ -34,8 +38,24 @@ const letterOf = (i) => {
 };
 const pctStep = (n, total) => Math.round(pct(n, total) / 5) * 5;
 
+const kindOf = (poll) => pollKindOf(poll && poll.pollType, !!(poll && poll.multiple));
+const isRanking = (poll) => kindOf(poll) !== "election";
+const pollTypeLabel = (poll) => {
+  const k = kindOf(poll);
+  return k === "survey" ? i18n.pollTypeSurvey : k === "collaboration" ? i18n.pollTypeCollaboration : i18n.pollTypeElection;
+};
+const POLL_KIND_ICONS = { election: "♛", survey: "☰", collaboration: "🤝" };
+const renderPollTypeChip = (poll) => renderStateChip("whole", POLL_KIND_ICONS[kindOf(poll)], String(pollTypeLabel(poll)).toUpperCase(), "kind");
+
+const resultOrder = (poll) => {
+  const counts = poll.counts || {};
+  const rows = (Array.isArray(poll.options) ? poll.options : []).map((opt, i) => ({ opt, i }));
+  return isRanking(poll) ? rows.sort((x, y) => (counts[y.opt] || 0) - (counts[x.opt] || 0) || x.i - y.i) : rows;
+};
+
 const outcomeOf = (poll) => {
   if (!poll.totalVoters) return i18n.pollNoVotesYet;
+  if (isRanking(poll)) return null;
   const max = Math.max(...poll.options.map(o => poll.counts[o] || 0));
   if (!max) return i18n.pollNoVotesYet;
   const winners = poll.options
@@ -54,13 +74,13 @@ const renderDeadlineChip = (poll) => poll.deadline
   : null;
 
 const renderModeChips = (poll) => [
-  poll.anonymous ? renderStateChip("whole", "◈", i18n.pollAnonymous, "level") : null,
-  poll.multiple ? renderStateChip("whole", "☰", i18n.pollMultiple, "level") : null
+  renderPollTypeChip(poll),
+  poll.anonymous ? renderStateChip("whole", "◈", i18n.pollAnonymous, "level") : null
 ].filter(Boolean);
 
 const renderResults = (poll) =>
   table({ class: "poll-results" },
-    ...poll.options.map((opt, i) =>
+    ...resultOrder(poll).map(({ opt, i }) =>
       tr({ class: poll.myChoices.includes(opt) ? "poll-result-row poll-result-mine" : "poll-result-row" },
         td({ class: "poll-result-option" }, `${letterOf(i)})`),
         td({ class: "poll-result-bar" },
@@ -73,6 +93,22 @@ const renderResults = (poll) =>
       )
     )
   );
+
+const renderChosenBy = (poll) => {
+  const byOption = poll.votersByOption || {};
+  if (kindOf(poll) !== "collaboration" || poll.anonymous) return null;
+  const rows = resultOrder(poll).filter(({ opt }) => Array.isArray(byOption[opt]) && byOption[opt].length);
+  if (!rows.length) return null;
+  return div({ class: "job-section" },
+    h2({ class: "job-section-title" }, i18n.pollChosenBy),
+    ...rows.map(({ opt, i }) =>
+      div({ class: "poll-chosen-row" },
+        span({ class: "poll-chosen-option" }, `${letterOf(i)}) ${opt}`),
+        div({ class: "poll-chosen-users" }, ...byOption[opt].map(id => userLink(id)))
+      )
+    )
+  );
+};
 
 const canVoteIn = (poll) => poll.status !== "CLOSED" && !poll.hasVoted && !poll.undecryptable && !poll.scheduledAt && !poll.readOnly;
 const renderVotedChip = (poll) => poll && poll.hasVoted && !poll.readOnly ? renderStateChip("transport", "☑", String(i18n.pollVotedChip).toUpperCase(), "mine") : null;
@@ -116,7 +152,8 @@ const renderPollInline = (poll, returnTo, idPrefix = "pi", { showCounts = true, 
   const mine = Array.isArray(poll.myChoices) ? poll.myChoices : [];
   const canVote = canVoteIn(poll) && options.length > 0;
   const inputType = poll.multiple ? "checkbox" : "radio";
-  const rows = options.map((opt, i) => {
+  const order = showCounts && !canVote ? resultOrder({ ...poll, options, counts }) : options.map((opt, i) => ({ opt, i }));
+  const rows = order.map(({ opt, i }) => {
     const id = `${idPrefix}-${i}-${poll.id}`;
     return div({ class: mine.includes(opt) ? "poll-choice poll-choice-mine" : "poll-choice" },
       label({ class: "poll-choice-head", ...(canVote ? { for: id } : {}) },
@@ -131,11 +168,12 @@ const renderPollInline = (poll, returnTo, idPrefix = "pi", { showCounts = true, 
         : null
     );
   });
-  const votersField = div({ class: "card-field poll-inline-voters" },
+  const after = Array.isArray(afterVoters) ? afterVoters.filter(Boolean) : [];
+  const votersField = div({ class: after.length ? "card-field poll-inline-voters" : "card-field poll-inline-voters card-content" },
     span({ class: "card-label" }, `${i18n.pollVoters}:`),
     span({ class: "card-value" }, String(total))
   );
-  const voters = Array.isArray(afterVoters) && afterVoters.length ? div({ class: "poll-inline-meta" }, votersField, ...afterVoters) : votersField;
+  const voters = after.length ? div({ class: "poll-inline-meta card-content" }, votersField, ...after) : votersField;
   return div({ class: "poll-inline" },
     canVote
       ? form({ method: "POST", action: action || `/polls/vote/${encodeURIComponent(poll.id)}`, class: "poll-inline-form" },
@@ -157,11 +195,15 @@ const renderPollInline = (poll, returnTo, idPrefix = "pi", { showCounts = true, 
   );
 };
 
-const renderPollResultsField = (poll) =>
-  div({ class: "card-field poll-inline-voters" },
-    span({ class: "card-label" }, `${i18n.voteResults}:`),
-    span({ class: "card-value vote-outcome vote-outcome-none" }, outcomeOf(poll))
-  );
+const renderPollResultsField = (poll) => {
+  const outcome = outcomeOf(poll);
+  return outcome
+    ? div({ class: "card-field poll-inline-voters" },
+        span({ class: "card-label" }, `${i18n.voteResults}:`),
+        span({ class: "card-value vote-outcome vote-outcome-none" }, outcome)
+      )
+    : null;
+};
 
 const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls", cardReturnTo = null) => {
   const href = `${basePath || "/polls"}/${encodeURIComponent(poll.id)}`;
@@ -185,16 +227,31 @@ const renderPollCard = (poll, filter, spreadInfo, basePath = "/polls", cardRetur
   );
 };
 
+const pollTypeOption = (kind) =>
+  kind === "survey" ? `${i18n.pollTypeSurvey}: ${i18n.pollTypeSurveyInfo}`
+    : kind === "collaboration" ? `${i18n.pollTypeCollaboration}: ${i18n.pollTypeCollaborationInfo}`
+      : `${i18n.pollTypeElection}: ${i18n.pollTypeElectionInfo}`;
+
+const renderPollTypeSelect = (selected = "election") =>
+  select({ name: "pollType", required: true },
+    ...POLL_KINDS.map(k => option({ value: k, ...(k === selected ? { selected: true } : {}) }, pollTypeOption(k)))
+  );
+
 const renderCreateForm = (poll = null, params = {}) => {
   const isEdit = !!poll;
   const action = isEdit && poll.scheduledAt ? `/polls/scheduled/update/${encodeURIComponent(poll.id)}` : isEdit ? `/polls/update/${encodeURIComponent(poll.id)}` : "/polls/create";
   const lock = isEdit ? renderMediaLockNote(poll) : null;
   const ro = lock ? { readonly: true } : {};
+  const selectedType = pollKindOf(isEdit ? poll.pollType : params.pollType, isEdit && poll.multiple === true);
   return section(
     params.spreadWarning || null,
     div({ class: "div-center audio-form" },
       h2(isEdit ? i18n.pollEditTitle : i18n.pollCreateTitle),
       form({ method: "POST", action },
+        label(i18n.pollType),
+        br(),
+        renderPollTypeSelect(selectedType),
+        br(), br(),
         label(i18n.pollQuestion),
         br(),
         input({ type: "text", name: "question", required: true, maxlength: "300", value: isEdit ? poll.question : "", placeholder: i18n.pollQuestionPlaceholder, ...ro }),
@@ -215,13 +272,6 @@ const renderCreateForm = (poll = null, params = {}) => {
           label(
             input({ type: "checkbox", name: "anonymous", value: "1", ...(isEdit && poll.anonymous ? { checked: true } : {}) }),
             " ", i18n.pollAnonymousLabel
-          )
-        ),
-        div({ class: "poll-switch" },
-          input({ type: "hidden", name: "multiple", value: "0" }),
-          label(
-            input({ type: "checkbox", name: "multiple", value: "1", ...(isEdit && poll.multiple ? { checked: true } : {}) }),
-            " ", i18n.pollMultipleLabel
           )
         ),
         br(),
@@ -261,10 +311,11 @@ const renderFilterBar = (filter, q, showSearch = true, items = null, censusList 
     if (m === filter) return true;
     if (m === "TOP") return censusPl.length > 0;
     if (m === "MINE") return censusPl.some(pl => String(pl.author || pl.createdBy) === String(userId));
-    if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusPl);
+    if (m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusPl);
     if (m === "RECENT") return censusPl.length > 0;
     if (m === "VOTED") return censusPl.some(pl => pl.hasVoted || safeArr(pl.myChoices).length > 0);
     if (m === "OPEN" || m === "CLOSED") return censusPl.some(pl => String(pl.status || "OPEN").toUpperCase() === m);
+    if (POLL_KINDS.includes(m.toLowerCase())) return censusPl.some(pl => kindOf(pl) === m.toLowerCase());
     return true;
   };
   return section(
@@ -277,12 +328,13 @@ const renderFilterBar = (filter, q, showSearch = true, items = null, censusList 
       )
     ),
     showSearch && !emptyMod ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
+      showSearch && !emptyMod ? renderLayoutSwitch("filters") : null,
       items ? renderModuleStatsBy(items, pl => String(pl.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.pollStatusOpen }, { value: 'CLOSED', label: i18n.pollStatusClosed }]) : null,
       form({ method: "GET", action: "/polls", class: "filter-box" },
         input({ type: "hidden", name: "filter", value: filter }),
         input({ type: "text", name: "q", value: q || "", placeholder: i18n.pollSearchPlaceholder, class: "filter-box__input" }),
         div({ class: "filter-box__controls" },
-          button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+          renderSearchButton(i18n.searchButton)
         )
       )
     ) : null
@@ -302,13 +354,14 @@ exports.pollsView = async (polls = [], filter = "ALL", params = {}) => {
       renderCreateForm(editing, params)
     );
   }
+  const pagePolls = polls.length ? paged(polls) : [];
   return template(
     i18n.pollsTitle,
     section(div({ class: "tags-header module-header-line" }, h2(i18n.pollsTitle), p(i18n.pollsDescription))),
     renderFilterBar(mode, params.q, true, polls, params.censusList),
     section(
       polls.length
-        ? div({ class: "jobs-grid" }, ...paged(polls).map(pl => renderPollCard(pl, mode, spreadMap.get(pl.id), "/polls", `/polls?filter=${encodeURIComponent(mode)}${params.q ? `&q=${encodeURIComponent(params.q)}` : ""}`)))
+        ? renderLayoutItems(() => div({ class: "jobs-grid" }, ...pagePolls.map(pl => renderPollCard(pl, mode, spreadMap.get(pl.id), "/polls", `/polls?filter=${encodeURIComponent(mode)}${params.q ? `&q=${encodeURIComponent(params.q)}` : ""}`))))
         : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.pollsNoItems))
     )
   );
@@ -348,6 +401,7 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
     statusRow
   );
 
+  const outcome = outcomeOf(poll);
   const pollMain = div({ class: "tribe-main" },
     div({ class: "job-section" },
       h2({ class: "job-section-title" }, i18n.pollParticipation),
@@ -357,11 +411,14 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
     ),
     div({ class: "job-section" },
       h2({ class: "job-section-title" }, i18n.voteResults),
-      p({ class: "poll-outcome-line" },
-        span({ class: "vote-outcome vote-outcome-none" }, outcomeOf(poll))
-      ),
+      outcome
+        ? p({ class: "poll-outcome-line" },
+            span({ class: "vote-outcome vote-outcome-none" }, outcome)
+          )
+        : null,
       renderResults(poll)
     ),
+    renderChosenBy(poll),
     div({ class: "job-section" },
       h2({ class: "job-section-title" }, `${i18n.pollChoicesLabel}:`),
       renderBallot(poll, href, basePath) || renderOptionsList(poll)
@@ -388,3 +445,6 @@ exports.renderBallot = renderBallot;
 exports.outcomeOf = outcomeOf;
 exports.letterOf = letterOf;
 exports.renderPollStatusChip = renderStatusChip;
+exports.renderPollTypeChip = renderPollTypeChip;
+exports.pollTypeLabel = pollTypeLabel;
+exports.renderPollTypeSelect = renderPollTypeSelect;

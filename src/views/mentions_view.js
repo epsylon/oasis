@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, span } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderCardTop, renderShareButton, renderCardMetaRow, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, renderSupportButton, hereAt, renderStateChip, asChip } = require("./main_views");
+const { template, i18n, renderCardTop, renderShareButton, renderCardMetaRow, renderModuleStats, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, paged, renderSupportButton, hereAt, renderStateChip, asChip, renderSearchButton } = require("./main_views");
 const { getViewDetailsAction, commentHref, commentLabel, rootTypeLabel, contentChipsOf, scopeChipOf } = require("./activity_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -23,7 +23,7 @@ const renderMentionCard = (item, readKeys, params = {}) => {
     renderCardTop(item.id, href, {
       date: item.createdAt,
       chips: [div({ class: 'card-chips-row' },
-        renderStateChip('whole', '▣', item.comment ? String(commentLabel(item.comment)).toUpperCase() : typeLabel(item.type), 'module'),
+        renderStateChip('whole', null, item.comment ? String(commentLabel(item.comment)).toUpperCase() : typeLabel(item.type), 'module'),
         ...(item.comment ? [scopeChipOf('comment', item.content, item)] : contentChipsOf(item.type, item.content, { action: { id: item.id, key: item.key, scope: item.scope } })),
         read ? null : asChip('mine', span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-icon' }, '●'), span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip)))
       )],
@@ -85,7 +85,7 @@ exports.mentionsView = async (items = [], filter = 'ALL', params = {}) => {
           input({ type: "hidden", name: "filter", value: filter }),
           input({ type: "text", name: "q", value: q, placeholder: i18n.mentionsSearchPlaceholder, class: "filter-box__input" }),
           div({ class: "filter-box__controls" },
-            button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+            renderSearchButton(i18n.searchButton)
           )
         )
       )

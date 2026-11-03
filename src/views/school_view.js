@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
@@ -91,7 +91,7 @@ const renderCourseChips = (course, subscription = null) =>
 const renderCourseCard = (course, filter, params = {}) => {
   const url = `/school/course/${encodeURIComponent(course.id)}`
   const isOwn = String(course.author) === String(userId)
-  return div({ class: "tribe-card" },
+  return div({ class: "tribe-card" + (isOwn ? " own-content" : "") },
     renderCardTop(course.id, url, {
       date: course.createdAt,
       chips: [renderCourseChips(course, params.subscriptions && (String(course.author) === String(userId) || safeArr(course.students).includes(userId)) ? { in: params.subscriptions.mine.has(course.rootId || course.id) || String(course.author) === String(userId) } : null)],
@@ -184,6 +184,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
   const emptyMod = moduleIsEmpty(list, filter || "all", "all", q)
   const title = i18n.schoolTitle
   const isForm = filter === "create" || filter === "edit"
+  const pageCourses = !isForm && list.length ? paged(list) : []
 
   return template(
     title,
@@ -192,6 +193,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
     !isForm && !emptyMod
       ? section(
           div({ class: "filters activity-filter-chips activity-toolbar-row" },
+            isForm || emptyMod ? null : renderLayoutSwitch("tribe-mode-buttons"),
             renderModuleStatsBy(list, c => String(c.status || 'ONGOING').toUpperCase(), [{ value: 'ONGOING', label: i18n.schoolOngoing }, { value: 'CLOSED', label: i18n.schoolClosed }]),
             form({ method: "GET", action: "/school", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
@@ -202,7 +204,7 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
                   option({ value: "students", ...(sort === "students" ? { selected: true } : {}) }, i18n.documentSortTop),
                   option({ value: "title", ...(sort === "title" ? { selected: true } : {}) }, i18n.schoolSortTitle)
                 ),
-                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+                renderSearchButton(i18n.searchButton)
               )
             )
           )
@@ -211,11 +213,9 @@ exports.schoolView = async (courses, filter, courseToEdit = null, params = {}) =
     section(
       isForm
         ? renderCourseForm(filter, filter === "edit" ? (courseToEdit || {}) : (params.draft || {}), params)
-        : div({ class: "tribe-grid" },
-            list.length
-              ? paged(list).map(course => renderCourseCard(course, filter, params))
-              : p(i18n.schoolNoCourses)
-          )
+        : list.length
+          ? renderLayoutItems(() => div({ class: "tribe-grid" }, pageCourses.map(course => renderCourseCard(course, filter, params))))
+          : div({ class: "tribe-grid" }, p(i18n.schoolNoCourses))
     )
   )
 }

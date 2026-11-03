@@ -5,7 +5,7 @@ const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/r
 
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
@@ -463,25 +463,30 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
     if (mode === "mine") return censusMp.some((x) => String(x.author) === String(userId));
     if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusMp);
     if (mode === "recent") return censusMp.length > 0;
-    if (mode === "favorites") return censusMp.some((x) => x.isFavorite);
+    if (mode === "favorites") return censusMp.length > 0;
     return true;
   };
+  const isForm = filter === "create" || filter === "edit";
+  const pageMaps = isForm ? [] : paged(list);
 
   return template(title,
     section(
       div({ class: "tags-header module-header-line" }, h2(title), p(i18n.mapDescription)),
       renderFilters(filter, q, emptyMod, mapsChip)),
     section(
-      filter === "create" || filter === "edit"
+      isForm
         ? renderMapForm(filter, mapId, mapToEdit, { ...params, filter })
         : section(
             emptyMod ? null : div({ class: "maps-search activity-filter-chips activity-toolbar-row" },
+              renderLayoutSwitch("filters"),
               renderModuleStats(list.length),
               form({ method: "GET", action: "/maps", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.mapSearchPlaceholder, class: "filter-box__input" }),
-                div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.mapSearchButton)))),
-            div({ class: "jobs-grid" }, renderMapList(paged(list), filter, { q, spreadMap: params.spreadMap })))));
+                div({ class: "filter-box__controls" }, renderSearchButton(i18n.mapSearchButton)))),
+            pageMaps.length
+              ? renderLayoutItems(() => div({ class: "jobs-grid" }, renderMapList(pageMaps, filter, { q, spreadMap: params.spreadMap })))
+              : div({ class: "jobs-grid" }, renderMapList(pageMaps, filter, { q, spreadMap: params.spreadMap })))));
 };
 
 exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
@@ -575,7 +580,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
   const placeSearch = form({ method: "GET", action: base, class: "filter-box" },
     ...hiddenState(false),
     input({ type: "text", name: "place", value: placeQ, placeholder: i18n.mapPlaceSearchPlaceholder, class: "filter-box__input" }),
-    div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.mapSearchButton)));
+    div({ class: "filter-box__controls" }, renderSearchButton(i18n.mapSearchButton)));
 
   const mapHero = div({ class: "map-hero" },
     renderPlaceResults(placeHits, (h) => a({ href: viewHref(viewForPlace(h)), class: "map-place-result" },

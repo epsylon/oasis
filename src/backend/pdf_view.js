@@ -7,6 +7,7 @@ const WORKER_TAG = 'oasis-pdf-view';
 const MUPDF_URL = pathToFileURL(path.join(__dirname, '..', 'server', 'node_modules', 'mupdf', 'dist', 'mupdf.js')).href;
 const PDF_BASE_WIDTH = 1600;
 const PDF_FIT_WIDTH = 1200;
+const PDF_THUMB_WIDTH = 360;
 const PDF_WEBP_EFFORT = 1;
 const PDF_ZOOMS = [50, 75, 100, 125, 150, 200, 300];
 const PDF_ZOOM_DEFAULT = 100;
@@ -22,7 +23,7 @@ const PDF_MAGIC = Buffer.from('%PDF-');
 const PDF_MAGIC_WINDOW = 1024;
 
 const widthOf = (zoom) => (zoom <= PDF_ZOOM_DEFAULT ? PDF_FIT_WIDTH : Math.round(PDF_BASE_WIDTH * zoom / 100));
-const PDF_WIDTHS = new Set(PDF_ZOOMS.map(widthOf));
+const PDF_WIDTHS = new Set([...PDF_ZOOMS.map(widthOf), PDF_THUMB_WIDTH]);
 const zoomOf = (value) => { const z = Number(value); return PDF_ZOOMS.includes(z) ? z : PDF_ZOOM_DEFAULT; };
 const rotationOf = (value) => { const r = Number(value); return PDF_ROTATIONS.includes(r) ? r : 0; };
 const looksLikePdf = (buf) => Buffer.isBuffer(buf) && buf.subarray(0, PDF_MAGIC_WINDOW).indexOf(PDF_MAGIC) >= 0;
@@ -166,7 +167,7 @@ if (!isMainThread && workerData === WORKER_TAG) {
   const keyOf = (text) => crypto.createHash('sha256').update(String(text)).digest('hex');
   const frameIdOf = (src) => `pdf-${keyOf(src).slice(0, PDF_FRAME_ID_LEN)}`;
   module.exports = {
-    PDF_BASE_WIDTH, PDF_ZOOMS, PDF_ZOOM_DEFAULT, PDF_ROTATIONS,
+    PDF_BASE_WIDTH, PDF_THUMB_WIDTH, PDF_ZOOMS, PDF_ZOOM_DEFAULT, PDF_ROTATIONS,
     widthOf, zoomOf, rotationOf, looksLikePdf, keyOf, frameIdOf,
     isFrameId: (v) => new RegExp(`^pdf-[0-9a-f]{${PDF_FRAME_ID_LEN}}$`).test(String(v || '')),
     isPdfWidth: (w) => PDF_WIDTHS.has(Number(w)),

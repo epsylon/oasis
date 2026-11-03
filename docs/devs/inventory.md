@@ -71,9 +71,9 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `banking/banking-eco-history.json` | Samples of the ECOin value, supply and inflation over time. This is what the Exchange charts draw. |
 | `banking/banking-funds-history.json` | Samples of your own ECOin wallet balance over time. This is what the funds chart of Banking › Overview draws. |
 | `banking/banking-ubi-paid.json` | On a PUB, the ledger of UBI already paid: one entry per inhabitant and month, with its transaction. It is what stops the same month being paid twice. |
-| `banking-rebalance-pending.json` | On a PUB, the rebalance to another PUB that was handed to the wallet but not yet confirmed. Written at the root of `~/.ssb/oasis/`. |
-| `clearnet-since.json` | A marker that this identity has published, on its profile, the moment from which its CLEARNET choices apply; it is written once. Written at the root of `~/.ssb/oasis/`. |
-| `blob-pins.json` | The blobs of the encrypted files you uploaded to a tribe, which the media cache never drops. Written at the root of `~/.ssb/oasis/`. |
+| `banking/banking-rebalance-pending.json` | On a PUB, the rebalance to another PUB that was handed to the wallet but not yet confirmed. |
+| `flags/clearnet-since.json` | A marker that this identity has published, on its profile, the moment from which its CLEARNET choices apply; it is written once. |
+| `content/blob-pins.json` | The blobs of the encrypted files you uploaded to a tribe, which the media cache never drops. |
 | `banking/banking-ubi-notice.json` | Which UBI payments BankingBot has already told you about, so it does not repeat itself. |
 | `banking/banking-confirm-notice.json` | The same, for contracts waiting for your confirmation. |
 | `content/content_favorites.json` | What you marked as a favourite, by content type. |
@@ -83,6 +83,8 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `content/viewer_hidden.json` | Inhabitants you muted and content you hid. Applied only by this node; nothing about it is published. |
 | `content/invites-used.json` | The latest invitations you used, with what you joined and when. |
 | `content/agenda-config.json` | How you arranged your Agenda. |
+| `content/list-layouts.json` | The view chosen for the module lists (cards, list or grid), one value shared by all of them. Kept only by this node; a PUB in public mode does not keep it. |
+| `content/last-page.json` | The last page opened on this node, so that the first visit to the home after Oasis starts goes back to it (once; opening any other page first cancels it). Kept only by this node; a PUB in public mode does not keep it. |
 | `content/scheduled.json` | The content you scheduled and that has not been published yet, with the moment it is due. It stays on this device until then; once published it leaves the file, and if publishing fails it stays, marked with the error. |
 | `content/blob-access.json` | When each downloaded blob was last opened. The media cache (Settings → Content → Media cache) uses it to decide what to drop first once the quota is exceeded. |
 | `content/snapshot.oasissn`, `content/snapshot-recent.oasissn` | Only on a PUB: the copies of its log (every feed whole, and the recently active feeds; private messages as ciphertext) that newcomers receive over the SSB connection when they join, so they can start right away. Rebuilt periodically. |

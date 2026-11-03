@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, input, a, span, strong, ul, li, table, thead, tbody, tr, td, th, pre, code, select, option } = require("../server/node_modules/hyperaxe")
-const { template, i18n } = require("./main_views")
+const { template, i18n, renderSearchButton } = require("./main_views")
 
 const FILTERS = [
   { key: "tree", href: "/dev", i18n: "devFilterFiles", fallback: "FILES" },
@@ -100,7 +100,7 @@ const renderSearchForm = (query, ext, stats = null) => div({ class: "dev-search 
         option({ value: "", ...(ext ? {} : { selected: true }) }, i18n.devAnyExtension || "Any file"),
         [".js", ".json", ".css", ".md", ".sh"].map(x => option({ value: x, ...(ext === x ? { selected: true } : {}) }, x))
       ),
-      button({ type: "submit", class: "filter-box__button" }, i18n.searchButton || "Search")
+      renderSearchButton(i18n.searchButton || "Search")
     )
   )
 )

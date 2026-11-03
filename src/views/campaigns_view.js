@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt, renderCountChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt, renderCountChip, renderSearchButton } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -9,12 +9,12 @@ const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "SIGNED", "TOP"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "SIGNED", "TOP"];
 const STATUSES = ["OPEN", "ACHIEVED", "CLOSED"];
 const CATEGORIES = ["ENVIRONMENT", "RIGHTS", "HEALTH", "EDUCATION", "INFRASTRUCTURE", "CULTURE", "ECONOMY", "OTHER"];
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
-const filterLabel = (f) => RELATION_FILTERS.includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`campaignFilter${cap(f)}`] || f).toUpperCase();
+const filterLabel = (f) => [...RELATION_FILTERS, "favorites"].includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`campaignFilter${cap(f)}`] || f).toUpperCase();
 const statusLabel = (s) => String(i18n[`campaignStatus${cap(s)}`] || s).toUpperCase();
 const catLabel = (c) => String(i18n[`campaignCategory${cap(c)}`] || c).toUpperCase();
 const campaignHref = (cp) => `/campaigns/${encodeURIComponent(cp.id)}`;
@@ -47,7 +47,7 @@ const campaignChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(c => String(c.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
   if (mode === "SIGNED") return census.some(c => Array.isArray(c.signers) && c.signers.includes(userId));
   if (mode === "RECENT") return census.length > 0;
   if (mode === "TOP") return census.some(c => c.signatureCount > 0);
@@ -128,14 +128,20 @@ exports.campaignsView = async (campaigns, filter = "ALL", params = {}) => {
         ? renderForm(f === "EDIT" ? params.campaign : null)
         : [
             emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+              isForm || emptyMod ? null : renderLayoutSwitch("filters"),
               renderModuleStats(list.length, STATUSES.map(s => ({ label: statusLabel(s), count: list.filter(c => c.status === s).length }))),
               form({ method: "GET", action: "/campaigns", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: f }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.campaignSearchPlaceholder, class: "filter-box__input" }),
-                div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+                div({ class: "filter-box__controls" }, renderSearchButton(i18n.searchButton))
               )
             ),
-            div({ class: "tribe-grid" }, list.length ? paged(list).map(c => renderCampaignCard(c, params)) : p(i18n.campaignNoItems))
+            list.length
+              ? (() => {
+                  const shownCampaigns = paged(list);
+                  return renderLayoutItems(() => div({ class: "tribe-grid" }, shownCampaigns.map(c => renderCampaignCard(c, params))));
+                })()
+              : div({ class: "tribe-grid" }, p(i18n.campaignNoItems))
           ]
     )
   );

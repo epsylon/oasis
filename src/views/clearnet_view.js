@@ -133,7 +133,7 @@ const renderReachChip = (isClearnet, i18nObj = {}, href = null) => {
   const label = isClearnet
     ? (i18nObj.shopReachClearnet || 'Clearnet')
     : (i18nObj.shopReachOasis || 'Oasis');
-  const chip = span({ class: `pm-exposition-chip pm-exposition-${isClearnet ? 'whole' : 'mutuals'}` },
+  const chip = span({ class: `pm-exposition-chip pm-exposition-scope pm-exposition-${isClearnet ? 'whole' : 'mutuals'} pm-scope-${isClearnet ? 'clearnet' : 'oasis'}` },
     span({ class: 'pm-exposition-icon' }, icon),
     span({ class: 'pm-exposition-text' }, label)
   );
@@ -153,14 +153,14 @@ const scopeOf = (item, isClearnet = !!item && item.clearnet === true) => {
   if (item.isPrivate === true || item.isPrivate === 'true' || item.isPrivate === 'on' || isPrivateFlag(item.isPublic) || item.isAnonymous === true) return 'private';
   return isClearnet ? 'clearnet' : 'oasis';
 };
-const scopeStateChip = (variant, text) => mv().asChip('scope', span({ class: `pm-exposition-chip pm-exposition-${variant}` },
+const scopeStateChip = (variant, text, scope) => mv().asChip('scope', span({ class: `pm-exposition-chip pm-exposition-scope pm-exposition-${variant} pm-scope-${scope}` },
   span({ class: 'pm-exposition-icon' }, '🔒'),
   span({ class: 'pm-exposition-text' }, text)
 ));
 const renderScopeChip = (item, i18nObj = {}, isClearnet = !!item && item.clearnet === true, href = null) => {
   const scope = scopeOf(item, isClearnet);
-  if (scope === 'private') return scopeStateChip('hidden', i18nObj.privacyPrivate || 'PRIVATE');
-  if (scope === 'tribe') return scopeStateChip('encrypted', i18nObj.tribeReachTribe || 'TRIBE');
+  if (scope === 'private') return scopeStateChip('hidden', i18nObj.privacyPrivate || 'PRIVATE', 'private');
+  if (scope === 'tribe') return scopeStateChip('encrypted', i18nObj.tribeReachTribe || 'TRIBE', 'tribe');
   if (scope === 'oasis' || scope === 'clearnet') return renderReachChip(scope === 'clearnet', i18nObj, scope === 'clearnet' && !item.tribeOrigin && !item.tribeId ? href : null);
   return null;
 };
@@ -586,7 +586,7 @@ body.pdf-embed{max-width:none;width:auto;margin:0;padding:0;overflow:hidden;back
 .pdf-embedded .pdf-canvas-wrap{flex:1 1 auto;height:auto;min-height:0}
 .pdf-page-image{display:block;box-sizing:border-box;width:auto;height:auto;margin:0 auto;border:1px solid var(--border);background-color:#fff}
 .pdf-z50{max-width:50%;max-height:50%}.pdf-z75{max-width:75%;max-height:75%}.pdf-z100{max-width:100%;max-height:100%}.pdf-z125{width:100%}.pdf-z150{width:150%}.pdf-z200{width:200%}.pdf-z300{width:300%}
-.pdf-viewer-container .pdf-controls{flex-shrink:0;margin-top:1rem}
+.pdf-viewer-container .pdf-controls{flex-shrink:0;margin-top:1rem;text-align:center}
 .pdf-viewer-container .pdf-controls a,.pdf-viewer-container .pdf-controls span{display:inline-block;margin:0 4px 4px 0;background-color:var(--bg-sub);color:var(--fg);border:none;padding:.4rem .8rem;font-size:1rem;line-height:1.2;text-decoration:none;cursor:pointer;border-radius:4px;transition:background-color .2s ease}
 .pdf-viewer-container .pdf-controls a:hover{background-color:var(--border)}
 .pdf-viewer-container .pdf-controls .pdf-off{opacity:.4;cursor:default}

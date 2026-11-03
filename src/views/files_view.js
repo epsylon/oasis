@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip, renderScopeChip } = require('./clearnet_view');
 
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderStateChip, renderFileDownloads, listLayout, renderSearchButton, blobAttr } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -53,6 +53,23 @@ const renderFileSeeds = (t, spreadMap) => {
   return String(info && typeof info.count === "number" ? info.count : (info && Array.isArray(info.voters) ? info.voters.length : 0));
 };
 const renderFileSpread = (t, spreadMap) => String(t.author) === String(userId) ? "—" : renderSpreadButton(t.key, spreadInfoOf(t, spreadMap), i18n.seedAction, false);
+
+const renderFileCard = (t, params = {}) => {
+  const href = `/files/${encodeURIComponent(t.key)}`;
+  return div({ class: "trending-card file-card" + (String(t.author) === String(userId) ? " own-content" : "") },
+    renderCardTop(t.key, href, {
+      author: t.author,
+      date: t.createdAt,
+      chips: [renderScopeChip(t, i18n, t.clearnet === true, clearnetItemHref('files', t.title, t.key)), renderStateChip("whole", null, formatSize(t.size), "data")],
+      spread: spreadInfoOf(t, params.spreadMap),
+      reportTitle: t.title
+    }),
+    div({ class: "card-section" },
+      h2({ class: "torrent-title" }, a({ href }, t.title || "")),
+      renderFileDownloads(t.key, t.torrentUrl, t.fileName || t.title, { blob: t.url })
+    )
+  );
+};
 
 const renderFileTable = exports.renderFileTable = (files, filter, params = {}) => {
   const returnTo = buildReturnTo(filter, params);
@@ -175,7 +192,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
-  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;
 };
@@ -191,6 +208,9 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
   const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const fileToEdit = fileId ? list.find((t) => t.key === fileId) : null;
+  const isForm = filter === "create" || filter === "edit";
+  const pageFiles = isForm ? [] : paged(list);
+  const fileCards = () => div({ class: "audios-list" }, listLayout() === "cards" ? renderFileTable(pageFiles, filter, { q, sort, spreadMap: params.spreadMap }) : pageFiles.map((t) => renderFileCard(t, { spreadMap: params.spreadMap })));
 
   return template(
     title,
@@ -221,11 +241,12 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
       )
     ),
     section(
-      filter === "create" || filter === "edit"
+      isForm
         ? [renderFileForm(filter, fileId, fileToEdit, { ...params, filter }), filter !== "edit" && params.nextcloud && !params.tribeId ? renderNextcloudForm(safeText(params.returnTo) || buildReturnTo("all", params)) : null]
         : section(
             emptyMod ? null : div(
               { class: "audios-search activity-filter-chips activity-toolbar-row" },
+                isForm || emptyMod ? null : renderLayoutSwitch("filters"),
                 renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/files", class: "filter-box" },
@@ -245,11 +266,11 @@ exports.filesView = async (files, filter = "all", fileId = null, params = {}) =>
                     option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.fileSortOldest),
                     option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.fileSortTop)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.fileSearchButton)
+                  renderSearchButton(i18n.fileSearchButton)
                 )
               )
             ),
-            div({ class: "audios-list" }, renderFileTable(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
+            pageFiles.length ? renderLayoutItems(fileCards) : fileCards()
           )
     )
   );
@@ -323,7 +344,7 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
                 ? tr(td({ class: "tribe-info-label" }, i18n.encryptedChipLabel || "E2E"), td({ class: "tribe-info-value" }, "AES-256-GCM"))
                 : tr(td({ class: "tribe-info-label" }, "SHA-256"), td({ class: "tribe-info-value" }, span({ class: "bank-address-code" }, blobSha256Hex(fileObj.url))))
             ),
-            a({ href: `/files/${encodeURIComponent(fileObj.key)}/get`, class: "filter-btn" }, `\u2B07 ${i18n.torrentOasisButton || "OASIS"}`)
+            a({ href: `/files/${encodeURIComponent(fileObj.key)}/get`, class: "filter-btn", ...blobAttr(fileObj.url, true) }, `\u2B07 ${i18n.torrentOasisButton || "LOCAL"}`)
           ),
           fileObj.torrentUrl
             ? div({ class: "torrent-detail-section" },

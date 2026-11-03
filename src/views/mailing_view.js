@@ -1,18 +1,18 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { renderScopeChip } = require("./clearnet_view");
 const { TEXT_CAP } = require('../backend/long_text');
-const { template, i18n, userLink, renderStateChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views");
+const { template, i18n, userLink, renderStateChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require("./main_views");
 const { renderStyledText } = require("../backend/renderStyledText");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "SUBSCRIBED"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "SUBSCRIBED"];
 const TYPE_FILTERS = ["OPEN", "CLOSED"];
 const STATUS_FILTERS = ["ACTIVE", "ARCHIVED"];
 const HISTORY_MODES = ["DATE", "THREADS", "INHABITANTS"];
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
-const baseLabel = (f) => RELATION_FILTERS.includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`mailingFilter${cap(f)}`] || f).toUpperCase();
+const baseLabel = (f) => [...RELATION_FILTERS, "favorites"].includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`mailingFilter${cap(f)}`] || f).toUpperCase();
 const typeLabel = (t) => String(i18n[`mailingType${cap(t)}`] || t).toUpperCase();
 const statusLabel = (s) => String(i18n[`mailingStatus${cap(s)}`] || s).toUpperCase();
 const historyLabel = (m) => String(i18n[`mailingHistory${cap(m)}`] || m).toUpperCase();
@@ -39,7 +39,7 @@ const mailingChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(l => String(l.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
   if (mode === "SUBSCRIBED") return census.some(l => l.isMember && String(l.author) !== String(userId));
   if (mode === "RECENT") return census.length > 0;
   if (mode === "OPEN") return census.some(l => !l.closed);
@@ -50,7 +50,7 @@ const mailingChipFor = (mode, census) => {
 exports.mailingChipFor = mailingChipFor;
 
 const renderArchiveItem = (list, params = {}) =>
-  li({ class: "mailing-archive-item" },
+  li({ class: listItemClass("mailing-archive-item" + (String(list.author) === String(userId) ? " own-content" : "")) },
     renderCardTop(list.id, listHref(list), {
       date: list.createdAt,
       chips: [
@@ -63,7 +63,7 @@ const renderArchiveItem = (list, params = {}) =>
       author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: (params.spreadMap && params.spreadMap.get(list.id)) || null, deleteAction: String(list.author) === String(userId) ? contentDeleteAction("mailingList", list.id) : null
     }),
     div({ class: "mailing-archive-meta" },
-      a({ href: listHref(list), class: "user-link" }, list.title || "—")
+      renderListTitle(listHref(list), list.title || "—")
     ),
     null
   );
@@ -123,6 +123,7 @@ exports.mailingView = async (lists, filter = "ALL", params = {}) => {
   const f = String(filter || "ALL").toUpperCase();
   const isForm = f === "CREATE" || f === "EDIT";
   const emptyMod = !isForm && moduleIsEmpty(census, "ALL", "ALL", q);
+  const pageLists = !isForm && list.length ? paged(list.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0))) : [];
   return template(
     i18n.mailingTitle,
     section(
@@ -134,6 +135,7 @@ exports.mailingView = async (lists, filter = "ALL", params = {}) => {
         ? renderForm(f === "EDIT" ? params.list : null)
         : [
             emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+              isForm || emptyMod ? null : renderLayoutSwitch("filters"),
               renderModuleStats(list.length, [
                 { label: typeLabel("OPEN"), count: list.filter(l => !l.closed).length },
                 { label: typeLabel("CLOSED"), count: list.filter(l => l.closed).length },
@@ -142,10 +144,10 @@ exports.mailingView = async (lists, filter = "ALL", params = {}) => {
               form({ method: "GET", action: "/mailing", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: f }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.mailingSearchPlaceholder, class: "filter-box__input" }),
-                div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+                div({ class: "filter-box__controls" }, renderSearchButton(i18n.searchButton))
               )
             ),
-            list.length ? ul({ class: "mailing-archive" }, ...paged(list.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0))).map(l => renderArchiveItem(l, params))) : div({ class: "tribe-grid" }, p(i18n.mailingNoItems))
+            list.length ? renderLayoutItems(() => ul({ class: "mailing-archive" }, ...pageLists.map(l => renderArchiveItem(l, params)))) : div({ class: "tribe-grid" }, p(i18n.mailingNoItems))
           ]
     )
   );
@@ -281,7 +283,7 @@ exports.singleMailingView = async (list, params = {}) => {
         ? form({ method: "GET", action: `${href}#history`, class: "filter-box" },
             input({ type: "hidden", name: "history", value: mode }),
             input({ type: "text", name: "q", value: q, placeholder: i18n.mailingHistorySearchPlaceholder, class: "filter-box__input" }),
-            div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+            div({ class: "filter-box__controls" }, renderSearchButton(i18n.searchButton))
           )
         : null,
       renderHistory(list, shown, mode)

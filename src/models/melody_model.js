@@ -107,6 +107,101 @@ function blockToNote(msg) {
   };
 }
 
+const NOTE_COLORS = ['#ff4040', '#ff7a30', '#ffb020', '#ffd83a', '#e8f53a', '#8ce03a', '#34d45a', '#2fd6b0', '#36b9ff', '#4a7dff', '#9a5cff', '#e152d8'];
+const OCTAVE_SHADE = { 3: 0.55, 4: 0.8, 5: 1 };
+const IMAGE_WIDTH = 1080;
+const IMAGE_HEIGHT = 54;
+const IMAGE_MAX_NOTES = 256;
+
+const pitchOf = (name) => String(name || '').replace(/\d+$/, '');
+const octaveOf = (name) => Number((String(name || '').match(/(\d+)$/) || [])[1]) || 4;
+const noteColor = (name) => {
+  const idx = NOTE_NAMES.indexOf(pitchOf(name));
+  const hex = NOTE_COLORS[idx >= 0 ? idx : 0];
+  const shade = OCTAVE_SHADE[octaveOf(name)] || 1;
+  return [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * shade));
+};
+const colourCount = (sequence) => new Set((sequence || []).map((n) => n && (n.name || n.n)).filter(Boolean)).size;
+
+function melodyImageRaw(sequence) {
+  const notes = (sequence || []).filter((n) => n && (n.name || n.n)).slice(0, IMAGE_MAX_NOTES);
+  const width = IMAGE_WIDTH;
+  const height = IMAGE_HEIGHT;
+  const data = Buffer.alloc(width * height * 4, 0);
+  for (let i = 3; i < data.length; i += 4) data[i] = 255;
+  const durs = notes.map((n) => Math.max(1, Number(n.durMs || n.d) || 1));
+  const total = durs.reduce((a, b) => a + b, 0) || 1;
+  let acc = 0;
+  notes.forEach((n, i) => {
+    const x0 = Math.round((acc / total) * width);
+    acc += durs[i];
+    const x1 = Math.round((acc / total) * width);
+    const [r, g, b] = noteColor(n.name || n.n);
+    const right = x1 - x0 > 2 ? x1 - 1 : x1;
+    for (let y = 0; y < height; y++) {
+      for (let x = x0; x < right; x++) {
+        const o = (y * width + x) * 4;
+        data[o] = r; data[o + 1] = g; data[o + 2] = b;
+      }
+    }
+  });
+  return { width, height, data };
+}
+
+function embedTextInPixels(pixels, text, channels = 4) {
+  const payload = Buffer.from(String(text || ''), 'utf8');
+  if (!payload.length || payload.length > 4096) return pixels;
+  const lenBuf = Buffer.alloc(2);
+  lenBuf.writeUInt16BE(payload.length, 0);
+  const full = Buffer.concat([STEG_MAGIC, lenBuf, payload]);
+  const slots = Math.floor(pixels.length / channels) * 3;
+  if (full.length * 8 > slots) return pixels;
+  const out = Buffer.from(pixels);
+  for (let i = 0; i < full.length * 8; i++) {
+    const bit = (full[i >> 3] >> (7 - (i & 7))) & 1;
+    const o = Math.floor(i / 3) * channels + (i % 3);
+    out[o] = (out[o] & ~1) | bit;
+  }
+  return out;
+}
+
+function readPixelBits(pixels, channels, startBit, numBits) {
+  const out = Buffer.alloc(Math.ceil(numBits / 8), 0);
+  for (let i = 0; i < numBits; i++) {
+    const k = startBit + i;
+    const o = Math.floor(k / 3) * channels + (k % 3);
+    if (o >= pixels.length) return null;
+    out[i >> 3] |= (pixels[o] & 1) << (7 - (i & 7));
+  }
+  return out;
+}
+
+function extractTextFromPixels(pixels, channels = 4) {
+  const magic = readPixelBits(pixels, channels, 0, 16);
+  if (!magic || magic[0] !== STEG_MAGIC[0] || magic[1] !== STEG_MAGIC[1]) return null;
+  const lenBuf = readPixelBits(pixels, channels, 16, 16);
+  const len = lenBuf ? lenBuf.readUInt16BE(0) : 0;
+  if (!len || len > 4096) return null;
+  const payload = readPixelBits(pixels, channels, 32, len * 8);
+  return payload ? payload.toString('utf8') || null : null;
+}
+
+async function melodyImagePng(sequence, text = '') {
+  const sharp = require('../server/node_modules/sharp');
+  const { width, height, data } = melodyImageRaw(sequence);
+  const pixels = text ? embedTextInPixels(data, text) : data;
+  return sharp(pixels, { raw: { width, height, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer();
+}
+
+async function extractTextFromImage(buffer) {
+  if (!Buffer.isBuffer(buffer) || !buffer.length) return null;
+  try {
+    const sharp = require('../server/node_modules/sharp');
+    const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    return extractTextFromPixels(data, info.channels);
+  } catch (_) { return null; }
+}
+
 function hashStr(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
@@ -135,14 +230,20 @@ module.exports = ({ cooler }) => {
     for (const n of seq) {
       stats[n.type] = (stats[n.type] || 0) + 1;
     }
-    return { feedId: me, total: seq.length, sequence: seq, stats };
+    return { feedId: me, total: seq.length, colours: colourCount(seq), sequence: seq, stats };
   }
 
   return {
     NOTE_NAMES,
     OCTAVES,
     TYPE_TO_DEGREE,
+    NOTE_COLORS,
+    OCTAVE_SHADE,
     getUserMelody: getUserMelodyInternal,
+    noteColor,
+    colourCount,
+    melodyImagePng,
+    extractTextFromImage,
     embedTextInWav,
     extractTextFromWav
   };

@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { renderCommentsSection } = require("./comments_view");
@@ -7,7 +7,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const FILTERS = ["all", "recent", "mine", "supported", "replicated", "linked"];
+const FILTERS = ["all", "recent", "mine", "supported", "replicated", "favorites", "linked"];
 
 const pageHref = (idOrSlug, tribeId = null) =>
   `/wiki/${encodeURIComponent(idOrSlug)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`;
@@ -105,12 +105,12 @@ const renderFilters = (filter, q, params = {}, census = []) => {
   const chipVisible = (mode) => {
     if (mode === filter || mode === "all") return true;
     if (mode === "mine") return census.some(p => String(p.author) === String(userId) || (p.versions || []).some(v => String(v.author) === String(userId)));
-    if (mode === "supported" || mode === "replicated") return hasRelation(mode, census);
+    if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, census);
     if (mode === "recent") return census.length > 0;
     if (mode === "linked") return census.some(p => p.isLinked);
     return true;
   };
-  const labelOf = (mode) => RELATION_FILTERS.includes(mode) ? relationFilterLabel(mode) : String(i18n[`wikiFilter${mode.charAt(0).toUpperCase() + mode.slice(1)}`] || mode).toUpperCase();
+  const labelOf = (mode) => RELATION_FILTERS.includes(mode) || mode === "favorites" ? relationFilterLabel(mode) : String(i18n[`wikiFilter${mode.charAt(0).toUpperCase() + mode.slice(1)}`] || mode).toUpperCase();
   return div({ class: "filters" },
     form({ method: "GET", action: "/wiki", class: "ui-toolbar ui-toolbar--filters" },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
@@ -186,6 +186,7 @@ exports.wikiView = async (pages, filter = "all", params = {}) => {
   const census = Array.isArray(params.censusList) ? params.censusList : list;
   const isForm = filter === "create" || filter === "edit";
   const emptyMod = !isForm && census.length === 0 && !q;
+  const pageList = !isForm && list.length ? paged(list) : [];
   return template(
     i18n.wikiTitle,
     section(
@@ -200,17 +201,18 @@ exports.wikiView = async (pages, filter = "all", params = {}) => {
         ? renderForm(filter === "edit" ? params.page : null, params)
         : [
             emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+              isForm || emptyMod ? null : renderLayoutSwitch("filters"),
               renderModuleStats(list.length),
               form({ method: "GET", action: "/wiki", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter }),
                 params.tribeId ? input({ type: "hidden", name: "tribeId", value: params.tribeId }) : null,
                 input({ type: "text", name: "q", value: q, placeholder: i18n.wikiSearchPlaceholder, class: "filter-box__input" }),
-                div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+                div({ class: "filter-box__controls" }, renderSearchButton(i18n.searchButton))
               )
             ),
-            div({ class: "tribe-grid" },
-              list.length ? paged(list).map(pg => renderPageCard(pg, params)) : p(i18n.wikiNoPages)
-            )
+            list.length
+              ? renderLayoutItems(() => div({ class: "tribe-grid" }, pageList.map(pg => renderPageCard(pg, params))))
+              : div({ class: "tribe-grid" }, p(i18n.wikiNoPages))
           ]
     )
   );

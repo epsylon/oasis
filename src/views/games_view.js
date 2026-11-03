@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, form, input, button, a, img, table, tr, td, th, span, iframe } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, renderModuleStats } = require('./main_views');
+const { template, i18n, userLink, renderModuleStats, renderSearchButton } = require('./main_views');
 const moment = require("../server/node_modules/moment");
 
 const getGames = () => [
@@ -118,7 +118,7 @@ exports.gamesView = (filter = 'all', hall = null, q = '') => {
       input({ type: 'hidden', name: 'filter', value: filter }),
       input({ type: 'text', name: 'q', value: q, placeholder: i18n.gamesSearchPlaceholder, class: 'filter-box__input' }),
       div({ class: 'filter-box__controls' },
-        button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+        renderSearchButton(i18n.searchButton)
       )
     )
   );

@@ -231,11 +231,12 @@ async function step(name, fn) {
 
   console.log('\nSEED: polls');
   const seedPolls = [];
-  for (const [q, opts, multiple] of [
-    [`Where do we meet ${hash(2)}?`, ['Plaza', 'Park', 'Bar'], false],
-    [`Which modules matter most ${hash(2)}?`, ['Forum', 'Market', 'Tribes', 'L.A.R.P.'], true]
+  for (const [q, opts, pollType] of [
+    [`Where do we meet ${hash(2)}?`, ['Plaza', 'Park', 'Bar'], 'election'],
+    [`Which modules matter most ${hash(2)}?`, ['Forum', 'Market', 'Tribes', 'L.A.R.P.'], 'survey'],
+    [`What could you help with ${hash(2)}?`, ['Computing', 'Cooking', 'Teaching', 'Translating'], 'collaboration']
   ]) {
-    const r = await step(`poll "${q.slice(0, 24)}"`, () => models.polls.createPoll({ question: q, options: opts, multiple, deadline: futureISO(20), tags: pickTags(2) }));
+    const r = await step(`poll "${q.slice(0, 24)}"`, () => models.polls.createPoll({ question: q, options: opts, pollType, deadline: futureISO(20), tags: pickTags(2) }));
     if (r && r.key) seedPolls.push({ key: r.key, option: opts[0] });
   }
   for (const p of seedPolls) {

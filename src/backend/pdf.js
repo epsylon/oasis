@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const { plainText } = require('./renderStyledText');
+const { hasVoteRules, voteResultOf } = require('../models/votes_model');
 const { MAP_W, MAP_H, makeView, fitView, toScreen, tileCoverage } = require('../maps/map_renderer');
 
 const LOGO_PATH = path.join(__dirname, '..', 'client', 'assets', 'images', 'snh-oasis.jpg');
@@ -469,6 +470,11 @@ const voteSections = (vote) => {
   out.push({ kind: 'section', text: 'TERMS' });
   out.push({ kind: 'kv', label: 'Status', value: txt(vote.status).toUpperCase() });
   if (vote.deadline) out.push({ kind: 'kv', label: 'Deadline', value: fmtDate(vote.deadline) });
+  const rules = hasVoteRules(vote) ? voteResultOf(vote) : null;
+  if (rules) {
+    out.push({ kind: 'kv', label: 'Required majority', value: rules.majority.replace(/_/g, ' ') });
+    out.push({ kind: 'kv', label: 'Quorum', value: rules.quorum > 0 ? `${rules.quorum}%` : 'NONE' });
+  }
   pushTags(out, vote);
 
   const votes = vote.votes && typeof vote.votes === 'object' ? vote.votes : {};
@@ -481,6 +487,8 @@ const voteSections = (vote) => {
     const pct = total > 0 ? Math.round((count / total) * 100) : 0;
     out.push({ kind: 'kv', label: choice, value: `${count} (${pct}%)` });
   }
+  if (rules && rules.participation !== null) out.push({ kind: 'kv', label: 'Participation', value: `${rules.voters}/${rules.eligible} (${rules.participation}%)` });
+  if (rules && txt(vote.status).toUpperCase() === 'CLOSED') out.push({ kind: 'kv', label: 'Outcome', value: rules.outcome.replace(/_/g, ' ') });
 
   pushOpinions(out, vote);
   pushMeta(out, vote);

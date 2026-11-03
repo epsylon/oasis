@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, renderStateChip, renderCardTop, renderCardByline, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderStateChip, renderCardTop, renderCardByline, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -11,13 +11,13 @@ const userId = config.keys.id;
 const CATEGORIES = ["WEATHER", "INFRASTRUCTURE", "HEALTH", "SECURITY", "LOST", "NEIGHBORHOOD"];
 const SEVERITIES = ["UNVERIFIED", "LOW", "MEDIUM", "HIGH"];
 const STATUSES = ["ACTIVE", "RESOLVED", "EXPIRED"];
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES"];
 const EXPIRES = ["1d", "3d", "7d", "30d"];
 
 const catLabel = (c) => String(i18n[`emergencyCategory${c.charAt(0) + c.slice(1).toLowerCase()}`] || c).toUpperCase();
 const sevLabel = (s) => String(i18n[`emergencySeverity${s.charAt(0) + s.slice(1).toLowerCase()}`] || s).toUpperCase();
 const statusLabel = (s) => String(i18n[`emergencyStatus${s.charAt(0) + s.slice(1).toLowerCase()}`] || s).toUpperCase();
-const baseLabel = (f) => RELATION_FILTERS.includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`emergencyFilter${f.charAt(0) + f.slice(1).toLowerCase()}`] || f).toUpperCase();
+const baseLabel = (f) => [...RELATION_FILTERS, "favorites"].includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : String(i18n[`emergencyFilter${f.charAt(0) + f.slice(1).toLowerCase()}`] || f).toUpperCase();
 
 const SEVERITY_VARIANTS = { CRITICAL: "closed", HIGH: "lifespan-orange", MEDIUM: "whole", LOW: "mutuals", UNVERIFIED: "hidden" };
 const severityChip = (emergency) => {
@@ -36,7 +36,7 @@ const renderTags = (tags) => (Array.isArray(tags) && tags.length)
 const emergencyHref = (emergency) => `/emergencies/${encodeURIComponent(emergency.id)}`;
 
 const renderEmergencyCard = (emergency, params = {}) =>
-  div({ class: `tribe-card emergency-card emergency-card-${String(emergency.severity || "UNVERIFIED").toLowerCase()}` },
+  div({ class: `tribe-card emergency-card emergency-card-${String(emergency.severity || "UNVERIFIED").toLowerCase()}${String(emergency.author) === String(userId) ? " own-content" : ""}` },
     renderCardTop(emergency.id, emergencyHref(emergency), { date: emergency.createdAt, chips: [severityChip(emergency), statusChip(emergency), categoryChip(emergency), renderCountChip("✓", i18n.emergencyConfirmations, emergency.confirmationCount || 0), expiresChip(emergency), renderScopeChip(emergency, i18n, clearnetEligible(emergency) && emergency.clearnet === true, clearnetItemHref("emergencies", emergency.title, emergency.id))], author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: (params.spreadMap && params.spreadMap.get(emergency.id)) || null, deleteAction: String(emergency.author) === String(userId) ? contentDeleteAction("emergency", emergency.id) : undefined }),
     div({ class: "tribe-card-body" },
       emergency.media && emergency.media.kind === "image" ? a({ href: emergencyHref(emergency) }, img({ loading: 'lazy', class: "emergency-card-cover", src: `/blob/${encodeURIComponent(emergency.media.blobId)}`, alt: emergency.title || "" })) : null,
@@ -48,7 +48,7 @@ const renderEmergencyCard = (emergency, params = {}) =>
 const chipVisible = (mode, filter, census) => {
   if (mode === filter || mode === "ALL") return true;
   if (mode === "MINE") return census.some(al => String(al.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
   if (mode === "RECENT") return census.length > 0;
   if (STATUSES.includes(mode)) return census.some(al => al.status === mode);
   if (SEVERITIES.includes(mode)) return census.some(al => al.severity === mode);
@@ -110,6 +110,7 @@ exports.emergenciesView = async (emergencies, filter = "ALL", params = {}) => {
   const f = String(filter || "ALL").toUpperCase();
   const isForm = f === "CREATE" || f === "EDIT";
   const emptyMod = !isForm && moduleIsEmpty(census, "ALL", "ALL", q);
+  const pageList = !isForm && list.length ? paged(list) : [];
   return template(
     i18n.emergenciesTitle,
     section(
@@ -121,14 +122,17 @@ exports.emergenciesView = async (emergencies, filter = "ALL", params = {}) => {
         ? renderForm(f === "EDIT" ? params.emergency : null, params)
         : [
             emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+              isForm || emptyMod ? null : renderLayoutSwitch("filters"),
               renderModuleStats(list.length, SEVERITIES.map(s => ({ label: sevLabel(s), count: list.filter(al => al.severity === s).length }))),
               form({ method: "GET", action: "/emergencies", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: f }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.emergencySearchPlaceholder, class: "filter-box__input" }),
-                div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+                div({ class: "filter-box__controls" }, renderSearchButton(i18n.searchButton))
               )
             ),
-            div({ class: "tribe-grid" }, list.length ? paged(list).map(al => renderEmergencyCard(al, params)) : p(i18n.emergencyNoItems))
+            list.length
+              ? renderLayoutItems(() => div({ class: "tribe-grid" }, pageList.map(al => renderEmergencyCard(al, params))))
+              : div({ class: "tribe-grid" }, p(i18n.emergencyNoItems))
           ]
     )
   );

@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, input, span, audio, table, tr, td, th, br, a } = require("../server/node_modules/hyperaxe");
-const { template, i18n, userLink, userLinkLabel, renderCallButton, liveClock, renderStateChip, renderVideoGrid, renderIcon } = require("./main_views");
+const { template, i18n, userLink, userLinkLabel, renderCallButton, liveClock, renderStateChip, renderVideoGrid, renderIcon, renderSearchButton } = require("./main_views");
 const { renderEncryptedChip } = require("./clearnet_view");
 const { phoneNumberOf } = require("../models/phone_number");
 const moment = require("../server/node_modules/moment");
@@ -285,7 +285,7 @@ exports.phoneView = ({ available = false, state = null, pams = [], history = [],
         form({ method: 'GET', action: '/phone', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter }),
           input({ type: 'text', name: 'q', value: String(q || ''), placeholder: i18n.phoneSearchPlaceholder, class: 'filter-box__input' }),
-          button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+          renderSearchButton(i18n.searchButton)
         )
       ),
       filter === 'create' && canCall ? renderCompose(compose) : null,

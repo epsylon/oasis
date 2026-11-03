@@ -255,7 +255,7 @@ describe('polls: rendering', (t) => {
     const form = String(await pollsView([], 'CREATE', {}));
     ok(form.includes('/polls/create'), 'the form posts to the module');
     ok(form.includes('anonymous'), 'the anonymous switch is there');
-    ok(form.includes('multiple'), 'the multiple switch is there');
+    ok(form.includes('name="pollType"'), 'the poll type is chosen in the form');
 
     const detail = String(await singlePollView(poll, [], {}));
     ok(detail.includes('/polls/opinions/'), 'opinions are votable');
@@ -488,5 +488,91 @@ describe('polls: asking later', (t) => {
     let threw = false;
     try { await polls.schedulePoll({ ...basePoll, deadline: new Date(Date.now() + hour).toISOString() }, new Date(Date.now() + 2 * hour).toISOString()); } catch (_) { threw = true; }
     ok(threw, 'it must be published before its deadline');
+  });
+});
+
+describe('polls: election, survey and collaboration', (t) => {
+  const pub = (P, content) => new Promise((res, rej) => P.node.publish(content, (e, m) => e ? rej(e) : res(m)));
+
+  t('the type decides how many answers a ballot takes', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net);
+    A.setActor();
+    const election = await A.use('polls').createPoll({ ...basePoll, pollType: 'election', multiple: true });
+    const survey = await A.use('polls').createPoll({ ...basePoll, pollType: 'survey' });
+    const collaboration = await A.use('polls').createPoll({ ...basePoll, pollType: 'collaboration' });
+    eq(net.log.find(m => m.key === survey.key).value.content.pollType, 'survey', 'the type travels in the message');
+    B.setActor();
+    const pollsB = B.use('polls');
+    let threw = false;
+    try { await pollsB.vote(election.key, ['Plaza', 'Park']); } catch (_) { threw = true; }
+    ok(threw, 'an election takes a single answer even if asked for more');
+    await pollsB.vote(survey.key, ['Plaza', 'Park']);
+    await pollsB.vote(collaboration.key, ['Plaza', 'Bar']);
+    const s = await pollsB.getPollById(survey.key);
+    const c = await pollsB.getPollById(collaboration.key);
+    eq(s.pollType, 'survey');
+    ok(s.multiple, 'a survey takes several answers');
+    eq(s.counts.Park, 1);
+    eq(c.pollType, 'collaboration');
+    eq(c.counts.Bar, 1, 'and so does a collaboration');
+    eq((await pollsB.getPollById(election.key)).multiple, false);
+  });
+
+  t('a poll from before the types is a survey if it allowed several answers, an election otherwise', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const multi = await pub(A, { type: 'poll', question: 'Old multi?', options: ['a', 'b'], multiple: true, anonymous: false, createdAt: new Date().toISOString() });
+    const single = await pub(A, { type: 'poll', question: 'Old single?', options: ['a', 'b'], multiple: false, anonymous: false, createdAt: new Date().toISOString() });
+    const unknown = await pub(A, { type: 'poll', question: 'Odd?', options: ['a', 'b'], pollType: 'lottery', createdAt: new Date().toISOString() });
+    eq((await A.use('polls').getPollById(multi.key)).pollType, 'survey');
+    eq((await A.use('polls').getPollById(single.key)).pollType, 'election');
+    eq((await A.use('polls').getPollById(unknown.key)).pollType, 'election', 'an unknown type falls back to an election');
+    eq((await A.use('polls').createPoll({ ...basePoll, multiple: true })).value.content.pollType, 'survey', 'a caller that only says multiple gets a survey');
+  });
+
+  t('only a collaboration that is not anonymous tells who chose each option', async () => {
+    const net = makeNetwork(); const A = makePeer(net); const B = makePeer(net); const C = makePeer(net);
+    A.setActor();
+    const open = await A.use('polls').createPoll({ ...basePoll, pollType: 'collaboration' });
+    const anon = await A.use('polls').createPoll({ ...basePoll, pollType: 'collaboration', anonymous: true });
+    const survey = await A.use('polls').createPoll({ ...basePoll, pollType: 'survey' });
+    for (const P of [B, C]) {
+      P.setActor();
+      await P.use('polls').vote(open.key, P === B ? ['Plaza', 'Park'] : ['Park']);
+      await P.use('polls').vote(anon.key, ['Plaza']);
+      await P.use('polls').vote(survey.key, ['Plaza']);
+    }
+    A.setActor();
+    const shown = await A.use('polls').getPollById(open.key);
+    deepEq(shown.votersByOption.Plaza, [B.keypair.id], 'who chose each option');
+    deepEq(shown.votersByOption.Park.slice().sort(), [B.keypair.id, C.keypair.id].sort(), 'everyone who chose it');
+    deepEq(shown.votersByOption.Bar, [], 'and nobody for the rest');
+    deepEq((await A.use('polls').getPollById(anon.key)).votersByOption, {}, 'an anonymous collaboration tells nothing');
+    deepEq((await A.use('polls').getPollById(survey.key)).votersByOption, {}, 'a survey never says who chose what');
+  });
+
+  t('the type can be changed before the first vote and polls can be listed by type', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const polls = A.use('polls');
+    const r = await polls.createPoll({ ...basePoll, pollType: 'election' });
+    await polls.createPoll({ question: 'Help?', options: ['a', 'b'], pollType: 'collaboration' });
+    await polls.updatePoll(r.key, { pollType: 'survey' });
+    const edited = await polls.getPollById(r.key);
+    eq(edited.pollType, 'survey', 'the edit keeps the new type');
+    ok(edited.multiple, 'and its rule for answers');
+    await polls.updatePoll(r.key, { question: 'Where now?' });
+    eq((await polls.getPollById(r.key)).pollType, 'survey', 'an edit that does not touch the type keeps it');
+    eq((await polls.listAll('SURVEY')).map(p => p.question).join(), 'Where now?');
+    eq((await polls.listAll('COLLABORATION')).map(p => p.question).join(), 'Help?');
+    eq((await polls.listAll('ELECTION')).length, 0);
+  });
+
+  t('a scheduled poll keeps its type when it is published', async () => {
+    const net = makeNetwork(); const A = makePeer(net); A.setActor();
+    const polls = A.use('polls');
+    const hour = 3600000;
+    const scheduled = await polls.schedulePoll({ ...basePoll, pollType: 'collaboration' }, new Date(Date.now() + hour).toISOString());
+    eq(scheduled.pollType, 'collaboration', 'the scheduled poll knows its type');
+    await polls.publishDue(Date.now() + hour + 1);
+    eq((await polls.listAll('ALL'))[0].pollType, 'collaboration', 'and so does the published one');
   });
 });

@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
-const { clearnetItemHref, template, i18n, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderCountChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -17,6 +17,7 @@ const FILTERS = [
   { key: "MINE", i18n: "housingFilterMine" },
   { key: "SUPPORTED", i18n: "filterSupported" },
   { key: "REPLICATED", i18n: "filterReplicated" },
+  { key: "FAVORITES", i18n: "favoritesTitle" },
   { key: "TOP", i18n: "housingFilterTop" },
   { key: "REQUESTED", i18n: "housingFilterRequested" },
   { key: "SALE", i18n: "housingFilterSale" },
@@ -345,7 +346,7 @@ const housingChip = (censusH, filter, x) => {
   if (m === filter) return true
   if (m === "TOP") return censusH.length > 0
   if (m === "MINE") return censusH.some(h => String(h.author) === String(userId))
-  if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusH)
+  if (m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusH)
   if (m === "RECENT") return censusH.length > 0
   if (m === "REQUESTED") return censusH.some(h => safeArr(h.requests).includes(userId))
   if (m === "SALE" || m === "RENT" || m === "COUCHSURFING") return censusH.some(h => String(h.housing_type || "").toUpperCase() === m)
@@ -392,6 +393,7 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
         ? renderHousingForm(filter === "EDIT" ? (Array.isArray(items) ? items[0] : items) || {} : (params.draft || {}), filter === "EDIT" ? "edit" : "create", Number(params.maxImages) > 0 ? Number(params.maxImages) : MAX_IMAGES, await renderSpreadEditWarning(filter === "EDIT" ? ((Array.isArray(items) ? items[0] : items) || {}).id : null), params)
         : section(
             emptyMod ? null : div({ class: "housing-search activity-filter-chips activity-toolbar-row" },
+              isForm || emptyMod ? null : renderLayoutSwitch("filters"),
               renderModuleStatsBy(items, it => String(it.status || '').toUpperCase(), [{ value: 'OPEN', label: i18n.housingFilterOpen }, { value: 'CLOSED', label: i18n.housingFilterClosed }]),
               form({ method: "GET", action: "/housing", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: filter || "ALL" }),
@@ -405,10 +407,13 @@ exports.housingView = async (items, filter = "ALL", params = {}) => {
                     option({ value: "requests", ...(sort === "requests" ? { selected: true } : {})}, i18n.housingSortRequests),
                     option({ value: "rating", ...(sort === "rating" ? { selected: true } : {})}, i18n.housingSortRating)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.housingSearchButton)
+                  renderSearchButton(i18n.housingSearchButton)
               )
             ),
-            div({ class: "housing-list" }, renderHousingList(paged(items), filter, params))
+            (() => {
+              const shownItems = paged(items)
+              return div({ class: "housing-list" }, safeArr(shownItems).length ? renderLayoutItems(() => renderHousingList(shownItems, filter, params)) : renderHousingList(shownItems, filter, params))
+            })()
           )
     )
   )

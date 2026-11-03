@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, textarea, br, a, select
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip } = require("./main_views");
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderSearchButton } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -78,7 +78,7 @@ const renderBookmarkList = exports.renderBookmarkList = (filteredBookmarks, filt
           div(
             { class: "card-section bookmark-card-body" },
             h2({ class: "bookmark-title" }, titleHref ? a({ href: titleHref, class: "card-title-link" }, bookmark.title || bookmark.url || "") : (bookmark.url ? urlLink : (bookmark.title || ""))),
-            titleHref ? (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, urlLink) : null) : (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null),
+            titleHref ? (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle card-content" }, urlLink) : null) : (bookmark.title && bookmark.url ? p({ class: "bookmark-subtitle" }, bookmark.title) : null),
             ...(typeof params.bodyExtra === "function" ? params.bodyExtra(bookmark) : []),
             engagement
           )
@@ -165,7 +165,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
-  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;
 };
@@ -182,6 +182,9 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
   const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const bookmarkToEdit = bookmarkId ? list.find((b) => b.id === bookmarkId) : null;
   const tags = bookmarkToEdit && Array.isArray(bookmarkToEdit.tags) ? bookmarkToEdit.tags : [];
+  const isForm = filter === "edit" || filter === "create";
+  const pageBookmarks = isForm ? [] : paged(list);
+  const bookmarkCards = () => div({ class: "bookmark-list" }, renderBookmarkList(pageBookmarks, filter, { q, sort, spreadMap: params.spreadMap }));
 
   return template(
     title,
@@ -205,11 +208,12 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
       )
     ),
     section(
-      filter === "edit" || filter === "create"
+      isForm
         ? renderBookmarkForm(filter, bookmarkId, bookmarkToEdit || {}, tags, { ...params, filter, spreadWarning: bookmarkEditWarning })
         : section(
             emptyMod ? null : div(
               { class: "bookmarks-search activity-filter-chips activity-toolbar-row" },
+                isForm || emptyMod ? null : renderLayoutSwitch("filters"),
                 renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/bookmarks", class: "filter-box" },
@@ -223,11 +227,11 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
                     option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.bookmarkSortOldest),
                     option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.bookmarkSortTop)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.bookmarkSearchButton)
+                  renderSearchButton(i18n.bookmarkSearchButton)
                 )
               )
             ),
-            div({ class: "bookmark-list" }, renderBookmarkList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
+            pageBookmarks.length ? renderLayoutItems(bookmarkCards) : bookmarkCards()
           )
     )
   );

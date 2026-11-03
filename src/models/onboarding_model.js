@@ -74,11 +74,11 @@ const browserLanguage = (header, supported) => {
   return '';
 };
 
-const firstRunLanguage = ({ fresh, isPublic, configured, cookie, header, supported } = {}) => {
+const firstRunLanguage = ({ fresh, isPublic, configured, header, supported } = {}) => {
   const list = Array.isArray(supported) ? supported : [];
   if (!fresh || isPublic) return { settled: true, language: '' };
   if (list.includes(configured) && configured !== DEFAULT_LANGUAGE) return { settled: true, language: '' };
-  const picked = (list.includes(cookie) ? cookie : '') || browserLanguage(header, list);
+  const picked = browserLanguage(header, list);
   if (!picked && !String(header || '').trim()) return { settled: false, language: '' };
   return { settled: true, language: picked };
 };

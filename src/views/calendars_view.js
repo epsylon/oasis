@@ -1,6 +1,6 @@
 const { div, h2, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton } = require("./main_views")
 const { renderMapEmbed } = require("./maps_view")
 const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -210,6 +210,7 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
   const showForm = filter === "create" || filter === "edit" || !!calendarToEdit
   const emptyMod = moduleIsEmpty(Array.isArray(calendars) ? calendars : [], filter || "all", "all", q)
   const headerText = i18n.calendarsTitle || "Calendars"
+  const pageCalendars = !showForm && calendars.length > 0 ? paged(calendars) : []
 
   return template(
     i18n.calendarsTitle || "Calendars",
@@ -222,12 +223,13 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
       showForm || emptyMod
         ? null
         : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          showForm || emptyMod ? null : renderLayoutSwitch("tribe-mode-buttons"),
           renderModuleStatsBy(calendars, c => c.isClosed ? 'CLOSED' : String(c.status || 'OPEN').toUpperCase(), [{ value: 'OPEN', label: i18n.calendarStatusOpen }, { value: 'CLOSED', label: i18n.calendarStatusClosed }]),
             form({ method: "GET", action: "/calendars", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", value: q, placeholder: i18n.calendarSearchPlaceholder || "Search calendars...", class: "filter-box__input" }),
               div({ class: "filter-box__controls" },
-                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+                renderSearchButton(i18n.searchButton)
               )
             )
           )
@@ -236,7 +238,7 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
       showForm
         ? renderCreateForm(calendarToEdit, params)
         : (calendars.length > 0
-            ? div({ class: "tribe-grid" }, ...paged(calendars).map(c => renderCalendarCard(c, params && params.spreadMap && params.spreadMap.get(c.rootId))))
+            ? renderLayoutItems(() => div({ class: "tribe-grid" }, ...pageCalendars.map(c => renderCalendarCard(c, params && params.spreadMap && params.spreadMap.get(c.rootId)))))
             : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.calendarsNoItems || "No calendars found.")))
     )
   )

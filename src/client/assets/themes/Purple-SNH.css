@@ -372,6 +372,7 @@ a.user-link:focus, button.user-link:focus {
 
 /* Tribes */
 .tribe-card { background: #3C1360 !important; border-color: #B86ADE !important; }
+:is(div,li,article):has(> .card-top):not(.tribe-side) { background: #3C1360 !important; }
 .tribe-card:hover { box-shadow: 0 0 15px rgba(184,106,222,0.3) !important; }
 .tribe-card-title { color: #FFEEDB !important; }
 .tribe-card-description { color: #FFEEDB !important; }
@@ -391,7 +392,7 @@ button.tribe-action-btn { background: transparent !important; }
 .tribe-subtribe-link:hover { background: #5A1A85 !important; }
 .tribe-parent-image { border-color: #B86ADE !important; }
 .tribe-parent-box { background: #3C1360 !important; }
-.trending-card.own-content, .addr-card.ubi-pub-card.own-content { box-shadow: inset 3px 0 0 #B86ADE; }
+.own-content { box-shadow: inset 3px 0 0 #B86ADE; }
 .map-stage { background: #2a0640 !important; border-color: #9B1C96 !important; }
 .map-label-country { fill: #E5E5E5; stroke: #2a0640; }
 .map-place-dot { fill: #ffffff; stroke: #2a0640; }

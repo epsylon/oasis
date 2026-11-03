@@ -389,6 +389,8 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
         const kind = f.toLowerCase();
         if (KINDS[kind]) out = out.filter(s => s.kind === kind);
       }
+      const asked = String(opts.type || '').toLowerCase();
+      if (KINDS[asked]) out = out.filter(s => s.kind === asked);
 
       const q = norm(opts.q);
       if (q) out = out.filter(s => norm(s.title).includes(q) || s.common.some(t => t.includes(q)));
@@ -396,8 +398,10 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
       const present = new Set();
       for (const s of out) for (const r of s.reasons) present.add(r);
       const reasonsAvail = REASON_ORDER.filter(r => present.has(r));
-      const reason = String(opts.reason || '').trim();
-      if (reason && REASON_ORDER.includes(reason)) out = out.filter(s => s.reasons.includes(reason));
+      const askedReason = String(opts.reason || '').trim();
+      const fallback = opts.defaultReason ? (reasonsAvail.includes('related') ? 'related' : (reasonsAvail[0] || '')) : '';
+      const reason = reasonsAvail.includes(askedReason) ? askedReason : fallback;
+      if (reason) out = out.filter(s => s.reasons.includes(reason));
 
       if (f === 'RECENT') out.sort((x, y) => y.ts - x.ts || y.score - x.score);
       else out.sort((x, y) => y.score - x.score || y.ts - x.ts);
@@ -412,7 +416,7 @@ module.exports = ({ cooler, favoriteIdsFor = null }) => {
         kindsMatched,
         anyMatches,
         reasonsAvail,
-        reason: reasonsAvail.includes(reason) ? reason : ''
+        reason
       };
     },
 

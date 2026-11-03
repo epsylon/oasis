@@ -1,6 +1,6 @@
 const { form, button, div, h2, p, section, input, label, br, a, span, table, thead, tbody, tr, th, td, textarea, select, option, img } = require('../server/node_modules/hyperaxe');
 const moment = require('../server/node_modules/moment');
-const { template, i18n, userLink, renderStateChip, renderModuleStatsBy, paged, renderCardTop, renderEngagement } = require('./main_views');
+const { template, i18n, userLink, renderStateChip, renderModuleStatsBy, paged, renderCardTop, renderEngagement, renderSearchButton } = require('./main_views');
 const { renderScopeChip } = require('./clearnet_view');
 const { renderStyledText, safeExternalHref } = require('../backend/renderStyledText');
 
@@ -1007,7 +1007,7 @@ const CaseSearch = (filter, search = '', items = null) =>
         class: 'filter-box__input'
       }),
       div({ class: 'filter-box__controls' },
-        button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+        renderSearchButton(i18n.searchButton)
       )
     )
   );

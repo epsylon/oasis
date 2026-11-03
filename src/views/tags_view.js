@@ -1,5 +1,5 @@
 const { form, button, div, h2, p, section, table, thead, tr, th, td, a, tbody, input } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderModuleStats, paged, relationFilterLabel } = require('./main_views');
+const { template, i18n, renderModuleStats, paged, relationFilterLabel, renderSearchButton } = require('./main_views');
 
 const getFilteredTags = (filter, tags) => {
   const filteredTags = Array.isArray(tags) ? [...tags] : [];
@@ -70,7 +70,7 @@ exports.tagsView = async (tags, filter, search = '') => {
         form({ method: 'GET', action: '/tags', class: 'filter-box' },
           input({ type: 'hidden', name: 'filter', value: filter || 'top' }),
           input({ type: 'text', name: 'search', value: query, placeholder: i18n.tagsSearchPlaceholder, class: 'filter-box__input' }),
-          div({ class: 'filter-box__controls' }, button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton))
+          div({ class: 'filter-box__controls' }, renderSearchButton(i18n.searchButton))
         )
       ),
       div({ class: 'tags-list' },

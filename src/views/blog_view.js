@@ -3,7 +3,7 @@ const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, renderScheduledChip, renderEditedChip, hasRelation } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, renderScheduledChip, renderEditedChip, hasRelation, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledHtml } = require("../backend/renderStyledText");
@@ -45,7 +45,7 @@ const renderFilterBar = (filter, q, showSearch = true, total = null, censusList 
     if (m === "MINE") return censusB.some(b => String(b.author) === String(userId));
     if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusB);
     if (m === "RECENT") return censusB.length > 0;
-    if (m === "FAVORITES") return censusB.some(b => b.isFavorite);
+    if (m === "FAVORITES") return censusB.length > 0;
     return true;
   };
   return section(
@@ -59,12 +59,13 @@ const renderFilterBar = (filter, q, showSearch = true, total = null, censusList 
     ),
     showSearch && !emptyMod
       ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
+        showSearch && !emptyMod ? renderLayoutSwitch("filters") : null,
           total != null ? renderModuleStats(total) : null,
           form({ method: "GET", action: "/blogs", class: "filter-box" },
             input({ type: "hidden", name: "filter", value: filter }),
             input({ type: "text", name: "q", value: q || "", placeholder: i18n.blogSearchPlaceholder, class: "filter-box__input" }),
             div({ class: "filter-box__controls" },
-              button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+              renderSearchButton(i18n.searchButton)
             )
           )
         )
@@ -167,6 +168,7 @@ const renderCommentsSection = (blog, comments = []) => {
 exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
   const showForm = String(filter).toUpperCase() === "CREATE";
   const spreadMap = params.spreadMap instanceof Map ? params.spreadMap : new Map();
+  const pageBlogs = !showForm && blogs.length ? paged(blogs) : [];
   return template(
     i18n.blogTitle,
     section(
@@ -180,7 +182,7 @@ exports.blogView = async (blogs = [], filter = "ALL", params = {}) => {
       ? renderCreateForm(params.draft || null)
       : section(
           blogs.length
-            ? div({ class: "blogs-grid" }, ...paged(blogs).map(b => renderBlogCard(b, filter, spreadMap.get(b.id))))
+            ? renderLayoutItems(() => div({ class: "blogs-grid" }, ...pageBlogs.map(b => renderBlogCard(b, filter, spreadMap.get(b.id)))))
             : div({ class: "no-content-box" }, p({ class: "no-content" }, i18n.blogNoItems))
         )
   );

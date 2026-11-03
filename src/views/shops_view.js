@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views")
+const { renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText")
@@ -243,6 +243,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
   const title = i18n.shopsTitle
   const isForm = filter === "create" || filter === "edit"
   const isProducts = filter === "products" || filter === "prices"
+  const pageItems = isForm || !list.length ? [] : paged(list)
 
   return template(
     title,
@@ -251,6 +252,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
     !isForm && !emptyMod
       ? section(
           div({ class: "filters activity-filter-chips activity-toolbar-row" },
+            isForm || emptyMod ? null : renderLayoutSwitch("tribe-mode-buttons"),
             isProducts ? renderModuleStats(list.length) : renderModuleStatsBy(list, s => String(s.visibility || '').toUpperCase(), [{ value: 'OPEN', label: i18n.shopOpen }, { value: 'CLOSED', label: i18n.shopClosed }]),
             form({ method: "GET", action: "/shops", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
@@ -260,7 +262,7 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
                   option({ value: "recent", ...(sort === "recent" ? { selected: true } : {}) }, i18n.documentSortRecent),
                   option({ value: "top", ...(sort === "top" ? { selected: true } : {}) }, i18n.documentSortTop)
                 ),
-                button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+                renderSearchButton(i18n.searchButton)
               )
             )
           )
@@ -270,16 +272,12 @@ exports.shopsView = async (shops, filter, shopToEdit = null, params = {}) => {
       isForm
         ? renderShopForm(filter, filter === "edit" ? (shopToEdit || {}) : (params.draft || {}), params)
         : isProducts
-          ? div({ class: "shop-products-grid" },
-              list.length
-                ? paged(list).map(prod => renderProductCard(prod, prod.shopId, buildReturnTo(filter, { q }), params))
-                : p(i18n.shopNoProducts)
-            )
-          : div({ class: "tribe-grid" },
-              list.length
-                ? paged(list).map(shopItem => renderShopCard(shopItem, filter, params))
-                : p(i18n.shopNoItems)
-            )
+          ? list.length
+            ? renderLayoutItems(() => div({ class: "shop-products-grid" }, pageItems.map(prod => renderProductCard(prod, prod.shopId, buildReturnTo(filter, { q }), params))))
+            : div({ class: "shop-products-grid" }, p(i18n.shopNoProducts))
+          : list.length
+            ? renderLayoutItems(() => div({ class: "tribe-grid" }, pageItems.map(shopItem => renderShopCard(shopItem, filter, params))))
+            : div({ class: "tribe-grid" }, p(i18n.shopNoItems))
     )
   )
 }

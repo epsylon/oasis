@@ -30,6 +30,14 @@ describe('pdf: read on the node, without the browser', (t) => {
     eq(await refused(() => viewer.info('not-here', async () => null)), 'UNAVAILABLE');
   });
 
+  t('thumbnails are drawn at a width the page route accepts', async () => {
+    ok(viewer.isPdfWidth(viewer.PDF_THUMB_WIDTH));
+    const pdf = sample();
+    const sharp = require('../../../src/server/node_modules/sharp');
+    const thumb = await sharp((await viewer.page('test-thumb', async () => pdf, 1, viewer.PDF_THUMB_WIDTH, 0)).body).metadata();
+    eq(thumb.width, viewer.PDF_THUMB_WIDTH);
+  });
+
   t('pictures are only drawn at the zoom levels and turns the viewer offers', () => {
     for (const z of viewer.PDF_ZOOMS) ok(viewer.isPdfWidth(viewer.widthOf(z)), `${z}%`);
     notOk(viewer.isPdfWidth(12345), 'any other width is refused');

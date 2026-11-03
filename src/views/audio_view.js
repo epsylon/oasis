@@ -18,9 +18,8 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderPlayerFollow, renderSearchButton } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
-const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
@@ -58,12 +57,15 @@ const renderTranscodeButton = (audioObj) =>
       )
     : null;
 
+const audioFollow = (audioObj) => audioObj?.url ? renderPlayerFollow(audioObj.url, audioObj.title, `/audios/${encodeURIComponent(audioObj.key)}`) : null;
+
 const renderAudioPlayer = (audioObj, opts = {}) =>
   audioObj?.url
     ? div(
-        { class: "audio-container" },
-        audioHyperaxe({ controls: true, src: blobUrlOf(audioObj.url), preload: "metadata" }),
-        opts.skipTranscode ? null : renderTranscodeButton(audioObj)
+        { class: "audio-container card-content" },
+        audioHyperaxe({ controls: true, preload: "metadata", src: blobUrlOf(audioObj.url) }),
+        opts.skipTranscode ? null : renderTranscodeButton(audioObj),
+        audioFollow(audioObj)
       )
     : p(i18n.audioNoFile);
 
@@ -173,7 +175,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
-  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => !x.tribeOrigin && String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;
 };
@@ -189,6 +191,9 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
   const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const audioToEdit = audioId ? list.find((a) => a.key === audioId) : null;
+  const isForm = filter === "create" || filter === "edit";
+  const pageAudios = isForm ? [] : paged(list);
+  const audioCards = () => div({ class: "audios-list" }, renderAudioList(pageAudios, filter, { q, sort, spreadMap: params.spreadMap }));
 
   return template(
     title,
@@ -219,11 +224,12 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
       )
     ),
     section(
-      filter === "create" || filter === "edit"
+      isForm
         ? renderAudioForm(filter, audioId, audioToEdit, { ...params, filter })
         : section(
             emptyMod ? null : div(
               { class: "audios-search activity-filter-chips activity-toolbar-row" },
+                isForm || emptyMod ? null : renderLayoutSwitch("filters"),
                 renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/audios", class: "filter-box" },
@@ -243,11 +249,11 @@ exports.audioView = async (audios, filter = "all", audioId = null, params = {}) 
                     option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.audioSortOldest),
                     option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.audioSortTop)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.audioSearchButton)
+                  renderSearchButton(i18n.audioSearchButton)
                 )
               )
             ),
-            div({ class: "audios-list" }, renderAudioList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
+            pageAudios.length ? renderLayoutItems(audioCards) : audioCards()
           )
     )
   );
@@ -312,7 +318,7 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(audioObj.description)))
       : null,
     renderAudioPlayer(audioObj),
-    audioObj?.url ? renderDownloadButton(blobUrlOf(audioObj.url), audioObj.title || "") : null,
+    audioObj?.url ? div({ class: "media-actions" }, renderDownloadButton(blobUrlOf(audioObj.url), audioObj.title || "")) : null,
     renderEngagement(audioObj.key,
       renderOpinionsVoting('/audios/opinions', audioObj.key, audioObj.opinions, returnTo, audioObj.opinions_inhabitants),
       renderAudioCommentsSection(audioObj.key, comments, returnTo))
@@ -348,13 +354,11 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
   );
 };
 
-const { renderCompositionSequence } = require("./melody_view");
+const { renderTranscodeResult } = require("./melody_view");
 
 exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload = null, availableIds = null, itemSize = null }) => {
   const title = i18n.audioTranscodeDetailTitle || "Transcode";
   const composition = Array.isArray(audio.bcsComposition) ? audio.bcsComposition : [];
-  const hasStego = decoded && stegoPayload && (stegoPayload.id || stegoPayload.ts || stegoPayload.msg);
-  const stegoDate = hasStego && Number.isFinite(stegoPayload.ts) ? moment(stegoPayload.ts).format("YYYY/MM/DD HH:mm") : null;
 
   return template(
     title,
@@ -381,29 +385,7 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
         ),
         br(),
         decoded
-          ? div({ class: "transcode-result" },
-              hasStego
-                ? [
-                    div({ class: "transcode-stego-field" },
-                      span({ class: "card-label" }, (i18n.audioTranscodeStegoTimestamp || "Generated at") + ": "),
-                      span({ class: "card-value" }, stegoDate || (i18n.audioTranscodeStegoUnknown || "—"))
-                    ),
-                    div({ class: "transcode-stego-field" },
-                      stegoPayload.id ? userLink(stegoPayload.id) : span({ class: "card-value" }, i18n.audioTranscodeStegoUnknown || "—")
-                    ),
-                    div({ class: "transcode-stego-field transcode-stego-msg" },
-                      span({ class: "card-label" }, (i18n.audioTranscodeStegoMessage || "TEXT") + ":"),
-                      br(),
-                      stegoPayload.msg
-                        ? p({ class: "transcode-stego-text" }, stegoPayload.msg)
-                        : span({ class: "card-value" }, i18n.audioTranscodeStegoEmpty || "(none)")
-                    )
-                  ]
-                : p({ class: "empty" }, i18n.audioTranscodeStegoNotFound || "No steganographic payload could be decoded from this audio."),
-              composition.length
-                ? renderCompositionSequence(composition, availableIds)
-                : p({ class: "empty" }, i18n.audioTranscodeCompositionEmpty || "This audio does not include a stored blockchain composition.")
-            )
+          ? renderTranscodeResult({ stegoPayload, composition, availableIds, notFound: i18n.audioTranscodeStegoNotFound || "No steganographic payload could be decoded from this audio.", empty: i18n.audioTranscodeCompositionEmpty || "This audio does not include a stored blockchain composition." })
           : null
       )
     )

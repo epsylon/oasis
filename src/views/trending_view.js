@@ -1,5 +1,5 @@
-const { div, h2, p, section, button, form, input } = require("../server/node_modules/hyperaxe");
-const { template, i18n, renderModuleStats, paged, hasRelation, RELATION_FILTERS, relationFilterLabel } = require('./main_views');
+const { div, h2, p, section, form, input } = require("../server/node_modules/hyperaxe");
+const { template, i18n, renderLayoutSwitch, renderModuleStats, paged, hasRelation, RELATION_FILTERS, relationFilterLabel, renderSearchButton, renderFilterFold, isFavoriteItem } = require('./main_views');
 const { config } = require('../server/SSB_server.js');
 const { renderActionCards, rootTypeLabel } = require('./activity_view');
 
@@ -8,14 +8,7 @@ const userId = config.keys.id;
 const capFirst = (s) => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
 const typeLabel = (type) => i18n['type' + capFirst(type)] || rootTypeLabel(type) || type;
 
-const filterButton = (mode, currentFilter) =>
-  form({ method: 'GET', action: '/trending' },
-    input({ type: 'hidden', name: 'filter', value: mode }),
-    button(
-      { type: 'submit', class: currentFilter === mode ? 'filter-btn active' : 'filter-btn' },
-      RELATION_FILTERS.includes(mode.toLowerCase()) ? relationFilterLabel(mode.toLowerCase()) : String(i18n[mode + 'Button'] || typeLabel(mode)).toUpperCase()
-    )
-  );
+const trendingFilterLabel = (mode) => mode === 'FAVORITES' ? String(i18n.favoritesTitle).toUpperCase() : RELATION_FILTERS.includes(mode.toLowerCase()) ? relationFilterLabel(mode.toLowerCase()) : String(i18n[mode + 'Button'] || typeLabel(mode)).toUpperCase();
 
 const asCardAction = (item, commentCounts) => ({
   ...item,
@@ -27,10 +20,12 @@ const asCardAction = (item, commentCounts) => ({
   ...(commentCounts instanceof Map ? { commentCount: commentCounts.get(item.key) || 0 } : {})
 });
 
+const trendingHref = (scope, kind) => `/trending?${new URLSearchParams([['filter', scope], ...(kind ? [['type', kind]] : [])]).toString()}`;
+
 exports.trendingView = (items, filter, spreadMap = new Map(), q = '', allItems = null, params = {}) => {
   const title = i18n.trendingTitle;
 
-  const baseFilters = ['TOP', 'ALL', 'RECENT', 'MINE', 'SUPPORTED', 'REPLICATED'];
+  const baseFilters = ['TOP', 'ALL', 'RECENT', 'MINE', 'SUPPORTED', 'REPLICATED', 'FAVORITES'];
   const contentFilters = [
     ['votes', 'event', 'task', 'report'],
     ['feed', 'post', 'project', 'industry', 'shopProduct', 'transfer'],
@@ -47,25 +42,29 @@ exports.trendingView = (items, filter, spreadMap = new Map(), q = '', allItems =
   const presentTypes = new Set(censusItems.map(item => (item.value?.content || item.content || {}).type).filter(Boolean));
   const emptyTrend = censusItems.length === 0 && !String(q || '').trim();
   const shownBase = baseFilters.filter(mode => !RELATION_FILTERS.includes(mode.toLowerCase()) || mode === filter || hasRelation(mode.toLowerCase(), censusItems));
+  const allTypes = contentFilters.flat();
+  const scope = baseFilters.includes(filter) ? filter : 'ALL';
+  const kind = allTypes.includes(filter) ? filter : (baseFilters.includes(filter) && allTypes.includes(params.type) ? params.type : null);
 
-  if (filter === 'MINE') {
+  if (scope === 'MINE') {
     filteredItems = filteredItems.filter(item => item.value.author === userId);
-  } else if (filter === 'SUPPORTED' || filter === 'REPLICATED') {
-    filteredItems = filteredItems.filter(item => filter === 'SUPPORTED' ? item.isSupported : item.isReplicated);
-  } else if (filter === 'RECENT') {
+  } else if (scope === 'SUPPORTED' || scope === 'REPLICATED') {
+    filteredItems = filteredItems.filter(item => scope === 'SUPPORTED' ? item.isSupported : item.isReplicated);
+  } else if (scope === 'FAVORITES') {
+    filteredItems = filteredItems.filter(item => isFavoriteItem(params.favIndex, item));
+  } else if (scope === 'RECENT') {
     const now = Date.now();
     filteredItems = filteredItems.filter(item => now - item.value.timestamp < 24 * 60 * 60 * 1000);
-  } else if (filter === 'TOP') {
+  } else if (scope === 'TOP') {
     filteredItems.sort((a, b) => (b.trendScore || 0) - (a.trendScore || 0) || b.value.timestamp - a.value.timestamp);
-  } else if (contentFilters.flat().includes(filter)) {
+  }
+  if (kind) {
     filteredItems = filteredItems.filter(item =>
-      item.value.content.type === filter ||
-      (filter === 'votes' && item.value.content.type === 'poll'));
-  } else if (filter !== 'ALL') {
-    filteredItems = filteredItems.filter(item => (item.trendScore || 0) > 0);
+      item.value.content.type === kind ||
+      (kind === 'votes' && item.value.content.type === 'poll'));
   }
 
-  if (filter !== 'TOP') {
+  if (scope !== 'TOP') {
     filteredItems.sort((a, b) => b.value.timestamp - a.value.timestamp);
   }
 
@@ -90,21 +89,19 @@ exports.trendingView = (items, filter, spreadMap = new Map(), q = '', allItems =
     title,
     section(
       header,
-      emptyTrend ? null : div(
-        { class: 'mode-buttons' },
-        div({ class: 'column' }, shownBase.map(mode => filterButton(mode, filter))),
-        ...contentFilters.map(row => {
-          const visible = row.filter(mode => presentTypes.has(mode) || (mode === 'votes' && presentTypes.has('poll')));
-          return visible.length ? div({ class: 'column' }, visible.map(mode => filterButton(mode, filter))) : null;
-        })
-      ),
+      emptyTrend ? null : renderFilterFold('trending-filters-more',
+        [...shownBase, ...allTypes.filter(mode => presentTypes.has(mode) || (mode === 'votes' && presentTypes.has('poll')))]
+          .map(mode => ({ value: mode, label: trendingFilterLabel(mode), href: baseFilters.includes(mode) ? trendingHref(mode, kind) : trendingHref(scope, mode === kind ? null : mode) })),
+        kind ? [scope, kind] : [scope]),
       emptyTrend ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+        emptyTrend ? null : renderLayoutSwitch('mode-buttons'),
         renderModuleStats(shownItems.length),
         form({ method: 'GET', action: '/trending', class: 'filter-box' },
-          input({ type: 'hidden', name: 'filter', value: filter }),
+          input({ type: 'hidden', name: 'filter', value: scope }),
+          kind ? input({ type: 'hidden', name: 'type', value: kind }) : null,
           input({ type: 'text', name: 'q', value: q, placeholder: i18n.trendingSearchPlaceholder, class: 'filter-box__input' }),
           div({ class: 'filter-box__controls' },
-            button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+            renderSearchButton(i18n.searchButton)
           )
         )
       ),

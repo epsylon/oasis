@@ -4,7 +4,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt, renderCountChip, asChip } = require('./main_views');
+const { template, i18n, userLink, renderSpreadButton, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt, renderCountChip, asChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -24,7 +24,7 @@ exports.renderForumInvitePage = (code) => {
   return template(i18n.invitesForumsTitle || 'Forums', section(pageContent));
 };
 
-const BASE_FILTERS = ['all','recent','mine','supported','replicated','top'];
+const BASE_FILTERS = ['all','recent','mine','supported','replicated','favorites','top'];
 const CAT_BLOCK1 = ['GENERAL','OASIS','L.A.R.P.'];
 const CAT_BLOCK2 = ['POLITICS','TECH','SCIENCE','MUSIC','ART','GAMING','BOOKS','FILMS'];
 const CAT_BLOCK3 = ['PHILOSOPHY','SOCIETY','PRIVACY','CYBERWARFARE','SURVIVALISM'];
@@ -47,6 +47,7 @@ function getFilteredForums(filter, forums) {
   if (filter === 'mine')    return forums.filter(f => f.author === userId);
   if (filter === 'supported') return forums.filter(f => f.isSupported);
   if (filter === 'replicated') return forums.filter(f => f.isReplicated);
+  if (filter === 'favorites') return forums.filter(f => f.isFavorite);
   if (filter === 'recent')  return forums.filter(f => new Date(f.createdAt).getTime() >= now - 86400000);
   if (filter === 'top')     return forums.filter(f => !f.tribeOrigin).sort((a,b) => b.score - a.score);
   if (ALL_CATS.includes(filter))
@@ -210,10 +211,11 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
     (f && f.title && String(f.title).trim()) || (f && f.text && String(f.text).trim())
   )
   if (!visibleForums.length) return div({ class: 'tribe-grid' }, p(i18n.noForums));
-  return ul({ class: 'mailing-archive' },
-    ...paged(visibleForums).map(f => {
+  const pageForums = paged(visibleForums);
+  return renderLayoutItems(() => ul({ class: 'mailing-archive' },
+    ...pageForums.map(f => {
       if (f.tribeOrigin) {
-        return li({ class: 'mailing-archive-item' },
+        return li({ class: listItemClass('mailing-archive-item forum-item' + (String(f.author) === String(userId) ? ' own-content' : '')) },
           renderCardTop(f.key, f.tribeOrigin.href, {
             spread: (spreadMap && spreadMap.get(f.key)) || null,
             reportTitle: f.title,
@@ -230,12 +232,12 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
             ]
           }),
           div({ class: 'mailing-archive-meta' },
-            a({ href: f.tribeOrigin.href, class: 'user-link' }, f.title || '—')
+            renderListTitle(f.tribeOrigin.href, f.title || '—')
           ),
           null
         );
       }
-      return li({ class: 'mailing-archive-item' },
+      return li({ class: listItemClass('mailing-archive-item forum-item' + (String(f.author) === String(userId) ? ' own-content' : '')) },
         renderCardTop(f.key, forumHref(f), {
           date: f.createdAt,
           chips: [
@@ -251,12 +253,12 @@ const renderForumList = (forums, currentFilter, spreadMap = new Map()) => {
           spread: spreadMap.get(f.key) || null, author: f.author, favKind: 'forum', isFavorite: f.isFavorite, reportTitle: f.title, deleteAction: f.author === userId ? `/forum/delete/${encodeURIComponent(f.key)}` : null
         }),
         div({ class: 'mailing-archive-meta' },
-          a({ href: forumHref(f), class: 'user-link' }, f.title || '—')
+          renderListTitle(forumHref(f), f.title || '—')
         ),
         null
       );
     })
-  );
+  ));
 }
 
 exports.forumView = async (forums, currentFilter, params = {}) => {
@@ -267,7 +269,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
   const baseChipVisible = (mode) => {
     if (mode === currentFilter || mode === 'all') return true;
     if (mode === 'mine') return censusForums.some(f => String(f.author) === String(userId));
-    if (mode === 'supported' || mode === 'replicated') return hasRelation(mode, censusForums);
+    if (mode === 'supported' || mode === 'replicated' || mode === 'favorites') return hasRelation(mode, censusForums);
     if (mode === 'recent') return censusForums.length > 0;
     return censusForums.length > 0;
   };
@@ -284,6 +286,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
           mine: i18n.forumFilterMine,
           supported: i18n.filterSupported,
           replicated: i18n.filterReplicated,
+          favorites: String(i18n.favoritesTitle).toUpperCase(),
           recent: i18n.forumFilterRecent,
           top: i18n.forumFilterTop
         }),
@@ -296,12 +299,13 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
       currentFilter === 'create'
         ? null
         : emptyModForum ? null : div({ class: 'filters activity-filter-chips activity-toolbar-row' },
+          currentFilter === 'create' || emptyModForum ? null : renderLayoutSwitch('mode-buttons-row'),
           renderModuleStats(getFilteredForums(currentFilter || 'all', forums).length),
             form({ method: 'GET', action: '/forum', class: 'filter-box' },
               input({ type: 'hidden', name: 'filter', value: currentFilter || 'all' }),
               input({ type: 'text', name: 'q', value: params.q || '', placeholder: i18n.forumSearchPlaceholder, class: 'filter-box__input' }),
               div({ class: 'filter-box__controls' },
-                button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+                renderSearchButton(i18n.searchButton)
               )
             )
           ),
@@ -338,6 +342,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
           mine: i18n.forumFilterMine,
           supported: i18n.filterSupported,
           replicated: i18n.filterReplicated,
+          favorites: String(i18n.favoritesTitle).toUpperCase(),
           recent: i18n.forumFilterRecent,
           top: i18n.forumFilterTop
         }),

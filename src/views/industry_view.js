@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
 const { renderScopeChip } = require("./clearnet_view")
 const { renderZoomableImage } = require("./gallery_view")
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip } = require("./main_views")
+const { template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -315,6 +315,11 @@ const renderGlobalBuilds = (builds, spreadMap = new Map()) => {
   )
 }
 
+const renderIndustryLayout = (items, cards) => {
+  const shown = paged(items)
+  return div({ class: "industry-list" }, safeArr(shown).length ? renderLayoutItems(() => cards(shown)) : cards(shown))
+}
+
 exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
   const f = String(filter || "ALL").toUpperCase()
   const facilityEditWarning = f === "EDIT" ? await renderSpreadEditWarning((safeArr(facilitiesOrForm)[0] || {}).id) : null
@@ -355,11 +360,12 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
         : isForm
         ? renderFacilityForm(f === "EDIT" ? (safeArr(facilitiesOrForm)[0] || {}) : {}, f === "EDIT" ? "edit" : "create", facilityEditWarning)
         : f === "BLUEPRINTS"
-        ? div({ class: "industry-list" }, renderGlobalBlueprints(paged(facilitiesOrForm), params.spreadMap || new Map()))
+        ? renderIndustryLayout(facilitiesOrForm, (shown) => renderGlobalBlueprints(shown, params.spreadMap || new Map()))
         : f === "BUILDS"
-        ? div({ class: "industry-list" }, renderGlobalBuilds(paged(facilitiesOrForm), params.spreadMap || new Map()))
+        ? renderIndustryLayout(facilitiesOrForm, (shown) => renderGlobalBuilds(shown, params.spreadMap || new Map()))
         : section(
             emptyMod ? null : div({ class: "industry-search activity-filter-chips activity-toolbar-row" },
+              emptyMod || isRules || isForm ? null : renderLayoutSwitch("filters"),
               renderModuleStatsBy(facilitiesOrForm, fc => String(fc.status || 'ACTIVE').toUpperCase(), [{ value: 'ACTIVE', label: i18n.industryStatusActive }, { value: 'PAUSED', label: i18n.industryStatusPaused }, { value: 'DISSOLVED', label: i18n.industryStatusDissolved }]),
               form({ method: "GET", action: "/industry", class: "filter-box" },
                 input({ type: "hidden", name: "filter", value: f || "ALL" }),
@@ -369,11 +375,11 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
                     [option({ value: "", ...(sectorSel ? {} : { selected: true }) }, i18n.industryAllSectors || "All sectors")]
                       .concat(SECTORS.map((s) => option({ value: s, ...(s === sectorSel ? { selected: true } : {}) }, sectorLabel(s))))
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.searchButton)
+                  renderSearchButton(i18n.searchButton)
                 )
               )
             ),
-            div({ class: "industry-list" }, renderFacilityList(paged(facilitiesOrForm), f, params.spreadMap))
+            renderIndustryLayout(facilitiesOrForm, (shown) => renderFacilityList(shown, f, params.spreadMap))
           )
     )
   )

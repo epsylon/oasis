@@ -1,6 +1,6 @@
 const { div, h2, h3, p, section, button, form, a, input, span, pre, table, thead, tbody, tr, td, th, br, strong, label, ul, li } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, i18n, userLink, formatCarbon, renderStateChip, renderModuleStats, renderWalletChip, paged, renderIcon } = require("../views/main_views");
+const { template, i18n, userLink, formatCarbon, renderStateChip, renderModuleStats, renderWalletChip, paged, renderIcon, renderSearchButton } = require("../views/main_views");
 const moment = require("../server/node_modules/moment");
 
 const FILTER_LABELS = {
@@ -761,7 +761,7 @@ const renderAddresses = (data, userId) => {
       ? form({ method: "GET", action: "/banking", class: "filter-box bank-addr-search" },
           input({ type: "hidden", name: "filter", value: "addresses" }),
           input({ type: "text", name: "q", placeholder: i18n.bankAddressSearch, value: search || "", class: "filter-box__input" }),
-          div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+          div({ class: "filter-box__controls" }, renderSearchButton(i18n.searchButton))
         )
       : null,
     rows.length === 0

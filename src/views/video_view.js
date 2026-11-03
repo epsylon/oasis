@@ -16,9 +16,8 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const moment = require("../server/node_modules/moment");
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters } = require("./main_views");
+const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -55,11 +54,12 @@ const renderVideoPlayer = (videoObj) =>
         { class: "video-container video-container-row" },
         videoHyperaxe({
           controls: true,
-          src: blobUrlOf(videoObj.url),
-          preload: "metadata"
+          preload: "metadata",
+          src: blobUrlOf(videoObj.url)
         })
       )
     : p(i18n.videoNoFile);
+
 
 const renderVideoCommentsSection = (videoId, comments = [], returnTo = null) => {
   return renderSharedCommentsSection({
@@ -168,7 +168,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
   if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
-  if (mode === "favorites") return censusM.some((x) => x.isFavorite);
+  if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
   return true;
 };
@@ -184,6 +184,9 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
   const emptyMod = moduleIsEmpty(list, filter, "all", q);
   const mediaChip = mediaChipFor(filter, Array.isArray(params.censusList) ? params.censusList : list);
   const videoToEdit = videoId ? list.find((v) => v.key === videoId) : null;
+  const isForm = filter === "create" || filter === "edit";
+  const pageVideos = isForm ? [] : paged(list);
+  const videoCards = () => div({ class: "videos-list" }, renderVideoList(pageVideos, filter, { q, sort, spreadMap: params.spreadMap }));
 
   return template(
     title,
@@ -214,11 +217,12 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
       )
     ),
     section(
-      filter === "create" || filter === "edit"
+      isForm
         ? renderVideoForm(filter, videoId, videoToEdit, { ...params, filter })
         : section(
             emptyMod ? null : div(
               { class: "videos-search activity-filter-chips activity-toolbar-row" },
+                isForm || emptyMod ? null : renderLayoutSwitch("filters"),
                 renderModuleStats(list.length),
               form(
                 { method: "GET", action: "/videos", class: "filter-box" },
@@ -238,11 +242,11 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
                     option({ value: "oldest", ...(sort === "oldest" ? { selected: true } : {})}, i18n.videoSortOldest),
                     option({ value: "top", ...(sort === "top" ? { selected: true } : {})}, i18n.videoSortTop)
                   ),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.videoSearchButton)
+                  renderSearchButton(i18n.videoSearchButton)
                 )
               )
             ),
-            div({ class: "videos-list" }, renderVideoList(paged(list), filter, { q, sort, spreadMap: params.spreadMap }))
+            pageVideos.length ? renderLayoutItems(videoCards) : videoCards()
           )
     )
   );
@@ -299,7 +303,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       ? div({ class: "job-section" }, h2({ class: "job-section-title" }, i18n.description), p({ class: "tribe-side-description" }, ...renderStyledText(videoObj.description)))
       : null,
     renderVideoPlayer(videoObj),
-    videoObj?.url ? renderDownloadButton(blobUrlOf(videoObj.url), videoObj.title || "") : null,
+    videoObj?.url ? div({ class: "media-actions" }, renderDownloadButton(blobUrlOf(videoObj.url), videoObj.title || "")) : null,
     renderEngagement(videoObj.key,
       renderOpinionsVoting('/videos/opinions', videoObj.key, videoObj.opinions, returnTo, videoObj.opinions_inhabitants),
       renderVideoCommentsSection(videoObj.key, comments, returnTo))

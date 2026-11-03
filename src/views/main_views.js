@@ -32,6 +32,7 @@ const { a, article, br, body, button, details, div, em, form, h1, h2, h3, head, 
 const lodash = require("../server/node_modules/lodash");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const nameCache = require('../backend/nameCache');
+const mediaPlayer = require('../backend/media_player');
 
 const userLinkLabel = (feedId, knownName) => {
   const id = String(feedId || '');
@@ -101,6 +102,7 @@ const inboxBadges = () => {
   const inboxCount = Number(sharedState.getInboxCount()) || 0;
   return [inboxCount > 0 ? span({ class: 'inbox-badge' }, String(inboxCount)) : ''];
 };
+const inboxHref = () => (Number(sharedState.getInboxCount()) || 0) > 0 ? '/inbox?filter=unread' : '/inbox';
 const phoneOn = () => !config.public && getConfig().modules.phoneMod !== 'off';
 const PHONE_PAM_MAX_MS = require('../server/phone_module').VOICEMAIL_MAX_MS;
 const renderCallButton = (feedId, { upper = false, cls = null, pam = false } = {}) => {
@@ -247,8 +249,172 @@ exports.sortChips = sortChips;
 exports.chipRoleOf = chipRoleOf;
 exports.renderChipsRow = renderChipsRow;
 
+const LIST_LAYOUTS = [['cards', 'listViewCards', 'layoutCards'], ['list', 'listViewList', 'layoutList'], ['grid', 'listViewGrid', 'layoutGrid']];
+const listLayout = () => { const st = listScope(); return (st && st.layout) || 'cards'; };
+const renderLayoutSwitch = (rowClass = 'mode-buttons-row', chipClass = null) => {
+  const scope = listScope() || {};
+  const segs = String(scope.path || '').split('/').filter(Boolean);
+  const st = segs.length > 1 ? { path: `/${segs[0]}`, query: '' } : scope;
+  const params = Array.from(new URLSearchParams(st.query || '').entries()).filter(([k]) => k !== 'layout' && k !== 'page');
+  const current = listLayout();
+  if (chipClass) return div({ class: `${rowClass} layout-switch` },
+    LIST_LAYOUTS.map(([value, key, icon]) => a({
+      href: `${st.path || ''}?${new URLSearchParams([...params, ['layout', value]]).toString()}`,
+      class: current === value ? `${chipClass} layout-switch-btn active` : `${chipClass} layout-switch-btn`,
+      title: String(i18n[key] || value)
+    }, renderIcon(icon)))
+  );
+  return div({ class: `${rowClass} layout-switch` },
+    LIST_LAYOUTS.map(([value, key, icon]) => form({ method: 'GET', action: st.path || '' },
+      ...params.map(([k, v]) => input({ type: 'hidden', name: k, value: v })),
+      input({ type: 'hidden', name: 'layout', value }),
+      button({ type: 'submit', class: current === value ? 'filter-btn layout-switch-btn active' : 'filter-btn layout-switch-btn', title: String(i18n[key] || value) }, renderIcon(icon))
+    ))
+  );
+};
+const findNode = (n, pred) => {
+  for (const k of Array.from((n && n.childNodes) || [])) {
+    if (pred(k)) return k;
+    const found = findNode(k, pred);
+    if (found) return found;
+  }
+  return null;
+};
+const hasClass = (name) => (n) => classesOf(n).includes(name);
+const blobDownloadOf = (src) => (String(src || '').startsWith('/blob/') ? `${src}${String(src).includes('?') ? '&' : '?'}download=1` : null);
+const localHrefOf = (card) => {
+  const media = findNode(card, (k) => ['audio', 'video'].includes(tagOf(k)) && blobDownloadOf(k.src));
+  if (media) return blobDownloadOf(media.src);
+  const picture = findNode(card, (k) => classesOf(k).some((c) => c === 'image-card-body' || c === 'image') && !!findNode(k, hasClass('lightbox-download')));
+  const download = picture ? findNode(picture, hasClass('lightbox-download')) : null;
+  return download ? String(download.href || '') || null : null;
+};
+const forEachCard = (root, fn) => {
+  const walk = (n) => {
+    for (const k of Array.from((n && n.childNodes) || [])) {
+      const top = Array.from(k.childNodes || []).find(hasClass('card-top'));
+      if (top) fn(k, String((findNode(top, hasClass('btn-content')) || {}).href || '')); else walk(k);
+    }
+  };
+  walk(root);
+};
+const OPINION_PAGES = ['/trending', '/opinions'];
+const keepsOpinions = () => { const p = String((listScope() || {}).path || ''); return OPINION_PAGES.some((b) => p === b || p.startsWith(b + '/')); };
+const linkOpinions = (card, href) => {
+  for (let box = findNode(card, hasClass('opinions-voting-collapse')); box && box.parentNode; box = findNode(card, hasClass('opinions-voting-collapse'))) {
+    const summary = findNode(box, hasClass('opinions-summary'));
+    const count = findNode(box, hasClass('opinions-summary-count'));
+    const cls = `${classesOf(summary).join(' ')} opinions-summary-link`.trim();
+    const kids = [span({ class: 'opinions-summary-icon' }, 'ꔍ'), span({ class: 'opinions-summary-count' }, String((count && count.textContent) || ''))];
+    box.parentNode.insertBefore(href ? a({ href, class: cls, title: i18n.opinionsTitle }, ...kids) : span({ class: cls }, ...kids), box);
+    box.parentNode.removeChild(box);
+  }
+};
+const dropOpinions = (card) => {
+  const isOpinion = (k) => classesOf(k).some((c) => c === 'opinions-voting-collapse' || c === 'feed-votes-summary');
+  for (let node = findNode(card, isOpinion); node && node.parentNode; node = findNode(card, isOpinion)) node.parentNode.removeChild(node);
+};
+const NO_LOCAL_CARDS = ['podcast-card'];
+const addListActions = (card) => {
+  if (findNode(card, (k) => classesOf(k).some((c) => c === 'torrent-card-actions' || c === 'card-actions'))) return;
+  const local = classesOf(card).some((c) => NO_LOCAL_CARDS.includes(c)) ? null : localHrefOf(card);
+  if (local) card.appendChild(div({ class: 'torrent-card-actions' }, a({ href: local, class: 'filter-btn', ...blobAttr(blobOfHref(local)) }, `\u2B07 ${i18n.torrentOasisButton || 'LOCAL'}`)));
+};
+const collectNodes = (n, pred, out = []) => {
+  for (const k of Array.from((n && n.childNodes) || [])) { if (pred(k)) out.push(k); else collectNodes(k, pred, out); }
+  return out;
+};
+const EXCERPT_DROP_TAGS = ['img', 'video', 'audio', 'object', 'embed', 'iframe', 'form', 'button', 'input', 'details', 'table', 'hr'];
+const EXCERPT_DROP = ['lightbox', 'zoom-link', 'pdf-holder', 'pdf-viewer-container', 'rt-rule', 'filter-btn'];
+const pruneExcerpt = (n) => {
+  for (const k of Array.from(n.childNodes || [])) {
+    if (k.nodeType === 3) continue;
+    if (EXCERPT_DROP_TAGS.includes(tagOf(k)) || classesOf(k).some((c) => EXCERPT_DROP.includes(c))) n.removeChild(k);
+    else pruneExcerpt(k);
+  }
+  return n;
+};
+const trimEdge = (n, side) => {
+  const kids = Array.from(n.childNodes || []);
+  const k = side === 'first' ? kids[0] : kids[kids.length - 1];
+  if (!k) return;
+  if (k.nodeType === 3) {
+    const v = String(k.value == null ? k.textContent || '' : k.value);
+    const t = side === 'first' ? v.replace(/^\s+/, '') : v.replace(/\s+$/, '');
+    if (!t) { n.removeChild(k); trimEdge(n, side); } else k.value = t;
+  } else trimEdge(k, side);
+};
+const addExcerpt = (card) => {
+  const src = findNode(card, hasClass('card-excerpt'));
+  if (!src) return;
+  const box = div({ class: [...classesOf(src).filter((c) => c && c !== 'card-excerpt'), 'card-content', 'card-content-excerpt'].join(' ') });
+  for (const k of Array.from(src.childNodes || [])) { src.removeChild(k); box.appendChild(k); }
+  pruneExcerpt(box);
+  trimEdge(box, 'first');
+  trimEdge(box, 'last');
+  if (String(box.textContent || '').trim()) card.appendChild(box);
+};
+const isHeading = (k) => ['h1', 'h2', 'h3', 'h4'].includes(tagOf(k));
+const titleOf = (card) => {
+  for (const k of Array.from(card.childNodes || [])) {
+    if (classesOf(k).includes('card-top')) continue;
+    const t = isHeading(k) ? k : findNode(k, isHeading);
+    if (t) return t;
+  }
+  return null;
+};
+const insertAfter = (ref, node) => {
+  const parent = ref.parentNode;
+  const kids = Array.from(parent.childNodes || []);
+  const next = kids[kids.indexOf(ref) + 1];
+  if (next) parent.insertBefore(node, next); else parent.appendChild(node);
+};
+const placeContent = (card, layout) => {
+  const title = layout === 'grid' ? titleOf(card) : null;
+  let after = title && title.parentNode && classesOf(title.parentNode).includes('shop-title-row') ? title.parentNode : title;
+  for (const k of collectNodes(card, hasClass('card-content'))) {
+    k.parentNode.removeChild(k);
+    const box = tagOf(k) === 'div' ? k : div({ class: 'card-content' }, k);
+    if (after && after.parentNode) { insertAfter(after, box); after = box; } else card.appendChild(box);
+  }
+  for (const k of collectNodes(card, hasClass('card-actions'))) { k.parentNode.removeChild(k); card.appendChild(k); }
+};
+const ENGAGE_DROP = ['comments-summary', 'comments-summary-link', 'comments-collapse', 'card-share', 'support-form', 'support-pill'];
+const dropEngagement = (card) => {
+  for (const k of collectNodes(card, hasClass('card-engage'))) k.class = `${classesOf(k).join(' ')} card-meta-row`.trim();
+  for (const k of collectNodes(card, (n) => classesOf(n).some((c) => ENGAGE_DROP.includes(c)))) k.parentNode.removeChild(k);
+  for (const row of collectNodes(card, hasClass('card-meta-row'))) {
+    if (!Array.from(row.childNodes || []).some((k) => k.nodeType !== 3 || String(k.textContent || '').trim())) row.parentNode.removeChild(row);
+  }
+};
+const renderListTitle = (href, title) => compactCards() ? h2({ class: 'tribe-card-title' }, a({ href }, title)) : a({ href, class: 'user-link' }, title);
+const listItemClass = (cls) => compactCards() ? `${cls} tribe-card` : cls;
+exports.renderListTitle = renderListTitle;
+exports.listItemClass = listItemClass;
+const renderLayoutItems = (cards, layout = listLayout()) => {
+  const st = listScope();
+  if (!st || layout === 'cards' || !LIST_LAYOUTS.some(([value]) => value === layout)) return cards();
+  st.compactCards = layout;
+  try {
+    const node = div({ class: `layout-${layout}` }, cards());
+    const opinions = keepsOpinions();
+    forEachCard(node, (card, href) => {
+      if (opinions) linkOpinions(card, href); else dropOpinions(card);
+      if (layout === 'list') addExcerpt(card);
+      placeContent(card, layout);
+      dropEngagement(card);
+      if (layout === 'list') addListActions(card);
+    });
+    return node;
+  } finally { st.compactCards = false; }
+};
+const compactCards = () => !!(listScope() || {}).compactCards;
+exports.listLayout = listLayout;
+exports.renderLayoutSwitch = renderLayoutSwitch;
+exports.renderLayoutItems = renderLayoutItems;
+
 const renderStateChip = (variant, icon, text, role = null) => asChip(role,
-  span({ class: `pm-exposition-chip pm-exposition-${variant}` },
+  span({ class: `pm-exposition-chip pm-exposition-${variant}${role === 'module' ? ' pm-exposition-module' : ''}` },
     icon ? span({ class: "pm-exposition-icon" }, icon) : null,
     span({ class: "pm-exposition-text" }, String(text || ""))
   ));
@@ -369,14 +535,23 @@ const renderWalletChip = () => {
 exports.renderWalletChip = renderWalletChip;
 
 const torrentFileName = (title) => `${String(title || 'download').replace(/\.torrent$/i, '')}.torrent`;
+const BLOB_ID_RE = /^&[A-Za-z0-9+/]{43}=\.sha256$/;
+const blobOfHref = (href) => {
+  const m = /\/blob\/([^?#/]+)/.exec(String(href || ''));
+  if (!m) return null;
+  try { const id = decodeURIComponent(m[1]); return BLOB_ID_RE.test(id) ? id : null; } catch (_) { return null; }
+};
+const blobAttr = (id, notice = false) => (typeof id === 'string' && BLOB_ID_RE.test(id) ? { 'data-blob': id, ...(notice ? { 'data-blob-notice': '1' } : {}) } : {});
+exports.blobOfHref = blobOfHref;
+exports.blobAttr = blobAttr;
 const torrentDownloadHref = (blobId, title) => `/blob/${encodeURIComponent(blobId)}?name=${encodeURIComponent(torrentFileName(title))}`;
 const renderTorrentDownload = (href, opts = {}) =>
-  a({ href, class: opts.class || 'filter-btn' }, `\u2B07 ${i18n.torrentExternalButton || 'EXTERNAL'}`);
+  a({ href, class: opts.class || 'filter-btn', ...blobAttr(opts.blob || blobOfHref(href), opts.notice) }, `\u2B07 ${i18n.torrentExternalButton || 'EXTERNAL'}`);
 exports.torrentDownloadHref = torrentDownloadHref;
 exports.renderTorrentDownload = renderTorrentDownload;
 const renderTorrentSourceDownload = (torrentKey, source, opts = {}) => {
   if (typeof source !== 'string' || !source.startsWith('&') || !torrentKey) return null;
-  return a({ href: `/torrents/${encodeURIComponent(torrentKey)}/get`, class: opts.class || 'filter-btn' }, `\u2B07 ${i18n.torrentOasisButton || 'OASIS'}`);
+  return a({ href: `/torrents/${encodeURIComponent(torrentKey)}/get`, class: opts.class || 'filter-btn', ...blobAttr(source, opts.notice) }, `\u2B07 ${i18n.torrentOasisButton || 'LOCAL'}`);
 };
 exports.renderTorrentSourceDownload = renderTorrentSourceDownload;
 const renderFileDownloads = (fileKey, torrentUrl, name, opts = {}) => {
@@ -384,9 +559,9 @@ const renderFileDownloads = (fileKey, torrentUrl, name, opts = {}) => {
   const btnClass = opts.class || 'filter-btn';
   const torrentName = `${String(name || 'download').replace(/\.torrent$/i, '')}.torrent`;
   return div({ class: 'torrent-card-actions' },
-    a({ href: `/files/${encodeURIComponent(fileKey)}/get`, class: btnClass }, `\u2B07 ${i18n.torrentOasisButton || 'OASIS'}`),
+    a({ href: `/files/${encodeURIComponent(fileKey)}/get`, class: btnClass, ...blobAttr(opts.blob, opts.notice) }, `\u2B07 ${i18n.torrentOasisButton || 'LOCAL'}`),
     typeof torrentUrl === 'string' && torrentUrl.startsWith('&')
-      ? a({ href: `/blob/${encodeURIComponent(torrentUrl)}?name=${encodeURIComponent(torrentName)}`, class: btnClass }, `\u2B07 ${i18n.torrentExternalButton || 'EXTERNAL'}`)
+      ? a({ href: `/blob/${encodeURIComponent(torrentUrl)}?name=${encodeURIComponent(torrentName)}`, class: btnClass, ...blobAttr(torrentUrl) }, `\u2B07 ${i18n.torrentExternalButton || 'EXTERNAL'}`)
       : null
   );
 };
@@ -394,6 +569,16 @@ exports.renderFileDownloads = renderFileDownloads;
 
 const blobUrlOf = (v) => (String(v || '').startsWith('/blob/sealed/') ? String(v) : `/blob/${encodeURIComponent(v)}`);
 exports.blobUrlOf = blobUrlOf;
+const PLAIN_BLOB_RE = /^&[A-Za-z0-9+/]{43}=\.sha256$/;
+const renderPlayerFollow = (blobId, title, href) => {
+  if (config.public || !PLAIN_BLOB_RE.test(String(blobId || '')) || !mediaPlayer.available()) return null;
+  return form({ method: 'POST', action: '/player/start', class: 'player-follow-form' },
+    input({ type: 'hidden', name: 'blob', value: blobId }),
+    input({ type: 'hidden', name: 'title', value: String(title || '').slice(0, 200) }),
+    input({ type: 'hidden', name: 'href', value: href }),
+    button({ type: 'submit', class: 'filter-btn', title: i18n.playerFollowHint }, renderIcon('headphones')));
+};
+exports.renderPlayerFollow = renderPlayerFollow;
 const ACTION_ICONS = {
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
   leave: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
@@ -412,9 +597,22 @@ const ACTION_ICONS = {
   torrent: '<line x1="7" y1="20" x2="7" y2="4"/><polyline points="3 8 7 4 11 8"/><line x1="17" y1="4" x2="17" y2="20"/><polyline points="13 16 17 20 21 16"/>',
   close: '<line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>',
   film: '<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="17" y2="20"/><line x1="3" y1="12" x2="21" y2="12"/>',
-  fullscreen: '<polyline points="4 9 4 4 9 4"/><polyline points="15 4 20 4 20 9"/><polyline points="20 15 20 20 15 20"/><polyline points="9 20 4 20 4 15"/>'
+  fullscreen: '<polyline points="4 9 4 4 9 4"/><polyline points="15 4 20 4 20 9"/><polyline points="20 15 20 20 15 20"/><polyline points="9 20 4 20 4 15"/>',
+  search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  headphones: '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>',
+  support: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/>',
+  unsupport: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
+  ban: '<circle cx="12" cy="12" r="9"/><line x1="5.6" y1="5.6" x2="18.4" y2="18.4"/>',
+  unblock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.8-1"/>',
+  mute: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/>',
+  unmute: '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M19 5a10 10 0 0 1 0 14"/>',
+  layoutCards: '<rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>',
+  layoutList: '<circle cx="4.5" cy="6" r="1.5"/><circle cx="4.5" cy="12" r="1.5"/><circle cx="4.5" cy="18" r="1.5"/><line x1="9" y1="6" x2="21" y2="6"/><line x1="9" y1="12" x2="21" y2="12"/><line x1="9" y1="18" x2="21" y2="18"/>',
+  layoutGrid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'
 };
 const renderIcon = (name) => span({ class: 'btn-icon', [RAW_HTML]: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ACTION_ICONS[name] || ''}</svg>` });
+const renderSearchButton = (label) => button({ type: "submit", class: "filter-box__button filter-box__button--icon", title: String(label || "") }, renderIcon("search"));
+exports.renderSearchButton = renderSearchButton;
 const renderHideIcon = () => renderIcon('hide');
 exports.renderIcon = renderIcon;
 exports.renderHideIcon = renderHideIcon;
@@ -548,27 +746,50 @@ const avatarSrc = (feedId) => {
   const cached = config.public ? null : nameCache.image(feedId);
   return cached ? `/image/${AVATAR_SIZE}/${encodeURIComponent(cached)}?fallback=avatar` : `/avatar/${encodeURIComponent(feedId)}`;
 };
+const renderBylineAvatar = (author, name) => {
+  const title = userLinkLabel(author, name);
+  const image = (listScope() || {}).compactCards === 'grid' && !config.public ? nameCache.image(author) : null;
+  if (typeof image === 'string' && /^&[A-Za-z0-9+/]{43}=\.sha256$/.test(image) && !/^&0+=\.sha256$/.test(image)) {
+    const { renderZoomableImage } = require('./gallery_view');
+    const nodes = renderZoomableImage(`/blob/${encodeURIComponent(image)}`, { linkClass: 'card-byline-avatar', thumb: avatarSrc(author) });
+    nodes[0].setAttribute('title', title);
+    return nodes;
+  }
+  return a({ href: `/author/${encodeURIComponent(author)}`, class: 'card-byline-avatar', title }, img({ src: avatarSrc(author), alt: '' }));
+};
+const MODULE_ROOTS = new Set(['activity', 'agenda', 'audios', 'blogs', 'bookmarks', 'calendars', 'campaigns', 'chats', 'courts', 'cv', 'documents', 'emergencies', 'events', 'feed', 'files', 'forum', 'housing', 'images', 'industry', 'inhabitants', 'jobs', 'larp', 'logistics', 'mailing', 'maps', 'market', 'pads', 'parliament', 'podcasts', 'polls', 'projects', 'reports', 'rooms', 'school', 'shops', 'tasks', 'torrents', 'transfers', 'tribes', 'videos', 'votes', 'wiki']);
+const MODULE_ROOT_ALIASES = { tribe: 'tribes', author: 'inhabitants' };
+const moduleHrefOf = (href) => {
+  const seg = String(href || '').split(/[?#]/)[0].split('/')[1] || '';
+  const root = MODULE_ROOT_ALIASES[seg] || seg;
+  return MODULE_ROOTS.has(root) ? `/${root}` : null;
+};
 const renderCardByline = (opts = {}) => {
   const author = opts.bylineAuthor || opts.author ? String(opts.bylineAuthor || opts.author) : '';
   const when = opts.date ? moment(opts.date) : null;
   const time = when && when.isValid() ? span({ class: 'card-byline-time', title: when.format('YYYY/MM/DD HH:mm') }, when.fromNow()) : null;
+  const linkModule = (n) => opts.moduleHref && n && n.chipRole === 'module' && String(n.nodeName || n.tagName || '').toLowerCase() !== 'a'
+    ? asChip('module', a({ href: opts.moduleHref, class: 'pm-exposition-chip-link' }, n))
+    : n;
   const chipNodes = [].concat(opts.chips || []).filter(Boolean);
-  const extraChips = [].concat(opts.extraChips || []).filter(Boolean);
+  const extraChips = [].concat(opts.extraChips || []).filter(Boolean).map(linkModule);
   const isChipsRow = (n) => !!n && String(n.class || n.className || '').split(/\s+/).includes('card-chips-row');
   let chipsRow = null;
   if (chipNodes.length === 1 && isChipsRow(chipNodes[0]) && typeof chipNodes[0].appendChild === 'function') {
     chipsRow = chipNodes[0];
     const kids = Array.from(chipsRow.childNodes);
     for (const c of kids) chipsRow.removeChild(c);
-    for (const c of sortChips(kids.concat(extraChips))) chipsRow.appendChild(c);
+    for (const c of sortChips(kids.map(linkModule).concat(extraChips))) chipsRow.appendChild(c);
   } else if (chipNodes.length || extraChips.length) {
-    chipsRow = renderChipsRow(...chipNodes, ...extraChips);
+    chipsRow = renderChipsRow(...chipNodes.map(linkModule), ...extraChips);
   }
-  const extra = [].concat(opts.bylineExtra || [], chipsRow).filter(Boolean);
+  const lead = chipsRow && compactCards() ? Array.from(chipsRow.childNodes).filter((n) => ['module', 'scope'].includes(chipRoleOf(n))) : [];
+  for (const c of lead) chipsRow.removeChild(c);
+  const extra = [].concat(opts.bylineExtra || [], lead.length ? div({ class: 'card-chips-lead' }, ...lead) : null, chipsRow).filter(Boolean);
   if (!author && !time && !extra.length) return span();
   return div({ class: 'card-byline' },
     span({ class: 'card-byline-who' },
-      author ? a({ href: `/author/${encodeURIComponent(author)}`, class: 'card-byline-avatar' }, img({ src: avatarSrc(author), alt: '' })) : null,
+      author ? renderBylineAvatar(author, opts.authorName) : null,
       author ? userLink(author, opts.authorName) : null,
       time
     ),
@@ -576,6 +797,12 @@ const renderCardByline = (opts = {}) => {
   );
 };
 const relationSets = () => { const st = listScope(); return st && st.relationSets ? st.relationSets : null; };
+const LAYOUT_TYPE_KEYS = { tribes: 'typeTribe', chats: 'typeChat', pads: 'typePad', rooms: 'typeRoom', calendars: 'typeCalendar', maps: 'typeMap', wiki: 'typeWiki', blogs: 'typePost', feed: 'typeFeed', audios: 'typeAudio', videos: 'typeVideo', images: 'typeImage', documents: 'typeDocument', bookmarks: 'typeBookmark', torrents: 'typeTorrent', files: 'typeFile', podcasts: 'typePodcast', market: 'typeMarket', shops: 'typeShop', jobs: 'typeJob', projects: 'typeProject', housing: 'typeHousing', transfers: 'typeTransfer', logistics: 'typeLogisticsRoute', industry: 'typeIndustry', campaigns: 'typeCampaign', events: 'typeEvent', tasks: 'typeTask', reports: 'typeReport', votes: 'typeVotes', polls: 'typePoll', emergencies: 'typeEmergency', forum: 'typeForum', mailing: 'typeMailingList', school: 'typeSchool' };
+const layoutTypeChip = () => {
+  if (!compactCards()) return null;
+  const key = LAYOUT_TYPE_KEYS[String((listScope() || {}).path || '').split('/')[1]];
+  return key && i18n[key] ? renderStateChip('whole', null, String(i18n[key]).toUpperCase(), 'module') : null;
+};
 const msgSizeFor = (id) => { const st = listScope(); return id && st && st.msgSizes instanceof Map ? st.msgSizes.get(String(id)) || 0 : 0; };
 const renderCardTop = (msgId, viewHref, opts = {}) => {
   const o = (opts && typeof opts === 'object') ? opts : {};
@@ -586,9 +813,10 @@ const renderCardTop = (msgId, viewHref, opts = {}) => {
   const spreadingChip = replicating ? renderStateChip('transport', '⟳', String(i18n.spreadingChip || '').toUpperCase(), 'relation') : null;
   const givenChips = [].concat(o.chips || []).flatMap((n) => (n && n.childNodes && String(n.class || n.className || '').split(/\s+/).includes('card-chips-row') ? Array.from(n.childNodes) : [n]));
   const ecoChip = givenChips.some((n) => chipRoleOf(n) === 'eco') ? null : renderEcoTax(msgSizeFor(msgId) || o.msgSize, msgId);
+  const typeChip = givenChips.concat(o.extraChips || []).some((n) => chipRoleOf(n) === 'module') ? null : layoutTypeChip();
   const anchor = anchorFor(msgId);
   return div({ class: 'card-header activity-card-header card-top', ...(anchor ? { id: anchor } : {}) },
-    renderCardByline({ ...o, extraChips: [].concat(o.extraChips || [], ecoChip, supportedChip, spreadingChip).filter(Boolean) }),
+    renderCardByline({ ...o, moduleHref: moduleHrefOf(viewHref), extraChips: [].concat(typeChip, o.extraChips || [], ecoChip, supportedChip, spreadingChip).filter(Boolean) }),
     renderContentActions(msgId, viewHref, { ...o, share: false, menu: true })
   );
 };
@@ -751,16 +979,17 @@ const renderRelationshipBlock = (relationship, feedId) => {
   if (rel.me) return span({ class: 'status you' }, i18n.relationshipYou);
   const muted = (() => { try { return require('../models/viewer_filters').isMuted(feedId); } catch (_) { return false; } })();
   const actions = [];
-  const icons = { follow: '♥', unfollow: '✕', block: '⊘', unblock: '↺', mute: '◌', unmute: '●' };
+  const icons = { follow: 'support', unfollow: 'unsupport', block: 'ban', unblock: 'unblock', mute: 'mute', unmute: 'unmute' };
   const addAction = (action) => actions.push(
     form({ action: `/${action}/${encodeURIComponent(feedId)}`, method: 'post' },
-      button({ type: 'submit', class: 'filter-btn' }, `${icons[action]} ${i18n[action]}`)
+      button({ type: 'submit', class: 'filter-btn relationship-btn' }, renderIcon(icons[action]), i18n[action])
     )
   );
   if (rel.following) addAction('unfollow');
   else if (rel.blocking) addAction('unblock');
-  else { addAction('follow'); addAction('block'); }
+  else addAction('follow');
   if (!rel.blocking) addAction(muted ? 'unmute' : 'mute');
+  if (!rel.following && !rel.blocking) addAction('block');
   return div({ class: 'relationship-status' },
     muted ? span({ class: 'status blocked' }, i18n.relationshipMuted) : null,
     rel.blocking && rel.blockedBy
@@ -838,7 +1067,7 @@ const renderMobileCounters = () => {
   const phone = phoneOn() ? (Number(sharedState.getPhoneCount()) || 0) : 0;
   if (inbox <= 0 && mentions <= 0 && phone <= 0) return null;
   return div({ class: 'mobile-counters' },
-    inbox > 0 ? a({ href: '/inbox', class: 'mobile-counter', title: i18n.inbox }, '☂ ', String(inbox)) : null,
+    inbox > 0 ? a({ href: '/inbox?filter=unread', class: 'mobile-counter', title: i18n.inbox }, '☂ ', String(inbox)) : null,
     phone > 0 ? a({ href: '/phone', class: 'mobile-counter', title: i18n.phoneTitle }, '✆ ', String(phone)) : null,
     mentions > 0 ? a({ href: '/mentions', class: 'mobile-counter', title: i18n.mentions }, '✺ ', String(mentions)) : null
   );
@@ -1186,14 +1415,16 @@ const renderSupportedChip = (author, following) =>
     : null;
 exports.renderSupportedChip = renderSupportedChip;
 const RELATION_FILTERS = ['supported', 'replicated'];
-const hasRelation = (mode, list) => Array.isArray(list) && list.some(x => x && (mode === 'supported' ? x.isSupported : x.isReplicated));
-const relationFilterLabel = (mode) => String(mode === 'supported' ? i18n.filterSupported : i18n.filterReplicated).toUpperCase();
-const renderRelationFilters = (current, visible, opts = {}) => RELATION_FILTERS
+const hasRelation = (mode, list) => Array.isArray(list) && (mode === 'supported' ? list.some(x => x && x.isSupported) : list.length > 0);
+const relationFilterLabel = (mode) => String(mode === 'supported' ? i18n.filterSupported : mode === 'favorites' ? i18n.favoritesTitle : i18n.filterReplicated).toUpperCase();
+const renderRelationFilters = (current, visible, opts = {}) => (opts.favorites ? [...RELATION_FILTERS, 'favorites'] : RELATION_FILTERS)
   .map(mode => ({ mode, value: opts.upper ? mode.toUpperCase() : mode }))
   .filter(({ value }) => String(current) === value || !visible || visible(value))
   .map(({ mode, value }) => opts.href
     ? a({ href: opts.href(value), class: String(current) === value ? (opts.activeClass || 'filter-btn active') : (opts.linkClass || 'filter-btn') }, relationFilterLabel(mode))
     : button({ type: 'submit', name: opts.name || 'filter', value, class: String(current) === value ? 'filter-btn active' : 'filter-btn' }, relationFilterLabel(mode)));
+const isFavoriteItem = (favIndex, item) => favIndex instanceof Map && !!item && [item.key, item.id, item.rootId].some((k) => k && favIndex.has(String(k)));
+exports.isFavoriteItem = isFavoriteItem;
 exports.RELATION_FILTERS = RELATION_FILTERS;
 exports.hasRelation = hasRelation;
 exports.relationFilterLabel = relationFilterLabel;
@@ -1232,6 +1463,13 @@ const pdfPageImage = (src, page, width, rotation, prefix = "") => `${prefix}/pdf
 const pdfEmbedHref = (src, t, fid) => `/pdf/embed?${new URLSearchParams({ src, ...(t ? { title: String(t).slice(0, 200) } : {}), fid })}`;
 const renderPdfDocument = (url, { title: docTitle = "" } = {}) => {
   if (!url) return null;
+  if (compactCards()) {
+    const viewHref = `/pdf?${new URLSearchParams({ src: url, ...(docTitle ? { title: String(docTitle).slice(0, 200) } : {}) })}`;
+    if ((listScope() || {}).compactCards === "list") {
+      return div({ class: "torrent-card-actions" }, a({ href: pdfDownloadHref(url, docTitle), class: "filter-btn", ...blobAttr(blobOfHref(url)) }, `\u2B07 ${i18n.torrentOasisButton || "LOCAL"}`));
+    }
+    return a({ href: viewHref, class: "pdf-thumb" }, img({ src: pdfPageImage(url, 1, pdfView.PDF_THUMB_WIDTH, 0), class: "pdf-thumb-image", alt: String(docTitle || "PDF"), loading: "lazy" }));
+  }
   const fid = pdfView.frameIdOf(url);
   return span({ class: "pdf-holder" },
     object({ id: fid, data: pdfEmbedHref(url, docTitle, fid), type: "text/html", class: "pdf-frame", title: String(docTitle || "PDF"), "aria-label": String(docTitle || "PDF") }, ""),
@@ -1298,16 +1536,17 @@ exports.pdfEmbedView = (state, { title: docTitle = "", back = "" } = {}) => {
   ).outerHTML;
 };
 
-exports.pdfViewerView = (state, { title: docTitle = "", back = "" } = {}) => template(
-  docTitle || "PDF",
-  section(
-    div({ class: "tags-header module-header-line" },
-      h2(docTitle || "PDF"),
-      back ? a({ href: back, class: "filter-btn" }, `← ${i18n.goBack}`) : null
-    ),
-    renderPdfViewer(state, { title: docTitle, base: "/pdf", keep: { src: state && state.src, title: docTitle || null, back: back || null } })
-  )
-);
+exports.pdfViewerView = (state, { title: docTitle = "", back = "" } = {}) => {
+  const { renderDocumentsHeader } = require('./document_view');
+  return template(
+    docTitle || "PDF",
+    section(
+      ...renderDocumentsHeader('all'),
+      div({ class: "tags-header module-header-line pdf-page-title" }, h2(docTitle || "PDF")),
+      renderPdfViewer(state, { title: docTitle, base: "/pdf", keep: { src: state && state.src, title: docTitle || null, back: back || null } })
+    )
+  );
+};
 
 const renderOpinionsVoting = (basePath, id, opinions, returnTo, voters, pathFor = null) => {
   const ops = opinions || {};
@@ -1482,19 +1721,38 @@ const renderFooter = () => {
   );
 };
 
-const navLink = ({ href, emoji, text, current, class: extraClass }) =>
-  li(
-    a(
-      {
-        href,
-        class: [current ? "current" : "", extraClass]
-          .filter(Boolean)
-          .join(" ")
-      },
-      span({ class: "emoji" }, emoji),
-      span({ class: "nav-text" }, text)
-    )
+const navLinkIsCurrent = (href) => {
+  const base = String(href || '').split(/[?#]/)[0];
+  const path = currentNavPath();
+  return !!base && base !== '/' && !!path && (path === base || path.startsWith(base + '/'));
+};
+const navAnchor = ({ href, emoji, text, current, class: extraClass }) =>
+  a(
+    {
+      href,
+      class: [current || (current === undefined && navLinkIsCurrent(href)) ? "current" : "", extraClass]
+        .filter(Boolean)
+        .join(" ")
+    },
+    span({ class: "emoji" }, emoji),
+    span({ class: "nav-text" }, text)
   );
+const navLink = (opts) => li(navAnchor(opts));
+const PLAYER_END_MARGIN_S = 2;
+const playerEndRefresh = () => {
+  const st = config.public ? null : mediaPlayer.status();
+  if (!st || st.paused || !(st.duration > 0)) return 0;
+  const left = Math.ceil(st.duration - st.position);
+  return left > 0 ? left + PLAYER_END_MARGIN_S : 0;
+};
+const inboxTopLink = () => li(a({ href: inboxHref() }, span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, ...inboxBadges()));
+const mentionsTopLink = () => {
+  const mentionsTotal = sharedState.getMentionsTotal ? sharedState.getMentionsTotal() : 0;
+  if (!(mentionsTotal > 0)) return null;
+  const mentionsCount = sharedState.getMentionsCount();
+  return li(a({ href: "/mentions" }, span({ class: "emoji" }, "✺"), nbsp, i18n.mentions, mentionsCount > 0 ? span({ class: "inbox-badge" }, String(mentionsCount)) : ""));
+};
+const matchesTopLink = () => navLink({ href: "/data", emoji: "⚯", text: i18n.dataTitle });
 
 const currentNavPath = () => {
   let store = null;
@@ -1796,12 +2054,7 @@ const renderTagsLink = () => {
   const tagsMod = getConfig().modules.tagsMod === "on";
   return tagsMod
     ? [
-        navLink({
-          href: "/tags",
-          emoji: "ꖶ",
-          text: i18n.tagsLabel,
-          class: "tags-link enabled"
-        })
+        navLink({ href: "/tags", emoji: "ꖶ", text: i18n.tagsLabel, class: "tags-link enabled" })
       ]
     : "";
 };
@@ -2329,9 +2582,115 @@ const renderEmergencyBanner = (featured, opts = {}) => {
   );
 };
 
+const DETAIL_SWITCH_ROWS = ['filters', 'mode-buttons-row', 'tribe-mode-buttons', 'mode-buttons'];
+const classesOf = (n) => String((n && (n.className || n.class)) || '').split(/\s+/);
+const injectDetailLayoutSwitch = (elements) => {
+  const segs = String((listScope() || {}).path || '').split('/').filter(Boolean);
+  if (segs.length < 2 || !LAYOUT_TYPE_KEYS[segs[0]] || ['edit', 'create', 'new'].includes(segs[1])) return;
+  const has = (n) => !!n && !!n.childNodes && (classesOf(n).includes('layout-switch') || Array.from(n.childNodes).some(has));
+  if (elements.some(has)) return;
+  const walk = (n, depth) => {
+    if (!n || !n.childNodes || depth > 3) return false;
+    const kids = Array.from(n.childNodes);
+    for (let i = 0; i < kids.length; i++) {
+      if (classesOf(kids[i]).some((c) => DETAIL_SWITCH_ROWS.includes(c))) {
+        const sw = renderLayoutSwitch('filters');
+        if (kids[i + 1]) n.insertBefore(sw, kids[i + 1]); else n.appendChild(sw);
+        return true;
+      }
+      if (walk(kids[i], depth + 1)) return true;
+    }
+    return false;
+  };
+  elements.some((el) => walk(el, 0));
+};
+const FOLD_HEAD = ['all', 'recent', 'mine', 'supported', 'replicated', 'favorites', 'top'];
+const renderFilterFold = (id, items, current) => {
+  const isHead = (it) => FOLD_HEAD.includes(String(it.value).toLowerCase());
+  const head = FOLD_HEAD.map((v) => items.find((it) => String(it.value).toLowerCase() === v)).filter(Boolean);
+  const rest = items.filter((it) => !isHead(it));
+  const active = new Set([].concat(current).map(String));
+  const chip = (it, more) => a({ href: it.href, class: ['activity-chip', more ? 'activity-chip-more' : '', active.has(String(it.value)) ? 'active' : ''].filter(Boolean).join(' ') }, it.label);
+  if (!rest.length) return div({ class: 'activity-filter-chips' }, ...head.map((it) => chip(it, false)));
+  return div({ class: 'activity-filter-chips filters-fold activity-filters-fold' },
+    input({ type: 'checkbox', id, class: 'filters-fold-check' }),
+    ...head.map((it) => chip(it, false)),
+    label({ for: id, class: 'activity-chip filters-fold-toggle', title: i18n.filtersFoldToggle }, span({ class: 'filters-fold-more' }, '▾'), span({ class: 'filters-fold-less' }, '▴')),
+    ...rest.map((it) => chip(it, true))
+  );
+};
+exports.renderFilterFold = renderFilterFold;
+const FOLD_ROWS = ['filters', 'activity-filter-chips', 'mode-buttons-row', 'tribe-mode-buttons', 'mode-buttons'];
+const FOLD_ITEMS = ['filter-btn', 'activity-chip'];
+const FOLD_MIN_ITEMS = 4;
+const FOLD_CHAR_PX = 8.5;
+const FOLD_ITEM_PX = 25;
+const FOLD_FIELD_PX = 180;
+const FOLD_STEP_PX = 100;
+const FOLD_MIN_STEP = 3;
+const FOLD_MAX_STEP = 30;
+let foldSeq = 0;
+const tagOf = (n) => String((n && (n.tagName || n.nodeName)) || '').toLowerCase();
+const foldItemsOf = (row) => {
+  const out = [];
+  const visit = (n) => {
+    for (const k of Array.from(n.childNodes || [])) {
+      if (classesOf(k).some((c) => FOLD_ITEMS.includes(c))) out.push(k); else visit(k);
+    }
+  };
+  visit(row);
+  return out;
+};
+const foldWidthOf = (row) => {
+  let px = String(row.textContent || '').replace(/\s+/g, ' ').trim().length * FOLD_CHAR_PX;
+  const visit = (n) => {
+    for (const k of Array.from(n.childNodes || [])) {
+      const tag = tagOf(k);
+      if (tag === 'input') px += ['hidden', 'checkbox', 'radio'].includes(String(k.type || '')) ? 0 : FOLD_FIELD_PX;
+      else if (['button', 'a', 'label', 'select'].includes(tag)) px += FOLD_ITEM_PX;
+      else visit(k);
+    }
+  };
+  visit(row);
+  return px;
+};
+const foldBoxOf = (items) => {
+  const parents = items.map((k) => k.parentNode);
+  if (parents.every((p) => p && p === parents[0])) return parents[0];
+  if (!parents.every((p) => tagOf(p) === 'form' && foldItemsOf(p).length === 1)) return null;
+  const outer = parents.map((p) => p.parentNode);
+  return outer.every((p) => p && p === outer[0]) ? outer[0] : null;
+};
+const foldFilterRow = (row) => {
+  const items = foldItemsOf(row);
+  const box = items.length >= FOLD_MIN_ITEMS ? foldBoxOf(items) : null;
+  if (!box || classesOf(box).includes('column')) return;
+  const step = Math.min(FOLD_MAX_STEP, Math.max(FOLD_MIN_STEP, Math.ceil(foldWidthOf(row) / FOLD_STEP_PX)));
+  foldSeq = (foldSeq + 1) % 1000000;
+  const id = `filters-fold-${foldSeq}`;
+  const itemClass = classesOf(items[0]).includes('activity-chip') ? 'activity-chip' : 'filter-btn';
+  const check = input({ type: 'checkbox', id, class: 'filters-fold-check' });
+  const first = Array.from(box.childNodes || [])[0];
+  if (first) box.insertBefore(check, first); else box.appendChild(check);
+  box.appendChild(label({ for: id, class: `${itemClass} filters-fold-toggle`, title: i18n.filtersFoldToggle }, span({ class: 'filters-fold-more' }, '▾'), span({ class: 'filters-fold-less' }, '▴')));
+  row.class = `${classesOf(row).join(' ')} filters-fold filters-fold-w${step}`.trim();
+};
+const foldFilterRows = (elements) => {
+  const walk = (n, depth) => {
+    if (!n || !n.childNodes || depth > 5) return;
+    for (const k of Array.from(n.childNodes)) {
+      const cls = classesOf(k);
+      if (cls.some((c) => FOLD_ROWS.includes(c)) && !cls.includes('activity-toolbar-row') && !cls.includes('filters-fold')) foldFilterRow(k);
+      else walk(k, depth + 1);
+    }
+  };
+  elements.forEach((el) => walk(el, 0));
+};
 const template = (titlePrefix, ...elements) => {
   const scope = listScope();
   if (scope && scope.dryRun) return '';
+  injectDetailLayoutSwitch(elements);
+  foldFilterRows(elements);
   const currentConfig = getConfig();
   const theme = currentConfig.themes.current || "Dark-SNH";
   const buildAiSuggestion = (compact) => {
@@ -2360,9 +2719,9 @@ const template = (titlePrefix, ...elements) => {
       )
     );
   };
-  const bannerAct = (action, label, kls, fields = {}) => form({ method: "POST", action, class: "phone-action-form" },
+  const bannerAct = (action, label, kls, fields = {}, tip = null) => form({ method: "POST", action, class: "phone-action-form" },
     ...Object.entries(fields).map(([k, v]) => input({ type: "hidden", name: k, value: String(v) })),
-    button({ type: "submit", class: kls }, String(label).toUpperCase()));
+    button({ type: "submit", class: kls, ...(tip ? { title: String(tip) } : {}) }, String(label).toUpperCase()));
   const bannerCls = () => "update-banner phone-banner";
   const bannerChip = (icon, value) => span({ class: "pm-exposition-chip pm-exposition-whole phone-banner-chip" },
     span({ class: "pm-exposition-icon" }, icon),
@@ -2385,6 +2744,27 @@ const template = (titlePrefix, ...elements) => {
       );
     }
     return null;
+  };
+  const playerClock = (sec) => {
+    const v = Math.max(0, Math.floor(Number(sec) || 0));
+    const h = Math.floor(v / 3600);
+    return h ? `${h}:${pad2(Math.floor((v % 3600) / 60))}:${pad2(v % 60)}` : `${pad2(Math.floor(v / 60))}:${pad2(v % 60)}`;
+  };
+  const buildPlayerBanner = () => {
+    const st = config.public ? null : mediaPlayer.status();
+    if (!st) return null;
+    const step = mediaPlayer.SEEK_STEP;
+    return div({ class: `${bannerCls()} player-banner` },
+      span({ class: "phone-banner-dot" }),
+      a({ href: st.href, class: "update-banner-link" }, st.title || i18n.playerFollow),
+      bannerChip(st.paused ? "‖" : "◷", span(st.paused ? playerClock(st.position) : liveClock(Date.now() - st.position * 1000), st.duration > 0 ? ` / ${playerClock(st.duration)}` : "")),
+      String(st.href || "").startsWith("/audios/") ? bannerAct("/player/previous", "⇤", "tribe-action-btn", {}, i18n.playerPrevious) : null,
+      bannerAct("/player/seek", "«", "tribe-action-btn", { delta: -1 }, `−${step} s`),
+      st.paused ? bannerAct("/player/resume", "▸", "tribe-action-btn", {}, i18n.playerResume) : bannerAct("/player/pause", "‖", "tribe-action-btn", {}, i18n.playerPause),
+      bannerAct("/player/seek", "»", "tribe-action-btn", { delta: 1 }, `+${step} s`),
+      String(st.href || "").startsWith("/audios/") ? bannerAct("/player/next", "⇥", "tribe-action-btn", {}, i18n.playerNext) : null,
+      bannerAct("/player/stop", "×", "tribe-action-btn danger-btn", {}, i18n.playerStop)
+    );
   };
   const buildPhoneBanner = () => {
     let here = '';
@@ -2467,38 +2847,20 @@ const template = (titlePrefix, ...elements) => {
           ),
           uxMode === "ainav" ? nav(
             ul(
-              (() => {
-                return li(
-                  a({ href: "/inbox" },
-                    span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, ...inboxBadges()
-                  )
-                );
-              })(),
               renderPhoneTopLink(),
+              (() => {
+                return inboxTopLink();
+              })(),
               navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
               navLink({ href: "/invites", emoji: "ꔮ", text: i18n.invites })
             )
           ) : nav(
             ul(
-              (() => {
-                const mentionsTotal = sharedState.getMentionsTotal ? sharedState.getMentionsTotal() : 0;
-                if (!(mentionsTotal > 0)) return null;
-                const mentionsCount = sharedState.getMentionsCount();
-                const badge = mentionsCount > 0 ? span({ class: 'inbox-badge' }, String(mentionsCount)) : '';
-                return li(
-                  a({ href: "/mentions" },
-                    span({ class: "emoji" }, "✺"), nbsp, i18n.mentions, badge
-                  )
-                );
-              })(),
-              (() => {
-                return li(
-                  a({ href: "/inbox" },
-                    span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, ...inboxBadges()
-                  )
-                );
-              })(),
+              mentionsTopLink(),
               renderPhoneTopLink(),
+              (() => {
+                return inboxTopLink();
+              })(),
               (uxMode === "chats" || uxMode === "feed" || uxMode === "phone" || uxMode === "rooms")
                 ? navLink({ href: "/settings", emoji: "⚙", text: i18n.settings })
                 : null
@@ -2553,7 +2915,7 @@ const template = (titlePrefix, ...elements) => {
           nav(
             ul(
               ...((getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? [] : (renderAILink() || [])),
-              navLink({ href: "/data", emoji: "⚯", text: i18n.dataTitle }),
+              matchesTopLink(),
               renderTagsLink(),
               navLink({ href: "/search", emoji: "⌕", text: i18n.searchTitle })
             )
@@ -2595,6 +2957,7 @@ const template = (titlePrefix, ...elements) => {
       })(),
       (getConfig().modules.aiNavMod === 'on' || uxMode === 'ainav') ? null : buildAiSuggestion(false),
       buildPhoneBanner(),
+      buildPlayerBanner(),
       buildEmergencyBanner(false),
       renderFeedBanner(readFeedStatus()),
       div(
@@ -2690,6 +3053,7 @@ const template = (titlePrefix, ...elements) => {
                   emoji: "⚒",
                   title: i18n.menuTools
                 },
+                navLink({ href: "/changelog", emoji: "☷", text: i18n.changelogTitle }),
                 navLink({
                   href: "/blockexplorer",
                   emoji: "ꖸ",
@@ -2777,7 +3141,9 @@ const template = (titlePrefix, ...elements) => {
     )
   );
   const kept = scope && scope.keepFields && typeof scope.keepFields === 'object' ? scope.keepFields : null;
-  return doctypeString + (kept ? restoreFormFields(nodes.outerHTML, kept) : nodes.outerHTML);
+  const page = kept ? restoreFormFields(nodes.outerHTML, kept) : nodes.outerHTML;
+  const refresh = page.includes('<textarea') ? 0 : playerEndRefresh();
+  return doctypeString + (refresh ? page.replace('</head>', `<meta http-equiv="refresh" content="${refresh}"></head>`) : page);
 };
 
 exports.template = template;
@@ -2804,14 +3170,10 @@ exports.ainavHomeView = ({ recentTags = [] } = {}) => {
           div({ class: "top-bar-left" },
             nav(
               ul(
-                (() => {
-                  return li(
-                    a({ href: "/inbox" },
-                      span({ class: "emoji" }, "☂"), nbsp, i18n.inbox, ...inboxBadges()
-                    )
-                  );
-                })(),
                 renderPhoneTopLink(),
+                (() => {
+                  return inboxTopLink();
+                })(),
                 navLink({ href: "/settings", emoji: "⚙", text: i18n.settings }),
                 navLink({ href: "/invites", emoji: "ꔮ", text: i18n.invites })
               )
@@ -4321,6 +4683,33 @@ const inboxBotLabel = (bot) => ({
 exports.INBOX_BOT_ORDER = INBOX_BOT_ORDER;
 exports.inboxBotLabel = inboxBotLabel;
 
+const inboxGroupsOf = (messagesRaw, { userId, readKeys = [], archivedKeys = [], mutedBots = [] } = {}) => {
+  const read = new Set(Array.from(readKeys || [], String))
+  const archived = new Set(Array.from(archivedKeys || [], String))
+  const muted = new Set(Array.from(mutedBots || [], String))
+  const isMutedMsg = m => { const b = inboxBotOf(m?.value?.content); return !!(b && muted.has(b)) }
+  const messages = (messagesRaw || []).filter(m => m && m.key && m.value && m.value.content && m.value.content.type === 'post' && m.value.content.private === true).filter(m => !isMutedMsg(m))
+  const isSent = m => (m?.value?.author === userId) || (m?.value?.content?.from === userId)
+  const isList = m => !!(m?.value?.content?.list)
+  const isToUser = m => Array.isArray(m?.value?.content?.to) && m.value.content.to.includes(userId)
+  const isReminder = m => /^(Task Reminder:|Calendar Reminder:)/i.test(String(m?.value?.content?.subject || ''))
+  const isNotification = m => !!inboxBotOf(m?.value?.content)
+  const isSelfNotice = m => isSent(m) && isToUser(m) && isNotification(m)
+  const isArchived = m => archived.has(String(m?.key))
+  const received = messages.filter(m => (!isSent(m) || isSelfNotice(m)) && isToUser(m) && !isArchived(m))
+  return {
+    messages,
+    received,
+    archived: messages.filter(isArchived),
+    notifications: messages.filter(m => isNotification(m) && !isArchived(m) && (!isSent(m) || isReminder(m) || isSelfNotice(m))),
+    mailing: messages.filter(m => isList(m) && !isArchived(m)),
+    unread: messages.filter(m => isToUser(m) && !read.has(String(m.key)) && !archived.has(String(m.key))),
+    sent: messages.filter(m => isSent(m) && !isReminder(m) && !isSelfNotice(m) && !isArchived(m)),
+    inbox: received.filter(m => !isReminder(m)),
+    pms: received.filter(m => !isNotification(m) && !isList(m))
+  }
+}
+
 exports.privateView = async (messagesInput, filter, decrypted = null, notice = '', q = '') => {
   const messagesRaw = Array.isArray(messagesInput) ? messagesInput : messagesInput.messages
   const listTitles = (!Array.isArray(messagesInput) && messagesInput.listTitles && typeof messagesInput.listTitles === 'object') ? messagesInput.listTitles : {}
@@ -4354,6 +4743,14 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   const isArchived = m => archivedKeys.has(String(m?.key))
   const toUserKeys = new Set(messages.filter(isToUser).map(m => String(m.key)))
   const isUnreadKey = (key) => toUserKeys.has(String(key)) && !readKeys.has(String(key)) && !archivedKeys.has(String(key))
+  const msgByKey = new Map(messages.map(m => [String(m.key), m]))
+  const kindChipOf = (key) => {
+    const m = msgByKey.get(String(key))
+    if (!m) return null
+    const bot = inboxBotOf(m.value.content)
+    const [icon, text] = bot ? ['🔔', `${i18n.inboxKindUpdate} · ${inboxBotLabel(bot)}`] : isList(m) ? ['✉', i18n.inboxKindList] : ['✉', i18n.inboxKindDirect]
+    return span({ class: 'pm-exposition-chip pm-exposition-whole' }, span({ class: 'pm-exposition-icon' }, icon), span({ class: 'pm-exposition-text' }, text))
+  }
   const firstHref = (str) => { const m = String(str || '').match(/\]\((\/[^)\s]+)\)/); return m ? m[1] : null }
 
   const linkAuthor = (id) => userLink(id)
@@ -4406,7 +4803,8 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
         td({ class: 'card-label' }, i18n.pmSubjectLabel || 'Subject:'),
         td({ class: 'card-value pm-subject-cell' },
           span(subject || i18n.pmNoSubject || '(no subject)'),
-          isUnreadKey(msgKey) ? span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-icon' }, '●'), span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip)) : null
+          isUnreadKey(msgKey) ? span({ class: 'pm-exposition-chip pm-unread-chip' }, span({ class: 'pm-exposition-icon' }, '●'), span({ class: 'pm-exposition-text' }, i18n.inboxUnreadChip)) : null,
+          isUnreadKey(msgKey) ? kindChipOf(msgKey) : null
         )
       ),
       ecoChip
@@ -4545,35 +4943,33 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     threads[tid].push(m)
   }
 
-  const inboxSet = new Set()
-  for (const arr of Object.values(threads)) {
-    for (const m of arr) {
-      if ((!isSent(m) || isSelfNotice(m)) && isToUser(m) && !isArchived(m)) inboxSet.add(m)
-    }
-  }
-
-  const received = Array.from(inboxSet)
-  const archivedMsgs = messages.filter(isArchived)
-  const notifications = messages.filter(m => isNotification(m) && !isArchived(m) && (!isSent(m) || isReminder(m) || isSelfNotice(m)))
-  const mailing = messages.filter(m => isList(m) && !isArchived(m))
+  const groups = inboxGroupsOf(messagesRaw, { userId, readKeys, archivedKeys, mutedBots })
+  const received = groups.received
+  const archivedMsgs = groups.archived
+  const notifications = groups.notifications
+  const mailing = groups.mailing
   const botCounts = {}
   for (const m of notifications) { const b = inboxBotOf(m.value.content); if (b) botCounts[b] = (botCounts[b] || 0) + 1 }
   const botsPresent = INBOX_BOT_ORDER.filter(b => botCounts[b] > 0)
 
+  const unreadMsgs = groups.unread
+  if (!filter && unreadMsgs.length) filter = 'unread'
+
   const data = (
-    filter === 'sent' ? messages.filter(m => isSent(m) && !isReminder(m) && !isSelfNotice(m) && !isArchived(m)) :
+    filter === 'unread' ? unreadMsgs :
+    filter === 'sent' ? groups.sent :
     filter === 'reminders' ? messages.filter(m => isReminder(m) && !isArchived(m)) :
-    filter === 'pms' ? received.filter(m => !isNotification(m) && !isList(m)) :
+    filter === 'pms' ? groups.pms :
     filter === 'notifications' ? (botFilter ? notifications.filter(m => inboxBotOf(m.value.content) === botFilter) : notifications) :
     filter === 'mailing' ? mailing :
     filter === 'archived' ? archivedMsgs :
-    filter === 'inbox' ? received.filter(m => !isReminder(m)) :
+    filter === 'inbox' ? groups.inbox :
     messages.filter(m => !isArchived(m))
   ).filter(qMatch)
 
-  const inboxCount = received.filter(m => !isReminder(m)).length
-  const sentCount = messages.filter(m => isSent(m) && !isReminder(m) && !isSelfNotice(m) && !isArchived(m)).length
-  const pmCount = received.filter(m => !isNotification(m) && !isList(m)).length
+  const inboxCount = groups.inbox.length
+  const sentCount = groups.sent.length
+  const pmCount = groups.pms.length
   const notifCount = notifications.length
   const mailingCount = mailing.length
   const archivedCount = archivedMsgs.length
@@ -4962,6 +5358,12 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
           button({
             type: 'submit',
             name: 'filter',
+            value: 'unread',
+            class: filter === 'unread' ? 'filter-btn active' : 'filter-btn'
+          }, `${String(i18n.inboxFilterUnread).toUpperCase()} (${unreadMsgs.length})`),
+          button({
+            type: 'submit',
+            name: 'filter',
             value: 'inbox',
             class: filter === 'inbox' ? 'filter-btn active' : 'filter-btn'
           }, `${String(i18n.allButton || 'ALL').toUpperCase()} (${inboxCount})`),
@@ -5040,7 +5442,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
           botFilter ? input({ type: 'hidden', name: 'bot', value: botFilter }) : null,
           sortMode === 'recent' ? input({ type: 'hidden', name: 'sort', value: 'recent' }) : null,
           input({ type: 'text', name: 'q', value: String(q || ''), placeholder: i18n.inboxSearchPlaceholder || 'Search in Inbox...', class: 'filter-box__input' }),
-          button({ type: 'submit', class: 'filter-box__button' }, i18n.searchButton)
+          renderSearchButton(i18n.searchButton)
         )
       ),
       div({ class: 'message-list' },

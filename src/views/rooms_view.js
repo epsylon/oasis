@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare, RELATION_FILTERS, relationFilterLabel, hasRelation, renderCountChip } = require("./main_views")
+const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare, RELATION_FILTERS, relationFilterLabel, hasRelation, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require("./main_views")
 const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
@@ -7,12 +7,12 @@ const { config } = require("../server/SSB_server.js")
 
 const userId = config.keys.id
 const ROOM_MAX = 50
-const MODES = ["all", "recent", "mine", "supported", "replicated", "live", "open", "invite", "closed"]
+const MODES = ["all", "recent", "mine", "supported", "replicated", "favorites", "live", "open", "invite", "closed"]
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const roomHref = (room) => `/rooms/${encodeURIComponent(room.rootId)}`
 const occOf = (params, room) => (params && params.occupancy && params.occupancy.get(room.rootId)) || null
-const modeLabel = (f) => RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : String(i18n[`roomFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f).toUpperCase()
+const modeLabel = (f) => RELATION_FILTERS.includes(f) || f === "favorites" ? relationFilterLabel(f) : String(i18n[`roomFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f).toUpperCase()
 const ROOM_REACH = ["OPEN", "INVITE-ONLY"]
 const roomReachLabel = (s) => s === "INVITE-ONLY" ? i18n.roomStatusInviteOnly : i18n.roomStatusOpen
 const clearnetEligible = (room) => !!room && !room.tribeId && !room.encrypted && room.type === "OPEN" && String(room.status || "").toUpperCase() === "OPEN" && !room.isClosed
@@ -86,7 +86,7 @@ const renderRoomItem = (room, params = {}) => {
   const inside = params.live && params.live.ref === room.rootId
   const occ = inside && Number.isFinite(Number(params.live.count)) ? { count: Number(params.live.count), max: params.live.max } : occOf(params, room)
   const canJoin = !room.isClosed && !inside && (room.type === "OPEN" || room.tribeId || String(room.author) === String(userId) || safeArr(room.members).includes(userId))
-  return li({ class: "mailing-archive-item room-item" },
+  return li({ class: listItemClass("mailing-archive-item room-item") },
     renderCardTop(room.rootId, roomHref(room), {
       date: room.createdAt,
       chips: [
@@ -98,7 +98,7 @@ const renderRoomItem = (room, params = {}) => {
       spread: (params.spreadMap && params.spreadMap.get(room.rootId)) || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, reportTitle: room.title, deleteAction: String(room.author) === String(userId) ? contentDeleteAction("room", room.rootId) : undefined
     }),
     div({ class: "mailing-archive-meta" },
-      a({ href: roomHref(room), class: "user-link" }, room.title || "—")
+      renderListTitle(roomHref(room), room.title || "—")
     ),
     null
   )
@@ -166,24 +166,26 @@ exports.roomsView = async (rooms, filter, roomToEdit, params = {}) => {
   const shown = q
     ? list.filter(r => [r.title, r.description, r.number, ...safeArr(r.tags)].some(v => String(v || "").toLowerCase().includes(q.toLowerCase())))
     : list
+  const pageRooms = !isForm && shown.length ? paged(shown) : []
   return template(i18n.roomsTitle,
     section(
       div({ class: "tags-header module-header-line" }, h2(i18n.roomsTitle), p(i18n.roomsDescription)),
       renderModeButtons(filter, emptyMod, params.modesAvail || null),
       !isForm && !emptyMod
         ? div({ class: "filters activity-filter-chips activity-toolbar-row" },
+          isForm || emptyMod ? null : renderLayoutSwitch("tribe-mode-buttons"),
             renderModuleStatsBy(shown, r => r.isClosed ? "CLOSED" : r.type, [{ value: "OPEN", label: i18n.roomStatusOpen }, { value: "INVITE-ONLY", label: i18n.roomStatusInviteOnly }, { value: "CLOSED", label: i18n.roomStatusClosed }]),
             form({ method: "GET", action: "/rooms", class: "filter-box" },
               input({ type: "hidden", name: "filter", value: filter }),
               input({ type: "text", name: "q", placeholder: i18n.roomSearchPlaceholder, value: q, class: "filter-box__input" }),
-              div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+              div({ class: "filter-box__controls" }, renderSearchButton(i18n.searchButton))
             )
           )
         : null,
       isForm
         ? renderRoomForm(filter === "edit" ? roomToEdit : null, params)
         : (shown.length
-            ? ul({ class: "mailing-archive" }, ...paged(shown).map(r => renderRoomItem(r, params)))
+            ? renderLayoutItems(() => ul({ class: "mailing-archive" }, ...pageRooms.map(r => renderRoomItem(r, params))))
             : div({ class: "tribe-grid" }, p(i18n.roomsNoItems)))
     )
   )
@@ -503,6 +505,7 @@ exports.roomModesFromCensus = (census, me, occupancy) => {
     mine: list.some(x => String(x.author) === String(me)),
     supported: hasRelation("supported", list),
     replicated: hasRelation("replicated", list),
+    favorites: hasRelation("favorites", list),
     recent: list.length > 0,
     live: list.some(x => { const o = occupancy && occupancy.get(x.rootId); return !!(o && o.count > 0) }),
     open: list.some(x => x.type === "OPEN" && !x.isClosed),

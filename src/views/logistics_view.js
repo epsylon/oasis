@@ -1,6 +1,6 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
 const { renderScopeChip } = require("./clearnet_view");
-const { template, i18n, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views");
+const { template, i18n, renderLayoutSwitch, renderLayoutItems, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -8,7 +8,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "BOOKED", "HISTORY", "TOP"];
+const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "BOOKED", "HISTORY", "TOP"];
 const KIND_FILTERS = ["TRIPS", "SHIPMENTS"];
 const MODE_FILTERS = ["OFFERS", "REQUESTS"];
 const DATE_FILTERS = ["UPCOMING", "PAST", "CLOSED"];
@@ -19,7 +19,7 @@ const RECURRENCES = ["NONE", "DAILY", "WEEKLY", "MONTHLY"];
 
 const cap = (s) => s.charAt(0) + s.slice(1).toLowerCase();
 const lbl = (prefix, v) => String(i18n[`logistics${prefix}${cap(v)}`] || v).toUpperCase();
-const filterLabel = (f) => RELATION_FILTERS.includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : lbl("Filter", f);
+const filterLabel = (f) => [...RELATION_FILTERS, "favorites"].includes(String(f).toLowerCase()) ? relationFilterLabel(String(f).toLowerCase()) : lbl("Filter", f);
 const kindLabel = (k) => lbl("Kind", k);
 const modeLabel = (m) => lbl("Mode", m);
 const statusLabel = (s) => lbl("Status", s);
@@ -68,7 +68,7 @@ const logisticsChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(r => String(r.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
   if (mode === "BOOKED") return census.some(r => !!r.myBooking);
   if (mode === "RECENT") return census.length > 0;
   if (mode === "HISTORY") return census.some(r => r.closed && r.participated);
@@ -218,6 +218,7 @@ exports.logisticsView = async (routes, filter = "ALL", params = {}) => {
         ? renderForm(f === "EDIT" ? params.route : null, params)
         : [
             emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+              isForm || emptyMod ? null : renderLayoutSwitch("filters"),
               renderModuleStats(list.length, [
                 { label: kindLabel("TRIP"), count: list.filter(r => r.kind === "TRIP").length },
                 { label: kindLabel("SHIPMENT"), count: list.filter(r => r.kind === "SHIPMENT").length },
@@ -227,10 +228,15 @@ exports.logisticsView = async (routes, filter = "ALL", params = {}) => {
                 input({ type: "hidden", name: "filter", value: f }),
                 input({ type: "hidden", name: "zone", value: zone }),
                 input({ type: "text", name: "q", value: q, placeholder: i18n.logisticsSearchPlaceholder, class: "filter-box__input" }),
-                div({ class: "filter-box__controls" }, button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+                div({ class: "filter-box__controls" }, renderSearchButton(i18n.searchButton))
               )
             ),
-            div({ class: "tribe-grid" }, list.length ? paged(list).map(r => renderRouteCard(r, params)) : p(i18n.logisticsNoItems))
+            list.length
+              ? (() => {
+                  const shownRoutes = paged(list);
+                  return renderLayoutItems(() => div({ class: "tribe-grid" }, shownRoutes.map(r => renderRouteCard(r, params))));
+                })()
+              : div({ class: "tribe-grid" }, p(i18n.logisticsNoItems))
           ]
     )
   );

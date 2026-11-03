@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, renderScheduledChip, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, renderScheduledChip, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderPlayerFollow, renderSearchButton } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -37,7 +37,7 @@ const podcastChipFor = (mode, census) => {
   if (mode === "MINE") return census.some(c => String(c.author) === String(userId));
   if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
   if (mode === "RECENT") return census.length > 0;
-  if (mode === "FAVORITES") return census.some(c => c.isFavorite);
+  if (mode === "FAVORITES") return census.length > 0;
   if (mode === "TOP") return census.some(c => (c.opinionCount || 0) > 0 || (c.spreadCount || 0) > 0);
   if (mode === "VIEWERS") return census.some(c => (c.playCount || 0) > 0);
   if (CATEGORIES.includes(mode)) return census.some(c => c.category === mode);
@@ -45,13 +45,19 @@ const podcastChipFor = (mode, census) => {
 };
 exports.podcastChipFor = podcastChipFor;
 
+const latestEpisodeOf = (ch) => {
+  const eps = Array.isArray(ch.episodes) ? ch.episodes : [];
+  const ep = eps[eps.length - 1];
+  return ep && ep.media && ep.media.blobId ? ep : null;
+};
+
 const renderChannelCard = (ch, params = {}) =>
   div({ class: "tribe-card podcast-card" },
     renderCardTop(ch.id, channelHref(ch), { date: ch.createdAt, chips: [playsChip(ch), renderStateChip("whole", "◇", catLabel(ch.category), "kind"), renderLicenseChip(ch.license), renderScopeChip(ch, i18n, ch.clearnet === true, clearnetItemHref('podcasts', ch.title, ch.id))], author: ch.author, favKind: "podcasts", isFavorite: ch.isFavorite, reportTitle: ch.title, spread: (params.spreadMap && params.spreadMap.get(ch.id)) || null, deleteAction: String(ch.author) === String(userId) ? contentDeleteAction("podcast", ch.id) : undefined }),
     div({ class: "tribe-card-body" },
       ch.cover && ch.cover.blobId ? a({ href: channelHref(ch) }, renderCover(ch, "podcast-card-cover")) : null,
       div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: channelHref(ch) }, ch.title || "—"))),
-      null
+      latestEpisodeOf(ch) ? renderPlayer(latestEpisodeOf(ch)) : null
     )
   );
 
@@ -117,6 +123,7 @@ exports.podcastsView = async (channels, filter = "ALL", params = {}) => {
   const f = String(filter || "ALL").toUpperCase();
   const isForm = f === "CREATE" || f === "EDIT";
   const emptyMod = !isForm && moduleIsEmpty(census, "ALL", "ALL", q);
+  const pageChannels = isForm || !list.length ? [] : paged(list);
   return template(
     i18n.podcastsTitle,
     section(
@@ -128,6 +135,7 @@ exports.podcastsView = async (channels, filter = "ALL", params = {}) => {
         ? renderChannelForm(f === "EDIT" ? params.channel : null)
         : [
             emptyMod ? null : div({ class: "filters activity-filter-chips activity-toolbar-row" },
+              isForm || emptyMod ? null : renderLayoutSwitch("filters"),
               renderModuleStats(list.length, [
                 { label: i18n.podcastEpisodesLabel, count: list.reduce((s, c) => s + (c.episodeCount || 0), 0) },
                 { label: i18n.podcastPlaysLabel, count: list.reduce((s, c) => s + (c.playCount || 0), 0) }
@@ -138,10 +146,12 @@ exports.podcastsView = async (channels, filter = "ALL", params = {}) => {
                 div({ class: "filter-box__controls" },
                   select({ name: "sort", class: "filter-box__select" },
                     ...SORTS.map(s => option({ value: s, ...((params.sort || "recent") === s ? { selected: true } : {}) }, i18n[`audioSort${s.charAt(0).toUpperCase()}${s.slice(1)}`]))),
-                  button({ type: "submit", class: "filter-box__button" }, i18n.searchButton))
+                  renderSearchButton(i18n.searchButton))
               )
             ),
-            div({ class: "tribe-grid" }, list.length ? paged(list).map(c => renderChannelCard(c, params)) : p(i18n.podcastNoItems))
+            pageChannels.length
+              ? renderLayoutItems(() => div({ class: "tribe-grid" }, pageChannels.map(c => renderChannelCard(c, params))))
+              : div({ class: "tribe-grid" }, p(i18n.podcastNoItems))
           ]
     )
   );
@@ -241,8 +251,8 @@ exports.singleChannelView = async (ch, params = {}) => {
 
 const renderPlayer = (ep) => {
   if (!ep.media || !ep.media.blobId) return p(i18n.audioNoFile);
-  if (ep.media.kind === "video") return div({ class: "podcast-player video-container video-container-row" }, videoHyperaxe({ controls: true, src: blobSrc(ep.media), preload: "metadata", class: "podcast-video" }));
-  return div({ class: "podcast-player audio-container" }, audioHyperaxe({ controls: true, src: blobSrc(ep.media), preload: "metadata" }));
+  if (ep.media.kind === "video") return div({ class: "podcast-player video-container video-container-row" }, videoHyperaxe({ controls: true, preload: "metadata", class: "podcast-video", src: blobSrc(ep.media) }));
+  return div({ class: "podcast-player audio-container card-content" }, audioHyperaxe({ controls: true, preload: "metadata", src: blobSrc(ep.media) }), renderPlayerFollow(ep.media.blobId, ep.title, episodeHref(ep)));
 };
 
 exports.singleEpisodeView = async (ep, params = {}) => {
