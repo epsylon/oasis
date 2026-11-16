@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderCardByline, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderCardByline, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -159,7 +159,7 @@ const taskChipFor = (currentFilter, visible) => (mode) => {
   if (mode === currentFilter) return true;
   if (!Array.isArray(visible)) return true;
   if (mode === "mine") return visible.some((t) => t.author === userId);
-  if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, visible);
+  if (mode === "mentions" || mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, visible);
   if (mode === "recent") return visible.length > 0;
   if (mode === "assigned") return visible.some((t) => safeArray(t.assignees).includes(userId));
   if (mode === "open") return visible.some((t) => normalizeStatus(t.status) === "OPEN");
@@ -187,6 +187,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
   let filtered;
   if (currentFilter === "recent") filtered = visible.filter((t) => (Date.parse(t.createdAt || "") || 0) >= Date.now() - 86400000);
   else if (currentFilter === "mine") filtered = visible.filter((t) => t.author === userId);
+  else if (currentFilter === "mentions") filtered = visible.filter((t) => t.isMentioned);
   else if (currentFilter === "supported") filtered = visible.filter((t) => t.isSupported);
   else if (currentFilter === "replicated") filtered = visible.filter((t) => t.isReplicated);
   else if (currentFilter === "favorites") filtered = visible.filter((t) => t.isFavorite);
@@ -229,6 +230,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
           ...(taskChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(currentFilter, { visible: taskChipVisible }),
           ...(taskChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(currentFilter, taskChipVisible, { favorites: true }),
           ...(taskChipVisible("assigned") ? [button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAssigned).toUpperCase())] : []),
@@ -305,6 +307,7 @@ exports.taskView = async (tasks, filter, taskId, returnTo, params = {}) => {
                 opt("PUBLIC", String(formData.isPublic || "PUBLIC").toUpperCase() === "PUBLIC", i18n.taskPublic),
                 opt("PRIVATE", String(formData.isPublic || "").toUpperCase() === "PRIVATE", i18n.taskPrivate)
               ), br(), br(),
+              ...(currentFilter === "edit" ? [] : renderPublishAtField(formData.publishAt)),
               button({ type: "submit" }, currentFilter === "edit" ? i18n.save : i18n.taskCreateButton)
             )
           )
@@ -331,6 +334,7 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
       { method: "GET", action: "/tasks" },
       button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAll).toUpperCase()),
       ...(taskChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterRecent).toUpperCase())] : []),
+      renderMentionsFilter(currentFilter, { visible: taskChipVisible }),
       ...(taskChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterMine).toUpperCase())] : []),
       ...renderRelationFilters(currentFilter, taskChipVisible, { favorites: true }),
       ...(taskChipVisible("assigned") ? [button({ type: "submit", name: "filter", value: "assigned", class: currentFilter === "assigned" ? "filter-btn active" : "filter-btn" }, String(i18n.taskFilterAssigned).toUpperCase())] : []),

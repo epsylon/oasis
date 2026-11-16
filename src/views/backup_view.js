@@ -1,4 +1,4 @@
-const { div, h2, h3, p, section, button, form, a, span, br, hr, input, label, select, option, pre, img, ul, li, strong, progress } = require("../server/node_modules/hyperaxe");
+const { div, h2, p, section, button, form, a, span, br, hr, input, label, select, option, pre, img, ul, li, strong, progress } = require("../server/node_modules/hyperaxe");
 const { template, i18n } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const crypto = require("crypto");
@@ -43,7 +43,7 @@ const renderRecovery = (kit) => kit
     )
   : p({ class: "backup-warning" }, i18n.backupKitPageDescription);
 
-const renderKeysExport = () =>
+const renderKeysExport = () => [
   div({ class: "backup-section" },
     renderRandomPassword(),
     p(i18n.exportDescription),
@@ -53,14 +53,31 @@ const renderKeysExport = () =>
       p({ class: "file-info" }, i18n.fileInfo),
       button({ type: "submit" }, i18n.backupKeysExportButton)
     )
-  );
+  ),
+  div({ class: "backup-section" },
+    form({ action: "/backup/keys/import", method: "POST", enctype: "multipart/form-data" },
+      label(i18n.password), br(),
+      input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(),
+      input({ type: "file", name: "uploadedFile", required: true, accept: ".enc" }), br(), br(),
+      button({ type: "submit" }, i18n.backupKeysImportButton)
+    )
+  )
+];
 
-const renderFullBackup = (options) => {
+const renderFullBackup = (options, accounts = []) => {
   const opt = options || {};
   const sinceValue = opt.sinceTs ? moment(opt.sinceTs).format("YYYY-MM-DD") : "";
+  const account = accounts.some(acc => acc.key === opt.account) ? opt.account : "all";
   return div({ class: "backup-section" },
     renderRandomPassword(),
     form({ method: "POST", action: "/backup/export" },
+      ...(accounts.length > 1 ? [
+        label(i18n.backupAccountLabel), br(),
+        select({ name: "account" },
+          option({ value: "all", ...(account === "all" ? { selected: true } : {}) }, i18n.backupAccountAll),
+          ...accounts.map(acc => option({ value: acc.key, ...(account === acc.key ? { selected: true } : {}) }, `@${acc.short}`))
+        ), br(), br()
+      ] : []),
       label(i18n.backupScopeLabel), br(),
       select({ name: "scope" },
         option({ value: "all", ...(opt.scope !== "mine" ? { selected: true } : {}) }, i18n.backupScopeAll),
@@ -76,8 +93,14 @@ const renderFullBackup = (options) => {
   );
 };
 
-const restoreSummary = (r) =>
-  `${i18n.backupRestoredMessages}: ${r.messages} · ${i18n.backupRestoredSkipped}: ${r.skipped} · ${i18n.backupRestoredBlobs}: ${r.blobs}${r.files ? ` · ${i18n.backupRestoredState}: ${r.files}` : ""}${r.forked ? ` · ${i18n.backupRestoredForked}: ${r.forked}` : ""}${r.failed ? ` · ${i18n.backupRestoredFailed}: ${r.failed}` : ""}`;
+const restoreLines = (r) => [
+  li({ class: "backup-check-ok" }, `✓ ${i18n.backupRestoredMessages}: ${r.messages || 0}`),
+  li({ class: "backup-check-ok" }, `✓ ${i18n.backupRestoredSkipped}: ${r.skipped || 0}`),
+  li({ class: "backup-check-ok" }, `✓ ${i18n.backupRestoredBlobs}: ${r.blobs || 0}`),
+  r.files ? li({ class: "backup-check-ok" }, `✓ ${i18n.backupRestoredState}: ${r.files}`) : null,
+  r.forked ? li({ class: "backup-check-warn" }, `⚠ ${i18n.backupRestoredForked}: ${r.forked}`) : null,
+  r.failed ? li({ class: "backup-check-bad" }, `✗ ${i18n.backupRestoredFailed}: ${r.failed}`) : null
+];
 
 const renderRestoreStatus = (job) => {
   if (!job) return null;
@@ -85,19 +108,29 @@ const renderRestoreStatus = (job) => {
     const elapsed = Math.max(0, Math.round((Date.now() - Date.parse(job.startedAt)) / 1000));
     const pct = Math.max(0, Math.min(100, Number((job.progress || {}).percent) || 0));
     return div({ class: "backup-restored" },
-      p({ class: "backup-warning" }, `⏳ ${i18n.backupRestoreRunning}`),
+      p({ class: "backup-hint" }, `⏳ ${i18n.backupRestoreRunning}`),
       div({ class: "indexing-progress-block" },
         progress({ value: String(pct), max: "100", class: "indexing-progress" }),
         p({ class: "indexing-percent" }, strong(`${pct.toFixed(1)} %`))
       ),
-      p(`${restoreSummary(job.progress || {})} · ${i18n.backupRestoreElapsed}: ${elapsed}s`)
+      ul(...restoreLines(job.progress || {}), li(`${i18n.backupRestoreElapsed}: ${elapsed}s`))
     );
   }
+  const noRoom = /^accounts-limit:(\d+)$/.exec(String(job.error || ""));
+  if (noRoom) return div({ class: "backup-restored" }, p({ class: "backup-warning" }, `✗ ${String(i18n.backupRestoreNoRoom).replace("{n}", noRoom[1])}`));
   if (job.error) return div({ class: "backup-restored" }, p({ class: "backup-warning" }, `✗ ${i18n.backupRestoreFailedLine} ${job.error}`));
   const r = job.result || {};
+  if (Array.isArray(r.accounts) && r.accounts.length) {
+    return div({ class: "backup-restored" },
+      p({ class: "backup-hint" }, `✓ ${i18n.backupRestoredLine}`),
+      ul(...restoreLines(r)),
+      form({ method: "POST", action: "/backup/restore/apply" }, button({ type: "submit" }, i18n.backupRestoreApply))
+    );
+  }
   const mine = (r.forks || []).some(f => f.mine);
   return div({ class: "backup-restored" },
-    p(`✓ ${i18n.backupRestoredLine} ${restoreSummary(r)}`),
+    p({ class: "backup-hint" }, `✓ ${i18n.backupRestoredLine}`),
+    ul(...restoreLines(r)),
     mine ? p({ class: "backup-warning" }, `⚠ ${i18n.backupRestoreForkMine}`) : null
   );
 };
@@ -106,17 +139,10 @@ const renderRestore = (job) =>
   div({ class: "backup-section" },
     renderRestoreStatus(job),
     job && job.running ? null : form({ method: "POST", action: "/backup/import", enctype: "multipart/form-data" },
-      p(i18n.backupRestorePassword),
-      input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(), br(),
-      input({ type: "file", name: "uploadedFile", required: true, accept: ".oasisbk" }), br(), br(),
+      label(i18n.password), br(),
+      input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(),
+      input({ type: "file", name: "uploadedFile", required: true, accept: ".oasisbk,.enc" }), br(), br(),
       button({ type: "submit" }, i18n.backupRestoreButton)
-    ),
-    p({ class: "backup-hint" }, i18n.importDescription),
-    form({ action: "/backup/keys/import", method: "POST", enctype: "multipart/form-data" },
-      p(i18n.passwordImport),
-      input({ type: "password", name: "importPassword", required: true, placeholder: i18n.importPasswordPlaceholder, minlength: 32 }), br(), br(),
-      input({ type: "file", name: "uploadedFile", required: true }), br(), br(),
-      button({ type: "submit" }, i18n.backupKeysImportButton)
     )
   );
 
@@ -128,11 +154,11 @@ const renderInstantBackup = () =>
     )
   );
 
-exports.backupView = async ({ type = "RECOVERY", options = null, restoreJob = null, kit = null } = {}) => {
+exports.backupView = async ({ type = "RECOVERY", options = null, restoreJob = null, kit = null, accounts = [] } = {}) => {
   const t = normalizeType(type);
   const body = t === "RECOVERY" ? renderRecovery(kit)
     : t === "KEYS" ? renderKeysExport()
-    : t === "FULL" ? renderFullBackup(options)
+    : t === "FULL" ? renderFullBackup(options, accounts)
     : t === "INSTANT" ? renderInstantBackup()
     : renderRestore(restoreJob);
   const html = template(
@@ -142,7 +168,7 @@ exports.backupView = async ({ type = "RECOVERY", options = null, restoreJob = nu
       renderTypeFilters(t)
     ),
     section(
-      div({ class: "div-center backup-wrap" }, body)
+      div({ class: "div-center backup-wrap" }, ...(Array.isArray(body) ? body : [body]))
     )
   );
   return restoreJob && restoreJob.running ? html.replace('</head>', '<meta http-equiv="refresh" content="5"></head>') : html;

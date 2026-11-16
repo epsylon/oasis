@@ -3,6 +3,9 @@ const { getConfig } = require('../configs/config-manager.js');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { readTyped } = require('./typed_log');
 const { isContentVisibleTo } = require('./content_visibility');
+const { WORD_CHARS } = require('../backend/word_chars');
+
+const TERM_SPLIT_RE = new RegExp(`[^${WORD_CHARS}]+|_+`);
 const { versionGroups, versionEntry } = require('../backend/dedupe');
 
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
@@ -67,7 +70,7 @@ const TITLE_STOPWORDS = new Set([
 
 const titleTerms = (c) => String(c.title || c.name || c.question || c.concept || '')
   .toLowerCase()
-  .split(/[^\p{L}\p{N}]+/u)
+  .split(TERM_SPLIT_RE)
   .filter(w => w.length >= 3 && !TITLE_STOPWORDS.has(w) && !/^\d+$/.test(w));
 
 const termsOf = (kind, c) => {
@@ -89,7 +92,7 @@ const termsOf = (kind, c) => {
 const DESC_TERMS_MAX = 40;
 const descTerms = (c) => String(c.description || c.text || c.body || '')
   .toLowerCase()
-  .split(/[^\p{L}\p{N}]+/u)
+  .split(TERM_SPLIT_RE)
   .filter(w => w.length >= 4 && !TITLE_STOPWORDS.has(w) && !/^\d+$/.test(w))
   .slice(0, DESC_TERMS_MAX);
 

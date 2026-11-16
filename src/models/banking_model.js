@@ -6,6 +6,7 @@ const { readTyped, CONTENT_TYPES, requestScope } = require("./typed_log");
 const { getConfig, defaultInvite } = require("../configs/config-manager.js");
 const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state.js");
+const profiles = require("../configs/profiles");
 
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
@@ -1007,12 +1008,14 @@ async function getSchoolBalance(userId) {
       if (!pubId) throw new Error("no_pub_configured");
       const alreadyClaimed = await hasClaimedThisMonth(uid);
       if (alreadyClaimed) throw new Error("already_claimed");
+      if (await claimedByOtherAvatar(uid)) throw new Error("avatar_claimed");
       if (await hasRefusedThisMonth(uid)) throw new Error("already_refused");
       const ssb = await openSsb();
       if (!ssb || !ssb.publish) throw new Error("ssb_unavailable");
       const now = new Date().toISOString();
       const claimContent = { type: "ubiClaim", pubId, epochId, claimedAt: now };
       await new Promise((resolve, reject) => ssb.publish(claimContent, (err, res) => err ? reject(err) : resolve(res)));
+      profiles.noteUbiClaim(epochId, uid);
       return { status: "claimed_pending", epochId };
     } finally {
       claimsInFlight.delete(lockKey);
@@ -1044,6 +1047,7 @@ async function getSchoolBalance(userId) {
     const uid = resolveUserId(userId);
     const epochId = epochIdNow();
     if (await hasClaimedThisMonth(uid)) throw new Error("already_claimed");
+    if (await claimedByOtherAvatar(uid)) throw new Error("avatar_claimed");
     if (await hasRefusedThisMonth(uid)) throw new Error("already_refused");
     const pubId = await resolvePubId();
     const ssb = await openSsb();
@@ -1062,6 +1066,7 @@ async function getSchoolBalance(userId) {
     const cfg = getWalletCfg("user") || {};
     if (!address || !isValidEcoinAddress(address) || !hasWalletCredentials()) return { available: false, reason: "no_wallet" };
     if (await hasClaimedThisMonth(uid)) return { available: false, reason: "claimed" };
+    if (await claimedByOtherAvatar(uid)) return { available: false, reason: "avatar_claimed" };
     if (await hasRefusedThisMonth(uid)) return { available: false, reason: "refused" };
     return { available: true, epochId: epochIdNow(), pubId: pub.pubId };
   }
@@ -1138,6 +1143,21 @@ async function getSchoolBalance(userId) {
       if (c.type === "ubiClaim" && v.author === userId && c.epochId === epochId) return true;
     }
     return false;
+  }
+
+  async function claimedByOtherAvatar(userId) {
+    const epochId = epochIdNow();
+    const claimant = profiles.ubiClaimant(epochId);
+    if (claimant) return claimant !== userId;
+    const others = profiles.otherIds();
+    if (!others.size) return false;
+    const msgs = await scanLogStream();
+    return msgs.some((m) => {
+      const v = m.value || {};
+      const c = v.content || {};
+      if (c.epochId !== epochId) return false;
+      return (c.type === "ubiClaim" && others.has(v.author)) || (c.type === "ubiClaimResult" && others.has(c.userId));
+    });
   }
 
   async function getUbiClaimHistory(userId) {
@@ -1543,6 +1563,8 @@ async function getSchoolBalance(userId) {
     const futureUBI = Number(((engagementScore / 100) * poolForEpoch).toFixed(6));
     const addresses = await listAddressesMerged();
     const alreadyClaimed = await hasClaimedThisMonth(uid);
+    if (alreadyClaimed) profiles.noteUbiClaim(epochId, uid);
+    const avatarClaimed = !alreadyClaimed && !isPubNode() && await claimedByOtherAvatar(uid).catch(() => false);
     const pubId = isPubNode() ? config.keys.id : await resolvePubId();
     const pubLastSeen = isPubNode() ? (lastAnnounce ? lastAnnounce.timestamp : 0) : (await discoverUbiPub()).timestamp;
     const userAddress = await getUserAddress(uid);
@@ -1563,6 +1585,7 @@ async function getSchoolBalance(userId) {
       userEngagementScore: engagementScore,
       futureUBI,
       alreadyClaimed,
+      avatarClaimed,
       alreadyRefused: await hasRefusedThisMonth(uid).catch(() => false),
       pubId,
       wealthTotals: (await listWealthSeries("all").catch(() => ({ totals: { distributed: 0, taxes: 0 } }))).totals,

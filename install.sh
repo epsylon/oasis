@@ -148,8 +148,10 @@ EMB_DIR="$MODEL_DIR/embeddings"
 EMB_TAR="oasis-embeddings.tar.gz"
 EMB_SHA256="128f3526695b4af1320facc601eac2428ced39e3cd18e5ee829a1c54eea9fa41"
 EMB_FILE="$EMB_DIR/onnx/model_quantized.onnx"
-CONFIG_PATH="${OASIS_STATE_DIR:-${ssb_path:-$HOME/.ssb}}/oasis/oasis-config.json"
-[ -f "$CONFIG_PATH" ] || node -e "require('../configs/config-manager.js')" >/dev/null 2>&1
+STATE_DIR=$(node -e "process.stdout.write(require('../configs/profiles').launchStateDir())" 2>/dev/null)
+[ -n "$STATE_DIR" ] || STATE_DIR="${OASIS_STATE_DIR:-${ssb_path:-$HOME/.ssb}}"
+CONFIG_PATH="$STATE_DIR/oasis/oasis-config.json"
+[ -f "$CONFIG_PATH" ] || OASIS_STATE_DIR="$STATE_DIR" node -e "require('../configs/config-manager.js')" >/dev/null 2>&1
 MODEL_MIRRORS="${OASIS_MODEL_MIRRORS:-} https://solarnethub.com/code/models https://4ndr0m3d4.xyz"
 
 tar_is_safe() {

@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, input, h1, label, img } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, hasRelation, renderRelationFilters, RELATION_FILTERS, relationFilterLabel, hereAt, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderOpinionsVoting, userLink, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, hasRelation, renderRelationFilters, RELATION_FILTERS, relationFilterLabel, hereAt, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -73,7 +73,7 @@ const renderMastodonToggle = (on = false) =>
     )
   );
 
-const renderFeedComposer = ({ text = "", media = "", rows = 5, clearnet = false, mastodon = false, mastodonOn = false } = {}) => {
+const renderFeedComposer = ({ text = "", media = "", rows = 5, clearnet = false, mastodon = false, mastodonOn = false, publishAt = "" } = {}) => {
   const cleanMedia = FEED_MEDIA_RE.test(String(media || "")) ? String(media).trim() : "";
   const draft = String(text || "");
   const hasPreview = !!(draft.trim() || cleanMedia);
@@ -98,6 +98,7 @@ const renderFeedComposer = ({ text = "", media = "", rows = 5, clearnet = false,
       : null,
     renderClearnetSelector(clearnet, i18n),
     mastodon ? renderMastodonToggle(mastodonOn) : null,
+    ...renderPublishAtField(publishAt),
     div({ class: "feed-compose-actions" },
       button({ type: "submit", class: "filter-btn", formaction: "/feed/preview" }, i18n.preview || "Preview"),
       button({ type: "submit", class: "create-button" }, i18n.createFeedButton || "Send Feed!")
@@ -200,7 +201,7 @@ const feedChipFor = (filter, censusF) => (mode) => {
   if (mode === filter) return true;
   if (!Array.isArray(censusF)) return true;
   if (mode === "MINE") return censusF.some((f) => String(f && f.value && f.value.author) === String(config.keys.id));
-  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), censusF);
+  if (mode === "MENTIONS" || mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), censusF);
   if (mode === "RECENT") return censusF.length > 0;
   return true;
 };
@@ -243,7 +244,7 @@ exports.feedView = (feeds, opts = "ALL") => {
     successBanner,
     div(
       { class: "mode-buttons-row" },
-      ...(emptyMod ? [] : generateFilterButtons(["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "TOP"].filter(feedChip), filter, "/feed", extra)),
+      ...(emptyMod ? [] : generateFilterButtons(["ALL", "RECENT", "MENTIONS", "MINE", "SUPPORTED", "REPLICATED", "TOP"].filter(feedChip), filter, "/feed", extra)),
       form({ method: "GET", action: "/feed/create" }, button({ type: "submit", class: "create-button filter-btn" }, i18n.createFeedTitle || "Create Feed"))
     ),
     emptyMod ? null : div(
@@ -291,7 +292,7 @@ exports.feedCreateView = (opts = {}) => {
     section(
       div({ class: "tags-header module-header-line" }, h2(i18n.createFeedTitle), p(i18n.FeedshareYourOpinions)),
       div({ class: "mode-buttons-row" }, ...generateFilterButtons(["ALL"], "CREATE", "/feed", { q, tag })),
-      renderFeedComposer({ text: opts.text, media: opts.media, clearnet: opts.clearnet === true, mastodon: opts.mastodon === true, mastodonOn: opts.mastodonOn === true })
+      renderFeedComposer({ text: opts.text, media: opts.media, clearnet: opts.clearnet === true, mastodon: opts.mastodon === true, mastodonOn: opts.mastodonOn === true, publishAt: opts.publishAt || "" })
     )
   );
 };
@@ -321,6 +322,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
           { method: "GET", action: "/feed", class: "ui-toolbar ui-toolbar--filters" },
           button({ type: "submit", name: "filter", value: "ALL", class: "filter-btn" }, i18n.ALLButton || "ALL"),
           ...(feedChip("RECENT") ? [button({ type: "submit", name: "filter", value: "RECENT", class: "filter-btn" }, i18n.RECENTButton || "RECENT")] : []),
+          renderMentionsFilter("", { upper: true, visible: feedChip }),
           ...(feedChip("MINE") ? [button({ type: "submit", name: "filter", value: "MINE", class: "filter-btn" }, i18n.MINEButton || "MINE")] : []),
           ...renderRelationFilters("", feedChip, { upper: true }),
           button({ type: "submit", name: "filter", value: "TOP", class: "filter-btn" }, i18n.TOPButton || "TOP"),

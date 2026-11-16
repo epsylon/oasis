@@ -1599,8 +1599,10 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section housing' },
           cardTitleRow(title, titleHref),
-          cardPrice(isFree ? (i18n.housingFree || 'FREE') : `${Number(price || 0).toFixed(2)} ECO`),
-          place ? cardChipLine('📍', place) : null
+          div({ class: 'card-chip-line' },
+            cardPrice(isFree ? (i18n.housingFree || 'FREE') : `${Number(price || 0).toFixed(2)} ECO`),
+            place ? renderCountChip('📍', null, String(place)) : null
+          )
         )
       );
     }
@@ -2028,7 +2030,7 @@ exports.rootTypeLabel = rootTypeLabel;
 
 exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const spreadMap = (extras && extras.spreadMap) || new Map();
-  const ACTIVITY_SCOPES = ['all', 'recent', 'mine', 'supported', 'replicated', 'favorites', 'top'];
+  const ACTIVITY_SCOPES = ['all', 'recent', 'mentions', 'mine', 'supported', 'replicated', 'favorites', 'top'];
   const scope = ACTIVITY_SCOPES.includes(filter) ? filter : 'all';
   const title = scope === 'mine' ? i18n.yourActivity : i18n.globalActivity;
   const desc = i18n.activityDesc;
@@ -2036,6 +2038,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const activityTypes = [
     { type: 'all',       label: i18n.allButton },
     { type: 'recent',    label: i18n.typeRecent },
+    { type: 'mentions',  label: String(i18n.mentions).toUpperCase() },
     { type: 'mine',      label: i18n.mineButton },
     { type: 'supported', label: i18n.filterSupported },
     { type: 'replicated', label: i18n.filterReplicated },
@@ -2080,7 +2083,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
     { type: 'video',     label: i18n.typeVideo }
   ];
 
-  const FILTER_META = new Set(['all', 'mine', 'supported', 'replicated', 'favorites', 'recent']);
+  const FILTER_META = new Set(['all', 'mentions', 'mine', 'supported', 'replicated', 'favorites', 'recent']);
   const ALLOWED_TYPES = new Set(['tribeOpened']);
   for (const { type } of activityTypes) {
     if (FILTER_META.has(type)) continue;
@@ -2095,6 +2098,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
   const opinionTotal = (action) => Object.values((action.value?.content || action.content || {}).opinions || {}).reduce((n, v) => n + (Number(v) || 0), 0);
   const inScope = (action) => {
     if (scope === 'mine') return action.author === userId;
+    if (scope === 'mentions') return !!action.isMentioned;
     if (scope === 'supported') return !!action.isSupported;
     if (scope === 'replicated') return !!action.isReplicated;
     if (scope === 'favorites') return isFavoriteItem(extras && extras.favIndex, action);
@@ -2232,7 +2236,7 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
       ),
       emptyAct ? null : (() => {
           const ORDER = [
-            'all', 'recent', 'mine', 'supported', 'replicated', 'favorites', 'top',
+            'all', 'recent', 'mentions', 'mine', 'supported', 'replicated', 'favorites', 'top',
             'inhabitants', 'tribe', 'larp', 'schoolCourse', 'parliament', 'courts', 'emergency',
             'votes', 'event', 'calendar', 'task', 'report', 'campaign',
             'banking', 'market', 'housing', 'project', 'industry', 'job', 'shop', 'logistics',
@@ -2245,7 +2249,8 @@ exports.activityView = (actions, filter, userId, q = '', extras = {}) => {
           const metaKeep = new Set(['all', 'mine', 'recent', 'replicated', 'favorites', 'top']);
           const hasContentFor = (type) =>
             metaKeep.has(type)
-            || (type === 'supported' ? (scope === type || actions.some(a2 => a2.isSupported))
+            || (type === 'mentions' ? (scope === type || actions.some(a2 => a2.isMentioned))
+              : type === 'supported' ? (scope === type || actions.some(a2 => a2.isSupported))
               : (GROUP_SUBTYPES[type] || [type]).some(t2 => presentActionTypes.has(t2)));
           const ordered = ORDER.map(type => byType.get(type)).filter(Boolean)
             .concat(activityTypes.filter(t => !placed.has(t.type)))

@@ -159,7 +159,9 @@ if (!isMainThread && workerData === WORKER_TAG) {
     }
   };
   const encode = async ({ pixels, width, height, channels }, rotation) => {
-    const sharp = require('../server/node_modules/sharp');
+    const { getSharp, encodePng, rotateRaw } = require('../server/sharp_loader');
+    const sharp = getSharp();
+    if (!sharp) return { body: encodePng(rotateRaw({ data: Buffer.from(pixels), width, height, channels }, rotation)), type: 'image/png' };
     const raw = { raw: { width, height, channels } };
     return { body: await sharp(Buffer.from(pixels), raw).rotate(rotation).webp({ quality: PDF_WEBP_QUALITY, effort: PDF_WEBP_EFFORT }).toBuffer(), type: 'image/webp' };
   };

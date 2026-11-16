@@ -8,13 +8,7 @@ const ssb = require("../client/gui");
 const config = require("../server/SSB_server").config;
 const cooler = ssb({ offline: config.offline });
 
-let sharpLib;
-const getSharp = () => {
-  if (sharpLib === undefined) {
-    try { sharpLib = require('../server/node_modules/sharp'); } catch (_) { sharpLib = null; }
-  }
-  return sharpLib;
-};
+const { getSharp } = require('../server/sharp_loader');
 
 const stripImageMetadata = async (buffer) => {
   const sharp = getSharp();

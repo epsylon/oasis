@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, th, td, progress, video, audio, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, renderMentionsFilter, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderOpinionsVoting, renderEngagement, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderSearchButton } = require("./main_views")
 const { renderClearnetSelector, renderClearnetSwitch, renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
 const opinionCategories = require("../backend/opinion_categories")
 const moment = require("../server/node_modules/moment")
@@ -204,7 +204,7 @@ const marketChipFor = (filter, list) => (mode) => {
   if (!Array.isArray(list)) return true;
   if (mode === "recent") return list.length > 0;
   if (mode === "mine") return list.some((e) => String(e.seller) === String(userId));
-  if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, list);
+  if (mode === "mentions" || mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, list);
   if (mode === "exchange") return list.some((e) => e.item_type === "exchange" && e.status === "FOR SALE");
   if (mode === "auctions") return list.some((e) => e.item_type === "auction" && e.status === "FOR SALE");
   if (mode === "mybids") return list.some(isMyBidItem);
@@ -233,6 +233,9 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
       break
     case "mine":
       filtered = list.filter((e) => e.seller === userId)
+      break
+    case "mentions":
+      filtered = list.filter((e) => e.isMentioned)
       break
     case "supported":
       filtered = list.filter((e) => e.isSupported)
@@ -316,6 +319,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
           ...(marketChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(filter, { visible: marketChipVisible }),
           ...(marketChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(filter, marketChipVisible, { favorites: true }),
           ...(marketChipVisible("exchange") ? [button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterItems).toUpperCase())] : []),
@@ -478,6 +482,7 @@ exports.marketView = async (items, filter, itemToEdit = null, params = {}) => {
               }),
               br(),br(),
               ...(reach === "PUBLIC" ? [renderClearnetSelector(itemEdit.clearnet === true || String(itemEdit.clearnet || "") === "1", i18n), br()] : []),
+              ...(filter === "edit" ? [] : renderPublishAtField()),
               button({ type: "submit" }, filter === "edit" ? i18n.save : i18n.marketCreateButton)
             )
           )
@@ -550,6 +555,7 @@ exports.singleMarketView = async (item, filter, comments = [], params = {}) => {
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterAll).toUpperCase()),
           ...(marketChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(filter, { visible: marketChipVisible }),
           ...(marketChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(filter, marketChipVisible, { favorites: true }),
           ...(marketChipVisible("exchange") ? [button({ type: "submit", name: "filter", value: "exchange", class: filter === "exchange" ? "filter-btn active" : "filter-btn" }, String(i18n.marketFilterItems).toUpperCase())] : []),

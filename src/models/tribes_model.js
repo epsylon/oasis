@@ -10,7 +10,9 @@ const TRIBE_LOG_TYPES = ['tribe', 'tribe-msg', 'tribe-keys-distrib', 'tribe-invi
 const INVITE_CODE_BYTES = 16;
 const VALID_INVITE_MODES = ['strict', 'open'];
 
-const STRUCTURAL_FIELDS = ['title', 'description', 'image', 'location', 'tags', 'isAnonymous', 'inviteMode', 'status', 'parentTribeId', 'mapUrl'];
+const STRUCTURAL_FIELDS = ['title', 'description', 'image', 'location', 'tags', 'isAnonymous', 'inviteMode', 'status', 'parentTribeId', 'mapUrl', 'disabledSections'];
+
+const OPTIONAL_SECTIONS = ['subtribes', 'votations', 'polls', 'events', 'tasks', 'feed', 'forum', 'maps', 'torrents', 'pads', 'wiki', 'chats', 'rooms', 'calendars', 'images', 'audios', 'videos', 'documents', 'files', 'bookmarks'];
 
 module.exports = ({ cooler, cryptoModel }) => {
   let ssb;
@@ -46,8 +48,9 @@ module.exports = ({ cooler, cryptoModel }) => {
     return true;
   };
 
-  const structuralFieldsEqual = (a, b) => {
+  const structuralFieldsEqual = (a, b, open = false) => {
     for (const f of STRUCTURAL_FIELDS) {
+      if (open && f === 'disabledSections') continue;
       const x = a[f];
       const y = b[f];
       if (Array.isArray(x) || Array.isArray(y)) { if (!arraysEqual(x, y)) return false; continue; }
@@ -129,6 +132,7 @@ module.exports = ({ cooler, cryptoModel }) => {
           status: c.status,
           parentTribeId: c.parentTribeId,
           mapUrl: c.mapUrl,
+          disabledSections: c.disabledSections,
           createdAt: c.createdAt,
           updatedAt: c.updatedAt,
           author: c.author,
@@ -204,7 +208,7 @@ module.exports = ({ cooler, cryptoModel }) => {
           };
           if (!validMembershipDelta(prevMembers, entry.content.members, entry.author, selfJoinOk)) continue;
           if (!validInvitesDelta(parentEntry.content.invites, entry.content.invites, entry.author, rootAuthor)) continue;
-          if (!structuralFieldsEqual(parentEntry.content, entry.content)) continue;
+          if (!structuralFieldsEqual(parentEntry.content, entry.content, mode === 'open')) continue;
         }
         candidates.push({ k, entry, isRootAuthor, root });
       }
@@ -306,6 +310,7 @@ module.exports = ({ cooler, cryptoModel }) => {
       status: c.status || 'OPEN',
       parentTribeId: c.parentTribeId || null,
       mapUrl: c.mapUrl || '',
+      disabledSections: Array.isArray(c.disabledSections) ? c.disabledSections.filter(s => OPTIONAL_SECTIONS.includes(s)) : [],
       createdAt: root.content.createdAt,
       updatedAt: c.updatedAt,
       author: root.author,
@@ -662,6 +667,7 @@ module.exports = ({ cooler, cryptoModel }) => {
         status: updatedContent.status !== undefined ? updatedContent.status : tribe.status,
         parentTribeId: updatedContent.parentTribeId !== undefined ? updatedContent.parentTribeId : tribe.parentTribeId,
         mapUrl: updatedContent.mapUrl !== undefined ? updatedContent.mapUrl : tribe.mapUrl,
+        disabledSections: updatedContent.disabledSections !== undefined ? updatedContent.disabledSections : (tribe.disabledSections || []),
         createdAt: tribe.createdAt,
         updatedAt: now,
         author: tribe.author,
@@ -1113,3 +1119,5 @@ module.exports = ({ cooler, cryptoModel }) => {
     }
   };
 };
+
+module.exports.OPTIONAL_SECTIONS = OPTIONAL_SECTIONS;

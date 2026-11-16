@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare, RELATION_FILTERS, relationFilterLabel, hasRelation, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare, RELATION_FILTERS, relationFilterLabel, hasRelation, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass , renderTribeBackRow } = require("./main_views")
 const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
@@ -7,7 +7,7 @@ const { config } = require("../server/SSB_server.js")
 
 const userId = config.keys.id
 const ROOM_MAX = 50
-const MODES = ["all", "recent", "mine", "supported", "replicated", "favorites", "live", "open", "invite", "closed"]
+const MODES = ["all", "recent", "mentions", "mine", "supported", "replicated", "favorites", "live", "open", "invite", "closed"]
 
 const safeArr = (v) => (Array.isArray(v) ? v : [])
 const roomHref = (room) => `/rooms/${encodeURIComponent(room.rootId)}`
@@ -142,6 +142,7 @@ const renderRoomForm = (room, params = {}) => {
       span(i18n.roomTagsLabel), br(),
       input({ type: "text", name: "tags", placeholder: i18n.tagsPlaceholder, value: safeArr(draft.tags).join(", ") }), br(),
       showClearnet ? renderClearnetSelector(draft.clearnet === true || String(draft.clearnet || "") === "1", i18n) : null,
+      ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, isEdit ? i18n.save : i18n.roomCreate)
     )
   )
@@ -385,6 +386,7 @@ exports.singleRoomView = async (room, params = {}) => {
       ],
       spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title, editAction: isAuthor ? `/rooms?filter=edit&id=${encodeURIComponent(room.rootId)}` : undefined, leaveAction: !isAuthor && !room.tribeId && safeArr(room.members).includes(me) ? `/rooms/leave/${encodeURIComponent(room.rootId)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("room", room.rootId) : undefined
     }),
+    renderTribeBackRow(room.tribeLink, `/rooms/${encodeURIComponent(room.rootId)}`),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, restricted ? i18n.roomStatusInviteOnly : (room.title || "—"))),
     isAuthor && canClearnet ? div({ class: "card-chips-row" }, renderClearnetSwitch("rooms", room.rootId, isClearnet)) : null,
     restricted ? null : renderCover(room, "tribe-detail-image"),
@@ -503,6 +505,7 @@ exports.roomModesFromCensus = (census, me, occupancy) => {
   const list = safeArr(census)
   return {
     mine: list.some(x => String(x.author) === String(me)),
+    mentions: hasRelation("mentions", list),
     supported: hasRelation("supported", list),
     replicated: hasRelation("replicated", list),
     favorites: hasRelation("favorites", list),

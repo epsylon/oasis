@@ -1,9 +1,9 @@
-const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span, img, strong, table, tr, td, ul, li } = require("../server/node_modules/hyperaxe");
+const { form, button, div, h2, h3, p, section, select, option, input, br, a, label, span, img, strong, table, tr, td, ul, li, progress } = require("../server/node_modules/hyperaxe");
 const fs = require('fs');
 const path = require('path');
 const { getConfig, CONNECTIONS_MIN, CONNECTIONS_MAX } = require('../configs/config-manager.js');
 const mainViews = require('./main_views');
-const { template, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel, THEMES, userLink } = mainViews;
+const { template, i18n, setLanguage, INBOX_BOT_ORDER, inboxBotLabel, THEMES, userLink, profileLabel } = mainViews;
 const i18nBase = require("../client/assets/translations/i18n");
 const moment = require("../server/node_modules/moment");
 const { WORKFLOWS, currentWorkflow } = require('../models/workflows_model');
@@ -41,9 +41,10 @@ const settingsView = (params) => {
   let serverConfig = {};
   try { serverConfig = require('../configs/config-manager.js').readServerConfig(); } catch (_) {}
   const currentHops = (serverConfig.friends && Number.isFinite(serverConfig.friends.hops)) ? serverConfig.friends.hops : 2;
-  const walletUrl = currentConfig.wallet.url;
-  const walletUser = currentConfig.wallet.user;
-  const walletFee = currentConfig.wallet.fee;
+  const walletConfig = currentConfig.wallet || {};
+  const walletUrl = walletConfig.url;
+  const walletUser = walletConfig.user;
+  const walletFee = walletConfig.fee;
   const currentWish = ['mutuals', 'only-lan', 'local'].includes(currentConfig.wish) ? currentConfig.wish : 'whole';
   const currentPmVisibility = ['mutuals', 'following'].includes(currentConfig.pmVisibility) ? currentConfig.pmVisibility : 'whole';
   const currentMentionsVisibility = ['mutuals', 'following'].includes(currentConfig.mentionsVisibility) ? currentConfig.mentionsVisibility : 'whole';
@@ -112,6 +113,48 @@ const settingsView = (params) => {
       )
     );
   }
+
+  const profilesSection = (() => {
+    const list = Array.isArray(params.avatars) ? params.avatars : [];
+    const limit = Number(params.avatarLimit) || 0;
+    const head = (text) => td({ class: "card-label" }, text);
+    const cell = (labelText, ...value) => td({ "data-label": labelText }, ...value);
+    const action = (path, acc, cls, text, title) => form({ action: path, method: "POST" },
+      input({ type: "hidden", name: "profile", value: acc.key }),
+      button({ type: "submit", class: cls, ...(title ? { title } : {}) }, text)
+    );
+    return section({ id: "profiles" },
+      div({ class: "tags-header" },
+        h2(i18n.profilesTitle),
+        p(i18n.profilesDescription),
+        list.length > 1 ? div({ class: "viewer-hidden-block profiles-manage" }, table({ class: "block-info-table profiles-table" },
+          tr(head(i18n.profilesSwitch), head(i18n.profilesColAvatar), head(i18n.profilesColCreated), head(i18n.profilesColLastUsed), head(i18n.profilesColSize), head(i18n.profilesStateDefault), head(i18n.profilesColRemove)),
+          ...list.map((acc) => tr(
+            cell(i18n.profilesSwitch, div({ class: "profiles-actions" },
+              acc.isOpen ? null : action("/profiles/switch", acc, "profiles-switch-btn", String(i18n.profilesTravelButton).toUpperCase())
+            )),
+            cell(i18n.profilesColAvatar, a({ class: "user-link", href: `/author/${encodeURIComponent(acc.id)}`, title: profileLabel(acc) }, String(acc.name || "").trim() || `@${acc.short}`)),
+            cell(i18n.profilesColCreated, acc.createdAt ? moment(acc.createdAt).format("YYYY/MM/DD") : "—"),
+            cell(i18n.profilesColLastUsed, acc.lastUsedAt ? moment(acc.lastUsedAt).fromNow() : "—"),
+            cell(i18n.profilesColSize, span({ title: `${i18n.profilesColBlockchain}: ${sizeLabel(acc.logBytes)} · ${i18n.profilesColMedia}: ${sizeLabel(acc.blobBytes)}` }, sizeLabel((Number(acc.logBytes) || 0) + (Number(acc.blobBytes) || 0)))),
+            cell(i18n.profilesStateDefault, div({ class: "profiles-actions" },
+              acc.isOpen
+                ? span({ class: "ubi-tick-ok", title: i18n.profilesStateDefault }, "✓")
+                : span({ class: "ubi-tick-bad" }, "✗")
+            )),
+            cell(i18n.profilesColRemove, div({ class: "profiles-actions" },
+              acc.canDelete ? action("/settings/profiles/delete", acc, "danger-btn", i18n.profilesDelete) : null
+            ))
+          ))
+        )) : null,
+        limit && list.length >= limit
+          ? p({ class: "profiles-limit" }, String(i18n.profilesLimit).replace('{n}', String(limit)))
+          : form({ action: "/settings/profiles/create", method: "POST", class: "profiles-form" },
+              button({ type: "submit" }, i18n.profilesCreate)
+            )
+      )
+    );
+  })();
 
   const filter = params.filter === 'multiverse' && modOn('fediverse') ? 'multiverse' : params.filter === 'content' ? 'content' : 'oasis';
   const oasisParts = [
@@ -377,6 +420,7 @@ const settingsView = (params) => {
     )
   ];
   const contentParts = [
+    profilesSection,
     section({ id: "wish" },
       div({ class: "tags-header" },
         h2(i18n.settingsWishTitle),
@@ -489,40 +533,30 @@ const settingsView = (params) => {
       div({ class: "tags-header" },
         h2(i18n.settingsHiddenTitle),
         p(i18n.settingsHiddenDesc),
-        p(strong(`${i18n.settingsMutedLabel} (${viewerHidden.muted.length})`)),
-        viewerHidden.muted.length
-          ? div({ class: "viewer-hidden-block" }, table({ class: "block-info-table" },
-              tr(
-                td({ class: "card-label" }, i18n.inhabitantProfileTitle),
-                td({ class: "card-label" }, i18n.date),
-                td({ class: "card-label" }, "")
-              ),
-              ...viewerHidden.muted.map(m => tr(
-                td({ "data-label": i18n.inhabitantProfileTitle }, userLink(m.id)),
-                td({ "data-label": i18n.date }, hiddenAt(m.at)),
-                td({ "data-label": "" }, form({ action: `/unmute/${encodeURIComponent(m.id)}`, method: "POST" },
-                  input({ type: "hidden", name: "returnTo", value: "/settings?filter=content#hidden" }),
-                  button({ type: "submit", class: "filter-btn" }, i18n.unmute)))
+        (() => {
+          const returnTo = input({ type: "hidden", name: "returnTo", value: "/settings?filter=content#hidden" });
+          const rows = [
+            ...viewerHidden.muted.map(m => ({ type: i18n.inhabitantProfileTitle, item: userLink(m.id), at: m.at, action: `/unmute/${encodeURIComponent(m.id)}`, label: i18n.unmute })),
+            ...viewerHidden.hidden.map(h => ({ type: i18n.settingsTabContent, item: h.href ? a({ href: h.href }, plainLabel(h.label) || h.id) : span(plainLabel(h.label) || h.id), at: h.at, action: `/unhide/${encodeURIComponent(h.id)}`, label: i18n.unhideContent }))
+          ];
+          if (!rows.length) return p({ class: "muted" }, `${i18n.settingsMutedEmpty} ${i18n.settingsHiddenEmpty}`);
+          return div({ class: "viewer-hidden-block settings-table-block" }, table({ class: "block-info-table hidden-table" },
+            tr(
+              td({ class: "card-label" }, i18n.statsContentTypeColumn),
+              td({ class: "card-label" }, i18n.name),
+              td({ class: "card-label" }, i18n.date),
+              td({ class: "card-label" }, i18n.profilesColActions)
+            ),
+            ...rows.map(r => tr(
+              td({ "data-label": i18n.statsContentTypeColumn }, r.type),
+              td({ "data-label": i18n.name }, r.item),
+              td({ "data-label": i18n.date }, hiddenAt(r.at)),
+              td({ "data-label": i18n.profilesColActions }, div({ class: "profiles-actions" },
+                form({ action: r.action, method: "POST" }, returnTo, button({ type: "submit", class: "danger-btn profiles-default-btn" }, r.label))
               ))
             ))
-          : p({ class: "muted" }, i18n.settingsMutedEmpty),
-        p(strong(`${i18n.settingsHiddenLabel} (${viewerHidden.hidden.length})`)),
-        viewerHidden.hidden.length
-          ? div({ class: "viewer-hidden-block" }, table({ class: "block-info-table" },
-              tr(
-                td({ class: "card-label" }, i18n.settingsTabContent),
-                td({ class: "card-label" }, i18n.date),
-                td({ class: "card-label" }, "")
-              ),
-              ...viewerHidden.hidden.map(h => tr(
-                td({ "data-label": i18n.settingsTabContent }, h.href ? a({ href: h.href }, plainLabel(h.label) || h.id) : span(plainLabel(h.label) || h.id)),
-                td({ "data-label": i18n.date }, hiddenAt(h.at)),
-                td({ "data-label": "" }, form({ action: `/unhide/${encodeURIComponent(h.id)}`, method: "POST" },
-                  input({ type: "hidden", name: "returnTo", value: "/settings?filter=content#hidden" }),
-                  button({ type: "submit", class: "filter-btn" }, i18n.unhideContent)))
-              ))
-            ))
-          : p({ class: "muted" }, i18n.settingsHiddenEmpty)
+          ));
+        })()
       )
     ),
   ];
@@ -660,4 +694,15 @@ const settingsView = (params) => {
 };
 
 exports.settingsView = settingsView;
+
+exports.profileTravelView = (account) => template(
+  i18n.profilesTravel,
+  section(
+    div({ class: "tags-header module-header-line" }, h2(`\u2764  ${i18n.profilesTravel}`)),
+    div({ class: "indexing-progress-block" },
+      p({ class: "indexing-message" }, `\ud83c\udf34 ${String(i18n.profilesTraveling).replace("{name}", String(account.name || "").trim() || `@${account.short}`)}`),
+      progress({ max: "100", class: "indexing-progress" })
+    )
+  )
+).replace('</head>', '<meta http-equiv="refresh" content="8;url=/"></head>');
 

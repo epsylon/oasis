@@ -1,5 +1,5 @@
 const { div, h2, h4, p, section, button, form, a, span, textarea, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton , renderTribeBackRow } = require("./main_views")
 const { renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -85,7 +85,7 @@ const renderPadStatusChip = (status, isClosed) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) || f === "favorites" ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
+    ["all", "recent", "mentions", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) || f === "favorites" ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/pads" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" },
@@ -156,6 +156,7 @@ const renderCreateForm = (padToEdit, params) => {
       span(i18n.padTagsLabel || "Tags"), require("../server/node_modules/hyperaxe").br(),
       input({ type: "text", name: "tags", value: padToEdit ? padToEdit.tags.join(", ") : "", placeholder: i18n.padTagsPlaceholder || "Enter tags separated by commas" }),
       require("../server/node_modules/hyperaxe").br(), require("../server/node_modules/hyperaxe").br(),
+      ...(padToEdit ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, padToEdit ? i18n.save : (i18n.padCreate || "Create Pad"))
     )
   )
@@ -295,6 +296,7 @@ exports.singlePadView = async (pad, entries, params) => {
       editAction: isAuthor ? `/pads?filter=edit&id=${encodeURIComponent(pad.rootId)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('pad', pad.rootId) : undefined
     }),
+    renderTribeBackRow(pad.tribeLink, `/pads/${encodeURIComponent(pad.rootId)}`),
     div({ class: "pad-title-row" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, pad.title || "\u2014")

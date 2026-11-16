@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
 const { renderScopeChip } = require("./clearnet_view")
 const { renderZoomableImage } = require("./gallery_view")
-const { template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -30,6 +30,7 @@ const POLICIES = ["open", "vote", "invite"]
 const FILTERS = [
   { key: "ALL", i18n: "industryFilterAll", title: "industryAllTitle" },
   { key: "RECENT", i18n: "industryFilterRecent", title: "industryRecentTitle" },
+  { key: "MENTIONS", i18n: "mentions", title: "mentions" },
   { key: "MINE", i18n: "industryFilterMine", title: "industryMineTitle" },
   { key: "SUPPORTED", i18n: "filterSupported", title: "industryAllTitle" },
   { key: "REPLICATED", i18n: "filterReplicated", title: "industryAllTitle" },
@@ -209,6 +210,7 @@ const renderFacilityForm = (facility, mode, spreadWarning = null) => {
       br(),
       input({ type: "number", name: "laborRate", min: "0", step: "0.01", value: fc.laborRate != null ? fc.laborRate : 0 }),
       br(),
+      ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit" }, isEdit ? i18n.save : (i18n.industryCreateButton || "Create facility"))
     )
   )
@@ -333,7 +335,7 @@ exports.industryView = async (facilitiesOrForm, filter, params = {}) => {
     const m = x.key
     if (m === f) return true
     if (m === "MINE") return censusI.some(fc => String(fc.steward) === String(userId) || safeArr(fc.members).includes(userId))
-    if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusI)
+    if (m === "MENTIONS" || m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusI)
     if (m === "ACTIVE" || m === "PAUSED" || m === "DISSOLVED") return censusI.some(fc => String(fc.status || "ACTIVE").toUpperCase() === m)
     if (m === "MEMBER") return censusI.some(fc => safeArr(fc.members).includes(userId))
     if (m === "RECENT") return censusI.length > 0

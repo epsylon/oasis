@@ -538,10 +538,11 @@ const renderOverviewSummaryTable = (s, rules, userEcoinTax, isPub = false) => {
   );
 };
 
-const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId, hasValidWallet, ubiAvailability, alreadyRefused = false, addressPublished = false, ecoinSynced = false) => {
+const renderClaimUBIBlock = (pendingAllocation, isPub, alreadyClaimed, pubId, hasValidWallet, ubiAvailability, alreadyRefused = false, addressPublished = false, ecoinSynced = false, avatarClaimed = false) => {
   if (!ecoinSynced) return "";
   if (alreadyClaimed) return "";
   if (alreadyRefused) return div({ class: "bank-claim-ubi" }, div({ class: "bank-claim-card" }, p(i18n.bankUbiRefusedThisMonth)));
+  if (avatarClaimed && !isPub) return div({ class: "bank-claim-ubi" }, div({ class: "bank-claim-card" }, p(i18n.bankUbiClaimedByAvatar)));
   if (!pubId && !isPub) return "";
   if (!isPub && !(hasValidWallet && addressPublished)) return "";
   if (!isPub && ubiAvailability !== "OK") return "";
@@ -729,6 +730,7 @@ const flashText = (key) => {
   if (key === "not_found") return i18n.bankAddressNotFound;
   if (key === "claimed_pending") return i18n.bankClaimedPending;
   if (key === "already_claimed") return i18n.bankAlreadyClaimedThisMonth;
+  if (key === "avatar_claimed") return i18n.bankUbiClaimedByAvatar;
   if (key === "no_pub_configured") return i18n.bankNoPubConfigured;
   if (key === "no_pub_address") return i18n.bankNoPubAddress;
   if (key === "refused") return i18n.bankUbiRefusedThisMonth;
@@ -820,7 +822,7 @@ const renderBankingView = (data, filter, userId, isPub) =>
           )
         : filter === "ubi"
         ? div(
-            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId, (data.summary || {}).hasValidWallet, (data.summary || {}).ubiAvailability, (data.summary || {}).alreadyRefused, (data.summary || {}).addressPublished, !!(data.exchange && data.exchange.isSynced)),
+            renderClaimUBIBlock(data.pendingUBI || null, isPub, data.alreadyClaimed, (data.summary || {}).pubId, (data.summary || {}).hasValidWallet, (data.summary || {}).ubiAvailability, (data.summary || {}).alreadyRefused, (data.summary || {}).addressPublished, !!(data.exchange && data.exchange.isSynced), !!(data.summary || {}).avatarClaimed),
             renderUbiPubs(data.ubiPubs || [], !!(data.summary || {}).hasValidWallet),
             renderUbiCharts({ ...(data.ubiCharts || {}), payments: data.ubiPayments, rebalances: data.ubiRebalances })
           )

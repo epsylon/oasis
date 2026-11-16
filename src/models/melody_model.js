@@ -187,16 +187,23 @@ function extractTextFromPixels(pixels, channels = 4) {
 }
 
 async function melodyImagePng(sequence, text = '') {
-  const sharp = require('../server/node_modules/sharp');
+  const { getSharp, encodePng } = require('../server/sharp_loader');
+  const sharp = getSharp();
   const { width, height, data } = melodyImageRaw(sequence);
   const pixels = text ? embedTextInPixels(data, text) : data;
+  if (!sharp) return encodePng({ data: pixels, width, height, channels: 4 });
   return sharp(pixels, { raw: { width, height, channels: 4 } }).png({ compressionLevel: 9 }).toBuffer();
 }
 
 async function extractTextFromImage(buffer) {
   if (!Buffer.isBuffer(buffer) || !buffer.length) return null;
   try {
-    const sharp = require('../server/node_modules/sharp');
+    const { getSharp, decodePng } = require('../server/sharp_loader');
+    const sharp = getSharp();
+    if (!sharp) {
+      const decoded = decodePng(buffer);
+      return decoded && decoded.channels >= 3 ? extractTextFromPixels(decoded.data, decoded.channels) : null;
+    }
     const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     return extractTextFromPixels(data, info.channels);
   } catch (_) { return null; }

@@ -11,6 +11,8 @@ const LAST_REPAIR_FILE = 'last-repair.json';
 const STATUS_FILE = 'status.json';
 const MAX_MSG_CHARS = 8192;
 const SIGNATURE_PLACEHOLDER = 'x'.repeat(88) + '.sig.ed25519';
+const RESTORE_FILES = ['own-feed.json', 'pending-feed.jsonl'];
+const RESTORE_CONFLICT = 'restore-conflict';
 
 const collect = (source, timeoutMs) => new Promise((resolve) => {
   let done = false;
@@ -77,7 +79,7 @@ module.exports = {
   firstInvalid,
   MAX_MSG_CHARS,
   init(server, config) {
-    const state = { checks: 0, lastCheckAt: null, lastPeer: null, lastRepair: null, busy: false, reportedOk: false, selfChecked: false, repairedFrom: 0 };
+    const state = { checks: 0, lastCheckAt: null, lastPeer: null, lastRepair: null, busy: false, reportedOk: false, selfChecked: false, repairedFrom: 0, restoring: false, restoreConflict: false };
     const api = { status: () => ({ ...state }) };
     const db = server.db;
     if (!db || typeof db.getState !== 'function' || typeof db.deleteFeed !== 'function' || typeof db.add !== 'function' || typeof server.createHistoryStream !== 'function' || typeof server.on !== 'function') return api;
@@ -93,18 +95,33 @@ module.exports = {
     const rawPublish = typeof db.publish === 'function' ? db.publish.bind(db) : (typeof server.publish === 'function' ? server.publish.bind(server) : null);
     let repairing = false;
     const held = [];
+    const restoreQueue = [];
     let afterPublish = () => {};
     const gate = (fn, self) => function (...args) {
       const cb = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
       const size = cb && args.length ? tooLarge(args[0]) : 0;
       if (size) { cb(new Error(`Message too large: ${size} characters, the network accepts up to ${MAX_MSG_CHARS}`)); return; }
+      if (state.restoreConflict) { if (cb) cb(new Error(RESTORE_CONFLICT)); return; }
+      if (state.restoring) { restoreQueue.push({ run: () => fn.apply(self, args), fail: (err) => { if (cb) cb(err); } }); return; }
       if (repairing) { held.push(() => fn.apply(self, args)); return; }
       if (!cb) return fn.apply(self, args);
       return fn.apply(self, args.slice(0, -1).concat((err, msg) => { cb(err, msg); if (!err) afterPublish(); }));
     };
     if (typeof db.publish === 'function') db.publish = gate(db.publish, db);
     if (typeof server.publish === 'function') server.publish = gate(server.publish, server);
+    const hold = (fn, self) => function (...args) {
+      const cb = typeof args[args.length - 1] === 'function' ? args[args.length - 1] : null;
+      if (state.restoreConflict) { if (cb) cb(new Error(RESTORE_CONFLICT)); return; }
+      if (state.restoring) { restoreQueue.push({ run: () => fn.apply(self, args), fail: (err) => { if (cb) cb(err); } }); return; }
+      return fn.apply(self, args);
+    };
+    if (typeof db.create === 'function') db.create = hold(db.create, db);
     const release = () => { repairing = false; held.splice(0).forEach(fn => { try { fn(); } catch (_) {} }); };
+    const releaseRestored = () => {
+      state.restoring = false;
+      const err = state.restoreConflict ? new Error(RESTORE_CONFLICT) : null;
+      restoreQueue.splice(0).forEach(h => { try { err ? h.fail(err) : h.run(); } catch (_) {} });
+    };
     const publish = (content) => new Promise((resolve) => {
       if (!rawPublish) return resolve(null);
       try { rawPublish(content, (err, msg) => resolve(err ? null : msg)); } catch (_) { resolve(null); }
@@ -133,7 +150,9 @@ module.exports = {
     };
     const history = async (source, seq, limit) => { const r = await collect(source({ id: me, seq, keys: true, live: false, ...(limit ? { limit } : {}) }), REMOTE_TIMEOUT_MS); return r ? keyed(r) : null; };
     const localHistory = (seq, limit) => history((o) => server.createHistoryStream(o), seq, limit);
-    const remoteHistory = (rpc, seq, limit) => history((o) => rpc.createHistoryStream(o), seq, limit);
+    let unanswered = false;
+    const remoteHistory = async (rpc, seq, limit) => { const r = await history((o) => rpc.createHistoryStream(o), seq, limit); if (r === null) unanswered = true; return r; };
+    const retries = new WeakMap();
     const oneOf = async (p) => { const r = await p; return r && r.length ? r[0] : null; };
     const reportPath = () => path.join(config && config.path ? config.path : '.', ...REPORT_DIR);
     const writeReport = (name, data) => {
@@ -300,6 +319,12 @@ module.exports = {
       if (result.kind === 'missing-tail') log(`Feed status: ${result.adopted} messages of my own feed recovered from ${peer}`);
     };
 
+    let waiting = null;
+    const runWaiting = () => {
+      const rpc = waiting;
+      waiting = null;
+      if (rpc && !rpc.closed) setImmediate(() => { check(rpc).catch(() => {}); });
+    };
     const selfCheck = async () => {
       if (state.busy) return null;
       const tip = localTip();
@@ -319,15 +344,18 @@ module.exports = {
         return null;
       } finally {
         state.busy = false;
+        runWaiting();
       }
     };
 
     const check = async (rpc) => {
-      if (state.busy || !rpc || rpc.id === me || typeof rpc.createHistoryStream !== 'function') return null;
+      if (!rpc || rpc.id === me || typeof rpc.createHistoryStream !== 'function') return null;
+      if (state.busy) { waiting = rpc; return null; }
       const tip = localTip();
       if (!tip || !tip.value) return null;
       if (!state.selfChecked) { const own = await selfCheck(); if (own) return own; }
       state.busy = true;
+      unanswered = false;
       state.checks += 1;
       state.lastCheckAt = new Date().toISOString();
       state.lastPeer = rpc.id;
@@ -361,6 +389,13 @@ module.exports = {
         return null;
       } finally {
         state.busy = false;
+        const tries = retries.get(rpc) || 0;
+        if (unanswered && !rpc.closed && tries < 2) {
+          retries.set(rpc, tries + 1);
+          const timer = setTimeout(() => { check(rpc).catch(() => {}); }, 2000);
+          if (timer.unref) timer.unref();
+        }
+        runWaiting();
       }
     };
 
@@ -373,6 +408,42 @@ module.exports = {
       }
       return null;
     };
+    const restoreDir = () => { try { return path.dirname(require('../configs/state-manager').statePath(RESTORE_FILES[0])); } catch (_) { return null; } };
+    const restoredOwn = async (dir) => {
+      const bySeq = new Map();
+      const keep = (v) => { if (v && v.author === me && Number(v.sequence) > 0) bySeq.set(Number(v.sequence), v); };
+      try { const list = JSON.parse(fs.readFileSync(path.join(dir, RESTORE_FILES[0]), 'utf8')); for (const m of Array.isArray(list) ? list : []) keep(m && m.value); } catch (_) {}
+      const feedFile = path.join(dir, RESTORE_FILES[1]);
+      if (fs.existsSync(feedFile)) {
+        const lines = require('readline').createInterface({ input: fs.createReadStream(feedFile, 'utf8'), crlfDelay: Infinity });
+        for await (const line of lines) { try { const m = JSON.parse(line); keep(m && m.value); } catch (_) {} }
+      }
+      return [...bySeq.values()].sort((a, b) => a.sequence - b.sequence);
+    };
+    const importRestored = async () => {
+      const dir = restoreDir();
+      if (!dir || !RESTORE_FILES.some(f => fs.existsSync(path.join(dir, f)))) return;
+      state.restoring = true;
+      try {
+        const mine = await restoredOwn(dir);
+        if (!mine.length) return;
+        for (const value of mine) await new Promise((resolve) => { try { db.add(value, () => resolve()); } catch (_) { resolve(); } });
+        const last = mine[mine.length - 1];
+        const tip = localTip();
+        const tipSeq = tip && tip.value ? Number(tip.value.sequence) : 0;
+        let lastKey = null;
+        try { lastKey = validate.id(last); } catch (_) {}
+        const complete = tipSeq > last.sequence || (tipSeq === last.sequence && tip.key === lastKey);
+        if (!complete) {
+          state.restoreConflict = true;
+          log(`Feed status: the restored feed does not fit (local tip ${tipSeq}, backup up to ${last.sequence}); publishing is stopped so the feed does not fork`);
+        }
+      } catch (_) {
+      } finally {
+        releaseRestored();
+      }
+    };
+    importRestored().catch(() => {});
     afterPublish = () => { const rpc = livePeer(); if (rpc) check(rpc).catch(() => {}); };
     server.on('rpc:connect', (rpc) => { check(rpc).catch(() => {}); });
     if (typeof db.onDrain === 'function') {

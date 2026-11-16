@@ -262,9 +262,9 @@ describe('mentions: by name, not only by id', (t) => {
     rst.setMentionResolver((name) => name === 'jdrm' ? id : null);
     try {
       const linked = String(rst.renderStyledHtml('hola @jdrm, mira mail@jdrm.com y @nadie'));
-      ok(linked.includes(`href="/author/${encodeURIComponent(id)}"`) && linked.includes('class="mention"'), 'a known name becomes a mention link');
+      ok(linked.includes(`href="/author/${encodeURIComponent(id)}"`) && linked.includes('class="user-link mention-link"'), 'a known name becomes a mention link');
       ok(linked.includes('mail@jdrm.com') && !linked.includes('mailto:@'), 'the email keeps its shape');
-      ok(linked.includes('@nadie') && (linked.match(/class="mention"/g) || []).length === 1, 'an unknown name is left alone');
+      ok(linked.includes('@nadie') && (linked.match(/class="user-link mention-link"/g) || []).length === 1, 'an unknown name is left alone');
       const clearnet = String(rst.renderStyledHtml('hola @jdrm', { internalLinks: false }));
       ok(clearnet.includes('@jdrm') && !clearnet.includes('/author/'), 'on the clearnet names are not linked');
     } finally { rst.setMentionResolver(null); }

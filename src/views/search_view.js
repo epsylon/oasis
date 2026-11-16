@@ -7,7 +7,7 @@ const SEARCH_SCOPES = ["", "mine", "supported", "replicated"];
 const searchScopeLabel = (scope) => String(scope === "mine" ? i18n.searchScopeMine : scope === "supported" ? i18n.searchScopeSupported : scope === "replicated" ? i18n.searchScopeReplicated : i18n.allButton).toUpperCase();
 
 const renderSearchForm = ({ action, query = "", queryName = "query", hidden = [], withScope = false, scope = "" } = {}) => {
-  const searchInput = input({ id: "search_query", name: queryName, required: false, type: "search", value: query, placeholder: i18n.searchPlaceholder });
+  const searchInput = input({ id: "search_query", name: queryName, type: "search", value: query, placeholder: i18n.searchPlaceholder });
   searchInput.setAttribute("minlength", 3);
   const resultCount = currentPerPage();
   const resultsPerPageSelect = select(

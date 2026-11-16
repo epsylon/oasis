@@ -7,7 +7,7 @@ useful than a long one without it.
 
 ## Never share
 
-- `~/.ssb/secret` or any file from `~/.ssb/oasis/keys`: they are your identity.
+- `secret` or any file from `oasis/keys/` of an account (`~/.ssb/oasis/profiles/.ssb-oasis_*/`): they are your identity.
 - The admin link Oasis prints when it starts with `--allow-host`.
 - Wallet user names, passwords or addresses you want to keep private.
 - Backup files, recovery kits or exported keys.

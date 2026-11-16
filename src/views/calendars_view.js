@@ -1,6 +1,6 @@
 const { div, h2, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton , renderTribeBackRow } = require("./main_views")
 const { renderMapEmbed } = require("./maps_view")
 const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -18,7 +18,7 @@ const renderNoteText = (text) => renderStyledText(String(text || ""))
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
+    ["all", "recent", "mentions", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/calendars" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" },
@@ -159,6 +159,7 @@ const renderCreateForm = (calendarToEdit, params) => {
           ]
         : null,
       showClearnet ? renderClearnetSelector(draft.clearnet === true || String(draft.clearnet || "") === "1", i18n) : null,
+      ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, isEdit ? i18n.save : (i18n.calendarCreate || "Create Calendar"))
     )
   )
@@ -298,6 +299,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
       leaveAction: !isAuthor && isParticipant ? `/calendars/leave/${encodeURIComponent(calendar.rootId)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('calendar', calendar.rootId) : undefined
     }),
+    renderTribeBackRow(calendar.tribeLink, `/calendars/${encodeURIComponent(calendar.rootId)}`),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, calendar.title || "\u2014")
     ),

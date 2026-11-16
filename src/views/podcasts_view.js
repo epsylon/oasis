@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, audio: audioHyperaxe, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, renderScheduledChip, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderPlayerFollow, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, renderScheduledChip, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderPlayerFollow, renderSearchButton } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -8,7 +8,7 @@ const { config } = require("../server/SSB_server.js");
 
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "TOP", "VIEWERS"];
+const BASE_FILTERS = ["ALL", "RECENT", "MENTIONS", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "TOP", "VIEWERS"];
 const SORTS = ["recent", "oldest", "top"];
 const CATEGORIES = ["NEWS", "MUSIC", "TALK", "EDUCATION", "TECH", "CULTURE", "COMMUNITY", "OASIS", "OTHER"];
 
@@ -35,7 +35,7 @@ const podcastChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(c => String(c.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "MENTIONS" || mode === "SUPPORTED" || mode === "REPLICATED") return hasRelation(mode.toLowerCase(), census);
   if (mode === "RECENT") return census.length > 0;
   if (mode === "FAVORITES") return census.length > 0;
   if (mode === "TOP") return census.some(c => (c.opinionCount || 0) > 0 || (c.spreadCount || 0) > 0);
@@ -93,6 +93,7 @@ const renderChannelForm = (ch) =>
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.podcastTagsPlaceholder, value: ch ? ch.tags.join(", ") : "" }), br(), br(),
       ...renderLicenseSelect(ch ? ch.license : undefined, i18n),
       renderClearnetSelector(ch ? !!ch.clearnet : false, i18n), br(),
+      ...(ch ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, ch ? i18n.save : i18n.podcastCreate)
     )
   );

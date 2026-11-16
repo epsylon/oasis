@@ -14,6 +14,7 @@ const userId = config.keys.id;
 const FILTERS = [
   { key: "ALL", i18n: "blogFilterAll" },
   { key: "RECENT", i18n: "blogFilterRecent" },
+  { key: "MENTIONS", i18n: "mentions" },
   { key: "MINE", i18n: "blogFilterMine" },
   { key: "SUPPORTED", i18n: "filterSupported" },
   { key: "REPLICATED", i18n: "filterReplicated" },
@@ -43,7 +44,7 @@ const renderFilterBar = (filter, q, showSearch = true, total = null, censusList 
     if (m === filter || m === "ALL") return true;
     if (m === "TOP") return censusB.length > 0;
     if (m === "MINE") return censusB.some(b => String(b.author) === String(userId));
-    if (m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusB);
+    if (m === "MENTIONS" || m === "SUPPORTED" || m === "REPLICATED") return hasRelation(m.toLowerCase(), censusB);
     if (m === "RECENT") return censusB.length > 0;
     if (m === "FAVORITES") return censusB.length > 0;
     return true;

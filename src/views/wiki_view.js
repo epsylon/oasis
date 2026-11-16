@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, input, label, select, option, ul, li, img } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton , renderTribeBackRow } = require("./main_views");
 const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderLicenseChip, renderLicenseSelect, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { renderStyledText, richTextarea } = require("../backend/renderStyledText");
 const { renderCommentsSection } = require("./comments_view");
@@ -7,7 +7,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const FILTERS = ["all", "recent", "mine", "supported", "replicated", "favorites", "linked"];
+const FILTERS = ["all", "recent", "mentions", "mine", "supported", "replicated", "favorites", "linked"];
 
 const pageHref = (idOrSlug, tribeId = null) =>
   `/wiki/${encodeURIComponent(idOrSlug)}${tribeId ? `?tribeId=${encodeURIComponent(tribeId)}` : ""}`;
@@ -105,7 +105,7 @@ const renderFilters = (filter, q, params = {}, census = []) => {
   const chipVisible = (mode) => {
     if (mode === filter || mode === "all") return true;
     if (mode === "mine") return census.some(p => String(p.author) === String(userId) || (p.versions || []).some(v => String(v.author) === String(userId)));
-    if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, census);
+    if (mode === "mentions" || mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, census);
     if (mode === "recent") return census.length > 0;
     if (mode === "linked") return census.some(p => p.isLinked);
     return true;
@@ -169,6 +169,7 @@ const renderForm = (page, params = {}) => {
       br(),
       button({ type: "submit", class: "filter-btn", formaction: "/wiki/preview", attrs: { formmethod: "POST" } }, i18n.wikiPreview),
       " ",
+      ...(page ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, page ? i18n.save : i18n.wikiCreate)
     )
   );
@@ -330,6 +331,7 @@ exports.wikiPageView = async (page, params = {}) => {
         }),
         div({ class: "card-section" },
           shareRow,
+          renderTribeBackRow(params.tribeLink, params.tribe ? `/wiki/${encodeURIComponent(page.rootId || page.id)}?tribeId=${encodeURIComponent(params.tribe.id)}` : ''),
           div({ class: "shop-title-row" }, h2({ class: "wiki-page-title" }, shownTitle)),
           version ? p({ class: "wiki-version-notice" }, `${i18n.wikiViewingVersion} (${moment(version.createdAt).format("YYYY/MM/DD HH:mm")}) — `, a({ href: base }, i18n.wikiBackToPage)) : null,
           diffBlock || renderWikiBody(shownBody, { missing: page.missingLinks, tribeId }),

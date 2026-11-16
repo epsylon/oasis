@@ -55,7 +55,8 @@ describe('scheduler: the drafts file', (t) => {
       fs.writeFileSync(s.stateFile, '[]', 'utf8');
       await s.scheduler.schedule('blog', { text: 'three' }, future());
       notOk(fs.readdirSync(path.dirname(s.stateFile)).some(n => n.endsWith('.tmp')), 'no temporary file is left behind');
-      eq(JSON.parse(fs.readFileSync(s.stateFile, 'utf8')).length, 1);
+      eq((await s.scheduler.listMine('blog')).length, 1);
+      notOk(fs.readFileSync(s.stateFile, 'utf8').includes('three'), 'what waits to be published is not readable on disk');
     } finally { s.cleanup(); }
   });
 });

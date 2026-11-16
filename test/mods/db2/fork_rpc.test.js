@@ -39,7 +39,7 @@ const makeNode = (keys, { guard = true } = {}) => {
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 const publish = (sbot, content) => new Promise((resolve, reject) => sbot.publish(content, (err, m) => err ? reject(err) : setTimeout(() => resolve(m), 5)));
 const add = (sbot, value) => new Promise((resolve, reject) => sbot.db.add(value, (err, m) => err ? reject(err) : setTimeout(() => resolve(m), 5)));
-const feedOf = async (sbot, id) => { await settle(50); return new Promise((resolve) => pull(sbot.createHistoryStream({ id, keys: true }), pull.collect((e, a) => resolve(a || [])))); };
+const feedOf = async (sbot, id) => { await new Promise((resolve) => { const timer = setTimeout(resolve, 5000); const done = () => { clearTimeout(timer); resolve(); }; if (sbot.db && typeof sbot.db.onDrain === 'function') sbot.db.onDrain(done); else done(); }); await settle(20); return new Promise((resolve) => pull(sbot.createHistoryStream({ id, keys: true }), pull.collect((e, a) => resolve(a || [])))); };
 const texts = (msgs) => msgs.map(m => m.value.content.text).join();
 const closeSbot = (sbot) => new Promise((resolve) => sbot.close(() => resolve()));
 const waitFor = async (test, ms = 60000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (test()) return true; await settle(200); } return false; };

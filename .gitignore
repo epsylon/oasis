@@ -13,6 +13,7 @@ src/configs/*
 !src/configs/config-manager.js
 !src/configs/shared-state.js
 !src/configs/state-manager.js
+!src/configs/profiles.js
 !src/configs/server-config.json
 !src/configs/invite-codes.json
 test/results/

@@ -10,11 +10,12 @@ const highlightJs = require("../server/node_modules/highlight.js/lib/core");
 highlightJs.registerLanguage("json", require("../server/node_modules/highlight.js/lib/languages/json"));
 const prettyMs = require("../server/node_modules/pretty-ms");
 const moment = require('../server/node_modules/moment');
-const { renderStyledText, renderStyledHtml, plainText, safeExternalHref } = require('../backend/renderStyledText');
+const { renderStyledText, renderStyledHtml, plainText, safeExternalHref, internalPathOf } = require('../backend/renderStyledText');
 const ssbClientGUI = require("../client/gui");
 const config = require("../server/ssb_config");
 const cooler = ssbClientGUI({ offline: config.offline });
 const sharedState = require('../configs/shared-state');
+const profiles = require('../configs/profiles');
 
 let ssb, userId;
 
@@ -32,6 +33,7 @@ const { a, article, br, body, button, details, div, em, form, h1, h2, h3, head, 
 const lodash = require("../server/node_modules/lodash");
 const { sanitizeHtml } = require('../backend/sanitizeHtml');
 const nameCache = require('../backend/nameCache');
+const { foldAccents } = require('../backend/word_chars');
 const mediaPlayer = require('../backend/media_player');
 
 const userLinkLabel = (feedId, knownName) => {
@@ -44,12 +46,45 @@ const userLinkLabel = (feedId, knownName) => {
   return id;
 };
 
+const isOwnAccount = (feedId) => {
+  if (!feedId || config.public) return false;
+  try { return profiles.otherIds().has(String(feedId)); } catch (_) { return false; }
+};
+
 const userLink = (feedId, knownName) => {
   if (!feedId) return null;
   return a({ class: 'user-link', href: `/author/${encodeURIComponent(feedId)}` }, userLinkLabel(feedId, knownName));
 };
 
 exports.userLink = userLink;
+
+const renderWatchPill = ({ tribeId, itemId = null, watching, returnTo = '' }) => form({ method: 'POST', action: '/tribes/watch', class: 'subscription-form' },
+  input({ type: 'hidden', name: 'tribeId', value: tribeId }),
+  itemId ? input({ type: 'hidden', name: 'itemId', value: itemId }) : null,
+  input({ type: 'hidden', name: 'on', value: watching ? '0' : '1' }),
+  returnTo ? input({ type: 'hidden', name: 'returnTo', value: returnTo }) : null,
+  button({ type: 'submit', class: watching ? 'subscription-pill engage-on' : 'subscription-pill', title: watching ? i18n.subscriptionUnsubscribe : i18n.subscriptionSubscribe },
+    span({ class: 'subscription-pill-icon' }, '\uD83D\uDD14'),
+    span({ class: 'subscription-pill-label' }, watching ? i18n.subscriptionOn : i18n.subscriptionSubscribe)
+  )
+);
+exports.renderWatchPill = renderWatchPill;
+
+const renderTribeBackRow = (link, returnTo = '') => {
+  if (!link || !link.id) return null;
+  return div({ class: 'tribe-back-row' },
+    a({ href: `/tribe/${encodeURIComponent(link.id)}`, class: 'subscription-pill tribe-back-btn' }, `\u27F5 ${link.title || ''}`),
+    link.watchId ? renderWatchPill({ tribeId: link.id, itemId: link.watchId, watching: link.watching, returnTo }) : null
+  );
+};
+exports.renderTribeBackRow = renderTribeBackRow;
+
+const profileLabel = (account) => {
+  if (!account) return '';
+  const name = String(account.name || '').trim();
+  return name ? `${name} · @${account.short}` : `@${account.short}`;
+};
+exports.profileLabel = profileLabel;
 
 const renderCreatedRows = (createdAt, author, updatedAt) => {
   const createdTs = createdAt ? new Date(createdAt).getTime() : NaN;
@@ -483,7 +518,7 @@ exports.fmtDay = fmtDay;
 
 const clearnetShortId = (id) => String(id || '').replace(/^[%&@]/, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toLowerCase();
 const clearnetSlugFor = (title, id) => {
-  const base = String(title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
+  const base = foldAccents(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/, '');
   const short = clearnetShortId(id);
   return base ? `${base}-${short}` : short;
 };
@@ -725,11 +760,13 @@ const renderContentActions = (msgId, viewHref, opts = {}) => {
     if (!pinBtn && !spreadBtn && !chainBtn && !contentBtn && !reportBtn && !pmBtn && !subscribersPmBtn && !callBtn && !editBtn && !deleteBtn && !leaveBtn && !donateBtn && !torrentBtn && !hideBtn) return null;
     return div({ class: 'content-actions' }, editBtn, deleteBtn, leaveBtn, spreadBtn, pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, subscribersPmBtn, callBtn, torrentBtn, linkBtn, chainBtn, contentBtn);
   }
+  const leadNodes = [].concat(o.leadActions || []).filter(Boolean);
   const commonItems = [pinBtn, reportBtn, hideBtn, donateBtn, pmBtn, subscribersPmBtn, callBtn, torrentBtn, linkBtn, chainBtn].flat().filter(Boolean);
   const dangerItems = [editBtn, deleteBtn, leaveBtn].filter(Boolean);
   const menuItems = [...commonItems, ...(dangerItems.length ? [commonItems.length ? div({ class: 'card-menu-sep' }) : null, ...dangerItems] : [])].filter(Boolean);
-  if (!menuItems.length && !spreadBtn && !contentBtn) return null;
+  if (!menuItems.length && !spreadBtn && !contentBtn && !leadNodes.length) return null;
   return div({ class: 'content-actions' },
+    ...leadNodes,
     spreadBtn,
     menuItems.length
       ? details({ class: 'card-menu' },
@@ -791,6 +828,7 @@ const renderCardByline = (opts = {}) => {
     span({ class: 'card-byline-who' },
       author ? renderBylineAvatar(author, opts.authorName) : null,
       author ? userLink(author, opts.authorName) : null,
+      author && isOwnAccount(author) ? span({ class: 'status you you-other' }, i18n.relationshipYou) : null,
       time
     ),
     ...extra
@@ -892,6 +930,41 @@ const renderScheduledChip = (publishAt) => publishAt
       span({ class: 'pm-exposition-text' }, moment(publishAt).format('YYYY/MM/DD HH:mm')))
   : null;
 exports.renderScheduledChip = renderScheduledChip;
+const scheduledTitleOf = (entry) => {
+  const d = { ...((entry && entry.data) || {}), ...((entry && entry.data && entry.data.args && !Array.isArray(entry.data.args) && entry.data.args) || {}) };
+  const named = [d.label, d.title, d.subject, d.name, d.question, d.url].find((v) => typeof v === 'string' && v.trim());
+  if (named) return named.trim().slice(0, 120);
+  const body = [d.text, d.description].find((v) => typeof v === 'string' && v.trim());
+  return body ? body.replace(/\s+/g, ' ').trim().slice(0, 120) : String((entry && entry.kind) || '');
+};
+const renderScheduledStrip = () => {
+  const store = listScope();
+  const list = store && Array.isArray(store.scheduled) ? store.scheduled : [];
+  if (!list.length) return null;
+  const back = `${store.path || '/'}${store.query ? `?${store.query}` : ''}`;
+  const now = moment().format('YYYY-MM-DDTHH:mm');
+  return section({ class: 'scheduled-strip' },
+    ...list.map((entry) => div({ class: 'scheduled-item' },
+      span({ class: 'scheduled-item-title' }, scheduledTitleOf(entry)),
+      renderScheduledChip(entry.publishAt),
+      entry.error ? span({ class: 'scheduled-item-error', title: String(entry.error) }, '⚠') : null,
+      form({ method: 'POST', action: `/scheduled/reschedule/${encodeURIComponent(entry.id)}`, class: 'scheduled-item-form' },
+        input({ type: 'hidden', name: 'returnTo', value: back }),
+        input({ type: 'datetime-local', name: 'publishAt', min: now, value: moment(entry.publishAt).format('YYYY-MM-DDTHH:mm'), required: true }),
+        button({ type: 'submit', class: 'filter-btn' }, String(i18n.scheduledReschedule).toUpperCase())
+      ),
+      form({ method: 'POST', action: `/scheduled/cancel/${encodeURIComponent(entry.id)}`, class: 'scheduled-item-form' },
+        input({ type: 'hidden', name: 'returnTo', value: back }),
+        button({ type: 'submit', class: 'danger-btn' }, String(i18n.scheduledCancel).toUpperCase())
+      )
+    ))
+  );
+};
+const renderPublishAtField = (value = '') => [
+  label({ for: 'publishAt' }, i18n.publishAtLabel), br(),
+  input({ type: 'datetime-local', name: 'publishAt', id: 'publishAt', min: moment().format('YYYY-MM-DDTHH:mm'), value: value ? moment(value).format('YYYY-MM-DDTHH:mm') : '' }), br(), br()
+];
+exports.renderPublishAtField = renderPublishAtField;
 exports.renderCommentsPill = renderCommentsPill;
 exports.commentCountFor = commentCountFor;
 exports.renderOpinionsPill = renderOpinionsPill;
@@ -991,6 +1064,7 @@ const renderRelationshipBlock = (relationship, feedId) => {
   if (!rel.blocking) addAction(muted ? 'unmute' : 'mute');
   if (!rel.following && !rel.blocking) addAction('block');
   return div({ class: 'relationship-status' },
+    isOwnAccount(feedId) ? span({ class: 'status you you-other' }, i18n.relationshipYou) : null,
     muted ? span({ class: 'status blocked' }, i18n.relationshipMuted) : null,
     rel.blocking && rel.blockedBy
       ? span({ class: 'status blocked' }, i18n.relationshipMutualBlock)
@@ -1414,15 +1488,26 @@ const renderSupportedChip = (author, following) =>
     ? renderStateChip('transport', '♥', String(i18n.supportedChip || '').toUpperCase(), 'relation')
     : null;
 exports.renderSupportedChip = renderSupportedChip;
-const RELATION_FILTERS = ['supported', 'replicated'];
-const hasRelation = (mode, list) => Array.isArray(list) && (mode === 'supported' ? list.some(x => x && x.isSupported) : list.length > 0);
-const relationFilterLabel = (mode) => String(mode === 'supported' ? i18n.filterSupported : mode === 'favorites' ? i18n.favoritesTitle : i18n.filterReplicated).toUpperCase();
-const renderRelationFilters = (current, visible, opts = {}) => (opts.favorites ? [...RELATION_FILTERS, 'favorites'] : RELATION_FILTERS)
+const RELATION_FILTERS = ['supported', 'replicated', 'mentions'];
+const RELATION_BUTTONS = ['supported', 'replicated'];
+const hasRelation = (mode, list) => Array.isArray(list) && (mode === 'supported' ? list.some(x => x && x.isSupported) : mode === 'mentions' ? list.some(x => x && x.isMentioned) : list.length > 0);
+const relationFilterLabel = (mode) => String(mode === 'supported' ? i18n.filterSupported : mode === 'favorites' ? i18n.favoritesTitle : mode === 'mentions' ? i18n.mentions : i18n.filterReplicated).toUpperCase();
+const renderRelationFilters = (current, visible, opts = {}) => (opts.favorites ? [...RELATION_BUTTONS, 'favorites'] : RELATION_BUTTONS)
   .map(mode => ({ mode, value: opts.upper ? mode.toUpperCase() : mode }))
   .filter(({ value }) => String(current) === value || !visible || visible(value))
   .map(({ mode, value }) => opts.href
     ? a({ href: opts.href(value), class: String(current) === value ? (opts.activeClass || 'filter-btn active') : (opts.linkClass || 'filter-btn') }, relationFilterLabel(mode))
     : button({ type: 'submit', name: opts.name || 'filter', value, class: String(current) === value ? 'filter-btn active' : 'filter-btn' }, relationFilterLabel(mode)));
+const renderMentionsFilter = (current, opts = {}) => {
+  const value = opts.upper ? 'MENTIONS' : 'mentions';
+  const active = String(current) === value;
+  if (!active && typeof opts.visible === 'function' && !opts.visible(value)) return null;
+  const label = String(i18n.mentions).toUpperCase();
+  return opts.href
+    ? a({ href: opts.href(value), class: active ? (opts.activeClass || 'filter-btn active') : (opts.linkClass || 'filter-btn') }, label)
+    : button({ type: 'submit', name: opts.name || 'filter', value, class: active ? 'filter-btn active' : 'filter-btn' }, label);
+};
+exports.renderMentionsFilter = renderMentionsFilter;
 const isFavoriteItem = (favIndex, item) => favIndex instanceof Map && !!item && [item.key, item.id, item.rootId].some((k) => k && favIndex.has(String(k)));
 exports.isFavoriteItem = isFavoriteItem;
 exports.RELATION_FILTERS = RELATION_FILTERS;
@@ -2604,7 +2689,7 @@ const injectDetailLayoutSwitch = (elements) => {
   };
   elements.some((el) => walk(el, 0));
 };
-const FOLD_HEAD = ['all', 'recent', 'mine', 'supported', 'replicated', 'favorites', 'top'];
+const FOLD_HEAD = ['all', 'recent', 'mentions', 'mine', 'supported', 'replicated', 'favorites', 'top'];
 const renderFilterFold = (id, items, current) => {
   const isHead = (it) => FOLD_HEAD.includes(String(it.value).toLowerCase());
   const head = FOLD_HEAD.map((v) => items.find((it) => String(it.value).toLowerCase() === v)).filter(Boolean);
@@ -2686,6 +2771,32 @@ const foldFilterRows = (elements) => {
   };
   elements.forEach((el) => walk(el, 0));
 };
+const renderProfileSwitch = () => {
+  if (config.public) return null;
+  let list = [];
+  try { list = profiles.accounts(); } catch (_) {}
+  const me = list.find((p) => p.key === profiles.currentKey());
+  const myId = config.keys && config.keys.id;
+  if (list.length < 2 || !me || me.id !== myId) return null;
+  profiles.touch({ name: nameCache.get(myId) || undefined, image: nameCache.image(myId) || undefined });
+  const live = { ...me, name: nameCache.get(myId) || me.name };
+  return details({ class: 'profile-switch' },
+    summary({ class: 'profile-switch-current', title: profileLabel(live) },
+      img({ class: 'profile-switch-avatar', src: avatarSrc(myId), alt: '' }),
+      span({ class: 'oasis-nav-arrow' }, '\u25BE')
+    ),
+    div({ class: 'profile-switch-menu' },
+      ...profiles.others().map((p) => form({ method: 'POST', action: '/profiles/switch', class: 'profile-switch-form' },
+        input({ type: 'hidden', name: 'profile', value: p.key }),
+        button({ type: 'submit', class: 'profile-switch-item' },
+          img({ class: 'profile-switch-avatar', src: `/profiles/avatar/${encodeURIComponent(p.key)}`, alt: '' }),
+          span({ class: 'profile-switch-name' }, profileLabel(p))
+        )
+      ))
+    )
+  );
+};
+
 const template = (titlePrefix, ...elements) => {
   const scope = listScope();
   if (scope && scope.dryRun) return '';
@@ -2837,13 +2948,15 @@ const template = (titlePrefix, ...elements) => {
         { class: uxMode === "ainav" ? "header ainav-only" : "header" },
         div(
           { class: "top-bar-left" },
-          a(
-            { class: "logo-icon", href: "/" },
-            img({
-              class: "logo-icon",
-              src: "/assets/images/snh-oasis.jpg",
-              alt: "Oasis Logo"
-            })
+          div({ class: "logo-stack" },
+            renderProfileSwitch() || a(
+              { class: "logo-icon", href: "/" },
+              img({
+                class: "logo-icon",
+                src: "/assets/images/snh-oasis.jpg",
+                alt: "Oasis Logo"
+              })
+            )
           ),
           uxMode === "ainav" ? nav(
             ul(
@@ -3135,7 +3248,7 @@ const template = (titlePrefix, ...elements) => {
             )
           )
         ),
-        main({ id: "content", class: "main-column" }, elements, renderListPager(), renderLogWindowNote(), renderMobileCounters())
+        main({ id: "content", class: "main-column" }, elements.length ? [elements[0], renderScheduledStrip(), ...elements.slice(1)] : elements, renderListPager(), renderLogWindowNote(), renderMobileCounters())
       ),
     renderFooter()
     )
@@ -4678,8 +4791,13 @@ const inboxBotLabel = (bot) => ({
   blogs: i18n.pmBotBlogs, jobs: i18n.pmBotJobs, projects: i18n.pmBotProjects, market: i18n.pmBotMarket, shops: i18n.pmBotShops,
   political: i18n.pmBotPolitical, banking: i18n.pmBotBanking, school: i18n.pmBotSchool, industry: i18n.pmBotIndustry,
   housing: i18n.pmBotHousing, wiki: i18n.pmBotWiki, emergencies: i18n.pmBotEmergencies, podcasts: i18n.pmBotPodcasts,
-  campaigns: i18n.pmBotCampaigns, logistics: i18n.pmBotLogistics, social: i18n.pmBotSocial, larp: i18n.pmBotLarp, reminders: i18n.privateReminders
+  campaigns: i18n.pmBotCampaigns, logistics: i18n.pmBotLogistics, social: i18n.pmBotSocial, larp: i18n.pmBotLarp, tribes: i18n.pmBotTribes, reminders: i18n.privateReminders
 })[bot] || bot;
+const INBOX_BOT_ICONS = {
+  blogs: '📝', jobs: '💼', projects: '💚', market: '💰', shops: '🛍️', political: '🏛️', larp: '🎭', banking: '💰', school: '🎓', industry: '🏭',
+  housing: '🏠', wiki: '📖', emergencies: '🚨', podcasts: '🎙️', campaigns: '✍', logistics: '🚚', social: '♥', tribes: '🔔', reminders: '⏰'
+};
+const inboxBotSender = (bot) => [INBOX_BOT_ICONS[bot], inboxBotLabel(bot)].filter(Boolean).join(' ');
 exports.INBOX_BOT_ORDER = INBOX_BOT_ORDER;
 exports.inboxBotLabel = inboxBotLabel;
 
@@ -4739,7 +4857,7 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   }
   const isNotification = m => !!inboxBotOf(m?.value?.content)
   const isSelfNotice = m => isSent(m) && isToUser(m) && isNotification(m)
-  const botSenderByKey = new Map(messages.filter(isSelfNotice).map(m => [String(m.key), inboxBotLabel(inboxBotOf(m.value.content))]))
+  const botSenderByKey = new Map(messages.filter(isSelfNotice).map(m => [String(m.key), inboxBotSender(inboxBotOf(m.value.content))]))
   const isArchived = m => archivedKeys.has(String(m?.key))
   const toUserKeys = new Set(messages.filter(isToUser).map(m => String(m.key)))
   const isUnreadKey = (key) => toUserKeys.has(String(key)) && !readKeys.has(String(key)) && !archivedKeys.has(String(key))
@@ -4747,8 +4865,8 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   const kindChipOf = (key) => {
     const m = msgByKey.get(String(key))
     if (!m) return null
-    const bot = inboxBotOf(m.value.content)
-    const [icon, text] = bot ? ['🔔', `${i18n.inboxKindUpdate} · ${inboxBotLabel(bot)}`] : isList(m) ? ['✉', i18n.inboxKindList] : ['✉', i18n.inboxKindDirect]
+    if (inboxBotOf(m.value.content)) return null
+    const [icon, text] = isList(m) ? ['✉', i18n.inboxKindList] : ['✉', i18n.inboxKindDirect]
     return span({ class: 'pm-exposition-chip pm-exposition-whole' }, span({ class: 'pm-exposition-icon' }, icon), span({ class: 'pm-exposition-text' }, text))
   }
   const firstHref = (str) => { const m = String(str || '').match(/\]\((\/[^)\s]+)\)/); return m ? m[1] : null }
@@ -4786,19 +4904,8 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
 
   function headerLine({ sentAt, from, toLinks, subject, msgKey, msgSize, crypter }) {
     const ecoChip = msgSize ? renderEcoTax(msgSize, msgKey) : null;
+    const botSender = botSenderByKey.get(String(msgKey))
     return table({ class: 'pm-info-table' },
-      tr(
-        td({ class: 'card-label' }, i18n.pmFromLabel || 'From:'),
-        td({ class: 'card-value' }, botSenderByKey.has(String(msgKey)) ? span({ class: 'pm-bot-sender' }, botSenderByKey.get(String(msgKey))) : linkAuthor(from))
-      ),
-      tr(
-        td({ class: 'card-label' }, i18n.privateDate || 'Date'),
-        td({ class: 'card-value' }, moment(sentAt).format('YYYY/MM/DD HH:mm:ss'))
-      ),
-      tr(
-        td({ class: 'card-label' }, i18n.pmToLabel || 'To:'),
-        td({ class: 'card-value' }, ...toLinks.reduce((acc, lnk, i) => i > 0 ? [...acc, br(), lnk] : [lnk], []))
-      ),
       tr(
         td({ class: 'card-label' }, i18n.pmSubjectLabel || 'Subject:'),
         td({ class: 'card-value pm-subject-cell' },
@@ -4807,6 +4914,22 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
           isUnreadKey(msgKey) ? kindChipOf(msgKey) : null
         )
       ),
+      tr(
+        td({ class: 'card-label' }, i18n.privateDate || 'Date'),
+        td({ class: 'card-value' }, moment(sentAt).format('YYYY/MM/DD HH:mm:ss'))
+      ),
+      botSender || from !== userId
+        ? tr(
+            td({ class: 'card-label' }, i18n.pmFromLabel || 'From:'),
+            td({ class: 'card-value' }, botSender ? span({ class: 'pm-bot-sender' }, botSender) : linkAuthor(from))
+          )
+        : null,
+      toLinks.length
+        ? tr(
+            td({ class: 'card-label' }, i18n.pmToLabel || 'To:'),
+            td({ class: 'card-value' }, ...toLinks.reduce((acc, lnk, i) => i > 0 ? [...acc, br(), lnk] : [lnk], []))
+          )
+        : null,
       ecoChip
         ? tr(
             td({ class: 'card-label' }, i18n.ecoTaxLabel || 'ECO Tax'),
@@ -4861,6 +4984,8 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
   function threadId(m) {
     const c = m?.value?.content || {}
     if (c.list) return canonicalSubject(c.subject || '') + '||list:' + String(c.thread || c.list)
+    const bot = inboxBotOf(c)
+    if (bot) return 'bot:' + bot
     return canonicalSubject(c.subject || '') + '||' + participantsKey(m)
   }
 
@@ -4931,6 +5056,10 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
       .replace(/\/ai\/ask\?[^\s<"]+/g, (match) => `<a class="ai-ask-link" href="${match}">${match}</a>`)
       .replace(/\/tribe\/([%A-Za-z0-9/+._=-]+\.sha256)(\?section=[a-zA-Z]+)?/g, (match) => `<a class="tribe-link" href="${match}">${match}</a>`)
       .replace(/\/larp\/([a-zA-Z]+)/g, (match) => `<a class="larp-link" href="${match}">${match}</a>`)
+      .replace(/(^|[\s(\[]|<br>)(\/[A-Za-z][A-Za-z0-9-]*\/[^\s<>"'`]+)/g, (match, lead, raw) => {
+        const target = internalPathOf(raw)
+        return target ? `${lead}${renderStyledHtml(target.token)}${raw.slice(target.token.length)}` : match
+      })
       .replace(/(?<![A-Za-z0-9_])\/(profile|inbox|invites|peers|tribes|inhabitants|publish|activity|settings|modules|banking|larp|parliament|courts|melody|audios|videos|images|documents|bookmarks|torrents|files|forum|feed|fediverse|multiverse|events|tasks|votes|reports|market|jobs|projects|industry|shops|pixelia|opinions|trending|agenda|cv|favorites|stats|blockexplorer|wallet|chats|pads|maps|calendars|ai|games|search)(?![A-Za-z0-9_\/])/g, (match) => `<a class="oasis-path-link" href="${match}">${match}</a>`)
       .replace(/(https?:\/\/[^\s<"]+)/g, (match) => `<a href="${match}" target="_blank" rel="noopener noreferrer">${match}</a>`)
       .replace(/\u0000MD(\d+)\u0000/g, (m, i) => mdLinks[Number(i)] !== undefined ? mdLinks[Number(i)] : m)
@@ -5293,6 +5422,17 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
+  function TribesBotCard({ sentAt, from, toLinks, text, key, msgSize }) {
+    const title = i18n.tribeWatchNoticeTitle
+    return div(
+      { class: 'pm-card tribes-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `🔔 ${i18n.pmBotTribes} · ${title}`),
+      div({ class: 'message-text', [RAW_HTML]: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
   function WikiBotCard({ subjectU, sentAt, from, toLinks, text, key, msgSize }) {
     const titleMap = {
       WIKI_EDITED: i18n.wikiBotEditedTitle || 'A wiki page you follow has been edited.',
@@ -5455,7 +5595,8 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             const text = content.text || ''
             const sentAt = new Date(content.sentAt || msg.timestamp)
             const fromResolved = author
-            const toLinks = isNotification(msg) ? [linkAuthor(config.keys.id)] : Array.isArray(content.to) ? content.to.map(addr => linkAuthor(addr)) : []
+            const toIds = isNotification(msg) ? [] : Array.isArray(content.to) ? content.to : []
+            const toLinks = toIds.some(addr => addr !== userId) ? toIds.map(addr => linkAuthor(addr)) : []
             const level = threadLevel(subjectRaw)
             const msgSize = msgSizeBytes(msg)
 
@@ -5523,6 +5664,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             }
             if (subjectU === 'HOUSING_REQUESTED' || subjectU === 'HOUSING_CANCELLED' || subjectU === 'HOUSING_UNAVAILABLE') {
               return HousingBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (subjectU === 'TRIBE_ACTIVITY') {
+              return TribesBotCard({ sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
             }
             if (subjectU === 'WIKI_EDITED' || subjectU === 'WIKI_RESTORED') {
               return WikiBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
@@ -5673,7 +5817,7 @@ exports.likesView = async ({ messages, feed, name, spreadMap = null }) => {
     section(
       div({ class: "tags-header module-header-line" },
         h2(i18n.viewLikes),
-        p(userLink(feed, name))
+        userLink(feed, name)
       )
     ),
     list.length

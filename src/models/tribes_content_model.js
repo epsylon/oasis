@@ -304,6 +304,12 @@ module.exports = ({ cooler, cryptoModel, tribesModel }) => {
       return items.get(tip) || null;
     },
 
+    async listAllItems() {
+      const msgs = await readLog();
+      const { items } = await decodeContentMsgs(msgs, {});
+      return [...items.values()];
+    },
+
     async listByTribe(tribeId, contentType, filter) {
       const rootId = await tribesModel.getRootId(tribeId).catch(() => tribeId);
       const msgs = await readLog();

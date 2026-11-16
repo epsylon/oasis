@@ -4,7 +4,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { template, i18n, userLink, renderSpreadButton, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt, renderCountChip, asChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require('./main_views');
+const { renderPublishAtField, template, i18n, userLink, renderSpreadButton, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt, renderCountChip, asChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -128,12 +128,18 @@ const renderForumForm = (draft = null) =>
       }, draft ? String(draft.text || '') : ''), br(), br(),
       label(i18n.uploadMedia), br(),
       input({ type: 'file', name: 'blob' }), br(), br(),
+      ...renderPublishAtField(draft && draft.publishAt),
       button({ type: 'submit' }, i18n.forumCreateButton)
     )
   );
 
-const bySupport = (a, b) =>
-  wilsonScore(b.positiveVotes, b.negativeVotes) - wilsonScore(a.positiveVotes, a.negativeVotes);
+const timeOf = (m) => new Date(m && m.timestamp).getTime() || 0;
+const bySupport = (a, b) => {
+  const sa = wilsonScore(a.positiveVotes, a.negativeVotes);
+  const sb = wilsonScore(b.positiveVotes, b.negativeVotes);
+  if (sb !== sa) return sb - sa;
+  return sa > 0 ? timeOf(b) - timeOf(a) : 0;
+};
 
 const bestReplyKey = (nodes) => {
   const flat = [];
@@ -269,7 +275,7 @@ exports.forumView = async (forums, currentFilter, params = {}) => {
   const baseChipVisible = (mode) => {
     if (mode === currentFilter || mode === 'all') return true;
     if (mode === 'mine') return censusForums.some(f => String(f.author) === String(userId));
-    if (mode === 'supported' || mode === 'replicated' || mode === 'favorites') return hasRelation(mode, censusForums);
+    if (mode === 'mentions' || mode === 'supported' || mode === 'replicated' || mode === 'favorites') return hasRelation(mode, censusForums);
     if (mode === 'recent') return censusForums.length > 0;
     return censusForums.length > 0;
   };

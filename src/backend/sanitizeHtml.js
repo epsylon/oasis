@@ -2,7 +2,7 @@
 
 const SAFE_SRC = /^\/(?:c\/)?(?:blob|image)\/[^\s"'<>]+$/i;
 const SAFE_HREF = /^(?:https?:\/\/|\/(?!\/)|#|mailto:)/i;
-const SAFE_CLASS = /^(?:rt-[a-z0-9-]+|styled-link|mention|tag-link|tag-inline|zoom-link|pm-quote|wiki-link(?:-missing)?|internal-link(?:-id|-kind)?|lightbox(?:-[a-z]+)?|post-(?:audio|image|pdf|video)|pdf-(?:holder|frame|unmax))$/;
+const SAFE_CLASS = /^(?:rt-[a-z0-9-]+|styled-link|mention|mention-link|user-link|tag-link|tag-inline|zoom-link|pm-quote|wiki-link(?:-missing)?|internal-link(?:-id|-kind)?|lightbox(?:-[a-z]+)?|post-(?:audio|image|pdf|video)|pdf-(?:holder|frame|unmax))$/;
 const SAFE_ID = /^(?:pdf|rtzoom|linkbox)-[A-Za-z0-9-]+$/;
 const SAFE_OBJECT_DATA = /^\/pdf\/embed\?[^\s"'<>]*$/;
 const OBJECT_TYPE = 'text/html';

@@ -5,7 +5,7 @@ const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/r
 
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton , renderTribeBackRow } = require("./main_views");
 const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
@@ -176,6 +176,7 @@ const renderFilters = (filter, q, emptyMod = false, chip = null, search = null) 
       ...(emptyMod ? [] : [
       button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterAll).toUpperCase()),
       ...(!chip || chip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterRecent).toUpperCase())] : []),
+      renderMentionsFilter(filter, { visible: chip }),
       ...(!chip || chip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterMine).toUpperCase())] : []),
       ...renderRelationFilters(filter, chip),
       ...(!chip || chip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.mapFilterFavorites).toUpperCase())] : []),
@@ -278,6 +279,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         div({ class: "map-form-map-slot" },
           renderMap(pickerMarkers, null, 0, { view, id: "map", nav, pickForm: formId, pickAction: stepAction })),
         showClearnet ? renderClearnetSelector(clearnetOn, i18n) : null,
+        ...(isEdit ? [] : renderPublishAtField()),
         button({ type: "submit", class: "create-button" }, isEdit ? i18n.save : i18n.mapCreateButton)));
 };
 
@@ -461,7 +463,7 @@ exports.mapsView = async (maps, filter = "all", mapId = null, params = {}) => {
   const mapsChip = (mode) => {
     if (mode === filter) return true;
     if (mode === "mine") return censusMp.some((x) => String(x.author) === String(userId));
-    if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusMp);
+    if (mode === "mentions" || mode === "supported" || mode === "replicated") return hasRelation(mode, censusMp);
     if (mode === "recent") return censusMp.length > 0;
     if (mode === "favorites") return censusMp.length > 0;
     return true;
@@ -543,6 +545,7 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       editAction: String(mapObj.author) === String(userId) ? `/maps/edit/${encodeURIComponent(mapObj.key)}?returnTo=${encodeURIComponent(returnTo)}` : undefined,
       deleteAction: String(mapObj.author) === String(userId) ? contentDeleteAction('map', mapObj.key) : undefined
     }),
+    renderTribeBackRow(mapObj.tribeLink, `/maps/${encodeURIComponent(mapObj.rootId || mapObj.key)}`),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, mapObj.title || i18n.mapAllSectionTitle)
     ),

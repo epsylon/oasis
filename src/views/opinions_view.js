@@ -7,7 +7,7 @@ const { renderActionCards } = require('./activity_view');
 const opinionFilterLabel = (mode) => mode === 'FAVORITES' ? String(i18n.favoritesTitle).toUpperCase() : RELATION_FILTERS.includes(mode.toLowerCase()) ? relationFilterLabel(mode.toLowerCase()) :
   String(i18n[mode + 'Button'] || i18n['vote' + mode.charAt(0).toUpperCase() + mode.slice(1)] || mode).toUpperCase();
 
-const OPINION_SCOPES = ['TOP', 'ALL', 'RECENT', 'MINE', 'SUPPORTED', 'REPLICATED', 'FAVORITES'];
+const OPINION_SCOPES = ['TOP', 'ALL', 'RECENT', 'MENTIONS', 'MINE', 'SUPPORTED', 'REPLICATED', 'FAVORITES'];
 const opinionsHref = (scope, category) => `/opinions?${new URLSearchParams([['filter', scope], ...(category ? [['category', category]] : [])]).toString()}`;
 
 exports.opinionsView = (items, filter, spreadMap = new Map(), q = '', allItems = null, params = {}) => {

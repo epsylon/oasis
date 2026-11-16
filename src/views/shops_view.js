@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText")
@@ -52,7 +52,7 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "supported", "replicated", "top", "products", "prices", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
+    ["all", "recent", "mentions", "mine", "supported", "replicated", "top", "products", "prices", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/shops" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, (RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`shopFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
@@ -195,6 +195,7 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       input({ type: "text", name: "tags", placeholder: i18n.shopTagsPlaceholder || "Enter tags separated by commas", value: Array.isArray(shop.tags) ? shop.tags.join(", ") : (shop.tags || "") }), br,
       showClearnet ? renderClearnetSelector(shop.clearnet === true || String(shop.clearnet || "") === "1", i18n) : null,
       br(),
+      ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit" }, isEdit ? i18n.save : i18n.shopCreate)
     )
   )

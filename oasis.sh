@@ -7,10 +7,23 @@ if [ ! -e "$CURRENT_DIR/src/server/node_modules" ] && [ -d "$CURRENT_DIR/src/bas
   ln -s ../base/node_modules "$CURRENT_DIR/src/server/node_modules"
 fi
 MODEL_PATH="$CURRENT_DIR/src/AI/oasis-42-1-chat.Q4_K_M.gguf"
-CONFIG_FILE="${OASIS_STATE_DIR:-${ssb_path:-$HOME/.ssb}}/oasis/oasis-config.json"
-[ -f "$CONFIG_FILE" ] || node -e "require('$CURRENT_DIR/src/configs/config-manager.js')" >/dev/null 2>&1
+STATE_DIR=$(node -e "process.stdout.write(require('$CURRENT_DIR/src/configs/profiles').launchStateDir())" 2>/dev/null)
+[ -n "$STATE_DIR" ] || STATE_DIR="${OASIS_STATE_DIR:-${ssb_path:-$HOME/.ssb}}"
+CONFIG_FILE="$STATE_DIR/oasis/oasis-config.json"
+[ -f "$CONFIG_FILE" ] || OASIS_STATE_DIR="$STATE_DIR" node -e "require('$CURRENT_DIR/src/configs/config-manager.js')" >/dev/null 2>&1
 
 case " $* " in *" --debug "*) export OASIS_DEBUG=1 ;; esac
+
+run_gui() {
+  cd "$CURRENT_DIR/src/backend" || exit 1
+  node backend.js "$@"
+  code=$?
+  while [ "$code" -eq 75 ]; do
+    node backend.js --no-open "$@"
+    code=$?
+  done
+  exit "$code"
+}
 
 show_help() {
   cat <<'EOF'
@@ -97,7 +110,7 @@ case "$MODE" in
       rm -f "$CONFIG_FILE.bak"
     fi
     shift
-    SERVER_CONFIG_FILE="${OASIS_STATE_DIR:-${ssb_path:-$HOME/.ssb}}/oasis/oasis-server-config.json"
+    SERVER_CONFIG_FILE="$STATE_DIR/oasis/oasis-server-config.json"
     if ! grep -q '"pub": *true' "$SERVER_CONFIG_FILE" "$CURRENT_DIR/src/configs/server-config.json" 2>/dev/null; then
       echo "Note: this node uses the desktop server config (pub: false, hops 2)."
       echo "      For a PUB copy docs/PUB/server-config.json.example to $SERVER_CONFIG_FILE first (pub: true). See docs/PUB/deploy.md, step 4."
@@ -114,14 +127,13 @@ case "$MODE" in
     ;;
   gui)
     shift
-    cd "$CURRENT_DIR/src/backend" || exit 1
-    exec node backend.js "$@"
+    run_gui "$@"
     ;;
   *)
     cd "$CURRENT_DIR/src/backend" || exit 1
     case " $* " in
       *" --public "*) exec node --max-old-space-size=4096 backend.js "$@" ;;
     esac
-    exec node backend.js "$@"
+    run_gui "$@"
     ;;
 esac

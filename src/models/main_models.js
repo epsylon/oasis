@@ -18,6 +18,7 @@ const { existsSync } = require('fs');
 
 const ssbRef = require("../server/node_modules/ssb-ref");
 const nameCache = require('../backend/nameCache');
+const profiles = require('../configs/profiles');
 const sharedState = require('../configs/shared-state');
 
 const { getConfig } = require('../configs/config-manager.js');
@@ -1602,6 +1603,13 @@ const post = {
       };
       const prefs = visibilityPrefs ? normalizePrefs(visibilityPrefs) : undefined;
       const baseFields = { type: "about", about: ssb.id, name, description };
+      const remember = (msg) => {
+        const c = (msg && msg.value && msg.value.content) || {};
+        if (c.name) nameCache.set(ssb.id, c.name, Date.now());
+        if (c.image) nameCache.setImage(ssb.id, c.image);
+        profiles.touch({ name: c.name || undefined, image: c.image || undefined });
+        return msg;
+      };
       const curTheme = getConfig()?.themes?.current;
       baseFields.deviceSource = curTheme === 'OasisKIT' ? 'KIT' : (curTheme === 'OasisMobile' || process.env.OASIS_MOBILE === '1') ? 'MOBILE' : 'DESKTOP';
       if (prefs) baseFields.visibilityPrefs = prefs;
@@ -1632,7 +1640,7 @@ const post = {
                 const content = { ...baseFields, image: blobId };
                 ssb.publish(content, (err, msg) => {
                   if (err) reject(err);
-                  else resolve(msg);
+                  else resolve(remember(msg));
                 });
               }
             })
@@ -1642,7 +1650,7 @@ const post = {
         return new Promise((resolve, reject) => {
           ssb.publish(baseFields, (err, msg) => {
             if (err) reject(err);
-            else resolve(msg);
+            else resolve(remember(msg));
           });
         });
       }

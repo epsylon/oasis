@@ -1,6 +1,6 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
 const { renderScopeChip } = require("./clearnet_view");
-const { template, i18n, renderLayoutSwitch, renderLayoutItems, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, template, i18n, renderLayoutSwitch, renderLayoutItems, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -8,7 +8,7 @@ const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "BOOKED", "HISTORY", "TOP"];
+const BASE_FILTERS = ["ALL", "RECENT", "MENTIONS", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "BOOKED", "HISTORY", "TOP"];
 const KIND_FILTERS = ["TRIPS", "SHIPMENTS"];
 const MODE_FILTERS = ["OFFERS", "REQUESTS"];
 const DATE_FILTERS = ["UPCOMING", "PAST", "CLOSED"];
@@ -68,7 +68,7 @@ const logisticsChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(r => String(r.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "MENTIONS" || mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
   if (mode === "BOOKED") return census.some(r => !!r.myBooking);
   if (mode === "RECENT") return census.length > 0;
   if (mode === "HISTORY") return census.some(r => r.closed && r.participated);
@@ -191,6 +191,7 @@ const renderForm = (route, params = {}) => {
       input({ type: "text", name: "orderRef", maxlength: "200", placeholder: i18n.logisticsOrderRefPlaceholder, value: route ? route.orderRef : "" }), br(),
       label(i18n.logisticsTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.logisticsTagsPlaceholder, value: route ? route.tags.join(", ") : "" }), br(), br(),
+      ...(route ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, route ? i18n.save : i18n.logisticsCreate)
     )
   );

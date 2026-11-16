@@ -4,6 +4,16 @@ Oasis keeps everything on your own device, in a single folder. This page says wh
 
 The folder is `$HOME/.ssb`. It moves with `HOME`, so the Debian package — which runs as the `oasis` user — uses `/var/lib/oasis/.ssb`. It can also be pointed elsewhere with the `ssb_path` setting of the sbot or with the `OASIS_STATE_DIR` environment variable.
 
+Each account of the node is a complete `.ssb` of its own, in `~/.ssb/oasis/profiles/.ssb-oasis_<short id>/`. A node holds up to 3 of them, called avatars (Settings › Avatars), and opens one at a time; travelling to another restarts Oasis on that folder (`oasis.sh` relaunches it on exit code 75). Outside those folders `~/.ssb` keeps only:
+
+| Path | What it is |
+| --- | --- |
+| `secret` | Not a key: a notice saying where the accounts are. It keeps an older Oasis, or any other SSB client, from creating a new identity here. |
+| `oasis/profiles.json` | Which account opens at start, the name and image of each account for the header list, and which account claimed this month's UBI, so the other accounts of the node cannot claim it. |
+| `oasis/profiles/` | One folder per account. Any account but the open one can be deleted, so one always stays. |
+
+Everything below describes the folder of one account.
+
 It has two halves:
 
 - The **Secure Scuttlebutt protocol** owns the root: your identity, the log, the blobs, who you have met. Any SSB client would recognise it.
@@ -77,6 +87,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `banking/banking-ubi-notice.json` | Which UBI payments BankingBot has already told you about, so it does not repeat itself. |
 | `banking/banking-confirm-notice.json` | The same, for contracts waiting for your confirmation. |
 | `content/content_favorites.json` | What you marked as a favourite, by content type. |
+| `content/tribe-watch.json` | Which of your tribes, and which chats or other elements inside them, you asked to be notified about (the bell), when you last opened each one, and which TribesBot notices were already sent, so the "new" counters and the notices only count what you have not seen. |
 | `content/follow_state.json` | Follow requests pending and accepted, with the moment of the last one. |
 | `content/supporters-seen.json` | The inhabitants already known to support you, so SocialBot only tells you about the new ones. The first time it is created it only records who already supports you, without notices. |
 | `content/larp-seen.json` | What LarpBot has already told you about (decrees, results, Wall posts of your house, the pending test, the House of the solstice), so it does not repeat itself. |
@@ -85,7 +96,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `content/agenda-config.json` | How you arranged your Agenda. |
 | `content/list-layouts.json` | The view chosen for the module lists (cards, list or grid), one value shared by all of them. Kept only by this node; a PUB in public mode does not keep it. |
 | `content/last-page.json` | The last page opened on this node, so that the first visit to the home after Oasis starts goes back to it (once; opening any other page first cancels it). Kept only by this node; a PUB in public mode does not keep it. |
-| `content/scheduled.json` | The content you scheduled and that has not been published yet, with the moment it is due. It stays on this device until then; once published it leaves the file, and if publishing fails it stays, marked with the error. |
+| `content/scheduled.json` | The content you scheduled (*Publish at*, in any module) and that has not been published yet, with the moment it is due, encrypted with the key of the account. It stays on this device until then and is published the first time Oasis is used after that moment; once published it leaves the file, and if publishing fails it stays, marked with the error. |
 | `content/blob-access.json` | When each downloaded blob was last opened. The media cache (Settings → Content → Media cache) uses it to decide what to drop first once the quota is exceeded. |
 | `content/snapshot.oasissn`, `content/snapshot-recent.oasissn` | Only on a PUB: the copies of its log (every feed whole, and the recently active feeds; private messages as ciphertext) that newcomers receive over the SSB connection when they join, so they can start right away. Rebuilt periodically. |
 | `ai/AI-history.json` | Your conversation with the AI. It stays here; it is never published. |
@@ -98,6 +109,8 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `flags/oasis-inbox-read` | Which inbox messages you marked as read, so the inbox counter only counts the rest. |
 | `flags/oasis-inbox-archived` | Which inbox messages you archived. They leave the inbox lists and the counter, and come back with Unarchive. |
 | `flags/oasis-mentions-seen` | Which mentions you marked as read (their ids only), so the mentions counter only counts the rest. |
+| `flags/oasis-mentions-archived` | Which mentions you archived. They leave the mentions lists and the counter, and come back with Unarchive. |
+| `flags/oasis-mentions-deleted` | Which mentions you deleted from Mentions. The content stays where it was published; it is only no longer listed there. |
 | `flags/oasis-political-seen` | Which governance announcements have already been sent to you, so none is sent twice. |
 | `peers/gossip_unfollowed.json` | The pubs you stopped following, so they are not offered again. |
 | `peers/peer-health.json` | Since when each pub or peer has been failing to connect. A pub that keeps failing for long enough is shown as unreachable and hidden from the peer lists; as soon as it connects again it is removed from here. |
@@ -110,7 +123,7 @@ A file with a `.before-restore` suffix next to any of these is the copy a restor
 
 ## What a backup covers
 
-**Tools › Backup › FULL BACKUP** packs the log, the blobs and `~/.ssb/oasis/` — keyrings included, but not the settings files nor the room recordings — into one encrypted file, and a restore puts them back where they belong. The identity is *not* in there: `secret` travels on its own, through **RECOVERY** or **EXPORT KEYS**, and must be restored *after* the backup. The order matters and [the backup guide](../backups/README.md) explains why.
+**Tools › Backup › FULL BACKUP** packs into one encrypted file the log, the blobs and the `oasis/` folder of the open account — keyrings included, but not the settings files nor the room recordings — with its `secret`, and, for every other account it includes, its `secret`, its `oasis/` folder, the messages it published and their blobs. **RESTORE BACKUP** puts each account back in its folder; [the backup guide](../backups/README.md) explains how. **KEYS** exports or imports the `secret` alone.
 
 ## What is sensitive
 

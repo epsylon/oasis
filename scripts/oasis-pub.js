@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 const fs = require('fs');
 const path = require('path');
+require(path.join(__dirname, '..', 'src', 'configs', 'profiles')).resolve();
 const ssbConfig = require(path.join(__dirname, '..', 'src', 'server', 'ssb_config'));
 const ssbClient = require(path.join(__dirname, '..', 'src', 'server', 'node_modules', 'ssb-client'));
 const pubInvites = require(path.join(__dirname, '..', 'src', 'models', 'pub_invites'));

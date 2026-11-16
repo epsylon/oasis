@@ -68,6 +68,7 @@ const toQueryString = (filter, search = {}) => {
 const filterBlocks = (blocks, filter, userId) => {
   if (filter === 'recent') return blocks.filter(b => Date.now() - b.ts < 24*60*60*1000);
   if (filter === 'mine') return blocks.filter(b => b.author === userId);
+  if (filter === 'mentions') return blocks.filter(b => b.isMentioned);
   if (filter === 'supported') return blocks.filter(b => b.isSupported);
   if (filter === 'replicated') return blocks.filter(b => b.isReplicated);
   if (filter === 'all') return blocks;
@@ -455,7 +456,7 @@ const renderBlockchainView = (blocks, filter, userId, search = {}, extras = {}) 
   const qs = toQueryString(filter, s);
   const censusBlocks = Array.isArray(extras && extras.censusBlocks) ? extras.censusBlocks : blocks;
   const chipVisible = (mode) => mode === filter || filterBlocks(censusBlocks, mode, userId).length > 0;
-  const baseChips = ['all', 'recent', 'mine', ...['supported', 'replicated'].filter(chipVisible), ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
+  const baseChips = ['all', 'recent', ...(chipVisible('mentions') ? ['mentions'] : []), 'mine', ...['supported', 'replicated'].filter(chipVisible), ...(chipVisible('tombstone') ? ['tombstone'] : []), ...(chipVisible('logs') ? ['logs'] : [])];
 
   return template(
     i18n.blockchain,

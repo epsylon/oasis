@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
@@ -51,7 +51,7 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "supported", "replicated", "top", "applied", "open", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
+    ["all", "recent", "mentions", "mine", "supported", "replicated", "top", "applied", "open", "favorites"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/school" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, (RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`schoolFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
@@ -172,6 +172,7 @@ const renderCourseForm = (filter, course = {}, params = {}) => {
         : null,
       reach === "OPEN" && clearnetEligible({ ...course, visibility: "PUBLIC", price: "0" }) ? renderClearnetSelector(course.clearnet === true || String(course.clearnet || "") === "1", i18n) : null,
       br(),
+      ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit" }, isEdit ? i18n.schoolUpdate : i18n.schoolCreate)
     )
   )

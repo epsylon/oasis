@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -155,7 +155,7 @@ const reportChipFor = (filter, censusReports) => (mode) => {
   if (!Array.isArray(censusReports)) return true;
   if (mode === "top") return censusReports.length > 0;
   if (mode === "mine") return censusReports.some((r) => r.author === userId);
-  if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, censusReports);
+  if (mode === "mentions" || mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, censusReports);
   if (mode === "recent") return censusReports.length > 0;
   if (mode === "confirmed") return censusReports.some((r) => Array.isArray(r.confirmations) && r.confirmations.includes(userId));
   if (CATEGORY_BY_FILTER[mode]) return censusReports.some((r) => normU(r.category) === CATEGORY_BY_FILTER[mode]);
@@ -173,6 +173,8 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
   const confirmationsOf = (r) => (Array.isArray(r.confirmations) ? r.confirmations.length : 0);
   if (filter === "mine") {
     filtered = filtered.filter((r) => r.author === userId);
+  } else if (filter === "mentions") {
+    filtered = filtered.filter((r) => r.isMentioned);
   } else if (filter === "supported" || filter === "replicated") {
     filtered = filtered.filter((r) => filter === "supported" ? r.isSupported : r.isReplicated);
   } else if (filter === "favorites") {
@@ -235,6 +237,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
           ...chipBtn("all", i18n.reportsFilterAll),
           ...chipBtn("recent", i18n.reportsFilterRecent),
+          ...chipBtn("mentions", i18n.mentions),
           ...chipBtn("mine", i18n.reportsFilterMine),
           ...chipBtn("supported", i18n.filterSupported),
           ...chipBtn("replicated", i18n.filterReplicated),
@@ -319,6 +322,7 @@ exports.reportView = async (reports, filter, reportId, createCategory, params = 
                     ),
                     br(),
                     br(),
+                    ...renderPublishAtField(formData.publishAt),
                     button({ type: "submit", class: "create-button" }, i18n.reportsCreateButton)
                   )
                 ]
@@ -438,7 +442,10 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
     table({ class: "tribe-info-table jobs-info-table" }, ...infoRows),
     sideActions.length ? div({ class: "tribe-side-actions detail-action-row report-confirm-actions" }, ...sideActions) : null,
     renderDocumentActions('reports', report.id, [
-      a({ href: "/tasks?filter=create", class: "filter-btn" }, i18n.reportsCreateTaskButton)
+      form({ method: "GET", action: "/tasks" },
+        input({ type: "hidden", name: "filter", value: "create" }),
+        button({ type: "submit", class: "filter-btn" }, i18n.reportsCreateTaskButton)
+      )
     ]),
     renderEngagement(report.id, opinionsBar, renderReportCommentsSection(report.id, comments))
   );
@@ -453,6 +460,7 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
           { method: "GET", action: "/reports", class: "ui-toolbar ui-toolbar--filters" },
           button({ type: "submit", name: "filter", value: "all", class: btnClass("all") }, String(i18n.reportsFilterAll).toUpperCase()),
           ...(reportChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: btnClass("recent") }, String(i18n.reportsFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(filter, { visible: reportChip }),
           ...(reportChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: btnClass("mine") }, String(i18n.reportsFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(filter, reportChip, { favorites: true }),
           button({ type: "submit", name: "filter", value: "top", class: btnClass("top") }, String(i18n.reportsFilterTop).toUpperCase()),

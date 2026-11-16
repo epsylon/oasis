@@ -36,7 +36,7 @@ const ready = async (sbot) => { const t0 = Date.now(); while (!sbot.feedGuard.st
 const collect = (src) => new Promise((resolve, reject) => pull(src, pull.collect((err, arr) => err ? reject(err) : resolve(arr))));
 const publish = (sbot, content) => new Promise((resolve, reject) => sbot.publish(content, (err, m) => err ? reject(err) : setTimeout(() => resolve(m), 5)));
 const add = (sbot, value) => new Promise((resolve, reject) => sbot.db.add(value, (err, m) => err ? reject(err) : setTimeout(() => resolve(m), 5)));
-const feedOf = async (sbot, id) => { await settle(50); return collect(sbot.createHistoryStream({ id, keys: true })); };
+const feedOf = async (sbot, id) => { await new Promise((resolve) => { const timer = setTimeout(resolve, 5000); const done = () => { clearTimeout(timer); resolve(); }; if (sbot.db && typeof sbot.db.onDrain === 'function') sbot.db.onDrain(done); else done(); }); await settle(20); return collect(sbot.createHistoryStream({ id, keys: true })); };
 const texts = (msgs) => msgs.map(m => m.value.content.text).join();
 const closeSbot = (sbot) => new Promise((resolve) => sbot.close(() => resolve()));
 
@@ -149,7 +149,11 @@ describe('ssb-db2: a message the node accepted but the network never will', (t) 
       const big = joined.find(m => m.value.content.type === 'post' && m.value.content.text.length === 8000);
       ok(big && !big.value.content.chunks, 'the big message reads back whole, in pieces underneath');
       for (const m of healed.slice(3)) await add(network, m.value);
-      const theirsNow = await collect(network.createUserStream({ id: keys.id }));
+      let theirsNow = [];
+      for (const t0 = Date.now(); Date.now() - t0 < 30000; await settle(200)) {
+        theirsNow = await collect(network.createUserStream({ id: keys.id }));
+        if (theirsNow.filter(m => m.value.content.type === 'post').length >= 5) break;
+      }
       eq(theirsNow.filter(m => m.value.content.type === 'post').map(m => m.value.content.text.length).join(), '3,3,5,8000,5', 'and the network takes everything, the big one included');
       eq(await device.feedGuard.check(peer), null, 'nothing left to fix on contact');
       const err = await new Promise((resolve) => device.db.publish({ type: 'post', text: 'x'.repeat(8000) }, (e) => resolve(e)));

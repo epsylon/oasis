@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, textarea, br, a, select
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderSearchButton } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -153,6 +153,7 @@ const renderBookmarkForm = (filter, bookmarkId, bookmarkToEdit, tags, params = {
       br(),
       renderClearnetSelector(filter === "edit" ? !!bookmarkToEdit.clearnet : false, i18n),
       br(),
+      ...(filter === "edit" ? [] : renderPublishAtField()),
       button({ type: "submit" }, filter === "edit" ? i18n.save : i18n.bookmarkCreateButton)
     )
   );
@@ -163,7 +164,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (!Array.isArray(censusM)) return true;
   if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
+  if (mode === "mentions" || mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
@@ -198,6 +199,7 @@ exports.bookmarkView = async (bookmarks, filter = "all", bookmarkId = null, para
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(filter, { visible: mediaChip }),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterFavorites).toUpperCase())] : []),
@@ -309,6 +311,7 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(filter, { visible: mediaChip }),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button({ type: "submit", name: "filter", value: "favorites", class: filter === "favorites" ? "filter-btn active" : "filter-btn" }, String(i18n.bookmarkFilterFavorites).toUpperCase())] : []),

@@ -26,4 +26,4 @@ The model runs in a separate process on `127.0.0.1:4001`, started by Oasis with 
 
 ## What stays on your device
 
-Your conversation (`~/.ssb/oasis/ai/AI-history.json`) and the embedding caches. Only what you explicitly approve for training is published.
+Your conversation (`oasis/ai/AI-history.json`, in the folder of each account) and the embedding caches. Only what you explicitly approve for training is published.

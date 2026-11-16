@@ -7,17 +7,27 @@ const SCHEDULED_DIR = ['oasis', 'content'];
 const SCHEDULED_PREFIX = 'scheduled:';
 const ID_BYTES = 8;
 
-module.exports = ({ cooler, isPublic = false, configPath = null, stateFile = null }) => {
+module.exports = ({ cooler, isPublic = false, configPath = null, stateFile = null, keys = null }) => {
   let ssb;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
   const filePath = () => stateFile || (configPath ? path.join(configPath, ...SCHEDULED_DIR, SCHEDULED_FILE) : null);
   let unreadable = false;
+  const ssbKeys = () => require('../server/node_modules/ssb-keys');
+  const keysOf = () => { if (keys) return keys; try { return require('../server/ssb_config').keys || null; } catch (_) { return null; } };
   const readAll = () => {
     const p = filePath();
     if (!p) return [];
     let raw = null;
     try { raw = fs.readFileSync(p, 'utf8'); } catch (_) { unreadable = false; return []; }
-    try { const list = JSON.parse(raw); unreadable = false; return Array.isArray(list) ? list : []; } catch (_) { unreadable = raw.trim() !== ''; return []; }
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) { unreadable = false; return parsed; }
+      const k = keysOf();
+      const list = parsed && typeof parsed.sealed === 'string' && k ? ssbKeys().unbox(parsed.sealed, k) : null;
+      if (Array.isArray(list)) { unreadable = false; return list; }
+    } catch (_) {}
+    unreadable = raw.trim() !== '';
+    return [];
   };
   const writeAll = (list) => {
     const p = filePath();
@@ -25,7 +35,8 @@ module.exports = ({ cooler, isPublic = false, configPath = null, stateFile = nul
     if (unreadable) throw new Error(`${SCHEDULED_FILE} could not be read, refusing to overwrite it`);
     fs.mkdirSync(path.dirname(p), { recursive: true });
     const tmp = `${p}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(list, null, 2), 'utf8');
+    const k = keysOf();
+    fs.writeFileSync(tmp, k ? JSON.stringify({ sealed: ssbKeys().box(list, [k]) }) : JSON.stringify(list, null, 2), { encoding: 'utf8', mode: 0o600 });
     fs.renameSync(tmp, p);
   };
   const isScheduledId = (id) => typeof id === 'string' && id.startsWith(SCHEDULED_PREFIX);

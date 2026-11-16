@@ -25,7 +25,7 @@ const trendingHref = (scope, kind) => `/trending?${new URLSearchParams([['filter
 exports.trendingView = (items, filter, spreadMap = new Map(), q = '', allItems = null, params = {}) => {
   const title = i18n.trendingTitle;
 
-  const baseFilters = ['TOP', 'ALL', 'RECENT', 'MINE', 'SUPPORTED', 'REPLICATED', 'FAVORITES'];
+  const baseFilters = ['TOP', 'ALL', 'RECENT', 'MENTIONS', 'MINE', 'SUPPORTED', 'REPLICATED', 'FAVORITES'];
   const contentFilters = [
     ['votes', 'event', 'task', 'report'],
     ['feed', 'post', 'project', 'industry', 'shopProduct', 'transfer'],
@@ -48,6 +48,8 @@ exports.trendingView = (items, filter, spreadMap = new Map(), q = '', allItems =
 
   if (scope === 'MINE') {
     filteredItems = filteredItems.filter(item => item.value.author === userId);
+  } else if (scope === 'MENTIONS') {
+    filteredItems = filteredItems.filter(item => item.isMentioned);
   } else if (scope === 'SUPPORTED' || scope === 'REPLICATED') {
     filteredItems = filteredItems.filter(item => scope === 'SUPPORTED' ? item.isSupported : item.isReplicated);
   } else if (scope === 'FAVORITES') {

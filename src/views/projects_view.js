@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -27,6 +27,7 @@ const userId = config.keys.id
 const FILTERS = [
   { key: "ALL", i18n: "projectFilterAll", title: "projectAllTitle" },
   { key: "RECENT", i18n: "projectFilterRecent", title: "projectRecentTitle" },
+  { key: "MENTIONS", i18n: "mentions", title: "mentions" },
   { key: "MINE", i18n: "projectFilterMine", title: "projectMineTitle" },
   { key: "SUPPORTED", i18n: "filterSupported", title: "projectAllTitle" },
   { key: "REPLICATED", i18n: "filterReplicated", title: "projectAllTitle" },
@@ -328,7 +329,7 @@ const renderMilestonesAndBounties = (project, filter, editable) => {
                       ),
                       br(),
                       br(),
-                      button({ class: "btn", type: "submit", disabled: remain <= 0 }, i18n.projectBountyCreateButton)
+                      button({ class: "btn", type: "submit", ...(remain <= 0 ? { disabled: true } : {}) }, i18n.projectBountyCreateButton)
                     )
                   : null
               )
@@ -514,6 +515,7 @@ const renderProjectForm = (project, mode, spreadWarning = null) => {
       br(),
       br(),
       !isEdit || clearnetEligible(pr) ? renderClearnetSelector(isEdit ? !!pr.clearnet : false, i18n) : null,
+      ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit" }, isEdit ? i18n.projectUpdateButton : i18n.projectCreateButton)
     )
   )
@@ -534,7 +536,7 @@ exports.projectsView = async (projectsOrForm, filter, _unused, params = {}) => {
     if (m === f) return true;
     if (m === "TOP") return censusP.length > 0;
     if (m === "MINE") return censusP.some(pr => String(pr.author) === String(userId));
-    if (m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusP);
+    if (m === "MENTIONS" || m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusP);
     if (m === "APPLIED") return censusP.some(pr => String(pr.author) !== String(userId) && [pr.members, pr.participants, pr.applicants].some(l => Array.isArray(l) && l.includes(userId)));
     if (m === "ACTIVE" || m === "PAUSED" || m === "COMPLETED") return censusP.some(pr => String(pr.status || "ACTIVE").toUpperCase() === m);
     if (m === "FOLLOWING") return censusP.some(pr => Array.isArray(pr.followers) && pr.followers.includes(userId));

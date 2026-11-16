@@ -1,12 +1,12 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { renderScopeChip } = require("./clearnet_view");
 const { TEXT_CAP } = require('../backend/long_text');
-const { template, i18n, userLink, renderStateChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require("./main_views");
+const { renderPublishAtField, template, i18n, userLink, renderStateChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require("./main_views");
 const { renderStyledText } = require("../backend/renderStyledText");
 const { config } = require("../server/SSB_server.js");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "SUBSCRIBED"];
+const BASE_FILTERS = ["ALL", "RECENT", "MENTIONS", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "SUBSCRIBED"];
 const TYPE_FILTERS = ["OPEN", "CLOSED"];
 const STATUS_FILTERS = ["ACTIVE", "ARCHIVED"];
 const HISTORY_MODES = ["DATE", "THREADS", "INHABITANTS"];
@@ -39,7 +39,7 @@ const mailingChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(l => String(l.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "MENTIONS" || mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
   if (mode === "SUBSCRIBED") return census.some(l => l.isMember && String(l.author) !== String(userId));
   if (mode === "RECENT") return census.length > 0;
   if (mode === "OPEN") return census.some(l => !l.closed);
@@ -110,6 +110,7 @@ const renderForm = (list) =>
         : null,
       label(i18n.mailingTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.mailingTagsPlaceholder, value: list ? list.tags.join(", ") : "" }), br(), br(),
+      ...(list ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, list ? i18n.save : i18n.mailingCreate)
     )
   );

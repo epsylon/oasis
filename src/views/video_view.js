@@ -17,7 +17,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -128,7 +128,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       span(i18n.videoFileLabel),
       br(),
-      (filter === "edit" && renderMediaLockNote(videoToEdit)) || input({ type: "file", name: "video", accept: "video/*", required: filter !== "edit" }),
+      (filter === "edit" && renderMediaLockNote(videoToEdit)) || input({ type: "file", name: "video", accept: "video/*", ...(filter !== "edit" ? { required: true } : {}) }),
       br(),
       br(),
       span(i18n.videoTitleLabel),
@@ -156,6 +156,7 @@ const renderVideoForm = (filter, videoId, videoToEdit, params = {}) => {
       br(),
       renderClearnetSelector(filter === "edit" ? !!videoToEdit?.clearnet : false, i18n),
       br(),
+      ...(filter === "edit" ? [] : renderPublishAtField()),
       button({ type: "submit" }, filter === "edit" ? i18n.save : i18n.videoCreateButton)
     )
   );
@@ -166,7 +167,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (!Array.isArray(censusM)) return true;
   if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
+  if (mode === "mentions" || mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
@@ -203,6 +204,7 @@ exports.videoView = async (videos, filter = "all", videoId = null, params = {}) 
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(filter, { visible: mediaChip }),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(
@@ -323,6 +325,7 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(filter, { visible: mediaChip }),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.videoFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(

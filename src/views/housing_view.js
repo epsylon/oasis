@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
-const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -14,6 +14,7 @@ const userId = config.keys.id
 const FILTERS = [
   { key: "ALL", i18n: "housingFilterAll" },
   { key: "RECENT", i18n: "housingFilterRecent" },
+  { key: "MENTIONS", i18n: "mentions" },
   { key: "MINE", i18n: "housingFilterMine" },
   { key: "SUPPORTED", i18n: "filterSupported" },
   { key: "REPLICATED", i18n: "filterReplicated" },
@@ -336,6 +337,7 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       br(),
       br(),
       ...(showClearnet ? [renderClearnetSelector(item.clearnet === true || String(item.clearnet || "") === "1", i18n), br()] : []),
+      ...(isEdit ? [] : renderPublishAtField(item.publishAt)),
       button({ type: "submit" }, isEdit ? i18n.save : i18n.housingCreateButton)
     )
   )
@@ -346,7 +348,7 @@ const housingChip = (censusH, filter, x) => {
   if (m === filter) return true
   if (m === "TOP") return censusH.length > 0
   if (m === "MINE") return censusH.some(h => String(h.author) === String(userId))
-  if (m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusH)
+  if (m === "MENTIONS" || m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusH)
   if (m === "RECENT") return censusH.length > 0
   if (m === "REQUESTED") return censusH.some(h => safeArr(h.requests).includes(userId))
   if (m === "SALE" || m === "RENT" || m === "COUCHSURFING") return censusH.some(h => String(h.housing_type || "").toUpperCase() === m)

@@ -422,7 +422,7 @@ describe('views: SocialBot notices in the inbox', (t) => {
     const msg = { key: '%' + 's'.repeat(43) + '=.sha256', timestamp: Date.now(), value: { author: me, timestamp: Date.now(), content: { type: 'post', private: true, from: me, to: [me], subject: 'SOCIAL_SUPPORTED', text: `[@Ana](/author/${encodeURIComponent(supporter)}) has started supporting you`, sentAt: new Date().toISOString() } } };
     const html = String(await mv.privateView({ messages: [msg], readKeys: [], archivedKeys: [], mutedBots: [] }, undefined));
     ok(html.includes('social-support-notification'), 'it is shown as a SocialBot card');
-    ok(html.includes(`<span class="pm-bot-sender">${mv.i18n.pmBotSocial}</span>`), 'the sender is SocialBot');
+    ok(html.includes(`<span class="pm-bot-sender">♥ ${mv.i18n.pmBotSocial}</span>`), 'the sender is SocialBot');
     ok(html.includes(`/author/${encodeURIComponent(supporter)}`), 'and it links the new supporter');
   });
 });

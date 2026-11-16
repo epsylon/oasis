@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderTribeBackRow } = require("./main_views")
 const { renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
 const { renderPollInline, outcomeOf, pollTypeLabel, renderPollTypeSelect } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -49,7 +49,7 @@ const buildReturnTo = (filter, params = {}) => {
 const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =>
   div({ class: "tribe-mode-buttons" },
     ...(emptyMod ? [] : [
-    ["all", "recent", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
+    ["all", "recent", "mentions", "mine", "supported", "replicated", "favorites", "open", "closed"].filter(f => f === "all" || f === currentFilter || (modesAvail && (RELATION_FILTERS.includes(f) ? modesAvail[f] === true : modesAvail[f] !== false))).map(f =>
       form({ method: "GET", action: "/chats" },
         input({ type: "hidden", name: "filter", value: f }),
         button({ type: "submit", class: currentFilter === f ? "filter-btn active" : "filter-btn" }, (RELATION_FILTERS.includes(f) ? relationFilterLabel(f) : i18n[`chatFilter${f.charAt(0).toUpperCase() + f.slice(1)}`] || f.toUpperCase()))
@@ -142,6 +142,7 @@ const renderChatForm = (filter, chat = {}, params = {}) => {
       ), br(), br(),
       span(i18n.shopTags || "Tags"), br(),
       input({ type: "text", name: "tags", placeholder: i18n.chatTagsPlaceholder, value: safeArr(chat.tags).join(", ") }), br(), br(),
+      ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit" }, isEdit ? i18n.save : i18n.chatCreate)
     )
   )
@@ -404,6 +405,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   ].filter(Boolean)
   const chatSide = div({ class: "tribe-side" },
     renderCardTop(chat.key, `/chats/${encodeURIComponent(chat.key)}`, { arrow: false, date: chat.createdAt, chips: detailChips, spread: params.spreads || null, author: chat.author, favKind: 'chats', isFavorite: chat.isFavorite, returnTo: params.returnTo, reportTitle: chat.title, editAction: isAuthor ? `/chats/edit/${encodeURIComponent(chat.key)}` : undefined, leaveAction: !isAuthor && isMember ? `/chats/leave/${encodeURIComponent(chat.key)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('chat', chat.key) : undefined }),
+    renderTribeBackRow(params.tribeLink, `/chats/${encodeURIComponent(chat.key)}`),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, chat.title || i18n.chatUntitled)
     ),
@@ -566,6 +568,7 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
               input({ type: "hidden", name: "anonymous", value: "0" }),
               label(input({ type: "checkbox", name: "anonymous", value: "1" }), " ", i18n.pollAnonymousLabel)
             ),
+            ...renderPublishAtField(),
             button({ type: "submit", class: "filter-btn" }, i18n.pollPublishButton)
           )
         )

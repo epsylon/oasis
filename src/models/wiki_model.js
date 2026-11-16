@@ -2,13 +2,12 @@ const pull = require('../server/node_modules/pull-stream');
 const { readTyped, memoIndex } = require('./typed_log');
 const { buildValidatedTombstoneSet } = require('./tombstone_validator');
 const { getConfig } = require('../configs/config-manager.js');
+const { foldAccents } = require('../backend/word_chars');
 const logLimit = getConfig().ssbLogStream?.limit || 1000;
 
 const WIKILINK_RE = /\[\[([^\]|\n]{1,120})(?:\|([^\]\n]{1,120}))?\]\]/g;
 
-const slugify = (value) => String(value == null ? '' : value)
-  .normalize('NFD')
-  .replace(/[̀-ͯ]/g, '')
+const slugify = (value) => foldAccents(value)
   .toLowerCase()
   .trim()
   .replace(/[^a-z0-9]+/g, '-')

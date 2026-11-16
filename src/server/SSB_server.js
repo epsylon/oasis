@@ -7,6 +7,7 @@ const path = require('path');
 const SecretStack = require('secret-stack');
 const caps = require('ssb-caps');
 const db2Defaults = require('ssb-db2/defaults');
+if (require.main === module) require('../configs/profiles').resolve();
 const config = require('./ssb_config');
 const { printMetadata } = require('./ssb_metadata');
 

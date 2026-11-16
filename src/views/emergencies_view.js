@@ -11,7 +11,7 @@ const userId = config.keys.id;
 const CATEGORIES = ["WEATHER", "INFRASTRUCTURE", "HEALTH", "SECURITY", "LOST", "NEIGHBORHOOD"];
 const SEVERITIES = ["UNVERIFIED", "LOW", "MEDIUM", "HIGH"];
 const STATUSES = ["ACTIVE", "RESOLVED", "EXPIRED"];
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES"];
+const BASE_FILTERS = ["ALL", "RECENT", "MENTIONS", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES"];
 const EXPIRES = ["1d", "3d", "7d", "30d"];
 
 const catLabel = (c) => String(i18n[`emergencyCategory${c.charAt(0) + c.slice(1).toLowerCase()}`] || c).toUpperCase();
@@ -48,7 +48,7 @@ const renderEmergencyCard = (emergency, params = {}) =>
 const chipVisible = (mode, filter, census) => {
   if (mode === filter || mode === "ALL") return true;
   if (mode === "MINE") return census.some(al => String(al.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "MENTIONS" || mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
   if (mode === "RECENT") return census.length > 0;
   if (STATUSES.includes(mode)) return census.some(al => al.status === mode);
   if (SEVERITIES.includes(mode)) return census.some(al => al.severity === mode);

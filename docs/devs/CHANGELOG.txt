@@ -1,10 +1,20 @@
+2026-11-14 · OASIS 1.4.2
+- Avatars: up to 3 accounts, even in different cycles, one click to travel between them.
+- Backups of all your accounts or of just one, with their posts.
+- Tribes: a bell to follow chats and other modules, with counters of what is new.
+- Tribes: choose which modules a tribe uses; in open tribes, any member can.
+- Mentions filter in every module shows the content where you are mentioned.
+- Publish at: schedule what you publish, in every module.
+- Images work on any processor.
+- Security improvements.
+
 2026-11-02 · OASIS 1.4.1
 - Oasis opens again where you left it.
 - Changelog in TOOLS.
 - Filters combine with content types.
 - Inbox: unread tab.
 - Audio and podcasts keep playing while you browse.
-- Melody: an image of your blockchain that can be published with a hidden message, like the audio.
+- Melody: steganography, and your blockchain shared as an image.
 - Polls: election, survey and collaboration.
 - Votes: required majority and quorum.
 - Downloads as LOCAL and EXTERNAL.

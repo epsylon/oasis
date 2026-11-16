@@ -97,20 +97,23 @@ module.exports = ({ cooler }) => {
     return idx.resolve(id);
   };
 
-  const createFeed = async (text, mentions, media = null) => {
-    const ssbClient = await openSsb();
-    const userId = ssbClient.id;
-
+  const checkFeed = (text, media = null) => {
     if (typeof text !== "string") throw new Error("Invalid text");
     const cleaned = cleanText(text);
     const attached = typeof media === "string" ? media.trim() : "";
     const full = [cleaned, attached].filter(Boolean).join("\n");
-
     if (!full) throw new Error("Text required");
     if (!isValidFeedText(full)) {
       if (cleaned.length > FEED_TEXT_MAX) throw new Error("Text too long");
       throw new Error("Text too short");
     }
+    return { cleaned, attached, full };
+  };
+
+  const createFeed = async (text, mentions, media = null) => {
+    const ssbClient = await openSsb();
+    const userId = ssbClient.id;
+    const { cleaned, attached, full } = checkFeed(text, media);
 
     const content = {
       type: "feed",
@@ -438,6 +441,6 @@ module.exports = ({ cooler }) => {
     return new Promise((res, rej) => ssbClient.publish({ type: "tombstone", target: currentId, deletedAt: new Date().toISOString(), author: userId }, (e, m) => e ? rej(e) : res(m)));
   };
 
-  return { createFeed, createRefeed, refeedsFor, addOpinion, listFeeds, resolveCurrentId, getFeedById, getComments, addComment, deleteFeedById };
+  return { checkFeed, createFeed, createRefeed, refeedsFor, addOpinion, listFeeds, resolveCurrentId, getFeedById, getComments, addComment, deleteFeedById };
 };
 

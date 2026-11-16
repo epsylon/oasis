@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, br, input, table, tr, th, td, label, span, select, option } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, anchorFor, renderCountChip, renderStateChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton } = require("./main_views");
+const { renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, anchorFor, renderCountChip, renderStateChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
@@ -353,7 +353,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
   const voteChip = (m) => {
     if (m === mode) return true;
     if (m === "mine") return censusV.some((v) => v.createdBy === userId);
-    if (m === "supported" || m === "replicated" || m === "favorites") return hasRelation(m, censusV);
+    if (m === "mentions" || m === "supported" || m === "replicated" || m === "favorites") return hasRelation(m, censusV);
     if (m === "recent") return censusV.length > 0;
     if (m === "open") return censusV.some((v) => normalizeStatus(v.status) === "OPEN");
     if (m === "closed") return censusV.some((v) => normalizeStatus(v.status) === "CLOSED");
@@ -384,6 +384,7 @@ exports.voteView = async (votes, mode, voteId, comments = [], activeFilterParam,
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: mode === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterAll).toUpperCase()),
           ...(voteChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: mode === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(mode, { visible: voteChip }),
           ...(voteChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: mode === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(mode, voteChip, { favorites: true }),
           ...(voteChip("open") ? [button({ type: "submit", name: "filter", value: "open", class: mode === "open" ? "filter-btn active" : "filter-btn" }, String(i18n.voteFilterOpen).toUpperCase())] : []),

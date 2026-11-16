@@ -1,6 +1,8 @@
 const { a, img, video, audio, span, strong, em, u, s: strike, code, div, textarea, object } = require("../server/node_modules/hyperaxe");
 const i18nBase = require("../client/assets/translations/i18n");
 const { WIKILINK_RE, slugify, linkTarget } = require("../models/wiki_model");
+const nameCache = require("./nameCache");
+const { WORD_CHARS } = require("./word_chars");
 
 let zoomSeq = 0;
 
@@ -34,20 +36,42 @@ const BLOB_TORRENT_RE = /\[torrent:([^\]\[\n]{0,160})\]\(\s*(&[^)\s]{1,120}\.sha
 const BLOB_FILE_RE = /(?<!!)\[(?!(?:video|audio|pdf|torrent):)([^\]\n]{1,160})\]\(\s*(&[^)\s]+\.sha256|\/blob\/sealed\/[^)\s]{1,600})\s*\)/g;
 const MD_MENTION_RE = /\[@([^\]\[\n]{1,120})\]\(@?([A-Za-z0-9+/=.\-]{1,120}\.ed25519)\)/g;
 const RAW_MENTION_RE = /@([A-Za-z0-9+/=.\-]+\.ed25519)/g;
-const BARE_MENTION_RE = /(^|[^\p{L}\p{N}_\[\]/@])@([\p{L}\p{N}_.\-]{1,64})(?=$|[^\p{L}\p{N}_/+=])/gu;
+const BARE_MENTION_RE = new RegExp(`(^|[^${WORD_CHARS}\\[\\]/@])@([${WORD_CHARS}.\\-]{1,64})(?=$|[^${WORD_CHARS}/+=])`, 'g');
 let mentionResolver = null;
 const setMentionResolver = (fn) => { mentionResolver = typeof fn === 'function' ? fn : null; };
 const bareMentionName = (token) => (/\.ed25519$/i.test(token) ? '' : token.replace(/[.\-]+$/, ''));
+const MENTION_EXTRA_WORDS = 3;
+const NEXT_NAME_WORD_RE = new RegExp(`^ ([${WORD_CHARS}.\\-]{1,64})`);
+const resolveBareMention = (text, nameStart, token, resolver = mentionResolver) => {
+  const first = bareMentionName(token);
+  if (!first || typeof resolver !== 'function') return null;
+  const names = [first];
+  let acc = token;
+  let p = nameStart + token.length;
+  for (let i = 0; i < MENTION_EXTRA_WORDS; i++) {
+    const w = NEXT_NAME_WORD_RE.exec(text.slice(p, p + 70));
+    if (!w) break;
+    acc += ` ${w[1]}`;
+    p += w[0].length;
+    const name = bareMentionName(acc);
+    if (name) names.push(name);
+  }
+  for (const name of names.reverse()) {
+    const feedId = resolver(name);
+    if (feedId) return { name, feedId };
+  }
+  return null;
+};
 const MSG_REF_RE = /%[A-Za-z0-9+/=]{44}\.sha256/g;
 const MD_LINK_RE = /!?\[([^\]\n]{1,160})\]\((https?:\/\/[^)\s]+|\/(?![\/\\])[^)\s]*)\)/g;
 const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
 const EMAIL_RE = /\b[A-Za-z0-9][A-Za-z0-9._%+-]{0,63}@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,24}\b/g;
-const HASHTAG_RE = /#[\p{L}\p{N}_]{1,32}(?![\p{L}\p{N}_])/gu;
+const HASHTAG_RE = new RegExp(`#[${WORD_CHARS}]{1,32}(?![${WORD_CHARS}])`, 'g');
 const URL_TAIL_RE = /[.,;:!?»"')\]}>]+$/;
 const SELF_HOST_RE = /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?(?:[/?#]|$)/i;
 const INTERNAL_PATHS = [
-  'agenda','ai','audios','author','backup','banking','blockexplorer','blogs','bookmarks','calendars','campaigns',
-  'chats','cipher','courts','cv','dev','docs','emergencies','events','favorites','feed','files','forum','games','graphos',
+  'activity','agenda','ai','audios','author','backup','banking','blockexplorer','blogs','bookmarks','calendars','campaigns','changelog',
+  'chats','cipher','courts','cv','data','dev','docs','documents','emergencies','events','favorites','feed','fediverse','files','forum','games','graphos',
   'hashtag','housing','images','industry','inbox','inhabitants','invites','jobs','larp','logistics','logs','mailing',
   'maps','market','melody','mentions','modules','multiverse','opinions','pads','parliament','rooms','peers','pixelia','pm',
   'podcasts','polls','popular','profile','projects','publish','reports','school','search','settings','shops','spread',
@@ -55,7 +79,21 @@ const INTERNAL_PATHS = [
 ];
 const INTERNAL_PATH_SET = new Set(INTERNAL_PATHS);
 const SSB_ID_RE = /^(?:%[A-Za-z0-9+/=]{20,}\.sha256|@[A-Za-z0-9+/=]{20,}\.ed25519|&[A-Za-z0-9+/=]{20,}\.sha256)$/;
-const INTERNAL_PATH_RE = /(^|[\s(\[])(\/([A-Za-z][A-Za-z0-9-]*)\/((?:%|@|&)[A-Za-z0-9+/=]{20,}\.(?:sha256|ed25519)))(?=$|[\s)\]!,.;:])/g;
+const INTERNAL_PATH_RE = /(^|[\s(\[])(\/([A-Za-z][A-Za-z0-9-]*)(?:[/?#][^\s<>"'`]*)?)/g;
+
+const safeDecode = (seg) => { try { return decodeURIComponent(seg); } catch (_) { return seg; } };
+
+const internalPathOf = (raw) => {
+  const token = String(raw).replace(URL_TAIL_RE, '');
+  const m = /^\/([A-Za-z][A-Za-z0-9-]*)(\/[^?#]*)?([?#].*)?$/.exec(token);
+  if (!m || !INTERNAL_PATH_SET.has(m[1].toLowerCase())) return null;
+  const rest = (m[2] || '').slice(1);
+  const whole = SSB_ID_RE.test(rest) ? rest : safeDecode(rest);
+  const segments = SSB_ID_RE.test(whole) ? [whole] : rest.split('/').filter(Boolean).map(safeDecode);
+  const id = segments.find(seg => SSB_ID_RE.test(seg)) || segments[0] || '';
+  const href = `/${m[1]}${segments.map(seg => `/${encodeURIComponent(seg)}`).join('')}${m[3] || ''}`;
+  return { token, kind: m[1].toLowerCase(), id, href };
+};
 
 const internalTargetOf = (url) => {
   let parsed = null;
@@ -77,6 +115,14 @@ const shortInternalId = (id) => {
   const body = sigil ? value.slice(1) : value;
   return body.length > 8 ? `${sigil}${body.slice(0, 8)}…` : `${sigil}${body}`;
 };
+
+const mentionLabel = (feedId, name) => {
+  const given = String(name || '').trim();
+  const known = (given && !/\.ed25519$/i.test(given) ? given : '') || nameCache.get(feedId);
+  return known ? `@${known}` : shortInternalId(feedId);
+};
+
+const mentionLink = (feedId, name) => a({ href: `/author/${encodeURIComponent(feedId)}`, class: 'user-link mention-link' }, mentionLabel(feedId, name));
 const MAX_DEPTH = 8;
 
 const headerLevel = (hashes) => Math.min(3, String(hashes || '#').length);
@@ -119,10 +165,16 @@ function renderStyledText(value, opts = {}) {
   for (const m of text.matchAll(RAW_MENTION_RE)) push(m, { type: 'raw-mention', feedId: m[1] });
   for (const m of text.matchAll(BARE_MENTION_RE)) {
     const name = bareMentionName(m[2]);
-    if (name) allMatches.push({ index: m.index + m[1].length, length: name.length + 1, type: 'bare-mention', name });
+    if (!name) continue;
+    const at = m.index + m[1].length;
+    const hit = opts.internalLinks !== false ? resolveBareMention(text, at + 1, m[2]) : null;
+    allMatches.push(hit
+      ? { index: at, length: hit.name.length + 1, type: 'bare-mention', name: hit.name, feedId: hit.feedId }
+      : { index: at, length: name.length + 1, type: 'bare-mention', name });
   }
   for (const m of text.matchAll(INTERNAL_PATH_RE)) {
-    if (INTERNAL_PATH_SET.has(m[3].toLowerCase())) allMatches.push({ index: m.index + m[1].length, length: m[2].length, type: 'internal-path', kind: m[3].toLowerCase(), id: m[4], href: m[2] });
+    const target = INTERNAL_PATH_SET.has(m[3].toLowerCase()) ? internalPathOf(m[2]) : null;
+    if (target) allMatches.push({ index: m.index + m[1].length, length: target.token.length, type: 'internal-path', kind: target.kind, id: target.id, href: target.href, text: target.token });
   }
   for (const m of text.matchAll(MSG_REF_RE)) push(m, { type: 'msg-ref', id: m[0] });
   for (const m of text.matchAll(MD_LINK_RE)) push(m, { type: 'md-link', label: m[1], href: m[2] });
@@ -226,12 +278,12 @@ function renderStyledText(value, opts = {}) {
     } else if (m.type === 'blob-file') {
       result.push(a({ href: blobHref(m.blob), class: 'post-pdf', target: '_blank', rel: 'noopener noreferrer' }, m.name || m.blob.slice(1, 9)));
     } else if (m.type === 'md-mention') {
-      result.push(internalOn ? a({ href: `/author/${encodeURIComponent('@' + m.feedId)}`, class: 'mention' }, '@' + m.name) : '@' + m.name);
+      result.push(internalOn ? mentionLink('@' + m.feedId, m.name) : '@' + m.name);
     } else if (m.type === 'raw-mention') {
-      result.push(internalOn ? a({ href: `/author/${encodeURIComponent('@' + m.feedId)}`, class: 'mention' }, '@' + m.feedId.slice(0, 8) + '...') : '@' + m.feedId.slice(0, 8) + '...');
+      result.push(internalOn ? mentionLink('@' + m.feedId) : mentionLabel('@' + m.feedId));
     } else if (m.type === 'bare-mention') {
-      const feedId = internalOn && mentionResolver ? mentionResolver(m.name) : null;
-      result.push(feedId ? a({ href: `/author/${encodeURIComponent(feedId)}`, class: 'mention' }, '@' + m.name) : '@' + m.name);
+      const feedId = internalOn ? (m.feedId || (mentionResolver ? mentionResolver(m.name) : null)) : null;
+      result.push(feedId ? mentionLink(feedId, m.name) : '@' + m.name);
     } else if (m.type === 'md-link') {
       const external = /^https?:\/\//.test(m.href) && !SELF_HOST_RE.test(m.href);
       result.push(external
@@ -239,8 +291,8 @@ function renderStyledText(value, opts = {}) {
         : (internalOn ? a({ href: m.href, class: 'styled-link' }, ...inner(m.label)) : m.label));
     } else if (m.type === 'internal-path') {
       result.push(linksOn && internalOn
-        ? a({ href: m.href, class: 'internal-link' }, span({ class: 'internal-link-kind' }, m.kind.toUpperCase()), span({ class: 'internal-link-id' }, shortInternalId(m.id)))
-        : plain(m.href));
+        ? a({ href: m.href, class: 'internal-link' }, span({ class: 'internal-link-kind' }, m.kind.toUpperCase()), m.id ? span({ class: 'internal-link-id' }, shortInternalId(m.id)) : null)
+        : plain(m.text));
     } else if (m.type === 'url') {
       const schemeMatch = m.text.match(/^(https?):\/\//i);
       const href = schemeMatch ? `${schemeMatch[1].toLowerCase()}://${m.text.slice(schemeMatch[0].length)}` : `https://${m.text}`;
@@ -346,4 +398,4 @@ function richTextarea(attrs, ...children) {
   return [renderFormatBar(), textarea(attrs, ...children)];
 }
 
-module.exports = { renderStyledText, renderStyledHtml, renderTextPreview, plainText, escapeHtml, safeExternalHref, renderFormatBar, richTextarea, setMentionResolver, INTERNAL_PATHS };
+module.exports = { resolveBareMention, BARE_MENTION_RE, HASHTAG_RE, renderStyledText, renderStyledHtml, renderTextPreview, plainText, escapeHtml, safeExternalHref, renderFormatBar, richTextarea, setMentionResolver, internalPathOf, INTERNAL_PATHS };

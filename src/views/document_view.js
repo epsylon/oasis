@@ -3,7 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -103,7 +103,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       input({ type: "hidden", name: "returnTo", value: returnTo }),
       label(i18n.documentFileLabel),
       br(),
-      (filter === "edit" && renderMediaLockNote(docToEdit)) || input({ type: "file", name: "document", accept: "application/pdf", required: filter !== "edit" }),
+      (filter === "edit" && renderMediaLockNote(docToEdit)) || input({ type: "file", name: "document", accept: "application/pdf", ...(filter !== "edit" ? { required: true } : {}) }),
       br(),
       br(),
       label(i18n.documentTitleLabel),
@@ -122,6 +122,7 @@ const renderDocumentForm = (filter, documentId, docToEdit, params = {}) => {
       br(),
       renderClearnetSelector(filter === "edit" ? !!docToEdit?.clearnet : false, i18n),
       br(),
+      ...(filter === "edit" ? [] : renderPublishAtField()),
       button({ type: "submit" }, filter === "edit" ? i18n.save : i18n.documentCreateButton)
     )
   );
@@ -132,7 +133,7 @@ const mediaChipFor = (filter, censusM) => (mode) => {
   if (!Array.isArray(censusM)) return true;
   if (mode === "top") return censusM.some((x) => !x.tribeOrigin);
   if (mode === "mine") return censusM.some((x) => String(x.author) === String(userId));
-  if (mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
+  if (mode === "mentions" || mode === "supported" || mode === "replicated") return hasRelation(mode, censusM);
   if (mode === "recent") return censusM.length > 0;
   if (mode === "favorites") return censusM.length > 0;
   if (mode === "bcs") return censusM.some((x) => String(x.title || "").toUpperCase().startsWith("BCS-"));
@@ -169,6 +170,7 @@ exports.documentView = async (documents, filter = "all", documentId = null, para
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
           ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(filter, { visible: mediaChip }),
           ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(filter, mediaChip),
           ...(mediaChip("favorites") ? [button(
@@ -227,6 +229,7 @@ const renderDocumentsHeader = exports.renderDocumentsHeader = (filter = "all", p
         input({ type: "hidden", name: "sort", value: safeText(params.sort || "recent") }),
         button({ type: "submit", name: "filter", value: "all", class: filter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterAll).toUpperCase()),
         ...(mediaChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: filter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterRecent).toUpperCase())] : []),
+        renderMentionsFilter(filter, { visible: mediaChip }),
         ...(mediaChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: filter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.documentFilterMine).toUpperCase())] : []),
         ...renderRelationFilters(filter, mediaChip),
         ...(mediaChip("favorites") ? [button(

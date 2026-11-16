@@ -478,7 +478,7 @@ const renderClearnetPage = ({ title, ogTitle, ogDescription = '', ogImage = null
   const brandStats = chrome ? [[cnText('cnNode', 'Node'), st.node], [cnText('invitesPubsTitle', 'PUBs'), Number(st.pubs) || 0], [cnText('inhabitants', 'Inhabitants'), Number(st.inhabitants) || 0]] : [];
   const statsLine = brandStats
     .filter(([, v]) => typeof v === 'number' ? v > 0 : String(v || '').trim())
-    .map(([label, v]) => `<span class="cn-stat-pill">${escapeHtml(label)}: <strong>${escapeHtml(typeof v === 'number' ? (typeof Intl !== 'undefined' ? new Intl.NumberFormat(lang).format(v) : String(v)) : String(v).trim())}</strong></span>`).join('');
+    .map(([label, v]) => `<span class="cn-stat-pill">${escapeHtml(label)}: <strong>${escapeHtml(typeof v === 'number' ? String(v) : String(v).trim())}</strong></span>`).join('');
   const brandBlock = statsLine
     ? `<div class="cn-brand-block"><a class="cn-brand-link" href="${cnWithLang('/c', langOverride)}">${brandInner}</a><div class="cn-header-stats">${statsLine}</div></div>`
     : `<a class="cn-brand-block cn-brand-link" href="${cnWithLang('/c', langOverride)}">${brandInner}</a>`;

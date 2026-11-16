@@ -4269,3 +4269,4 @@ body > .header {
 .main-column .layout-list :is(div, li):has(> .card-top) > .card-top .card-chips-row { flex: 1 1 100% !important; flex-wrap: wrap !important; overflow: visible !important; -webkit-mask-image: none !important; mask-image: none !important; }
 .main-column .changelog-grid { grid-template-columns: minmax(0, 1fr) !important; }
 .main-column .changelog-current { padding: 16px !important; }
+.main-column .profiles-table :is(a.user-link, .profiles-actions button) { box-sizing: border-box !important; height: 32px !important; min-height: 0 !important; padding-top: 0 !important; padding-bottom: 0 !important; line-height: 28px !important; vertical-align: middle !important; }

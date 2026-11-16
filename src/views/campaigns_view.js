@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt, renderCountChip, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt, renderCountChip, renderSearchButton } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -9,7 +9,7 @@ const { config } = require("../server/SSB_server.js");
 const sharedState = require("../configs/shared-state");
 
 const userId = config.keys.id;
-const BASE_FILTERS = ["ALL", "RECENT", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "SIGNED", "TOP"];
+const BASE_FILTERS = ["ALL", "RECENT", "MENTIONS", "MINE", "SUPPORTED", "REPLICATED", "FAVORITES", "SIGNED", "TOP"];
 const STATUSES = ["OPEN", "ACHIEVED", "CLOSED"];
 const CATEGORIES = ["ENVIRONMENT", "RIGHTS", "HEALTH", "EDUCATION", "INFRASTRUCTURE", "CULTURE", "ECONOMY", "OTHER"];
 
@@ -47,7 +47,7 @@ const campaignChipFor = (mode, census) => {
   if (mode === "ALL") return true;
   if (!Array.isArray(census)) return true;
   if (mode === "MINE") return census.some(c => String(c.author) === String(userId));
-  if (mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
+  if (mode === "MENTIONS" || mode === "SUPPORTED" || mode === "REPLICATED" || mode === "FAVORITES") return hasRelation(mode.toLowerCase(), census);
   if (mode === "SIGNED") return census.some(c => Array.isArray(c.signers) && c.signers.includes(userId));
   if (mode === "RECENT") return census.length > 0;
   if (mode === "TOP") return census.some(c => c.signatureCount > 0);
@@ -106,6 +106,7 @@ const renderForm = (cp) =>
       label(i18n.campaignTagsLabel), br(),
       input({ type: "text", name: "tags", maxlength: "200", placeholder: i18n.campaignTagsPlaceholder, value: cp ? cp.tags.join(", ") : "" }), br(), br(),
       ...(!cp || clearnetEligible(cp) ? [renderClearnetSelector(!!cp && cp.clearnet === true, i18n), br()] : []),
+      ...(cp ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, cp ? i18n.save : i18n.campaignCreate)
     )
   );

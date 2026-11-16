@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { renderMentionsFilter, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
@@ -178,7 +178,7 @@ const eventChipFor = (currentFilter, censusEvents) => (mode) => {
   if (!Array.isArray(censusEvents)) return true;
   const pubE = (e) => normalizePrivacy(e.isPublic) === "public";
   if (mode === "mine") return censusEvents.some((e) => e.organizer === userId);
-  if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, censusEvents);
+  if (mode === "mentions" || mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, censusEvents);
   if (mode === "recent") return censusEvents.length > 0;
   if (mode === "today") return censusEvents.some((e) => pubE(e) && moment(e.date).isSame(moment(), "day"));
   if (mode === "week") return censusEvents.some((e) => pubE(e) && moment(e.date).isBetween(moment(), moment().add(7, "days"), null, "[]"));
@@ -216,6 +216,8 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
     filtered = visible.filter((e) => normalizePrivacy(e.isPublic) === "public" && (Date.parse(e.createdAt || "") || 0) >= Date.now() - 86400000);
   } else if (currentFilter === "mine") {
     filtered = visible.filter((e) => e.organizer === userId);
+  } else if (currentFilter === "mentions") {
+    filtered = visible.filter((e) => e.isMentioned);
   } else if (currentFilter === "supported" || currentFilter === "replicated") {
     filtered = visible.filter((e) => currentFilter === "supported" ? e.isSupported : e.isReplicated);
   } else if (currentFilter === "favorites") {
@@ -267,6 +269,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
           ...(eventChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(currentFilter, { visible: eventChipVisible }),
           ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(currentFilter, eventChipVisible, { favorites: true }),
           ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),
@@ -436,6 +439,7 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
       { method: "GET", action: "/events" },
       button({ type: "submit", name: "filter", value: "all", class: currentFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterAll).toUpperCase()),
       ...(eventChipVisible("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: currentFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterRecent).toUpperCase())] : []),
+      renderMentionsFilter(currentFilter, { visible: eventChipVisible }),
       ...(eventChipVisible("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: currentFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterMine).toUpperCase())] : []),
       ...renderRelationFilters(currentFilter, eventChipVisible, { favorites: true }),
       ...(eventChipVisible("today") ? [button({ type: "submit", name: "filter", value: "today", class: currentFilter === "today" ? "filter-btn active" : "filter-btn" }, String(i18n.eventFilterToday).toUpperCase())] : []),

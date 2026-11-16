@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -28,6 +28,7 @@ const userId = config.keys.id
 const FILTERS = [
   { key: "ALL", i18n: "jobsFilterAll", title: "jobsAllTitle" },
   { key: "RECENT", i18n: "jobsFilterRecent", title: "jobsRecentTitle" },
+  { key: "MENTIONS", i18n: "mentions", title: "mentions" },
   { key: "MINE", i18n: "jobsFilterMine", title: "jobsMineTitle" },
   { key: "SUPPORTED", i18n: "filterSupported", title: "jobsAllTitle" },
   { key: "REPLICATED", i18n: "filterReplicated", title: "jobsAllTitle" },
@@ -207,7 +208,7 @@ const jobChipFor = (filter, censusJ, params = {}) => (x) => {
   if (m === filter) return true;
   if (m === "TOP") return censusJ.length > 0;
   if (m === "MINE") return censusJ.some(j => String(j.author) === String(userId));
-  if (m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusJ);
+  if (m === "MENTIONS" || m === "SUPPORTED" || m === "REPLICATED" || m === "FAVORITES") return hasRelation(m.toLowerCase(), censusJ);
   if (m === "RECENT") return censusJ.length > 0;
   if (m === "APPLIED") return censusJ.some(j => safeArr(j.subscribers).includes(userId));
   if (m === "REMOTE") return censusJ.some(j => String(j.location || "").toLowerCase() === "remote");
@@ -410,6 +411,7 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null, params =
           ]
         : null,
       reach === "PUBLIC" && clearnetEligible({ ...job, visibility: reach }) ? renderClearnetSelector(job.clearnet === true || String(job.clearnet || "") === "1", i18n) : null,
+      ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit" }, isEdit ? i18n.jobsUpdateButton : i18n.createJobButton)
     )
   )

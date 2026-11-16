@@ -44,7 +44,8 @@ const INBOX_BOTS = {
   podcasts: ['PODCAST_EPISODE'],
   campaigns: ['CAMPAIGN_UPDATED', 'CAMPAIGN_ACHIEVED', 'CAMPAIGN_RAISED'],
   logistics: ['LOGISTICS_UPDATED', 'LOGISTICS_CLOSED', 'LOGISTICS_BOOKED', 'LOGISTICS_CANCELLED', 'LOGISTICS_CONFIRMED', 'LOGISTICS_REJECTED', 'LOGISTICS_DELIVERED'],
-  social: ['SOCIAL_SUPPORTED']
+  social: ['SOCIAL_SUPPORTED'],
+  tribes: ['TRIBE_ACTIVITY']
 };
 const BOT_BY_SUBJECT = new Map();
 for (const [bot, subjects] of Object.entries(INBOX_BOTS)) for (const s of subjects) BOT_BY_SUBJECT.set(s, bot);

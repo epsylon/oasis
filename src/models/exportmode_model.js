@@ -10,38 +10,25 @@ module.exports = {
       const archive = require('../server/node_modules/archiver')('zip', {
         zlib: { level: 9 }
       });
+      const closed = new Promise((resolve, reject) => { output.on('close', resolve); output.on('error', reject); });
       archive.pipe(output);
 
-      const addDirectoryToArchive = (dirPath, archive) => {
-        const files = fs.readdirSync(dirPath);
-        let hasFiles = false;
-
-        files.forEach((file) => {
+      const PRIVATE_DIRS = [path.join('oasis', 'keys'), path.join('oasis', 'multiverse')];
+      const skipped = (rel, file) => file === 'secret' || file.startsWith('secret.') || file === 'oasis-config.json' || PRIVATE_DIRS.some((dir) => rel === dir || rel.startsWith(dir + path.sep));
+      const addDirectoryToArchive = (dirPath) => {
+        for (const file of fs.readdirSync(dirPath)) {
           const filePath = path.join(dirPath, file);
-          const stat = fs.statSync(filePath);
-
           const rel = path.relative(ssbPath, filePath);
-          if (file === 'secret' || file.startsWith('secret.') || file === 'oasis-config.json' || rel === path.join('oasis', 'keys') || rel.startsWith(path.join('oasis', 'keys') + path.sep)) {
-            return;
-          }
-
-          if (stat.isDirectory()) {
-            addDirectoryToArchive(filePath, archive);
-            archive.directory(filePath, path.relative(ssbPath, filePath));
-            hasFiles = true;
-          } else {
-            archive.file(filePath, { name: path.relative(ssbPath, filePath) });
-            hasFiles = true;
-          }
-        });
-
-        if (!hasFiles) {
-          archive.directory(dirPath, path.relative(ssbPath, dirPath));
+          if (skipped(rel, file)) continue;
+          const stat = fs.lstatSync(filePath);
+          if (stat.isDirectory()) addDirectoryToArchive(filePath);
+          else if (stat.isFile()) archive.file(filePath, { name: rel });
         }
       };
 
-      addDirectoryToArchive(ssbPath, archive);
+      addDirectoryToArchive(ssbPath);
       await archive.finalize();
+      await closed;
 
       return outputPath;
     } catch (error) {

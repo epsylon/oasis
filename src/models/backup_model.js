@@ -24,18 +24,97 @@ const stateRoot = () => {
   try { return path.join(require('../configs/state-manager').ssbDir(), 'oasis'); } catch (_) { return null; }
 };
 
-const NOT_BACKED_UP = new Set(['oasis-config.json', 'oasis-server-config.json', 'rooms']);
+const NOT_BACKED_UP = new Set(['oasis-config.json', 'oasis-server-config.json', 'rooms', 'profiles', 'profiles.json']);
+const PROFILES_REL = 'profiles';
+const RESTORING = '.restoring-';
+const PENDING_FEED = 'pending-feed.jsonl';
+const PENDING_BLOBS = 'pending-blobs';
+const TRANSIENT = new Set(['own-feed.json', PENDING_FEED, PENDING_BLOBS]);
 const listStateFiles = (dir, base = dir) => {
   const out = [];
   let entries = [];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (_) { return out; }
   for (const entry of entries) {
-    if (dir === base && NOT_BACKED_UP.has(entry.name)) continue;
+    if ((dir === base && NOT_BACKED_UP.has(entry.name)) || TRANSIENT.has(entry.name)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) out.push(...listStateFiles(full, base));
     else if (entry.isFile() && !entry.name.endsWith('.migrated') && !/^snapshot(-recent)?\.oasissn/.test(entry.name)) out.push({ rel: path.relative(base, full), full });
   }
   return out;
+};
+const LOG_BLOCK = 64 * 1024;
+const OWN_FEED_FILE = 'own-feed.json';
+const readOwnFeed = (dir, feedId) => {
+  const out = [];
+  let fd;
+  try { fd = fs.openSync(path.join(dir, 'db2', 'log.bipf'), 'r'); } catch (_) { return out; }
+  const bipf = require('../server/node_modules/bipf');
+  const block = Buffer.alloc(LOG_BLOCK);
+  try {
+    for (let pos = 0; ; pos += LOG_BLOCK) {
+      const read = fs.readSync(fd, block, 0, LOG_BLOCK, pos);
+      if (read <= 0) break;
+      for (let o = 0; o + 2 <= read; ) {
+        const len = block.readUInt16LE(o);
+        if (len === 0 || o + 2 + len > read) break;
+        const data = block.subarray(o + 2, o + 2 + len);
+        o += 2 + len;
+        if (!data.some((b) => b !== 0)) continue;
+        let rec = null;
+        try { rec = bipf.decode(data, 0); } catch (_) { continue; }
+        if (rec && rec.value && rec.value.author === feedId && typeof rec.key === 'string') out.push({ key: rec.key, value: rec.value, timestamp: rec.timestamp });
+      }
+      if (read < LOG_BLOCK) break;
+    }
+  } finally { try { fs.closeSync(fd); } catch (_) {} }
+  return out.sort((a, b) => (a.value.sequence || 0) - (b.value.sequence || 0));
+};
+const activeProfiles = () => {
+  try { const profiles = require('../configs/profiles'); return profiles.active() ? profiles : null; } catch (_) { return null; }
+};
+const accountKeyOf = (wanted) => {
+  const profiles = activeProfiles();
+  const key = String(wanted || 'all');
+  return profiles && profiles.accounts().some(acc => acc.key === key) ? key : 'all';
+};
+const profileFiles = (account = 'all', withBlobs = false) => {
+  const profiles = activeProfiles();
+  if (!profiles) return [];
+  const out = [];
+  for (const acc of profiles.others()) {
+    if (account !== 'all' && acc.key !== account) continue;
+    const secret = path.join(acc.dir, 'secret');
+    if (fs.existsSync(secret)) out.push({ rel: `${PROFILES_REL}/${acc.key}/secret`, full: secret });
+    const feed = readOwnFeed(acc.dir, acc.id);
+    if (feed.length) out.push({ rel: `${PROFILES_REL}/${acc.key}/oasis/backup/${OWN_FEED_FILE}`, data: Buffer.from(JSON.stringify(feed), 'utf8') });
+    for (const f of listStateFiles(path.join(profiles.stateDirOf(acc.key), 'oasis'))) out.push({ rel: `${PROFILES_REL}/${acc.key}/oasis/${f.rel.split(path.sep).join('/')}`, full: f.full });
+    if (!withBlobs) continue;
+    const seen = new Set();
+    for (const m of feed) {
+      for (const ref of blobRefsOf(m.value && m.value.content)) {
+        const file = seen.has(ref) ? null : profiles.blobFile(acc.dir, ref);
+        seen.add(ref);
+        if (file) out.push({ rel: `${PROFILES_REL}/${acc.key}/${path.relative(acc.dir, file).split(path.sep).join('/')}`, full: file });
+      }
+    }
+  }
+  return out;
+};
+const profileTarget = (parts) => {
+  const profiles = activeProfiles();
+  if (!profiles) return null;
+  const [key, ...rest] = parts;
+  if (!profiles.isKey(key) || !rest.length) return null;
+  const isCurrent = key === profiles.currentKey();
+  const known = profiles.accounts().some(acc => acc.key === key);
+  if (!known && (key === profiles.MAIN || !profiles.canCreate())) return null;
+  const isSecret = rest.length === 1 && rest[0] === 'secret';
+  const isBlob = rest.length === 4 && rest[0] === 'blobs' && rest[1] === 'sha256' && /^[0-9a-f]{2}$/.test(rest[2]) && /^[0-9a-f]{2,64}$/.test(rest[3]);
+  if (!isSecret && !isBlob && (rest[0] !== 'oasis' || rest.length < 2 || NOT_BACKED_UP.has(rest[1]))) return null;
+  if (isCurrent && isSecret) return null;
+  const base = path.resolve(isSecret || isBlob ? profiles.dirOf(key) : profiles.stateDirOf(key));
+  const target = path.resolve(base, ...rest);
+  return target.startsWith(base + path.sep) ? { target, isSecret, isBlob, isCurrent } : null;
 };
 const BLOB_RE = /&[A-Za-z0-9+/=]{44}\.sha256/g;
 const DEFAULT_REMINDER_DAYS = 30;
@@ -165,6 +244,8 @@ const writeChunk = (stream, chunk) => new Promise((resolve, reject) => {
 module.exports = ({ cooler }) => {
   let ssb;
   let restoreJob = null;
+  let pendingApply = null;
+  let importing = null;
   const openSsb = async () => { if (!ssb) ssb = await cooler.open(); return ssb; };
 
   const readLog = async (ssbClient) => new Promise((resolve, reject) => {
@@ -197,10 +278,11 @@ module.exports = ({ cooler }) => {
   const normalizeOptions = (opts = {}) => {
     const scope = String(opts.scope || 'all').toLowerCase() === 'mine' ? 'mine' : 'all';
     const withBlobs = opts.blobs === undefined ? true : !(opts.blobs === false || String(opts.blobs) === '0' || String(opts.blobs) === 'false' || String(opts.blobs) === 'off');
+    const account = accountKeyOf(opts.account);
     const rawMods = Array.isArray(opts.modules) ? opts.modules : (opts.modules ? String(opts.modules).split(',') : []);
     const modules = rawMods.map(m => String(m || '').trim().toLowerCase()).filter(m => MODULE_KEYS.includes(m));
     const sinceTs = opts.since ? (Date.parse(opts.since) || 0) : 0;
-    return { scope, withBlobs, modules, sinceTs };
+    return { scope, withBlobs, modules, sinceTs, account };
   };
 
   const selectMessages = async (ssbClient, options) => {
@@ -308,7 +390,9 @@ module.exports = ({ cooler }) => {
       if (pw.length < 32) throw new Error('Password too short');
       const ssbClient = await openSsb();
       const options = normalizeOptions(opts);
-      const { picked, blobIds } = await selectMessages(ssbClient, options);
+      const profiles = activeProfiles();
+      const withOpen = options.account === 'all' || !profiles || options.account === profiles.currentKey();
+      const { picked, blobIds } = withOpen ? await selectMessages(ssbClient, options) : { picked: [], blobIds: new Set() };
       const salt = crypto.randomBytes(SALT_LEN);
       const iv = crypto.randomBytes(IV_LEN);
       const cipher = crypto.createCipheriv('aes-256-gcm', deriveKey(pw, salt), iv);
@@ -316,7 +400,15 @@ module.exports = ({ cooler }) => {
       const out = fs.createWriteStream(outPath);
       const done = new Promise((resolve, reject) => pipeline(gzip, cipher, out, (err) => err ? reject(err) : resolve()));
       out.write(Buffer.concat([BACKUP_MAGIC, salt, iv]));
-      const meta = { version: 1, createdAt: new Date().toISOString(), author: ssbClient.id, options, messages: picked.length };
+      const included = [];
+      const cur = profiles ? profiles.current() : null;
+      if (profiles) {
+        if (withOpen && cur) included.push({ key: cur.key, id: cur.id });
+        for (const acc of profiles.others()) if (options.account === 'all' || acc.key === options.account) included.push({ key: acc.key, id: acc.id });
+      }
+      const defaultKey = profiles ? profiles.defaultKey() : null;
+      const defaultId = (included.find(acc => acc.key === defaultKey) || included[0] || {}).id || null;
+      const meta = { version: 1, createdAt: new Date().toISOString(), author: ssbClient.id, options, messages: picked.length, ...(included.length ? { accounts: included, defaultId } : {}) };
       await writeChunk(gzip, record(REC_META, Buffer.from(JSON.stringify(meta), 'utf8')));
       for (const m of picked) {
         await writeChunk(gzip, record(REC_MSG, Buffer.from(JSON.stringify({ key: m.key, value: m.value, timestamp: m.timestamp }), 'utf8')));
@@ -324,9 +416,12 @@ module.exports = ({ cooler }) => {
       let files = 0;
       const root = stateRoot();
       if (root) {
-        for (const f of listStateFiles(root)) {
-          let data = null;
-          try { data = fs.readFileSync(f.full); } catch (_) { continue; }
+        const own = withOpen ? listStateFiles(root) : [];
+        if (withOpen && cur && fs.existsSync(path.join(cur.dir, 'secret'))) own.push({ rel: `${PROFILES_REL}/${cur.key}/secret`, full: path.join(cur.dir, 'secret') });
+        const extra = withOpen && options.account !== 'all' ? [] : profileFiles(options.account, options.withBlobs);
+        for (const f of [...own, ...extra]) {
+          let data = f.data || null;
+          if (!data) { try { data = fs.readFileSync(f.full); } catch (_) { continue; } }
           const head = Buffer.from(JSON.stringify({ rel: f.rel.split(path.sep).join('/'), size: data.length }), 'utf8');
           const lenBuf = Buffer.alloc(4);
           lenBuf.writeUInt32BE(head.length, 0);
@@ -350,7 +445,8 @@ module.exports = ({ cooler }) => {
       await done;
       fs.appendFileSync(outPath, cipher.getAuthTag());
       markBackup();
-      return { path: outPath, messages: picked.length, blobs, bytes: fs.statSync(outPath).size, filename: `oasis-backup-${new Date().toISOString().slice(0, 10)}.oasisbk` };
+      const tag = options.account !== 'all' && profiles ? ((profiles.accounts().find(acc => acc.key === options.account) || {}).short || '') : '';
+      return { path: outPath, messages: picked.length, blobs, bytes: fs.statSync(outPath).size, filename: `oasis-backup-${tag ? `${tag}-` : ''}${new Date().toISOString().slice(0, 10)}.oasisbk` };
     },
 
     async createSnapshot(outPath, { sinceMs = 0, now = Date.now() } = {}) {
@@ -590,9 +686,89 @@ module.exports = ({ cooler }) => {
         existing.set(k, msg.key);
         return true;
       };
+      let fileRoot;
+      const fileRootFor = () => {
+        if (fileRoot !== undefined) return fileRoot;
+        fileRoot = stateRoot();
+        try {
+          const profiles = require('../configs/profiles');
+          const author = stats.meta && stats.meta.author;
+          const owner = profiles.active() && author && author !== ssbClient.id ? profiles.accounts().find(acc => acc.id === author) : null;
+          if (owner) fileRoot = path.join(profiles.stateDirOf(owner.key), 'oasis');
+        } catch (_) {}
+        return fileRoot;
+      };
+      const profiles = activeProfiles();
+      let plan = null;
+      const planFor = (m) => {
+        if (!profiles || !m || !Array.isArray(m.accounts) || !m.accounts.length) return null;
+        const origin = profiles.current();
+        const node = profiles.accounts();
+        const finalIds = new Set([...node.filter(acc => !origin || acc.key !== origin.key).map(acc => acc.id), ...m.accounts.map(acc => acc && acc.id)]);
+        if (finalIds.size > profiles.MAX_ACCOUNTS) throw new Error(`accounts-limit:${finalIds.size - profiles.MAX_ACCOUNTS}`);
+        try { for (const n of fs.readdirSync(profiles.profilesDir())) if (n.startsWith(RESTORING)) fs.rmSync(path.join(profiles.profilesDir(), n), { recursive: true, force: true }); } catch (_) {}
+        const targets = new Map();
+        for (const acc of m.accounts) {
+          if (!acc || typeof acc.id !== 'string' || !profiles.isKey(acc.key)) continue;
+          const existing = node.find(n => n.id === acc.id);
+          const keep = !!existing && (!origin || existing.key !== origin.key);
+          const dir = keep ? existing.dir : path.join(profiles.profilesDir(), RESTORING + profiles.shortOf(acc.id));
+          targets.set(acc.key, { id: acc.id, short: profiles.shortOf(acc.id), dir, stateDir: keep ? profiles.stateDirOf(existing.key) : dir, fresh: !keep });
+        }
+        const list = [...targets.values()];
+        return { origin, targets, author: list.find(t => t.id === m.author) || null, def: list.find(t => t.id === m.defaultId) || list[0] || null };
+      };
+      const safeParts = (parts) => parts.length > 0 && parts.every(p => p && p !== '.' && p !== '..' && !/[\0]/.test(p));
+      const writeInto = (base, parts, data, opts = {}) => {
+        const baseAbs = path.resolve(base);
+        const target = path.resolve(baseAbs, ...parts);
+        if (!target.startsWith(baseAbs + path.sep)) throw new Error('state file rejected');
+        fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+        if (opts.once && fs.existsSync(target)) return false;
+        if (opts.keep && fs.existsSync(target)) { try { fs.copyFileSync(target, `${target}.before-restore`); } catch (_) {} }
+        fs.writeFileSync(target, data, opts.mode ? { mode: opts.mode, flag: 'wx' } : opts.once ? { flag: 'wx' } : {});
+        return true;
+      };
+      const pendingDirOf = (t) => path.join(t.stateDir, 'oasis', 'backup');
+      const intoAccounts = async (rec) => {
+        if (rec.type === 'msg') {
+          if (!plan.author || !rec.msg || !rec.msg.value || !rec.msg.value.author) { stats.skipped += 1; return; }
+          fs.mkdirSync(pendingDirOf(plan.author), { recursive: true, mode: 0o700 });
+          fs.appendFileSync(path.join(pendingDirOf(plan.author), PENDING_FEED), JSON.stringify({ key: rec.msg.key, value: rec.msg.value, timestamp: rec.msg.timestamp }) + '\n');
+          stats.messages += 1;
+          return;
+        }
+        if (rec.type === 'blob') {
+          if (!plan.author || !/^&[A-Za-z0-9+/]{43}=\.sha256$/.test(String(rec.id || ''))) { stats.skipped += 1; return; }
+          const hex = Buffer.from(String(rec.id).slice(1, 45), 'base64').toString('hex');
+          if (writeInto(path.join(pendingDirOf(plan.author), PENDING_BLOBS), [hex], rec.data, { once: true })) stats.blobs += 1; else stats.blobsSkipped += 1;
+          return;
+        }
+        if (rec.type !== 'file') return;
+        const parts = (typeof rec.rel === 'string' ? rec.rel.replace(/\\/g, '/') : '').split('/').filter(Boolean);
+        if (!safeParts(parts)) { stats.failed += 1; noteError('state file rejected'); return; }
+        try {
+          if (parts[0] === PROFILES_REL) {
+            const t = plan.targets.get(parts[1]);
+            const rest = parts.slice(2);
+            const isSecret = rest.length === 1 && rest[0] === 'secret';
+            const isBlob = rest.length === 4 && rest[0] === 'blobs' && rest[1] === 'sha256' && /^[0-9a-f]{2}$/.test(rest[2]) && /^[0-9a-f]{2,64}$/.test(rest[3]);
+            const isState = rest[0] === 'oasis' && rest.length >= 2 && !NOT_BACKED_UP.has(rest[1]);
+            if (!t || (isSecret && !t.fresh) || (!isSecret && !isBlob && !isState)) { stats.skipped += 1; return; }
+            if (isSecret) writeInto(t.dir, rest, rec.data, { mode: 0o400 });
+            else if (isBlob) { if (!writeInto(t.dir, rest, rec.data, { once: true })) { stats.blobsSkipped += 1; return; } }
+            else writeInto(t.stateDir, rest, rec.data, { keep: true });
+          } else {
+            if (!plan.author || NOT_BACKED_UP.has(parts[0])) { stats.skipped += 1; return; }
+            writeInto(path.join(plan.author.stateDir, 'oasis'), parts, rec.data, { keep: true });
+          }
+          stats.files += 1;
+        } catch (_) { stats.failed += 1; noteError('state file could not be written'); }
+      };
       const meta = await this.readBackup(filePath, password, async (rec) => {
         if (rec.total) stats.percent = Math.min(100, (rec.read / rec.total) * 100);
-        if (rec.type === 'meta') { stats.meta = rec.meta; return; }
+        if (rec.type === 'meta') { stats.meta = rec.meta; plan = planFor(rec.meta); return; }
+        if (plan) { await intoAccounts(rec); report(); return; }
         if (rec.type === 'msg') {
           if (!rec.msg || !rec.msg.value || !rec.msg.value.author) { stats.failed += 1; noteError('malformed message'); report(); return; }
           const res = await tryAdd(rec.msg);
@@ -602,9 +778,28 @@ module.exports = ({ cooler }) => {
         }
         if (rec.type === 'file') {
           if (!stateFiles) { stats.skipped += 1; report(); return; }
-          const root = stateRoot();
+          const root = fileRootFor();
           const rel = typeof rec.rel === 'string' ? rec.rel.replace(/\\/g, '/') : '';
           const parts = rel.split('/').filter(Boolean);
+          if (parts[0] === PROFILES_REL && parts.every(p => p !== '.' && p !== '..' && !/[\0]/.test(p))) {
+            const dest = profileTarget(parts.slice(1));
+            if (dest && dest.isBlob && dest.isCurrent) {
+              const ref = await addBlob(rec.data);
+              if (ref) { stats.blobs += 1; present.set(ref, rec.data.length); } else { stats.failed += 1; noteError('blob could not be stored'); }
+              report();
+              return;
+            }
+            try {
+              if (!dest || ((dest.isSecret || dest.isBlob) && fs.existsSync(dest.target))) { stats.skipped += 1; report(); return; }
+              fs.mkdirSync(path.dirname(dest.target), { recursive: true, mode: 0o700 });
+              if (!dest.isSecret && fs.existsSync(dest.target)) { try { fs.copyFileSync(dest.target, `${dest.target}.before-restore`); } catch (_) {} }
+              fs.writeFileSync(dest.target, rec.data, dest.isSecret ? { mode: 0o400, flag: 'wx' } : dest.isBlob ? { flag: 'wx' } : {});
+              try { require('../configs/profiles').reset(); } catch (_) {}
+              stats.files += 1;
+            } catch (_) { stats.failed += 1; noteError('state file could not be written'); }
+            report();
+            return;
+          }
           const safe = !!root && parts.length > 0 && !NOT_BACKED_UP.has(parts[0]) && !path.isAbsolute(rel) && parts.every(p => p !== '.' && p !== '..' && !/[\0]/.test(p));
           const rootAbs = root ? path.resolve(root) : '';
           const target = safe ? path.resolve(rootAbs, ...parts) : '';
@@ -625,6 +820,22 @@ module.exports = ({ cooler }) => {
           report();
         }
       });
+      if (plan) {
+        const { getConfig, newAccountConfig } = require('../configs/config-manager');
+        const language = getConfig().language;
+        for (const t of plan.targets.values()) {
+          if (!t.fresh || !language) continue;
+          try { writeInto(t.stateDir, ['oasis', 'oasis-config.json'], JSON.stringify({ ...newAccountConfig(), language }, null, 2), { once: true }); } catch (_) {}
+        }
+        stats.percent = 100;
+        stats.errors = Array.from(errorCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([reason, count]) => ({ reason, count }));
+        stats.accounts = [...plan.targets.values()].map(t => ({ id: t.id, short: t.short, isDefault: !!plan.def && t.id === plan.def.id, isNew: t.fresh }));
+        stats.replaces = plan.origin ? { key: plan.origin.key, short: plan.origin.short } : null;
+        pendingApply = plan.def ? { remove: plan.origin ? plan.origin.key : null, open: `.ssb-oasis_${plan.def.short}`, short: plan.def.short } : null;
+        try { fs.unlinkSync(filePath); } catch (_) {}
+        report();
+        return { ...stats, meta: stats.meta || meta };
+      }
       deferred.sort((a, b) => a.msg.value.author === b.msg.value.author ? (a.msg.value.sequence || 0) - (b.msg.value.sequence || 0) : String(a.msg.value.author).localeCompare(String(b.msg.value.author)));
       let pending = deferred;
       while (pending.length) {
@@ -648,6 +859,7 @@ module.exports = ({ cooler }) => {
 
     startRestore({ filePath, password, source = 'file' }) {
       if (restoreJob && restoreJob.running) return restoreJob;
+      pendingApply = null;
       const job = { running: true, source, startedAt: new Date().toISOString(), finishedAt: null, progress: { messages: 0, skipped: 0, failed: 0, forked: 0, blobs: 0, blobsSkipped: 0, percent: 0 }, result: null, error: null };
       restoreJob = job;
       job.promise = this.restoreBackup({ filePath, password, onProgress: (p) => { job.progress = p; } })
@@ -655,6 +867,75 @@ module.exports = ({ cooler }) => {
         .catch((err) => { job.error = err && err.message ? err.message : String(err); try { fs.unlinkSync(filePath); } catch (_) {} return null; })
         .finally(() => { job.running = false; job.finishedAt = new Date().toISOString(); });
       return job;
+    },
+
+    async importOwnFeed() {
+      if (importing) return importing;
+      importing = (async () => {
+        const dir = path.dirname(require('../configs/state-manager').statePath(OWN_FEED_FILE));
+        const ownFile = path.join(dir, OWN_FEED_FILE);
+        const feedFile = path.join(dir, PENDING_FEED);
+        const blobsDir = path.join(dir, PENDING_BLOBS);
+        if (!fs.existsSync(ownFile) && !fs.existsSync(feedFile) && !fs.existsSync(blobsDir)) return null;
+        const ssbClient = await openSsb();
+        const guard = ssbClient.feedGuard && typeof ssbClient.feedGuard.status === 'function' ? (() => { try { return ssbClient.feedGuard.status(); } catch (_) { return null; } })() : null;
+        if (guard && (guard.restoring || guard.restoreConflict)) return null;
+        const add = (value) => new Promise((resolve) => ssbClient.add(value, (e) => resolve(e || null)));
+        let added = 0;
+        let total = 0;
+        if (fs.existsSync(ownFile)) {
+          let list = [];
+          try { list = JSON.parse(fs.readFileSync(ownFile, 'utf8')); } catch (_) { list = []; }
+          const mine = (Array.isArray(list) ? list : []).filter((m) => m && m.value && m.value.author === ssbClient.id).sort((a, b) => (a.value.sequence || 0) - (b.value.sequence || 0));
+          total += mine.length;
+          for (const m of mine) if (!(await add(m.value))) added += 1;
+          try { fs.unlinkSync(ownFile); } catch (_) {}
+        }
+        if (fs.existsSync(feedFile)) {
+          let failed = [];
+          const lines = require('readline').createInterface({ input: fs.createReadStream(feedFile, 'utf8'), crlfDelay: Infinity });
+          for await (const line of lines) {
+            let msg = null;
+            try { msg = JSON.parse(line); } catch (_) { continue; }
+            if (!msg || !msg.value || !msg.value.author) continue;
+            total += 1;
+            if (await add(msg.value)) failed.push(msg); else added += 1;
+          }
+          failed.sort((a, b) => a.value.author === b.value.author ? (a.value.sequence || 0) - (b.value.sequence || 0) : String(a.value.author).localeCompare(String(b.value.author)));
+          while (failed.length) {
+            const next = [];
+            for (const msg of failed) if (await add(msg.value)) next.push(msg); else added += 1;
+            if (next.length === failed.length) break;
+            failed = next;
+          }
+          try { fs.unlinkSync(feedFile); } catch (_) {}
+        }
+        if (fs.existsSync(blobsDir)) {
+          for (const name of fs.readdirSync(blobsDir)) {
+            const file = path.join(blobsDir, name);
+            let data = null;
+            try { data = fs.readFileSync(file); } catch (_) { continue; }
+            await new Promise((resolve) => pull(pull.values([data]), ssbClient.blobs.add(() => resolve())));
+            try { fs.unlinkSync(file); } catch (_) {}
+          }
+          try { fs.rmdirSync(blobsDir); } catch (_) {}
+        }
+        return { added, total };
+      })().finally(() => { importing = null; });
+      return importing;
+    },
+
+    restorePlan() { return pendingApply; },
+
+    fileKind(filePath) {
+      let head = Buffer.alloc(0);
+      try {
+        const fd = fs.openSync(filePath, 'r');
+        try { const buf = Buffer.alloc(BACKUP_MAGIC.length); const n = fs.readSync(fd, buf, 0, buf.length, 0); head = buf.slice(0, n); } finally { fs.closeSync(fd); }
+      } catch (_) { return null; }
+      if (head.slice(0, BACKUP_MAGIC.length).equals(BACKUP_MAGIC)) return 'backup';
+      if (head.slice(0, KEY_MAGIC.length).equals(KEY_MAGIC)) return 'keys';
+      return null;
     },
 
     restoreStatus() {
@@ -776,4 +1057,4 @@ module.exports = ({ cooler }) => {
   };
 };
 
-Object.assign(module.exports, { reminderState, setReminderDays, markBackup, REMINDER_OPTIONS, MODULE_KEYS });
+Object.assign(module.exports, { reminderState, setReminderDays, markBackup, readOwnFeed, REMINDER_OPTIONS, MODULE_KEYS });

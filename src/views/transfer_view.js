@@ -1,7 +1,7 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderScopeChip } = require("./clearnet_view")
 const { getConfig } = require('../configs/config-manager.js');
-const { template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views")
+const { renderMentionsFilter, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -163,7 +163,7 @@ const trChipFor = (normalizedFilter, censusT) => (mode) => {
   if (!Array.isArray(censusT)) return true;
   const stT = (t) => String(t.status || "").toUpperCase()
   if (mode === "mine") return censusT.some(t => t.from === userId || t.to === userId)
-  if (mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, censusT)
+  if (mode === "mentions" || mode === "supported" || mode === "replicated" || mode === "favorites") return hasRelation(mode, censusT)
   if (mode === "recent") return censusT.length > 0
   if (mode === "mine-pending") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "UNCONFIRMED")
   if (mode === "mine-confirmed") return censusT.some(t => (t.from === userId || t.to === userId) && String(t.status || "").toUpperCase() === "CLOSED")
@@ -196,6 +196,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
   let filtered =
     normalizedFilter === "recent"      ? list.filter(t => (Date.parse(t.createdAt || "") || 0) >= Date.now() - 86400000) :
     normalizedFilter === "mine"        ? list.filter(t => t.from === userId || t.to === userId) :
+    normalizedFilter === "mentions"    ? list.filter(t => t.isMentioned) :
     normalizedFilter === "supported"   ? list.filter(t => t.isSupported) :
     normalizedFilter === "replicated"  ? list.filter(t => t.isReplicated) :
     normalizedFilter === "favorites"   ? list.filter(t => t.isFavorite) :
@@ -269,6 +270,7 @@ exports.transferView = async (transfers, filter, transferId, params = {}) => {
           ...(emptyMod ? [] : [
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
           ...(trChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: normalizedFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(normalizedFilter, { visible: trChip }),
           ...(trChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(normalizedFilter, trChip, { favorites: true }),
           ...(trChip("ubi") ? [button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUBI).toUpperCase())] : []),
@@ -520,6 +522,7 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
           input({ type: "hidden", name: "sort", value: sort }),
           button({ type: "submit", name: "filter", value: "all", class: normalizedFilter === "all" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterAll).toUpperCase()),
           ...(trChip("recent") ? [button({ type: "submit", name: "filter", value: "recent", class: normalizedFilter === "recent" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterRecent).toUpperCase())] : []),
+          renderMentionsFilter(normalizedFilter, { visible: trChip }),
           ...(trChip("mine") ? [button({ type: "submit", name: "filter", value: "mine", class: normalizedFilter === "mine" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterMine).toUpperCase())] : []),
           ...renderRelationFilters(normalizedFilter, trChip, { favorites: true }),
           ...(trChip("ubi") ? [button({ type: "submit", name: "filter", value: "ubi", class: normalizedFilter === "ubi" ? "filter-btn active" : "filter-btn" }, String(i18n.transfersFilterUBI).toUpperCase())] : []),

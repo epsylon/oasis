@@ -43,8 +43,10 @@ OASIS_AI=none ./install.sh
 
 Two example config files live in `docs/PUB/`:
 
-- [`server-config.json.example`](./server-config.json.example) — the Oasis Sbot config (cap, friends graph, seeds, incoming/outgoing ports). Goes into `~/.ssb/oasis/oasis-server-config.json`, which Oasis merges over the default shipped in `src/configs/server-config.json`, so updates never overwrite it.
-- [`oasis-config.json.example`](./oasis-config.json.example) — the Oasis config tuned for a PUB (AI/wallet/market/jobs/shops off; LAN broadcasting off). Goes into `~/.ssb/oasis/oasis-config.json`. The PUB reads it: modules and theme of the HUB, the media cache limit (step 16), the ECOin RPC for UBI (step 18) and the call relay (step 19).
+- [`server-config.json.example`](./server-config.json.example) — the Oasis Sbot config (cap, friends graph, seeds, incoming/outgoing ports). Goes into `oasis-server-config.json` in the `oasis/` folder of the PUB's account, which Oasis merges over the default shipped in `src/configs/server-config.json`, so updates never overwrite it.
+- [`oasis-config.json.example`](./oasis-config.json.example) — the Oasis config tuned for a PUB (AI/wallet/market/jobs/shops off; LAN broadcasting off). Goes into `oasis-config.json` in the same folder. The PUB reads it: modules and theme of the HUB, the media cache limit (step 16), the ECOin RPC for UBI (step 18) and the call relay (step 19).
+
+The account folder is `~/.ssb/oasis/profiles/.ssb-oasis_<short id>/` ([what lives there](../devs/inventory.md)). Before the first start there is no account yet: copy the files into `~/.ssb/oasis/` as below, and the account takes them when it is created.
 
 To make the PUB reachable as a Tor hidden service, as well or instead (optional), see [`TOR.md`](./TOR.md).
 
@@ -140,7 +142,7 @@ Data is written to `~/.ssb/` ([what each file in there is for](../devs/inventory
 
 ## 6) PUB admin: `./oasis.sh <command>`
 
-All admin actions go through the launcher itself, which talks to the running Oasis Sbot via the local unix socket (`~/.ssb/socket`). No external CLI install is needed — just keep the systemd unit `oasis-pub` active.
+All admin actions go through the launcher itself, which talks to the running Oasis Sbot via the local unix socket (`socket`, in the account folder). No external CLI install is needed — just keep the systemd unit `oasis-pub` active.
 
 ```
 ./oasis.sh whoami                  # print this PUB id
@@ -215,13 +217,13 @@ A new PUB knows no other PUB yet. With an invite code from a PUB of the network,
 ```
 ./oasis.sh status                # peer / replication overview
 ./oasis.sh gossip                # known peers with their state
-ls -la ~/.ssb/                    # confirm db2/, blobs/, gossip.json, conn.json exist
+ls -la ~/.ssb/oasis/profiles/*/   # confirm db2/, blobs/, gossip.json, conn.json exist
 sudo journalctl -u oasis-pub -f   # tail service logs
 ```
 
 ## 13) The AI module
 
-Nothing to do: `./oasis.sh server` sets `aiMod` and `aiNavMod` to `off` in the node's `oasis-config.json` (in `~/.ssb/oasis`) every time it starts, so the PUB never loads the AI model, even if it was downloaded. The rest of `oasis-config.json` is read as usual.
+Nothing to do: `./oasis.sh server` sets `aiMod` and `aiNavMod` to `off` in the `oasis-config.json` of the account every time it starts, so the PUB never loads the AI model, even if it was downloaded. The rest of `oasis-config.json` is read as usual.
 
 ## 14) Joining the Oasis network
 
@@ -239,7 +241,7 @@ The PUB also serves a read-only web HUB with the items its inhabitants chose to 
 "blobCache": { "maxMB": 0, "pubMaxMB": <megabytes> }
 ```
 
-**Snapshots.** The PUB periodically writes two files under `~/.ssb/oasis/content/`: `snapshot-recent.oasissn`, the complete feeds of the recently active inhabitants, and `snapshot.oasissn`, every message it holds. Private messages are included as the same ciphertext every peer already replicates, nothing is ever decrypted, and blobs are not included. It never touches the web: it travels only over the secret-handshake connection, and the PUB hands it exclusively to feeds it follows, that is, to inhabitants who redeemed one of its invites. Nobody browsing the HUB can fetch it. When a newcomer accepts an invite, their Oasis pulls the recent snapshot and then the full one, while ordinary replication keeps filling in whatever is newer. Nothing is needed on your side.
+**Snapshots.** The PUB periodically writes two files under `oasis/content/` in the account folder: `snapshot-recent.oasissn`, the complete feeds of the recently active inhabitants, and `snapshot.oasissn`, every message it holds. Private messages are included as the same ciphertext every peer already replicates, nothing is ever decrypted, and blobs are not included. It never touches the web: it travels only over the secret-handshake connection, and the PUB hands it exclusively to feeds it follows, that is, to inhabitants who redeemed one of its invites. Nobody browsing the HUB can fetch it. When a newcomer accepts an invite, their Oasis pulls the recent snapshot and then the full one, while ordinary replication keeps filling in whatever is newer. Nothing is needed on your side.
 
 ## 17) Mirroring the AI models
 
@@ -249,7 +251,7 @@ The PUB also serves a read-only web HUB with the items its inhabitants chose to 
 
 A PUB pays the Universal Basic Income (UBI) in ECOin when it runs `ecoind` next to Oasis. There is no switch: Oasis turns the UBI engine on by itself when both conditions hold on the same node:
 
-- `~/.ssb/oasis/oasis-server-config.json` has `"pub": true` (the PUB shape from step 4);
+- the account's `oasis/oasis-server-config.json` has `"pub": true` (the PUB shape from step 4);
 - `oasis-config.json` has a reachable ECOin RPC in `wallet` (`url`, `user`, `pass`), i.e. the same block a regular inhabitant fills in Settings → Wallet.
 
 ```json

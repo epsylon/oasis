@@ -173,7 +173,7 @@ const invitesView = (opts = {}) => {
                 input({ type: 'hidden', name: 'key', value: pubItem.key }),
                 input({ type: 'hidden', name: 'host', value: pubItem.host || '' }),
                 input({ type: 'hidden', name: 'port', value: String(pubItem.port || 8008) }),
-                button({ type: 'submit', disabled: hasError(pubItem) }, i18n.invitesFollow)
+                button({ type: 'submit', ...(hasError(pubItem) ? { disabled: true } : {}) }, i18n.invitesFollow)
               )
             )
           : p(i18n.invitesNoUnfollowed),

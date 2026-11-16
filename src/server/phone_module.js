@@ -427,8 +427,7 @@ const clampPcm = (acc) => {
 
 let OpusScript = null;
 try { OpusScript = require('opusscript'); } catch (_) {}
-let sharpLib = null;
-try { sharpLib = require('./node_modules/sharp'); } catch (_) {}
+const { getSharp } = require('./sharp_loader');
 const OPUS_TAG = 0xf0;
 const OPUS_BITRATE = 16000;
 const makeEncoder = (codec) => {
@@ -1144,7 +1143,7 @@ module.exports = {
       return {
         rid: r.rid, ref: r.ref, title: r.title, phase: r.phase, joinedAt: r.joinedAt, muted: !!r.muted, hand: !!r.hand, handSince: r.hand ? r.handAt : 0,
         secure: !!r.kid, count: humansIn(r) + 1, max: r.max, public: [...r.peers.values()].some(p => p.viewer), speaking: now - r.sentAt < 1000,
-        cam: !!r.cam, videoAvailable: videoOn() && r.hubVideo === true, grid: !!sharpLib, gridOrder: gridIds(r),
+        cam: !!r.cam, videoAvailable: videoOn() && r.hubVideo === true, grid: !!getSharp(), gridOrder: gridIds(r),
         streaming: r.stream ? r.stream.name : null, streamAvailable: fileStreamOn() && r.hubVideo === true,
         sharingScreen: !!(r.stream && r.stream.screen), screenAvailable: screenOn() && r.hubVideo === true,
         notify: !!r.notify, recording: !!r.rec, recordingSince: r.rec ? r.rec.at : 0, recordingBy: [...r.recPeers],
@@ -1376,24 +1375,24 @@ module.exports = {
       const tiles = [];
       for (let i = 0; i < ids.length; i++) {
         try {
-          let tile = sharpLib(g.frames.get(ids[i])).resize(size.w, size.h, { fit: 'contain', background: '#000000' });
+          let tile = getSharp()(g.frames.get(ids[i])).resize(size.w, size.h, { fit: 'contain', background: '#000000' });
           if (ids[i] === server.id) tile = tile.flop();
           tiles.push({ input: await tile.toBuffer(), left: (i % cols) * size.w, top: Math.floor(i / cols) * size.h });
         } catch (_) {}
       }
       if (!tiles.length) return;
-      const jpeg = await sharpLib({ create: { width: cols * size.w, height: rows * size.h, channels: 3, background: '#000000' } }).composite(tiles).jpeg({ quality: 80 }).toBuffer();
+      const jpeg = await getSharp()({ create: { width: cols * size.w, height: rows * size.h, channels: 3, background: '#000000' } }).composite(tiles).jpeg({ quality: 80 }).toBuffer();
       if (active(r)) publishFrame(r.tag + 'grid', jpeg);
     };
     const gridTick = (r) => {
       const g = r && r.grid;
-      if (!g || !active(r) || !sharpLib || g.busy || !g.dirty || !frameWatchers.has(r.tag + 'grid')) return;
+      if (!g || !active(r) || !getSharp() || g.busy || !g.dirty || !frameWatchers.has(r.tag + 'grid')) return;
       g.dirty = false;
       g.busy = true;
       composeGrid(r).catch(() => {}).then(() => { g.busy = false; });
     };
     const gridNote = (r, id, jpeg) => { if (!r || !r.grid) return; if (jpeg) r.grid.frames.set(id, jpeg); else r.grid.frames.delete(id); r.grid.dirty = true; };
-    const startGrid = (r) => { if (!sharpLib || !r.grid || r.grid.timer) return; r.grid.timer = setInterval(() => gridTick(r), Math.round(1000 / VIDEO_FPS)); if (r.grid.timer.unref) r.grid.timer.unref(); };
+    const startGrid = (r) => { if (!getSharp() || !r.grid || r.grid.timer) return; r.grid.timer = setInterval(() => gridTick(r), Math.round(1000 / VIDEO_FPS)); if (r.grid.timer.unref) r.grid.timer.unref(); };
     const stopGrid = (r) => { if (!r || !r.grid) return; clearInterval(r.grid.timer); r.grid.timer = null; r.grid.frames.clear(); r.grid.dirty = false; endFrames(r.tag + 'grid'); };
     const onRoomVideo = (r, slot, payload) => {
       const p = r.peers.get(slot);
@@ -1587,8 +1586,8 @@ module.exports = {
     };
     let blank = null;
     const blankFrame = async () => {
-      if (blank || !sharpLib) return blank;
-      try { blank = await sharpLib({ create: { width: GRID_TILE_LARGE.w, height: GRID_TILE_LARGE.h, channels: 3, background: '#000000' } }).jpeg().toBuffer(); } catch (_) { blank = null; }
+      if (blank || !getSharp()) return blank;
+      try { blank = await getSharp()({ create: { width: GRID_TILE_LARGE.w, height: GRID_TILE_LARGE.h, channels: 3, background: '#000000' } }).jpeg().toBuffer(); } catch (_) { blank = null; }
       return blank;
     };
     const soundKey = (r) => r.tag + 'sound';
@@ -1884,7 +1883,7 @@ module.exports = {
         const r = viewers.get(rid);
         const target = r ? r.tag + kind : '';
         const p = Pushable(() => { const set = frameWatchers.get(target); if (set) { set.delete(p); if (!set.size) frameWatchers.delete(target); } });
-        if (!r || r.phase !== 'live' || (kind === 'grid' && !sharpLib)) { p.end(); return p; }
+        if (!r || r.phase !== 'live' || (kind === 'grid' && !getSharp())) { p.end(); return p; }
         if (!frameWatchers.has(target)) frameWatchers.set(target, new Set());
         frameWatchers.get(target).add(p);
         if (kind === 'grid') { r.grid.dirty = true; r.grid.empty = false; }
@@ -1898,7 +1897,7 @@ module.exports = {
         const live = target === 'me'
           ? !!cam
           : target === 'film:me' ? !!(room && room.stream)
-          : target === 'grid' ? !!(room && sharpLib && gridIds(room).length)
+          : target === 'grid' ? !!(room && getSharp() && gridIds(room).length)
           : filmOf ? !!room && [...room.peers.values()].some(x => x.id === filmOf && now - (x.filmAt || 0) < VIDEO_HOLD_MS)
           : call ? (call.peer === target && !!call.peerCam)
           : room ? [...room.peers.values()].some(x => x.id === target && now - (x.frameAt || 0) < VIDEO_HOLD_MS)

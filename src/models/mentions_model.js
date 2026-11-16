@@ -2,11 +2,31 @@ const fs = require('fs');
 const pull = require('../server/node_modules/pull-stream');
 const { readTyped, CONTENT_TYPES } = require('./typed_log');
 const { isComment } = require('./comments_model');
+const { WORD_CHARS } = require('../backend/word_chars');
 
 const SEEN_FILE = 'oasis-mentions-seen';
+const ARCHIVE_FILE = 'oasis-mentions-archived';
+const DELETED_FILE = 'oasis-mentions-deleted';
 
-const seenPath = () => {
-  try { return require('../configs/state-manager').statePath(SEEN_FILE); } catch (_) { return null; }
+const flagPath = (name) => {
+  try { return require('../configs/state-manager').statePath(name); } catch (_) { return null; }
+};
+const seenPath = () => flagPath(SEEN_FILE);
+
+const readKeySet = (name) => {
+  const p = flagPath(name);
+  if (!p) return new Set();
+  try { const arr = JSON.parse(fs.readFileSync(p, 'utf8')); return new Set(Array.isArray(arr) ? arr.map(String) : []); } catch (_) { return new Set(); }
+};
+const writeKeySet = (name, set) => {
+  const p = flagPath(name);
+  if (!p) return false;
+  try { fs.writeFileSync(p, JSON.stringify(Array.from(set))); return true; } catch (_) { return false; }
+};
+const changeKeys = (name, keys, add) => {
+  const set = readKeySet(name);
+  for (const k of (Array.isArray(keys) ? keys : [keys]).filter(Boolean).map(String)) add ? set.add(k) : set.delete(k);
+  return writeKeySet(name, set);
 };
 
 const MAX_SEEN_KEYS = 500;
@@ -58,7 +78,7 @@ module.exports = ({ cooler }) => {
   };
 
   const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const nameRes = (names) => names.map(n => new RegExp(`(^|[^\\p{L}\\p{N}_\\[\\]/@])@${escapeRe(n)}(?=$|[^\\p{L}\\p{N}_/+=])`, 'iu'));
+  const nameRes = (names) => names.map(n => new RegExp(`(^|[^${WORD_CHARS}\\[\\]/@])@${escapeRe(n)}(?=$|[^${WORD_CHARS}/+=])`, 'i'));
   const myNamesOf = (messages, feedId) => {
     let latest = null;
     for (const m of messages) {
@@ -133,6 +153,7 @@ module.exports = ({ cooler }) => {
         out.push({
           id: m.key,
           key: m.key,
+          root: vg.rootOf(m.key),
           author: v.author,
           type: isComment(c) ? 'comment' : c.type,
           title: titleOf(c),
@@ -162,6 +183,26 @@ module.exports = ({ cooler }) => {
     seenAt: () => readSeen().ts,
 
     readKeys: () => new Set(readSeen().keys.map(String)),
+
+    archivedKeys: () => readKeySet(ARCHIVE_FILE),
+    archive: (key) => changeKeys(ARCHIVE_FILE, key, true),
+    unarchive: (key) => changeKeys(ARCHIVE_FILE, key, false),
+
+    deletedKeys: () => readKeySet(DELETED_FILE),
+    removeMany(keys) {
+      changeKeys(ARCHIVE_FILE, keys, false);
+      return changeKeys(DELETED_FILE, keys, true);
+    },
+
+    sortOut(list) {
+      const deleted = readKeySet(DELETED_FILE);
+      const archived = readKeySet(ARCHIVE_FILE);
+      const kept = (Array.isArray(list) ? list : []).filter(x => x && !deleted.has(String(x.key)));
+      return {
+        active: kept.filter(x => !archived.has(String(x.key))),
+        archived: kept.filter(x => archived.has(String(x.key)))
+      };
+    },
 
     markRead(key) {
       if (!key) return false;
