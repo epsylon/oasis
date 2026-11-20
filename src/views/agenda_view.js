@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, input, a } = require("../server/node_modules/hyperaxe");
 const { safeExternalHref } = require("../backend/renderStyledText");
-const { template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderCardTop, renderModuleStats, renderStateChip, chipRoleOf, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged, renderCountChip, renderSearchButton } = require('./main_views');
+const { template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderCardTop, renderModuleStats, renderStateChip, chipRoleOf, CONTENT_FAV_KIND, CONTENT_SPREADABLE, contentDeleteAction, paged, renderCountChip, renderSearchButton, renderAmountChip } = require('./main_views');
 const { contentChipsOf, scopeChipOf, transferAmountText, isUbiTransfer, jobTypeLabelOf } = require('./activity_view');
 const { renderProjectStatusChip } = require('./projects_view');
 const { renderBuildStatusChip } = require('./industry_view');
@@ -44,7 +44,9 @@ const agendaDeleteAction = (item) => {
 const chip = (text, kind = "whole", icon = null, role = null) => (text === null || text === undefined || text === "") ? null : renderStateChip(kind, icon || (role === 'status' ? (kind === 'hidden' ? '✗' : '✓') : null), String(text).toUpperCase(), role);
 const timeChip = (value, fmt = "YYYY/MM/DD HH:mm") => value ? p({ class: "time-chip" }, moment(value).format(fmt)) : null;
 const metaLine = (text) => text && String(text).trim() ? p({ class: "job-meta-line" }, String(text)) : null;
-const priceChip = (text) => text ? div({ class: "price-chip" }, text) : null;
+const priceChip = (text) => text ? renderAmountChip(text) : null;
+const dateChip = (value, fmt = "YYYY/MM/DD HH:mm") => value ? renderCountChip("◷", null, moment(value).format(fmt)) : null;
+const chipRow = (...nodes) => nodes.filter(Boolean).length ? div({ class: "card-chip-line" }, ...nodes.filter(Boolean)) : null;
 const statusKind = (status) => String(status || "").toUpperCase() === "CLOSED" ? "hidden" : "mutuals";
 const AGENDA_TYPE_KEYS = { calendarDate: 'typeCalendar' };
 const moduleLabelOf = (type) => String(i18n[AGENDA_TYPE_KEYS[type] || 'type' + String(type || '').charAt(0).toUpperCase() + String(type || '').slice(1)] || type || '').toUpperCase();
@@ -76,7 +78,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
       const maxBid = bids.length ? Math.max(...bids) : 0;
       chips.push(renderCountChip('▲', i18n.marketItemHighestBid, `${maxBid} ECO`));
     }
-    body.push(priceChip(`${item.price} ECO`), timeChip(item.deadline));
+    body.push(chipRow(priceChip(`${item.price} ECO`), dateChip(item.deadline)));
   }
 
   if (item.type === 'tribe') {
@@ -90,7 +92,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
 
   if (item.type === 'event') {
     chips.push(...contentChipsOf('event', item));
-    body.push(timeChip(item.date), metaLine(item.location), parseFloat(item.price || 0) > 0 ? priceChip(`${item.price} ECO`) : null,
+    body.push(chipRow(dateChip(item.date), parseFloat(item.price || 0) > 0 ? priceChip(`${item.price} ECO`) : null), metaLine(item.location),
       item.url ? p({ class: 'job-meta-line' }, a({ href: safeExternalHref(item.url), target: "_blank", rel: "noopener noreferrer" }, item.url)) : null);
   }
 
@@ -103,13 +105,13 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     const sent = String(item.from) === String(userId);
     const other = sent ? item.to : item.from;
     chips.push(...contentChipsOf('transfer', item));
-    body.push(priceChip(transferAmountText(item)), isUbiTransfer(item) ? null : timeChip(item.deadline),
+    body.push(chipRow(priceChip(transferAmountText(item)), isUbiTransfer(item) ? null : dateChip(item.deadline)),
       other ? p({ class: 'job-meta-line' }, `${sent ? '→' : '←'} `, userLink(other)) : null);
   }
 
   if (item.type === 'project') {
     chips.push(renderProjectStatusChip(String(item.status || 'ACTIVE').toUpperCase()), renderCountChip('▰', i18n.projectProgress, `${item.progress || 0}%`));
-    body.push(priceChip(`${item.pledged || 0} / ${item.goal} ECO`), item.deadline ? timeChip(item.deadline) : metaLine(i18n.noDeadline));
+    body.push(chipRow(priceChip(`${item.pledged || 0} / ${item.goal} ECO`), item.deadline ? dateChip(item.deadline) : null), item.deadline ? null : metaLine(i18n.noDeadline));
   }
 
   if (item.type === 'calendar') {
@@ -141,7 +143,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     chips.push(chip(i18n["housingType" + String(item.housing_type || '').toUpperCase()] || item.housing_type, 'whole', item.housing_type === "sale" ? "🏷" : item.housing_type === "rent" ? "🔑" : "🛋", 'kind'),
       chip(String(item.status || '').toUpperCase() === 'CLOSED' ? i18n.housingStatusCLOSED : i18n.housingStatusOPEN, statusKind(item.status), null, 'status'),
       isOwner ? renderCountChip('✉', i18n.housingRequests, requestCount) : chip(i18n.housingRequestedBadge || 'REQUESTED', 'transport', '★', 'mine'));
-    body.push(metaLine(item.place), priceChip(String(item.housing_type) === 'couchsurfing' ? (i18n.housingFree || 'FREE') : `${item.price} ECO`), timeChip(item.availableFrom, 'YYYY/MM/DD'));
+    body.push(metaLine(item.place), chipRow(priceChip(String(item.housing_type) === 'couchsurfing' ? (i18n.housingFree || 'FREE') : `${item.price} ECO`), dateChip(item.availableFrom, 'YYYY/MM/DD')));
   }
 
   if (item.type === 'job') {
@@ -153,7 +155,7 @@ const renderAgendaItem = (item, userId, filter, extras = {}) => {
     const jobStatus = String(item.status || '').toUpperCase();
     chips.push(chip(jobStatus ? (i18n['jobStatus' + jobStatus] || jobStatus) : null, statusKind(jobStatus), null, 'status'), chip(item.job_type ? jobTypeLabelOf(item.job_type) : null, 'whole', '◇', 'kind'), chip(item.languages, 'whole', '◈', 'level'),
       renderCountChip('✚', i18n.jobVacants, item.vacants || 0), renderCountChip('👥', i18n.jobSubscribers, subs.length));
-    body.push(metaLine(item.location), priceChip(`${item.salary} ECO`));
+    body.push(metaLine(item.location), chipRow(priceChip(`${item.salary} ECO`)));
   }
 
   if (item.type === 'industry') {

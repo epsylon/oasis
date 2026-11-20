@@ -114,7 +114,7 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
       techVersion ? td({ 'data-label': i18n.peersOasisVersion || 'Version' }, ...versionCell(k)) : null,
       td({ 'data-label': i18n.peerStateLabel }, stateCell(tp)),
       td({ 'data-label': i18n.peerLastChangeLabel }, String(tp.stateChange ? new Date(tp.stateChange).toISOString().slice(0, 16).replace('T', ' ') : '—')),
-      td(
+      td({ 'data-label': '' },
         form({ method: "POST", action: `/peers/${action}`, class: "inline-form" },
           input({ type: "hidden", name: "key", value: k }),
           input({ type: "hidden", name: "host", value: String(tp.host || '') }),
@@ -255,7 +255,7 @@ const peersView = async ({ onlinePeers, discoveredPeers, unknownPeers, lanBroadc
             td({ 'data-label': i18n.peerStateLabel }, r.online ? renderStateChip('mutuals', null, String(i18n.online).toUpperCase()) : renderStateChip('hidden', null, String(i18n.offline).toUpperCase())),
             td({ 'data-label': i18n.peersLanLastSeen }, fmtDate(r.seenAt)),
             lanVersion ? td({ 'data-label': i18n.peersOasisVersion || 'Version' }, ...versionCell(r.key)) : null,
-            td(r.online ? null : form({ method: "POST", action: "/peers/lan/forget", class: "inline-form" },
+            td({ 'data-label': '' }, r.online ? null : form({ method: "POST", action: "/peers/lan/forget", class: "inline-form" },
               input({ type: "hidden", name: "key", value: r.key }),
               button({ type: "submit", class: "filter-btn" }, i18n.delete)
             ))

@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, details, summary, ul, li } = require("../server/node_modules/hyperaxe");
 const { renderScopeChip } = require("./clearnet_view");
 const { TEXT_CAP } = require('../backend/long_text');
-const { renderPublishAtField, template, i18n, userLink, renderStateChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require("./main_views");
+const { renderPublishAtField, template, i18n, userLink, renderStateChip, renderCardTop, renderCardByline, renderEngagement, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass, renderJoinQr } = require("./main_views");
 const { renderStyledText } = require("../backend/renderStyledText");
 const { config } = require("../server/SSB_server.js");
 
@@ -255,8 +255,9 @@ exports.singleMailingView = async (list, params = {}) => {
   const sideActions = [leaveForm(list)].filter(Boolean);
   const side = div({ class: "tribe-side" },
     renderCardTop(list.id, href, { arrow: false, date: list.createdAt, chips: [renderScopeChip(list, i18n), listTypeChip(list), statusChip(list), ...countChips(list)], author: list.author, favKind: "mailing", isFavorite: list.isFavorite, reportTitle: list.title, spread: params.spread || null, editAction: isAuthor ? `/mailing?filter=edit&id=${encodeURIComponent(list.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("mailingList", list.id) : null }),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, list.title)),
     renderDetailShare(list.id, href, list.title, params.subscription && !list.closed ? { target: list.id, scope: "mailing", subscribed: !!(params.subscription.subscribed || list.isMember), count: list.participantCount || params.subscription.count, isOwner: isAuthor, returnTo: href } : null, null, null, list.author),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, list.title)),
+    !list.closed && String(list.listType || "").toUpperCase() === "OPEN" && !list.tribeId ? renderJoinQr("mailing", list.id) : null,
     list.description ? p({ class: "tribe-side-description" }, ...renderStyledText(list.description)) : null,
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null,
     isAuthor

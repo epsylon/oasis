@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderPublishAtField, renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderLifespanChip, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSpreadEditWarning, renderCardTop, renderSubscriptionBox, renderModuleStats, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton, renderJoinQr, renderAmountChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText")
@@ -13,7 +13,6 @@ const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v || "").trim()
 const clearnetEligible = (shop) => String(shop.visibility || "").toUpperCase() !== "CLOSED" && !shop.encrypted
 const SHOP_REACH = ["OPEN", "CLOSED"]
-const shopReachLabel = (v) => v === "CLOSED" ? i18n.shopClosed : i18n.shopOpen
 const voteSum = (opinions = {}) => Object.values(opinions || {}).reduce((s, n) => s + (Number(n) || 0), 0)
 const sumCats = (opinions = {}, cats = []) => (cats || []).reduce((s, c) => s + (Number((opinions || {})[c]) || 0), 0)
 const renderStarRating = (opinions, voterCount) => {
@@ -118,14 +117,13 @@ const renderProductCard = (product, shopId, returnTo, params = {}, shop = produc
   const productUrl = `/shops/product/${encodeURIComponent(product.key)}?shopId=${encodeURIComponent(shopId)}`
 
   return div({ class: "shop-product-card" },
-    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { date: product.createdAt, chips: [productScopeChip(product, shop), renderStockChip(stock)], spread: params.spreadMap && params.spreadMap.get(product.key) || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, reportTitle: product.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
+    renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { date: product.createdAt, chips: [productScopeChip(product, shop), renderAmountChip(`${Number(product.price || 0).toFixed(6)} ECO`), renderStockChip(stock)], spread: params.spreadMap && params.spreadMap.get(product.key) || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, reportTitle: product.title, returnTo, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
     product.image ? div({ class: "shop-product-media" }, a({ href: productUrl }, renderMediaBlob(product.image))) : null,
     div({ class: "shop-product-body" },
       product.shopTitle ? p(a({ href: `/shops/${encodeURIComponent(shopId)}`, class: "user-link" }, product.shopTitle)) : null,
       h2(a({ href: productUrl }, product.title || i18n.shopProductUntitled)),
       renderStarRating(product.opinions, voterCount),
       product.description ? p(...renderStyledText(product.description)) : null,
-      div({ class: "price-chip" }, `${Number(product.price || 0).toFixed(6)} ECO`),
       div({ class: "confirmations-block stock-block" },
         progress({ class: "confirmations-progress stock-progress", value: Math.min(stock, 100), max: 100 })
       ),
@@ -155,28 +153,12 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
   const reachRaw = String(params.reach || "").toUpperCase()
   const ownReach = String(shop.visibility || "").toUpperCase()
   const reach = SHOP_REACH.includes(reachRaw) ? reachRaw : (SHOP_REACH.includes(ownReach) ? ownReach : "OPEN")
-  const showClearnet = isEdit ? clearnetEligible(shop) : reach === "OPEN" && clearnetEligible({ ...shop, visibility: reach })
+  const showClearnet = isEdit ? clearnetEligible(shop) : clearnetEligible({ ...shop, visibility: "OPEN" })
   return div({ class: "create-tribe-form" },
     h2(isEdit ? i18n.shopUpdateSectionTitle : i18n.shopCreateSectionTitle),
     isEdit ? (params.spreadWarning || null) : null,
-    ...(isEdit ? [] : [
-      form({ method: "GET", action: "/shops" },
-        input({ type: "hidden", name: "filter", value: "create" }),
-        label(i18n.shopVisibility), br(),
-        div({ class: "apply-row" },
-          select({ name: "visibility", class: "report-category-select" },
-            option({ value: "OPEN", ...(reach === "OPEN" ? { selected: true } : {}) }, i18n.shopOpen),
-            option({ value: "CLOSED", ...(reach === "CLOSED" ? { selected: true } : {}) }, i18n.shopClosed)
-          ),
-          button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
-        )
-      ),
-      hr({ class: "form-sep" }),
-      h2({ class: "report-category-fixed" }, shopReachLabel(reach))
-    ]),
     form({ action: isEdit ? `/shops/update/${encodeURIComponent(shop.key || "")}` : "/shops/create", method: "POST", enctype: "multipart/form-data" },
       input({ type: "hidden", name: "returnTo", value: returnTo }),
-      isEdit ? null : input({ type: "hidden", name: "visibility", value: reach }),
       label(i18n.title || "Title"), br,
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.shopTitlePlaceholder || "Name of your shop", value: shop.title || "" }), br(),
       label(i18n.shopShortDescription), br,
@@ -193,6 +175,13 @@ const renderShopForm = (filter, shop = {}, params = {}) => {
       input({ type: "text", name: "mapUrl", placeholder: i18n.mapUrlPlaceholder || "/maps/MAP_ID", value: shop.mapUrl || "" }), br,
       label(i18n.shopTags), br,
       input({ type: "text", name: "tags", placeholder: i18n.shopTagsPlaceholder || "Enter tags separated by commas", value: Array.isArray(shop.tags) ? shop.tags.join(", ") : (shop.tags || "") }), br,
+      ...(isEdit ? [] : [
+        label(i18n.shopVisibility), br,
+        select({ name: "visibility" },
+          option({ value: "OPEN", ...(reach === "OPEN" ? { selected: true } : {}) }, i18n.shopOpen),
+          option({ value: "CLOSED", class: "reach-closed", ...(reach === "CLOSED" ? { selected: true } : {}) }, i18n.shopClosed)
+        ), br(), br()
+      ]),
       showClearnet ? renderClearnetSelector(shop.clearnet === true || String(shop.clearnet || "") === "1", i18n) : null,
       br(),
       ...(isEdit ? [] : renderPublishAtField()),
@@ -311,12 +300,13 @@ exports.singleShopView = async (shop, filter, products = [], comments = [], para
       ],
       spread: params.spreads || null, author: shop.author, favKind: 'shops', isFavorite: shop.isFavorite, reportTitle: shop.title, subscription: subscriptionOpts, editAction: isAuthor ? `/shops/edit/${encodeURIComponent(shop.key)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('shop', shop.key) : undefined
     }),
+    renderDetailShare(shop.key, `/shops/${encodeURIComponent(shop.key)}`, shop.title, subscriptionOpts, null, null, shop.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, shop.title || i18n.shopUntitled)
     ),
     isAuthor && canClearnet ? renderClearnetSwitch('shops', shop.rootId || shop.key, isClearnet) : null,
+    canClearnet && !shop.tribeId ? renderJoinQr('shops', shop.key) : null,
     renderMediaBlob(shop.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    renderDetailShare(shop.key, `/shops/${encodeURIComponent(shop.key)}`, shop.title, subscriptionOpts, null, null, shop.author),
     shop.description ? p({ class: "tribe-side-description" }, ...renderStyledText(shop.description)) : null,
     table({ class: "tribe-info-table" },
       shop.location ? tr(
@@ -415,6 +405,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
 
   const productSide = div({ class: "tribe-side" },
     renderCardTop(product.key, `/shops/product/${encodeURIComponent(product.key)}`, { arrow: false, date: product.createdAt, chips: [productScopeChip(product, shop), renderStockChip(stock)], bylineExtra: [renderEditedChip(product.key, product.rootId, product.updatedAt)], spread: params.spreads || null, author: product.author, favKind: 'shopProducts', isFavorite: product.isFavorite, returnTo, reportTitle: product.title, editAction: isAuthor ? `/shops/product/edit/${encodeURIComponent(product.key)}?shopId=${encodeURIComponent(product.shopId)}&returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('shopProduct', product.key) : undefined }),
+    renderDetailShare(product.key, `/shops/product/${encodeURIComponent(product.key)}`, product.title, null, null, null, product.author),
     div({ class: "tribe-side-actions" },
       form({ method: "GET", action: `/shops/${encodeURIComponent(product.shopId)}` },
         button({ type: "submit", class: "tribe-action-btn" }, `← ${i18n.shopBackToShop}`)
@@ -424,7 +415,7 @@ exports.singleProductView = async (product, shop, comments = [], params = {}) =>
       h2({ class: "tribe-card-title" }, product.title || i18n.shopProductUntitled)
     ),
     renderStarRating(product.opinions, safeArr(product.opinions_inhabitants).length),
-    renderDetailShare(product.key, `/shops/product/${encodeURIComponent(product.key)}`, product.title, null, null, null, product.author)
+    shop && clearnetEligible(shop) && !shop.tribeId ? renderJoinQr('products', product.key) : null,
   )
 
   const canBuy = !isAuthor && stock > 0

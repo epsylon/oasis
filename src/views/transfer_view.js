@@ -1,7 +1,7 @@
 const { hr, div, h2, p, section, button, form, a, input, br, span, label, select, option, progress, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderScopeChip } = require("./clearnet_view")
 const { getConfig } = require('../configs/config-manager.js');
-const { renderMentionsFilter, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views")
+const { renderMentionsFilter, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton, renderJoinQr, renderAmountChip, renderCountChip } = require("./main_views")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -145,11 +145,11 @@ const generateTransferCard = (transfer, filter, params = {}) => {
           a({ href: transferHref }, transferTitle(transfer))
         )
       ),
-      !isUbi && dl && dl.isValid()
-        ? p({ class: "time-chip" }, dl.format("YYYY/MM/DD HH:mm"))
-        : null,
-      cat !== "TRUST"
-        ? div({ class: "tribe-card-members" }, span({ class: "price-chip" }, fmtAmountWithUnit(transfer)))
+      (!isUbi && dl && dl.isValid()) || cat !== "TRUST"
+        ? div({ class: "card-chip-line" },
+            cat !== "TRUST" ? renderAmountChip(fmtAmountWithUnit(transfer)) : null,
+            !isUbi && dl && dl.isValid() ? renderCountChip("◷", null, dl.format("YYYY/MM/DD HH:mm")) : null
+          )
         : null,
       null
     )
@@ -489,10 +489,11 @@ exports.singleTransferView = async (transfer, filter, params = {}) => {
       editAction: canEdit ? `/transfers/edit/${encodeURIComponent(transfer.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined,
       deleteAction: canDelete ? contentDeleteAction('transfer', transfer.id) : undefined
     }),
+    renderDetailShare(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, transfer.concept, null, null, null, transfer.from),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, transferTitle(transfer))
     ),
-    renderDetailShare(transfer.id, `/transfers/${encodeURIComponent(transfer.id)}`, transfer.concept, null, null, null, transfer.from),
+    renderJoinQr('transfers', transfer.id),
     tagsNode
   )
 

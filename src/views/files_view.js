@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderClearnetSelector, renderClearnetSwitch, renderLicenseSelect, renderLicenseChip, renderScopeChip } = require('./clearnet_view');
 
-const { renderPublishAtField, renderMentionsFilter, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderStateChip, renderFileDownloads, listLayout, renderSearchButton, blobAttr } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderStateChip, renderFileDownloads, listLayout, renderSearchButton, blobAttr, renderJoinQr } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -322,11 +322,12 @@ exports.singleFileView = async (fileObj, filter = "all", comments = [], params =
       returnTo,
       reportTitle: fileObj.title
     }),
+    renderDetailShare(fileObj.key, href, fileObj.title, null, null, null, fileObj.author),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
       clearnetAllowed && isAuthor ? renderClearnetSwitch('files', fileObj.rootId || fileObj.key, isClearnet) : null
     ),
-    renderDetailShare(fileObj.key, href, fileObj.title, null, null, null, fileObj.author),
+    !fileObj.tribeId ? renderJoinQr('files', fileObj.key) : null,
     tagsNode,
   );
 

@@ -699,7 +699,7 @@ const LawsStats = (laws = [], revocatedCount = 0) => {
   return div(
     { class: 'table-wrap' },
     h2(i18n.parliamentPoliciesTitle || 'POLICIES'),
-    applyEl(table, { class: 'table table--centered' }, [
+    applyEl(table, { class: 'table table--centered stack-table' }, [
       thead(tr(
         th(i18n.parliamentThProposed),
         th(i18n.parliamentThApproved),
@@ -709,11 +709,11 @@ const LawsStats = (laws = [], revocatedCount = 0) => {
       )),
       tbody(
         tr(
-          td(String(proposed)),
-          td(String(approved)),
-          td(String(declined)),
-          td(String(discarded)),
-          td(String(revocated))
+          td({ 'data-label': i18n.parliamentThProposed }, String(proposed)),
+          td({ 'data-label': i18n.parliamentThApproved }, String(approved)),
+          td({ 'data-label': i18n.parliamentThDeclined }, String(declined)),
+          td({ 'data-label': i18n.parliamentThDiscarded }, String(discarded)),
+          td({ 'data-label': i18n.parliamentPoliciesRevocated }, String(revocated))
         )
       )
     ])
@@ -888,7 +888,7 @@ const LeadersSummary = (leaders = [], candidatures = [], allGovCards = [], total
   return div(
     { class: 'table-wrap' },
     h2(i18n.parliamentHistoricalLawsTitle || 'Actions'),
-    applyEl(table, { class: 'table table--centered' }, [
+    applyEl(table, { class: 'table table--centered stack-table' }, [
       thead(tr(
         th(i18n.parliamentThTotalCandidatures),
         th(i18n.parliamentThTimesInPower),
@@ -901,14 +901,14 @@ const LeadersSummary = (leaders = [], candidatures = [], allGovCards = [], total
       )),
       tbody(
         tr(
-          td(String(presented)),
-          td(String(timesInPower)),
-          td(String(totals.proposed)),
-          td(String(totals.approved)),
-          td(String(totals.declined)),
-          td(String(totals.discarded)),
-          td(String(totals.revocated)),
-          td(`${efficiencyPct} %`)
+          td({ 'data-label': i18n.parliamentThTotalCandidatures }, String(presented)),
+          td({ 'data-label': i18n.parliamentThTimesInPower }, String(timesInPower)),
+          td({ 'data-label': i18n.parliamentThProposed }, String(totals.proposed)),
+          td({ 'data-label': i18n.parliamentThApproved }, String(totals.approved)),
+          td({ 'data-label': i18n.parliamentThDeclined }, String(totals.declined)),
+          td({ 'data-label': i18n.parliamentThDiscarded }, String(totals.discarded)),
+          td({ 'data-label': i18n.parliamentPoliciesRevocated }, String(totals.revocated)),
+          td({ 'data-label': i18n.parliamentEfficiency }, `${efficiencyPct} %`)
         )
       )
     ])
@@ -931,13 +931,13 @@ const LeadersList = (leaders, metas = {}, candidatures = []) => {
       : userLink(l.powerId, l.powerTitle);
     const leaderCell = div({ class: 'leader-cell parliament-avatar-cell' }, avatar, div({ class: 'parliament-avatar-name' }, link));
     return tr(
-      td(leaderCell),
-      td(String(l.proposed || 0)),
-      td(String(l.approved || 0)),
-      td(String(l.declined || 0)),
-      td(String(l.discarded || 0)),
-      td(String(l.revocated || 0)),
-      td(`${(l.efficiency != null ? Math.round(l.efficiency * 100) : (l.proposed > 0 ? Math.round((l.approved / l.proposed) * 100) : 0))} %`)
+      td({ 'data-label': i18n.parliamentThLeader }, leaderCell),
+      td({ 'data-label': i18n.parliamentPoliciesProposal }, String(l.proposed || 0)),
+      td({ 'data-label': i18n.parliamentPoliciesApproved }, String(l.approved || 0)),
+      td({ 'data-label': i18n.parliamentPoliciesDeclined }, String(l.declined || 0)),
+      td({ 'data-label': i18n.parliamentPoliciesDiscarded }, String(l.discarded || 0)),
+      td({ 'data-label': i18n.parliamentPoliciesRevocated }, String(l.revocated || 0)),
+      td({ 'data-label': i18n.parliamentEfficiency }, `${(l.efficiency != null ? Math.round(l.efficiency * 100) : (l.proposed > 0 ? Math.round((l.approved / l.proposed) * 100) : 0))} %`)
     );
   });
   return div(

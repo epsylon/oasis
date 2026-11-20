@@ -3,7 +3,7 @@ const path = require('path');
 
 const WRITE_DELAY_MS = 1500;
 const MAX_URL = 2000;
-const SKIP_RE = /^\/(?:assets|blob|image|avatar|qr|qr-invite|c|pdf\/page|pdf\/embed|player|phone\/video|robots\.txt)(?:\/|$)/;
+const SKIP_RE = /^\/(?:assets|blob|image|avatar|qr|qr-invite|qr-invite-code|qr-public|qr-action|c|pdf\/page|pdf\/embed|player|phone\/video|robots\.txt)(?:\/|$)/;
 const DROP_PARAMS = ['layout', 'error', 'errsig', 'keep'];
 
 const keepable = (pathname) => {

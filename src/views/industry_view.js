@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, ul, li, video, audio, table, thead, tbody, tr, td, th } = require("../server/node_modules/hyperaxe")
 const { renderScopeChip } = require("./clearnet_view")
 const { renderZoomableImage } = require("./gallery_view")
-const { renderPublishAtField, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton, renderJoinQr } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -671,9 +671,10 @@ const renderFacilitySide = (fc, returnTo, params = {}, cardTop = null, subscript
 
   return div({ class: "tribe-side" },
     cardTop,
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/${encodeURIComponent(fc.id)}` }, safeText(fc.name) || (i18n.industryTitle || "Industry")))),
-    fc.image ? renderMediaBlob(fc.image, { class: "tribe-detail-image" }) : null,
     renderDetailShare(fc.id || fc.key, `/industry/${encodeURIComponent(fc.id)}`, fc.name, subscriptionOpts, null, null, fc.author),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, a({ href: `/industry/${encodeURIComponent(fc.id)}` }, safeText(fc.name) || (i18n.industryTitle || "Industry")))),
+    String(fc.status || "ACTIVE").toUpperCase() !== "DISSOLVED" && fc.membershipPolicy !== "invite" && !fc.tribeId ? renderJoinQr("industry", fc.id) : null,
+    fc.image ? renderMediaBlob(fc.image, { class: "tribe-detail-image" }) : null,
     fc.description ? p({ class: "tribe-side-description" }, ...renderStyledText(safeText(fc.description))) : null,
     table({ class: "tribe-info-table" },
       tr(td({ class: "tribe-info-label" }, i18n.industryLaborRate || "Labor rate"), td({ class: "tribe-info-value", colspan: "3" }, `${fc.laborRate || 0} ECO/h`)),
@@ -793,10 +794,11 @@ exports.singleBlueprintView = async (blueprint, params = {}) => {
           bylineExtra: [renderEditedChip(bp.id, bp.rootId, bp.updatedAt)],
           spread: params.spreads || null, author: bp.author, reportTitle: bp.name || bp.title
         }),
+        renderDetailShare(bp.rootId || bp.id, returnTo, bp.name || bp.title, null, null, null, bp.author),
         p({ class: "industry-facility-line" }, span({ class: "industry-meta-label" }, `${i18n.industryFacility || "Facility"}: `), a({ href: facilityHref }, safeText(bp.facilityName))),
         h2(safeText(bp.name)),
+        !bp.tribeId ? renderJoinQr("blueprints", bp.id) : null,
         bp.image ? div({ class: "shop-detail-media" }, renderMediaBlob(bp.image, { class: "post-image" })) : null,
-        renderDetailShare(bp.rootId || bp.id, returnTo, bp.name || bp.title, null, null, null, bp.author),
         bp.description ? p({ class: "tribe-card-description" }, ...renderStyledText(safeText(bp.description))) : null,
         renderBlueprintLaborHours(bp),
         safeArr(bp.materials).length ? div({ class: "industry-materials" }, ul({ class: "industry-materials-list" }, bp.materials.map(m => li(`${m.qty || 0} × ${safeText(m.item)}${m.price != null ? ` = ${m.price} ECO` : ""}`)))) : null,
@@ -831,10 +833,10 @@ exports.singleBuildView = async (build, params = {}) => {
   const facilityHref = `/industry/${encodeURIComponent(b.facilityId)}`
 
   const contribRows = safeArr(b.contributions).map(c => tr(
-    td(userLink(c.author)),
-    td(i18n["industryKind_" + c.kind] || c.kind),
-    td(c.kind === "labor" ? `${c.hours} h` : c.kind === "material" ? `${c.value} ECO · ${safeText(c.item)}` : `${c.eco} ECO`),
-    td(safeText(c.note))
+    td({ "data-label": i18n.industryMember || "Member" }, userLink(c.author)),
+    td({ "data-label": i18n.industryKindLabel || "Kind" }, i18n["industryKind_" + c.kind] || c.kind),
+    td({ "data-label": i18n.industryAmount || "Amount" }, c.kind === "labor" ? `${c.hours} h` : c.kind === "material" ? `${c.value} ECO · ${safeText(c.item)}` : `${c.eco} ECO`),
+    td({ "data-label": i18n.industryNote || "Note" }, safeText(c.note))
   ))
 
   const canUpdateBuild = isMember && (isProposer || isSteward) && !b.distributed && b.updateApproved !== false
@@ -973,9 +975,10 @@ exports.singleBuildView = async (build, params = {}) => {
     section(
       div({ class: "shop-detail" },
         renderCardTop(b.id, returnTo, { arrow: false, date: b.createdAt, chips: [renderScopeChip(b, i18n), renderBuildStatusChip(status), ...(b.blueprintKind ? [renderStateChip("whole", b.blueprintKind === "digital" ? "💾" : "📦", i18n["industryKind_" + b.blueprintKind] || b.blueprintKind, "kind"), renderStateChip("license", "⚖", String(b.blueprintLicense || "copyleft").toUpperCase(), "level")] : [])], spread: params.spreads || null, author: b.proposer, reportTitle: b.title }),
-        b.image ? div({ class: "shop-detail-media" }, renderMediaBlob(b.image, { class: "post-image" })) : null,
         renderDetailShare(b.id, returnTo, b.title, null, null, null, b.author),
         h2(safeText(b.title) || (i18n.industryBuild || "Build")),
+        !b.tribeId ? renderJoinQr("builds", b.id) : null,
+        b.image ? div({ class: "shop-detail-media" }, renderMediaBlob(b.image, { class: "post-image" })) : null,
       div({ class: "industry-meta" },
         b.blueprintName ? p(span({ class: "industry-meta-label" }, `${i18n.industryBlueprint || "Blueprint"}: `), safeText(b.blueprintName)) : null,
         b.blueprintImage ? renderMediaBlob(b.blueprintImage, { class: "post-image" }) : null,
@@ -994,7 +997,7 @@ exports.singleBuildView = async (build, params = {}) => {
       safeArr(b.contributions).length
         ? div({ class: "industry-section" },
             h2(i18n.industryContributions || "Contributions"),
-            table({ class: "industry-table" },
+            table({ class: "industry-table stack-table" },
               thead(tr(th(i18n.industryMember || "Member"), th(i18n.industryKindLabel || "Kind"), th(i18n.industryAmount || "Amount"), th(i18n.industryNote || "Note"))),
               tbody(...contribRows)
             )

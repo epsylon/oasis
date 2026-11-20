@@ -494,9 +494,9 @@ const CaseCard = (c) => {
       : null,
     div(
       { class: 'table-wrap mt-2' },
-      applyEl(table, { class: 'table table--centered' }, [
+      applyEl(table, { class: 'table table--centered stack-table' }, [
         thead(tr(th(i18n.courtsAccuser), th(i18n.courtsRespondent))),
-        tbody(tr(td(accLink), td(resLink)))
+        tbody(tr(td({ 'data-label': i18n.courtsAccuser }, accLink), td({ 'data-label': i18n.courtsRespondent }, resLink)))
       ])
     ),
     mediatorsAccuser.length
@@ -717,7 +717,7 @@ const MyCaseCard = (c) => {
       : null,
     div(
       { class: 'table-wrap mt-2' },
-      applyEl(table, { class: 'table table--centered' }, [
+      applyEl(table, { class: 'table table--centered stack-table' }, [
         thead(
           tr(
             th(i18n.courtsAccuser),
@@ -726,8 +726,8 @@ const MyCaseCard = (c) => {
         ),
         tbody(
           tr(
-            td(accLinkFull),
-            td(resLinkFull)
+            td({ 'data-label': i18n.courtsAccuser }, accLinkFull),
+            td({ 'data-label': i18n.courtsRespondent }, resLinkFull)
           )
         )
       ])
@@ -735,7 +735,7 @@ const MyCaseCard = (c) => {
     showMediatorsTable
       ? div(
           { class: 'table-wrap mt-2 mediators-table' },
-          applyEl(table, { class: 'table table--centered' }, [
+          applyEl(table, { class: 'table table--centered stack-table' }, [
             thead(
               tr(
                 th(i18n.courtsThJudge),
@@ -753,13 +753,13 @@ const MyCaseCard = (c) => {
             ),
             tbody(
               tr(
-                td(judgeLinkFull),
-                td(
+                td({ 'data-label': i18n.courtsThJudge }, judgeLinkFull),
+                td({ 'data-label': i18n.courtsMediatorsAccuserLabel || i18n.courtsMediatorsLabel || 'Accuser mediators' },
                   mediatorLinksAccuser.length
                     ? mediatorLinksAccuser
                     : span('')
                 ),
-                td(
+                td({ 'data-label': i18n.courtsMediatorsRespondentLabel || i18n.courtsMediatorsLabel || 'Respondent mediators' },
                   mediatorLinksRespondent.length
                     ? mediatorLinksRespondent
                     : span('')
@@ -1087,7 +1087,7 @@ const CaseDetailsBlock = (c) => {
       : null,
     div(
       { class: 'table-wrap mt-2' },
-      applyEl(table, { class: 'table table--centered' }, [
+      applyEl(table, { class: 'table table--centered stack-table' }, [
         thead(
           tr(
             th(i18n.courtsAccuser),
@@ -1096,8 +1096,8 @@ const CaseDetailsBlock = (c) => {
         ),
         tbody(
           tr(
-            td(accLink),
-            td(resLink)
+            td({ 'data-label': i18n.courtsAccuser }, accLink),
+            td({ 'data-label': i18n.courtsRespondent }, resLink)
           )
         )
       ])
@@ -1105,7 +1105,7 @@ const CaseDetailsBlock = (c) => {
     showMediatorsTable
       ? div(
           { class: 'table-wrap mt-2 mediators-table' },
-          applyEl(table, { class: 'table table--centered' }, [
+          applyEl(table, { class: 'table table--centered stack-table' }, [
             thead(
               tr(
                 th(
@@ -1122,12 +1122,12 @@ const CaseDetailsBlock = (c) => {
             ),
             tbody(
               tr(
-                td(
+                td({ 'data-label': i18n.courtsMediatorsAccuserLabel || i18n.courtsMediatorsLabel || 'Accuser mediators' },
                   mediatorLinksAccuser.length
                     ? mediatorLinksAccuser
                     : span('')
                 ),
-                td(
+                td({ 'data-label': i18n.courtsMediatorsRespondentLabel || i18n.courtsMediatorsLabel || 'Respondent mediators' },
                   mediatorLinksRespondent.length
                     ? mediatorLinksRespondent
                     : span('')

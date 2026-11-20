@@ -1403,7 +1403,7 @@ button.create-button:hover {
 }
 
 .error-page-message{margin:8px 0 16px;white-space:pre-wrap;word-break:break-word}
-.error-page-actions{margin-top:16px}
+.error-page-actions{margin:16px 0 0;padding:0;border:0;background:none;box-shadow:none}
 .inline-error-box{border:1px solid #d9534f !important;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .inline-error-box .error-page-message{margin:0;color:#d9534f;font-weight:bold}
 .inline-error-box .inline-error-dismiss{display:inline-flex;align-items:center;padding:4px 14px;border:1px solid #d9534f;border-radius:6px;background:transparent;color:#d9534f;font-weight:700;font-size:.9em;text-decoration:none;cursor:pointer}
@@ -2899,6 +2899,7 @@ width:100%; max-width:200px; max-height:300px; object-fit:cover; margin:16px 0; 
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.4rem;
+  margin-bottom: 0;
   background: transparent !important;
   border: 0 !important;
   padding: 0 !important;
@@ -6343,7 +6344,7 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .tribe-details.pad-page{flex-direction:column;gap:16px}
 .pad-page .tribe-side{width:100%;flex-direction:column;align-items:stretch;gap:10px;padding:12px 16px;box-sizing:border-box}
 .pad-page .pad-title-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;border:none;background:transparent;padding:0;margin:0}
-.pad-page .pad-title-row .shop-title-row,.pad-page .pad-title-row .detail-share{margin:0 !important}
+.pad-page .pad-title-row .shop-title-row{margin:0 !important}
 .pad-page .pad-actions-row{justify-content:flex-start;margin:0}
 .pad-page .tribe-side > *{margin:0}
 .pad-page .tribe-side > div:not(.tribe-info-table),.pad-page .tribe-side > form{border:none;background:transparent;padding:2px}
@@ -6551,6 +6552,10 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .stats-toplist .stats-toplist-num{flex:0 0 auto;color:#FFDD44;font-size:13px;min-width:36px;text-align:right}
 .peer-key{word-break:break-all;font-size:12px}
 .peers-list .block-info-table{table-layout:fixed;width:100%}
+.invites-used-table td{word-break:normal !important;overflow-wrap:break-word !important}
+.invites-used-table td:first-child,.invites-used-table td[data-label=""]{white-space:nowrap}
+.invites-used-table td > a.user-link{display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+.invites-used-table td.invite-code-cell{overflow-wrap:anywhere !important;max-width:200px}
 .viewer-hidden-block .block-info-table{width:100%}.viewer-hidden-block .block-info-table td{overflow-wrap:anywhere}.viewer-hidden-block .block-info-table td:nth-child(2),.viewer-hidden-block .block-info-table td:nth-child(3){white-space:nowrap;width:1%}
 .peers-list .block-info-table td{overflow-wrap:anywhere}
 .peers-list .block-info-table td:nth-child(1){width:18%}
@@ -6871,9 +6876,10 @@ details[open] > .school-lesson-summary .school-lesson-summary-title::after{conte
 .profile-side-header{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%}
 .profile-side .inhabitant-photo-details{width:160px !important;height:160px !important;max-width:160px !important;object-fit:cover;border:2px solid #ff9800;background:transparent}
 .profile-side-name{font-size:20px;margin:0;color:#FFD700;word-break:break-word}
-.profile-side-mention{font-family:monospace;font-size:12px;color:#FFD700;word-break:break-all;overflow-wrap:anywhere;margin:6px 0 8px 0;line-height:1.5;align-self:stretch;width:100%;max-width:100%;box-sizing:border-box;text-align:center}
-.profile-side-mention a{color:#FFD700;text-decoration:none}
-.profile-side-mention strong{color:#FFD700;font-weight:700}
+.profile-side-mention{margin:0;align-self:stretch;width:100%;max-width:100%;box-sizing:border-box;text-align:center}
+.profile-id-chip{display:inline-flex;flex-direction:column;align-items:center;gap:6px;max-width:100%;box-sizing:border-box;padding:10px 14px;border:1px solid rgba(255,215,0,.5);border-radius:10px;background:rgba(255,215,0,.07);text-decoration:none}
+.profile-id-chip:hover{background:rgba(255,215,0,.14);text-decoration:none}
+.profile-id-value{display:block;font-family:monospace;font-size:12px;font-weight:700;line-height:1.5;color:#FFD700;overflow-wrap:anywhere;word-break:break-all}
 .profile-side-description{color:inherit;font-size:13px;line-height:1.5;margin:0;word-break:break-word;background:transparent;padding:0;border:none;text-align:left}
 .profile-side-description p{margin:0 0 6px 0}
 .profile-side-description ul,.profile-side-description ol{margin:6px 0;padding-left:20px}
@@ -7265,7 +7271,6 @@ a.chip-link:hover .pm-exposition-chip{filter:brightness(1.2)}
 .transfer-block-card{border:none;background:transparent;padding:0;margin:0 0 12px 0}
 .tribe-main .job-section{border:none;background:transparent}
 .profile-reach{display:flex;flex-direction:column;align-items:center;gap:8px;margin:12px 0;padding:0;text-align:center;border:none !important;background:none !important}
-.profile-reach .invite-qr-card{margin:0}
 .profile-reach .shop-clearnet-url{margin:0;text-align:center;border:none !important;background:none !important}
 .profile-side > *{margin-top:0;margin-bottom:0}
 
@@ -7717,7 +7722,8 @@ a.user-link{padding:8px 16px;border-radius:5px;text-align:center;font-weight:bol
 .housing-info-table .tribe-info-value{white-space:normal;word-break:normal;overflow-wrap:anywhere}
 .housing-stars{color:#FFA500;font-size:14px;letter-spacing:1px}
 .media-gallery{border:none !important;background:transparent !important;padding:0 !important;box-shadow:none !important;margin:0 0 12px 0}
-.media-gallery .gallery{padding:0}
+.media-gallery .gallery{padding:0;margin:0;border:0;background:none;box-shadow:none;border-radius:0}
+.media-gallery .gallery-item img{display:block;width:auto;max-width:100%;height:auto;max-height:480px;margin:0 auto;object-fit:contain}
 .housing-search .filter-box{margin:0}
 .housing-place-input{height:36px;min-width:170px;width:auto;flex:1 1 170px}
 .media-form-gallery{padding:0;margin:10px 0}
@@ -8737,6 +8743,7 @@ details[open] > .school-unit-summary::after{content:" \25B4"}
 .wiki-link{color:#ffd740;text-decoration:underline dotted}
 .wiki-link-missing{color:#e74c3c;border-bottom:1px dashed #e74c3c;text-decoration:none}
 .wiki-page-title{margin:0 0 8px 0;overflow-wrap:anywhere}
+.shop-title-row .wiki-page-title{margin:16px 0 8px 0}
 .wiki-version-notice{font-size:.9em;opacity:.85;margin:6px 0 10px 0}
 .wiki-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0 4px 0;background:transparent !important;border:0 !important;padding:0 !important}
 .wiki-actions form{margin:0;padding:0;background:transparent !important;border:0 !important}
@@ -9068,6 +9075,7 @@ label.wallet-create-transfer input[type="checkbox"]{width:auto !important;flex:0
 .phone-chip-btn:hover .pm-exposition-chip,.phone-chip-btn:hover .phone-number-value{filter:brightness(1.2)}
 .phone-flash-anchor{display:none}
 .clearnet-choice{display:block;margin:0 0 10px 0;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none}
+form:has(option.reach-closed:checked) .clearnet-choice{display:none !important}
 .clearnet-choice-options{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:6px 0 4px 0;background:transparent !important;border:0 !important;padding:0 !important;box-shadow:none !important}
 .clearnet-choice-option{display:inline-flex;align-items:center;gap:8px;cursor:pointer;white-space:nowrap;width:auto;margin:0}
 .clearnet-choice-option input{width:auto;min-width:0;margin:0;flex:0 0 auto}
@@ -9313,7 +9321,7 @@ div:has(>.card-top):not(.tribe-side){padding:8px 16px 12px !important;border-rad
 .media-actions .media-download-btn{margin:0}
 .tribe-side-actions .update-btn.danger-btn{border-color:#d9534f;color:#d9534f;background:transparent}
 .tribe-side-actions .update-btn.danger-btn:hover{background:#d9534f;color:#000}
-.detail-share{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:flex-start;margin:4px 0 !important;padding:0 !important;border:0 !important;background:transparent !important;box-shadow:none !important;overflow:visible}
+.detail-share{display:flex;flex-wrap:wrap;align-items:center;gap:8px;justify-content:flex-start;margin:6px 0 18px !important;padding:0 !important;border:0 !important;background:transparent !important;box-shadow:none !important;overflow:visible}
 .detail-share .share-summary-link{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid rgba(128,128,128,.5);border-radius:5px;background:rgba(128,128,128,.12);font-size:12px;font-weight:600;line-height:30px;text-decoration:none;color:inherit}
 .detail-share .share-summary-link:hover{background:rgba(128,128,128,.25);text-decoration:none}
 .detail-share .detail-share-sub{display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px}
@@ -9634,3 +9642,22 @@ a.changelog-current-link:hover .changelog-current{border-color:#ffa300}
 .scheduled-item-form input[type=datetime-local]{width:auto;margin:0}
 .scheduled-item-error{color:#ff8a8a}
 .pm-bot-sender{font-weight:700}
+:is(.layout-grid,.layout-list,.main-column,body) :is(div,li,article,section):has(> .card-top.card-top > .card-hidden-note.card-hidden-note) > :not(.card-top):not(.card-hidden-note){display:none !important}
+.card-hidden-note{display:flex !important;flex-direction:column;align-items:center;gap:10px;width:100%;flex:1 1 100%;order:9;margin:0;padding:8px 0;border:0;background:none;box-shadow:none}
+:is(.main-column,body) :is(div,li,article,section) > .card-header.card-top > .card-hidden-note > img.card-hidden-picture.card-hidden-picture{display:block !important;width:100% !important;max-width:240px !important;height:auto !important;margin:0 auto !important}
+.detail-qr{display:flex;justify-content:center;margin:14px 0;padding:0;border:0;background:none;box-shadow:none}
+.wiki-page + .detail-qr{justify-content:flex-start}
+.detail-qr > .invite-qr-card.invite-qr-card{margin:0 !important;padding:0 !important;border:0 !important;background:none !important;box-shadow:none !important}
+.detail-qr > .invite-qr-card .invite-qr-img.invite-qr-img{width:140px !important;height:140px !important;margin:0 !important}
+@media (min-width:900px){:is(.forum-thread-card,.pad-page .tribe-side):has(> .detail-qr){display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:24px;row-gap:0;align-items:start;align-content:start}:is(.forum-thread-card,.pad-page .tribe-side):has(> .detail-qr) > *{grid-column:1}:is(.forum-thread-card,.pad-page .tribe-side):has(> .detail-qr) > .card-top{grid-column:1 / -1}:is(.forum-thread-card,.pad-page .tribe-side):has(> .detail-qr) > .detail-qr{grid-column:2;grid-row:2 / span 8;margin:0}}
+:where(:is(div, li):has(> .card-top)) div{box-shadow:none}
+.tribe-details,.forum-thread-container,.profile-layout{border:0 !important;background:transparent !important;box-shadow:none !important;padding:0 !important}
+:is(.profile-sensors-box,.inhabitant-left) .inhabitant-last-activity{flex-wrap:wrap;white-space:nowrap}
+.profile-side > :is(.profile-side-mention,.invite-qr-card,.profile-side-version,.profile-sensors-box,.inhabitant-stats-box,.inhabitant-stats-grid,.profile-side-actions,.profile-side-relationship,.profile-reach){padding:0 !important;margin:0 !important}
+.inhabitant-stats-grid{padding:0 !important;margin:0 !important;border:0 !important;background:transparent !important;box-shadow:none !important}
+.inhabitant-left .profile-side-version{padding:0 !important;margin:0 !important;border:0 !important;background:transparent !important;box-shadow:none !important}
+.profile-side > .profile-side-description,.tribe-side > .tribe-side-actions:is(.housing-status-row,.shop-visibility-row,.housing-visibility-row,.cv-visibility-row,.school-invite-code-block),.tribe-open-invite-panel,.calendar-open-invite-block,.tribe-open-invite:not(:is(.tribe-open-invite-panel,.calendar-open-invite-block) .tribe-open-invite),.pm-card > .message-text,.chat-full-width > .chat-messages-list{border:0 !important;background:rgba(128,128,128,.12) !important;box-shadow:none !important;border-radius:8px !important;padding:10px 12px !important}
+.tribe-side > :is(.tribe-side-actions,.card-tags,.tribe-side-tags),.tribe-main :is(.job-section,.card-engage,.doc-export-actions,.calendar-invite-actions,.confirmations-block,.vote-comments-section,.comment-form-wrapper,.comment-file-upload),.pm-card > .pm-actions,.inhabitants-card .inhabitant-left,.conn-actions,:is(.trending-card,.feed-detail-card) .feed-text,:is(.voting-buttons,.vote-comments-section,.comment-form-wrapper,.comment-file-upload,.calendar-interval-block),.chat-full-width > .chat-message-form,.profile-side :is(.profile-side-mention,.invite-qr-card,.profile-side-version,.profile-sensors-box,.inhabitant-stats-box,.inhabitant-stats-grid,.profile-side-actions,.profile-side-relationship,.profile-reach),.inhabitant-left .profile-sensors-box{border:0 !important;background:transparent !important;box-shadow:none !important}
+.forum-send-row{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:6px 0 0;padding:0;border:0;background:none;box-shadow:none}
+.forum-send-row input[type=file]{flex:0 1 auto;width:auto !important;max-width:360px;min-width:0;margin:0 !important}
+.forum-send-row .forum-send-btn{margin:0 !important}

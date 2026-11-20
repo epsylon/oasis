@@ -3,7 +3,7 @@ const RAW_HTML = Symbol.for('oasis.rawHtml');
 const { TEXT_CAP } = require('../backend/long_text');
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, renderScheduledChip, renderEditedChip, hasRelation, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, contentDeleteAction, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, renderDetailShare, renderScheduledChip, renderEditedChip, hasRelation, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledHtml } = require("../backend/renderStyledText");
@@ -198,11 +198,12 @@ exports.singleBlogView = async (blog, comments = [], params = {}) => {
 
   const blogSide = div({ class: "tribe-side" },
     renderCardTop(blog.id, href, blogTopOptions(blog, href, isAuthor, blog.scheduledAt ? { arrow: false, returnTo: href, editAction } : { arrow: false, chips: [renderScopeChip(blog, i18n, isClearnet, clearnetItemHref("blog", blog.subject || blog.text, blog.id))], bylineExtra: [renderEditedChip(blog.tipId, blog.id, blog.updatedAt)], spread: params.spreads || null, returnTo: href, editAction, subscription: subscriptionOpts })),
+    blog.scheduledAt ? null : renderDetailShare(blog.id, href, blog.subject || blog.text, subscriptionOpts, null, null, blog.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, blog.subject || i18n.blogTitle)
     ),
-    blog.scheduledAt ? null : renderDetailShare(blog.id, href, blog.subject || blog.text, subscriptionOpts, null, null, blog.author),
-    isAuthor && !blog.scheduledAt ? renderClearnetSwitch("posts", blog.rootId || blog.id, isClearnet) : null
+    isAuthor && !blog.scheduledAt ? renderClearnetSwitch("posts", blog.rootId || blog.id, isClearnet) : null,
+    !blog.scheduledAt && !blog.tribeId ? renderJoinQr('blogs', blog.id) : null
   );
 
   const blogMain = div({ class: "tribe-main" },

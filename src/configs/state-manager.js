@@ -26,6 +26,7 @@ const FOLDERS = {
   'larp-seen.json': 'content',
   'viewer_hidden.json': 'content',
   'invites-used.json': 'content',
+  'invites-pending.json': 'content',
   'agenda-config.json': 'content',
   'tribe-watch.json': 'content',
   'AI-history.json': 'ai',

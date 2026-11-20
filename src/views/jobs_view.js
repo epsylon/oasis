@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, progress, video, audio, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderPublishAtField, renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, renderCallButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderOpenClosedChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderCountChip, renderSearchButton, renderJoinQr, renderAmountChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -49,7 +49,6 @@ const safeArr = (v) => (Array.isArray(v) ? v : [])
 const safeText = (v) => String(v || "").trim()
 const clearnetEligible = (job) => String(job.status || "").toUpperCase() !== "CLOSED" && String(job.visibility || "PUBLIC").toUpperCase() !== "HIDDEN"
 const JOB_REACH = ["PUBLIC", "HIDDEN"]
-const jobReachLabel = (v) => v === "HIDDEN" ? (i18n.visibilityHidden || "Hidden") : (i18n.visibilityPublic || "Public")
 
 const parseNum = (v) => {
   const n = parseFloat(String(v ?? "").replace(",", "."))
@@ -242,14 +241,13 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
         isHidden ? renderJobHiddenChip() : null,
         isSubscribed ? renderJobAppliedChip() : null,
         job.industry ? a({ href: `/industry/${encodeURIComponent(job.industry)}` }, renderStateChip("whole", "🏭", String(i18n.industryTitle || "Industry").toUpperCase(), "kind")) : null,
+        renderAmountChip(String(job.job_type || "").toLowerCase() === "exchange"
+          ? `${Number(job.hoursOffered) || 0}h ⇄ ${Number(job.hoursRequested) || 0}h`
+          : `${fmtSalary(job.salary)} ECO`),
         renderLifespanChip(job.lifetime, i18n),
         renderScopeChip(job, i18n, clearnetEligible(job) && job.clearnet === true, clearnetItemHref('jobs', job.title, job.id)),
         renderCountChip("✉", i18n.jobSubscribers, subs.length)
       ].filter(Boolean)
-      const isExchange = String(job.job_type || "").toLowerCase() === "exchange"
-      const compensationText = isExchange
-        ? `${Number(job.hoursOffered) || 0}h ⇄ ${Number(job.hoursRequested) || 0}h`
-        : `${fmtSalary(job.salary)} ECO`
 
       const isOwn = job.author && String(job.author) === String(userId)
       const jobHref = `/jobs/${encodeURIComponent(job.id)}`
@@ -263,7 +261,6 @@ const renderJobList = exports.renderJobList = (jobs, filter, params = {}) => {
                 a({ href: jobHref }, safeText(job.title) || i18n.jobsTitle)
               )
             ),
-            div({ class: "price-chip" }, compensationText),
             null
           )
         )
@@ -277,27 +274,9 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null, params =
   const reachRaw = String(params.reach || "").toUpperCase()
   const ownReach = String(job.visibility || "").toUpperCase()
   const reach = JOB_REACH.includes(reachRaw) ? reachRaw : (JOB_REACH.includes(ownReach) ? ownReach : "PUBLIC")
-  const prefillKeys = ["industry", "title", "description", "tasks", "salary"]
   return div(
     { class: "div-center job-form" },
     isEdit ? spreadWarning : null,
-    form(
-      { method: "GET", action: isEdit ? `/jobs/edit/${encodeURIComponent(job.id)}` : "/jobs" },
-      isEdit ? null : input({ type: "hidden", name: "filter", value: "CREATE" }),
-      ...(isEdit ? [] : prefillKeys.filter((k) => params[k]).map((k) => input({ type: "hidden", name: k, value: params[k] }))),
-      label(i18n.visibilityLabel || "Visibility"),
-      br(),
-      div({ class: "apply-row" },
-        select(
-          { name: "visibility", class: "report-category-select" },
-          option({ value: "PUBLIC", ...(reach === "PUBLIC" ? { selected: true } : {})}, i18n.visibilityPublic || "Public"),
-          option({ value: "HIDDEN", ...(reach === "HIDDEN" ? { selected: true } : {})}, i18n.visibilityHidden || "Hidden")
-        ),
-        button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
-      )
-    ),
-    hr({ class: "form-sep" }),
-    h2({ class: "report-category-fixed" }, jobReachLabel(reach)),
     form(
       {
         action: isEdit ? `/jobs/update/${encodeURIComponent(job.id)}` : "/jobs/create",
@@ -305,7 +284,6 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null, params =
         enctype: "multipart/form-data"
       },
       input({ type: "hidden", name: "returnTo", value: "/jobs?filter=MINE" }),
-      input({ type: "hidden", name: "visibility", value: reach }),
       job.industry ? input({ type: "hidden", name: "industry", value: job.industry }) : null,
       label(i18n.jobType),
       br(),
@@ -410,7 +388,15 @@ const renderJobForm = (job = {}, mode = "create", spreadWarning = null, params =
             br()
           ]
         : null,
-      reach === "PUBLIC" && clearnetEligible({ ...job, visibility: reach }) ? renderClearnetSelector(job.clearnet === true || String(job.clearnet || "") === "1", i18n) : null,
+      label(i18n.visibilityLabel || "Visibility"),
+      br(),
+      select(
+        { name: "visibility" },
+        option({ value: "PUBLIC", ...(reach === "PUBLIC" ? { selected: true } : {})}, i18n.visibilityPublic || "Public"),
+        option({ value: "HIDDEN", class: "reach-closed", ...(reach === "HIDDEN" ? { selected: true } : {})}, i18n.visibilityHidden || "Hidden")
+      ),
+      br(), br(),
+      clearnetEligible({ ...job, visibility: "PUBLIC" }) ? renderClearnetSelector(job.clearnet === true || String(job.clearnet || "") === "1", i18n) : null,
       ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit" }, isEdit ? i18n.jobsUpdateButton : i18n.createJobButton)
     )
@@ -671,11 +657,12 @@ exports.singleJobsView = async (job, filter = "ALL", comments = [], params = {})
       ],
       spread: params.spreads || null, author: job.author, favKind: 'jobs', isFavorite: job.isFavorite, reportTitle: job.title, returnTo, editAction: isAuthor ? `/jobs/edit/${encodeURIComponent(job.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("job", job.id) : null
     }),
+    renderDetailShare(job.rootId || job.id, `/jobs/${encodeURIComponent(job.id)}`, job.title, null, null, null, job.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, safeText(job.title) || i18n.jobsTitle)
     ),
     isAuthor && canClearnet ? renderClearnetSwitch('jobs', job.rootId || job.id, isClearnet) : null,
-    renderDetailShare(job.rootId || job.id, `/jobs/${encodeURIComponent(job.id)}`, job.title, null, null, null, job.author),
+    visibility !== 'HIDDEN' && !job.tribeId ? renderJoinQr('jobs', job.id) : null,
     tagsNode,
     renderJobStatusRow(job, returnTo),
     visibilityRow

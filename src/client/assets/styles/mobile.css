@@ -912,8 +912,10 @@ a.create-button {
   white-space: nowrap !important;
   word-break: normal !important;
 }
+.peers-list .block-info-table td[data-label=""],
 .peers-technical-block .block-info-table td[data-label=""],
 .viewer-hidden-block .block-info-table td[data-label=""] { justify-content: center !important; }
+.peers-list .block-info-table td[data-label=""]::before,
 .peers-technical-block .block-info-table td[data-label=""]::before,
 .viewer-hidden-block .block-info-table td[data-label=""]::before { content: none !important; }
 .peers-list .block-info-table td .peer-key,
@@ -1526,3 +1528,12 @@ body:has(:is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"
 .main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) .card-byline > .card-byline-time { font-size: 11px !important; margin-right: 0 !important; }
 .main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) > .content-actions .spread-form .btn-singleview { padding: 0 7px !important; min-width: 0 !important; gap: 3px !important; height: 32px !important; }
 .main-column .card-header.card-top:not(:is(.layout-grid, .layout-list) *) > .content-actions .spread-form .btn-singleview .btn-count { font-size: 12px !important; }
+.stack-table, .stack-table tbody { display: block !important; width: 100% !important; border: 0 !important; table-layout: auto !important; }
+.stack-table thead, .stack-table tr.stack-head, .stack-table tr:has(> th) { display: none !important; }
+.stack-table tr { display: block !important; width: 100% !important; box-sizing: border-box !important; border: 1px solid rgba(255, 165, 0, 0.35) !important; border-radius: 8px !important; margin: 0 0 8px 0 !important; padding: 6px 10px !important; background: rgba(255, 165, 0, 0.04) !important; }
+.stack-table td { display: flex !important; justify-content: space-between !important; align-items: baseline !important; gap: 10px !important; width: 100% !important; box-sizing: border-box !important; border: 0 !important; padding: 3px 0 !important; font-size: 12px !important; text-align: right !important; white-space: normal !important; word-break: normal !important; overflow-wrap: anywhere !important; }
+.stack-table td::before { content: attr(data-label); flex: 0 0 auto !important; font-weight: 700 !important; text-transform: uppercase; font-size: 10px !important; letter-spacing: .03em; opacity: .7 !important; text-align: left !important; white-space: nowrap !important; overflow-wrap: normal !important; }
+.stack-table td[data-label=""] { justify-content: center !important; }
+.stack-table td[data-label=""]::before { content: none !important; }
+.stack-table td.invite-code-cell { max-width: none !important; }
+.stack-table td > a.user-link { display: inline-block !important; max-width: 70% !important; white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; word-break: normal !important; }

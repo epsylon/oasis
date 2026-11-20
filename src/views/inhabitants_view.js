@@ -168,15 +168,6 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
          img({ class: 'inhabitant-photo-details', src: resolvePhoto(user.photo, 256), alt: user.name || 'Anonymous' })
       ),
       user.name ? p({ class: 'inhabitant-left-name' }, userLink(user.id, user.name)) : null,
-      ...renderUserSensors({
-        isMe, fediverseConfigured, prefs, id: user.id,
-        karmaScore: user.karmaScore, karmaReceived: user.karmaReceived || null, carbonGrams: user.carbonGrams,
-        deviceSource: user.deviceSource, activityBucket: user.lastActivityBucket,
-        gpgFingerprint: user.gpgFingerprint, ecoAddress: user.ecoAddress,
-        estimatedUBI: user.estimatedUBI, lastClaimedDate: user.lastClaimedDate, totalClaimed: user.totalClaimed,
-        larpHouse: user.larpHouse, stats: user.stats,
-        mutual: !!(user.relationship && user.relationship.following && user.relationship.followsMe)
-      }, { excludeContent: true, sensorsOnly: true, dndToggle: false }),
       isMe ? p({ class: 'inhabitant-left-name' }, span({ class: 'status you' }, i18n.relationshipYou)) : null,
       filter === 'CVs'
         ? div(
@@ -190,7 +181,16 @@ const renderInhabitantCard = (user, filter, currentUserId, fediverseConfigured) 
               button({ type: 'submit', class: 'filter-btn' }, i18n.sharePm)
             )
           )
-        : null
+        : null,
+      ...renderUserSensors({
+        isMe, fediverseConfigured, prefs, id: user.id,
+        karmaScore: user.karmaScore, karmaReceived: user.karmaReceived || null, carbonGrams: user.carbonGrams,
+        deviceSource: user.deviceSource, activityBucket: user.lastActivityBucket,
+        gpgFingerprint: user.gpgFingerprint, ecoAddress: user.ecoAddress,
+        estimatedUBI: user.estimatedUBI, lastClaimedDate: user.lastClaimedDate, totalClaimed: user.totalClaimed,
+        larpHouse: user.larpHouse, stats: user.stats,
+        mutual: !!(user.relationship && user.relationship.following && user.relationship.followsMe)
+      }, { excludeContent: true, sensorsOnly: true, dndToggle: false })
     ),
     (() => {
       const detailNodes = [
@@ -403,14 +403,9 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
         div({ class: 'inhabitant-left' },
           img({ class: 'inhabitant-photo-details', src: image, alt: name || 'Anonymous' }),
           h2(name || 'Anonymous'),
-          safe.oasisVersion ? div({ class: 'profile-side-version' }, '🌴 ' + (i18n.oasisVersionLabel || 'Oasis Version') + ': ', strong(safe.oasisVersion)) : null,
-          ...renderUserSensors({
-            isMe, fediverseConfigured, prefs, id: id || viewedId,
-            karmaScore, karmaReceived: safe.karmaReceived || null, carbonGrams, deviceSource: safe.deviceSource, activityBucket: providedBucket,
-            gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
-            larpHouse, stats: safe.stats,
-            mutual: !!(safe.relationship && safe.relationship.following && safe.relationship.followsMe)
-          }, { excludeContent: true }),
+          (!isMe && (id || viewedId) && safe.relationship)
+            ? div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(safe.relationship, id || viewedId))
+            : null,
           (!isMe && (id || viewedId))
             ? div({ class: 'cv-actions doc-export-actions' },
                 form(
@@ -421,9 +416,14 @@ exports.inhabitantsProfileView = (payload, currentUserId, fediverseConfigured) =
                 renderCallButton(id || viewedId, { pam: true })
               )
             : null,
-          (!isMe && (id || viewedId) && safe.relationship)
-            ? div({ class: 'inhabitant-relationship' }, renderRelationshipBlock(safe.relationship, id || viewedId))
-            : null
+          ...renderUserSensors({
+            isMe, fediverseConfigured, prefs, id: id || viewedId,
+            karmaScore, karmaReceived: safe.karmaReceived || null, carbonGrams, deviceSource: safe.deviceSource, activityBucket: providedBucket,
+            gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
+            larpHouse, stats: safe.stats,
+            mutual: !!(safe.relationship && safe.relationship.following && safe.relationship.followsMe)
+          }, { excludeContent: true }),
+          safe.oasisVersion ? div({ class: 'profile-side-version' }, '🌴 ' + (i18n.oasisVersionLabel || 'Oasis Version') + ': ', strong(safe.oasisVersion)) : null
         ),
         (() => {
           const feedNodes = feed.length

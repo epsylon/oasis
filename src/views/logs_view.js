@@ -94,7 +94,7 @@ const renderLogPreview = (item) => {
 
 const renderTable = (items) => {
   if (!safeArr(items).length) return p({ class: "no-content" }, i18n.logsEmpty || 'No logs yet.');
-  return table({ class: "logs-table" },
+  return table({ class: "logs-table stack-table" },
     thead(
       tr(
         th(i18n.logsColumnDate || 'Date'),
@@ -106,21 +106,21 @@ const renderTable = (items) => {
     tbody(
       items.map(item =>
         tr(
-          td({ class: "logs-col-date" },
+          td({ class: "logs-col-date", "data-label": i18n.logsColumnDate || "Date" },
             span({ class: "logs-date-day" }, moment(item.ts).format("DD/MM/YYYY")),
             ' ',
             span({ class: "logs-date-time" }, moment(item.ts).format("HH:mm"))
           ),
-          td({ class: "logs-col-type" },
+          td({ class: "logs-col-type", "data-label": i18n.logsColumnType || "Type" },
             span({ class: item.mode === 'ai' ? "logs-type-text logs-type-ai" : "logs-type-text logs-type-manual" },
               item.mode === 'ai' ? (i18n.logsModeAI || 'AI') : (i18n.logsModeManual || 'Manual')
             )
           ),
-          td({ class: "logs-col-log" },
+          td({ class: "logs-col-log", "data-label": i18n.logsColumnLog || "Log" },
             item.label ? div({ class: "logs-entry-label" }, item.label) : null,
             renderLogPreview(item)
           ),
-          td({ class: "logs-col-actions" },
+          td({ class: "logs-col-actions", "data-label": "" },
             div({ class: "logs-row-actions" },
               form({ method: "GET", action: `/logs/view/${encodeURIComponent(item.key)}` },
                 button({ type: "submit", class: "filter-btn" }, i18n.logsViewDetails || 'View Details')

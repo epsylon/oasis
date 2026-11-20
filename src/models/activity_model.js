@@ -840,7 +840,7 @@ module.exports = ({ cooler, cryptoModel, tribesModel, padsModel, industryModel, 
         if (a.type === 'pad' && c.status !== 'OPEN') return false;
         if (a.type === 'room' && (c.status !== 'OPEN' || c.encrypted === true)) return false;
         if (a.type === 'chat' && c.status !== 'OPEN') return false;
-        if (a.type === 'calendar' && c.status !== 'OPEN') return false;
+        if (a.type === 'calendar' && (c.status !== 'OPEN' || c.eventId)) return false;
         if (a.type === 'event' && String(c.isPublic || '').toLowerCase() === 'private' && c.organizer !== userId && !(Array.isArray(c.attendees) && c.attendees.includes(userId))) return false;
         if (a.type === 'task' && String(c.isPublic || '').toUpperCase() === 'PRIVATE' && a.author !== userId && !(Array.isArray(c.assignees) && c.assignees.includes(userId))) return false;
         if (a.type === 'forum' && c.isPrivate === true && a.author !== userId) return false;

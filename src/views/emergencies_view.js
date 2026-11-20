@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { clearnetItemHref, template, i18n, renderStateChip, renderCardTop, renderCardByline, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { clearnetItemHref, template, i18n, renderStateChip, renderCardTop, renderCardByline, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderEngagement, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -166,9 +166,10 @@ exports.singleEmergencyView = async (emergency, params = {}) => {
     : null;
   const side = div({ class: "tribe-side" },
     renderCardTop(emergency.id, href, { arrow: false, date: emergency.createdAt, chips: [severityChip(emergency), statusChip(emergency), categoryChip(emergency), renderCountChip("✓", i18n.emergencyConfirmations, emergency.confirmationCount || 0), expiresChip(emergency), renderScopeChip(emergency, i18n, isClearnet, clearnetItemHref("emergencies", emergency.title, emergency.id))], author: emergency.author, favKind: "emergencies", isFavorite: emergency.isFavorite, reportTitle: emergency.title, spread: params.spread || null, returnTo: href, subscription: subscriptionOpts, editAction, deleteAction: isAuthor ? contentDeleteAction("emergency", emergency.id) : undefined }),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, emergency.title)),
     renderDetailShare(emergency.id, href, emergency.title, subscriptionOpts, null, null, emergency.author),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, emergency.title)),
     isAuthor && canClearnet ? renderClearnetSwitch("emergencies", emergency.rootId || emergency.id, isClearnet) : null,
+    !emergency.tribeId ? renderJoinQr("emergencies", emergency.id) : null,
     renderTags(emergency.tags),
     statusRow
   );

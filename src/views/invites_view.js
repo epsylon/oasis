@@ -3,7 +3,7 @@ const moment = require("../server/node_modules/moment");
 const path = require("path");
 const fs = require('fs');
 const { renderStyledText } = require("../backend/renderStyledText");
-const { template, i18n } = require('./main_views');
+const { template, i18n, userLink } = require('./main_views');
 
 const gossipPath = path.join(require("../server/ssb_config").path, "gossip.json");
 const unfollowedPath = require("../configs/state-manager").statePath("gossip_unfollowed.json");
@@ -26,6 +26,8 @@ const INVITE_KIND_LABEL = {
   forum: 'invitesForumsTitle',
   school: 'invitesSchoolTitle',
   maps: 'invitesMapsTitle',
+  industry: 'industryTitle',
+  mailing: 'mailingTitle',
   shops: 'invitesShopsTitle',
   inhabitants: 'invitesInhabitantsTitle',
   pubs: 'invitesPubsTitle'
@@ -102,6 +104,7 @@ const invitesView = (opts = {}) => {
   const filter = opts.filter === 'others' ? 'others' : 'pubs';
   const suggested = Array.isArray(opts.inviteCodes) ? opts.inviteCodes : [];
   const used = (Array.isArray(opts.invitesUsed) ? opts.invitesUsed : []).filter((e) => e && typeof e.href === 'string' && e.href.startsWith('/'));
+  const pending = (Array.isArray(opts.invitesPending) ? opts.invitesPending : []).filter((e) => e && typeof e.code === 'string');
 
   const renderPubTable = (items, actionFn) => table({ class: 'block-info-table invites-pubs-table' },
     pubTableHeader(),
@@ -199,18 +202,42 @@ const invitesView = (opts = {}) => {
           br(),
           button({ type: 'submit' }, i18n.invitesJoinButton)
         ),
+        pending.length ? h2(`${i18n.invitesPendingTitle} (${pending.length})`) : null,
+        pending.length
+          ? table({ class: 'block-info-table invites-used-table stack-table' },
+              tr({ class: 'stack-head' },
+                td({ class: 'card-label' }, i18n.invitesUsedDate),
+                td({ class: 'card-label' }, i18n.invitesUsedType),
+                td({ class: 'card-label' }, i18n.transfersFrom),
+                td({ class: 'card-label' }, i18n.invitesPendingCode),
+                td({ class: 'card-label' }, '')
+              ),
+              pending.map((entry) => tr(
+                td({ 'data-label': i18n.invitesUsedDate }, moment(entry.at).format('YYYY/MM/DD HH:mm')),
+                td({ 'data-label': i18n.invitesUsedType }, INVITE_KIND_LABEL[entry.kind] ? i18n[INVITE_KIND_LABEL[entry.kind]] : '—'),
+                td({ 'data-label': i18n.transfersFrom }, entry.by ? userLink(entry.by) : '—'),
+                td({ 'data-label': i18n.invitesPendingCode, class: 'invite-code-cell' }, entry.open ? `${String(entry.code).slice(0, 9)}…` : entry.code),
+                td({ 'data-label': '' }, form({ action: '/invites/pending/discard', method: 'post' },
+                  input({ type: 'hidden', name: 'kind', value: entry.kind || '' }),
+                  input({ type: 'hidden', name: 'code', value: entry.code }),
+                  input({ type: 'hidden', name: 'open', value: entry.open ? '1' : '' }),
+                  button({ type: 'submit', class: 'danger-btn' }, i18n.invitesPendingDiscard)
+                ))
+              ))
+            )
+          : null,
         h2(`${i18n.invitesUsedTitle} (${used.length})`),
         used.length
-          ? table({ class: 'block-info-table invites-used-table' },
-              tr(
+          ? table({ class: 'block-info-table invites-used-table stack-table' },
+              tr({ class: 'stack-head' },
                 td({ class: 'card-label' }, i18n.invitesUsedType),
                 td({ class: 'card-label' }, i18n.invitesUsedName),
                 td({ class: 'card-label' }, i18n.invitesUsedDate)
               ),
               used.map((entry) => tr(
-                td(INVITE_KIND_LABEL[entry.kind] ? i18n[INVITE_KIND_LABEL[entry.kind]] : entry.kind),
-                td(a({ href: entry.href }, entry.title || entry.href)),
-                td(moment(entry.at).format('YYYY/MM/DD HH:mm'))
+                td({ 'data-label': i18n.invitesUsedType }, INVITE_KIND_LABEL[entry.kind] ? i18n[INVITE_KIND_LABEL[entry.kind]] : entry.kind),
+                td({ 'data-label': i18n.invitesUsedName }, a({ href: entry.href }, entry.title || entry.href)),
+                td({ 'data-label': i18n.invitesUsedDate }, moment(entry.at).format('YYYY/MM/DD HH:mm'))
               ))
             )
           : p(i18n.invitesUsedEmpty)

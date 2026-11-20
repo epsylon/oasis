@@ -325,6 +325,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
       createdAt: c.createdAt || new Date(node.ts).toISOString(),
       updatedAt: c.updatedAt || null,
       tribeId: c.tribeId || null,
+      eventId: !undec && typeof c.eventId === "string" ? c.eventId : null,
       encrypted: !!undec,
       contentEncrypted: !!(c.encryptedPayload || c._decrypted === true)
     }
@@ -407,7 +408,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
       return tip
     },
 
-    async createCalendar({ title, status, deadline, tags, firstDate, firstDateLabel, firstNote, intervalWeekly, intervalMonthly, intervalYearly, intervalDeadline, mapUrl, tribeId }) {
+    async createCalendar({ title, status, deadline, tags, firstDate, firstDateLabel, firstNote, intervalWeekly, intervalMonthly, intervalYearly, intervalDeadline, mapUrl, tribeId, eventId }) {
       const ssbClient = await openSsb()
       const userId = ssbClient.id
       const now = new Date().toISOString()
@@ -432,6 +433,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
         invites: [],
         createdAt: now,
         updatedAt: now,
+        ...(eventId ? { eventId } : {}),
         ...(tribeId ? { tribeId } : {})
       }
 
@@ -474,6 +476,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
               deadline: dec.deadline || "",
               tags: Array.isArray(dec.tags) ? dec.tags : [],
               mapUrl: dec.mapUrl || "",
+              ...(dec.eventId ? { eventId: dec.eventId } : {}),
               author: userId,
               participants: [userId],
               invites: [{ code: pubCode, ek, salt: inviteSalt, gen: 1, public: true }],
@@ -499,6 +502,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
         ...(intervalMonthly ? { intervalMonthly: true } : {}),
         ...(intervalYearly ? { intervalYearly: true } : {}),
         ...(hasAnyInterval(intervalWeekly, intervalMonthly, intervalYearly) && (intervalDeadline || deadline) ? { intervalDeadline: intervalDeadline || deadline } : {}),
+        ...(eventId ? { eventId } : {}),
         ...(tribeId ? { tribeId } : {})
       }
       if (tribeId) dateContent = await encryptIfGroup(dateContent)
@@ -551,6 +555,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
         author: oldDec.author || userId,
         participants: oldDec.participants || [userId],
         invites: Array.isArray(oldDec.invites) ? oldDec.invites : [],
+        ...(oldDec.eventId ? { eventId: oldDec.eventId } : {}),
         ...(oldDec.tribeId ? { tribeId: oldDec.tribeId } : {}),
         createdAt: oldDec.createdAt,
         updatedAt: new Date().toISOString(),
@@ -610,6 +615,24 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
       if (!participants.includes(userId)) return
       const content = { type: "calendarParticipant", target: rootId, on: false, createdAt: new Date().toISOString() }
       return new Promise((resolve, reject) => ssbClient.publish(content, (e, res) => e ? reject(e) : resolve(res)))
+    },
+
+    async findCalendarByEvent(eventId) {
+      if (!eventId) return null
+      const ssbClient = await openSsb()
+      const messages = await readAll(ssbClient)
+      const idx = memoIndex('calendars', messages, buildIndex)
+      await decryptIndexNodes(idx)
+      for (const node of idx.nodes.values()) {
+        const c = node && node.c
+        if (!c || c.type !== "calendar" || c.eventId !== eventId) continue
+        let root = node.key
+        while (idx.parent.has(root)) root = idx.parent.get(root)
+        const cal = await this.getCalendarById(root).catch(() => null)
+        if (cal) return cal
+      }
+      const legacy = await this.findCalendarByLinkText(`/events/${eventId}`)
+      return legacy ? await this.getCalendarById(legacy).catch(() => null) : null
     },
 
     async findCalendarByLinkText(linkSubstring) {
@@ -701,6 +724,66 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
       return [msg]
     },
 
+    async updateEventDate(calendarId, eventId, { date, label, intervalWeekly, intervalMonthly, intervalYearly, intervalDeadline }) {
+      const ssbClient = await openSsb()
+      const userId = ssbClient.id
+      const rootId = await this.resolveRootId(calendarId)
+      const cal = await this.getCalendarById(rootId)
+      if (!cal || cal.author !== userId) return null
+      const when = ts(date)
+      if (when === null) return null
+      const own = (await this.getDatesForCalendar(rootId)).filter(d => d.author === userId)
+      const byKey = new Map()
+      for (const d of own) if (!byKey.has(d.key)) byKey.set(d.key, d)
+      const mine = [...byKey.values()]
+      const current = mine.find(d => d.eventId === eventId) || (mine.length === 1 ? mine[0] : null)
+      if (!current) return null
+      const messages = await readAll(ssbClient)
+      const raw = messages.find(m => m.key === current.key)
+      if (!raw) return null
+      const dec = await decryptScoped(raw.value.content, rootId)
+      if (!dec || dec._undecryptable) return null
+      const hasInterval = hasAnyInterval(intervalWeekly, intervalMonthly, intervalYearly)
+      const next = {
+        date: new Date(when).toISOString(),
+        label: safeText(label),
+        intervalWeekly: !!intervalWeekly,
+        intervalMonthly: !!intervalMonthly,
+        intervalYearly: !!intervalYearly,
+        intervalDeadline: hasInterval ? String(intervalDeadline || cal.deadline || "") : ""
+      }
+      const prev = {
+        date: dec.date ? new Date(dec.date).toISOString() : "",
+        label: dec.label || "",
+        intervalWeekly: !!dec.intervalWeekly,
+        intervalMonthly: !!dec.intervalMonthly,
+        intervalYearly: !!dec.intervalYearly,
+        intervalDeadline: dec.intervalDeadline || ""
+      }
+      const sameDeadline = (ts(next.intervalDeadline) || 0) === (ts(prev.intervalDeadline) || 0)
+      if (next.date === prev.date && next.label === prev.label && next.intervalWeekly === prev.intervalWeekly && next.intervalMonthly === prev.intervalMonthly && next.intervalYearly === prev.intervalYearly && sameDeadline) return null
+      let dateContent = {
+        type: "calendarDate",
+        calendarId: rootId,
+        date: next.date,
+        label: next.label,
+        author: userId,
+        createdAt: new Date().toISOString(),
+        replaces: current.key,
+        ...(next.intervalWeekly ? { intervalWeekly: true } : {}),
+        ...(next.intervalMonthly ? { intervalMonthly: true } : {}),
+        ...(next.intervalYearly ? { intervalYearly: true } : {}),
+        ...(next.intervalDeadline ? { intervalDeadline: next.intervalDeadline } : {}),
+        eventId,
+        ...(cal.tribeId ? { tribeId: cal.tribeId } : {})
+      }
+      if (cal.tribeId) dateContent = await encryptIfGroup(dateContent)
+      else dateContent = encryptStandalone(dateContent, rootId)
+      const msg = await new Promise((resolve, reject) => ssbClient.publish(dateContent, (err, m) => err ? reject(err) : resolve(m)))
+      await new Promise((resolve, reject) => ssbClient.publish({ type: "tombstone", target: current.key, deletedAt: new Date().toISOString(), author: userId }, (e) => e ? reject(e) : resolve()))
+      return msg
+    },
+
     async getDatesForCalendar(calendarId) {
       const rootId = await this.resolveRootId(calendarId)
       const cal = await this.getCalendarById(rootId)
@@ -745,6 +828,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
           key: m.key,
           calendarId: dec.calendarId || c.calendarId,
           label: dec.label || "",
+          eventId: typeof dec.eventId === "string" ? dec.eventId : null,
           author: v.author || dec.author,
           createdAt: dec.createdAt || new Date(v.timestamp || 0).toISOString()
         }
@@ -860,6 +944,17 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
           if (targetAuthor && (m.value || {}).author === targetAuthor) tombstoned.add(c.target)
         }
       }
+      const replacedBy = new Map()
+      for (const m of messages) {
+        const v = m.value || {}
+        const c = v.content
+        if (c && c.type === "calendarDate" && c.calendarId === rootId && c.replaces && authorByKey.get(c.replaces) === v.author) replacedBy.set(c.replaces, m.key)
+      }
+      const latestDate = (id) => {
+        let cur = id
+        for (let i = 0; i < 50 && replacedBy.has(cur); i++) cur = replacedBy.get(cur)
+        return cur
+      }
       const notes = []
       let pubKey
       for (const m of messages) {
@@ -867,7 +962,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
         const c = v.content
         if (!c || c.type !== "calendarNote") continue
         if (tombstoned.has(m.key)) continue
-        if (c.calendarId !== rootId || (dateId != null && c.dateId !== dateId)) continue
+        if (c.calendarId !== rootId || (dateId != null && latestDate(c.dateId) !== dateId)) continue
         let dec = c
         if (c.encryptedPayload) {
           let r = await decryptScoped(c, rootId)
@@ -884,7 +979,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
         notes.push({
           key: m.key,
           calendarId: dec.calendarId || c.calendarId,
-          dateId: dec.dateId || c.dateId,
+          dateId: latestDate(dec.dateId || c.dateId),
           text: dec.text || "",
           author: v.author || dec.author,
           createdAt: dec.createdAt || new Date(v.timestamp || 0).toISOString()
@@ -1036,6 +1131,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
         author: dec.author,
         participants: Array.isArray(dec.participants) ? dec.participants : [userId],
         invites,
+        ...(dec.eventId ? { eventId: dec.eventId } : {}),
         ...(dec.tribeId ? { tribeId: dec.tribeId } : {}),
         createdAt: dec.createdAt,
         updatedAt: new Date().toISOString(),
@@ -1082,6 +1178,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
         author: dec.author,
         participants: Array.isArray(dec.participants) ? dec.participants : [userId],
         invites,
+        ...(dec.eventId ? { eventId: dec.eventId } : {}),
         ...(dec.tribeId ? { tribeId: dec.tribeId } : {}),
         createdAt: dec.createdAt,
         updatedAt: new Date().toISOString(),
@@ -1161,6 +1258,7 @@ module.exports = ({ cooler, pmModel, cryptoModel, calendarCrypto, tribesModel })
         author: dec.author,
         participants: [...(Array.isArray(dec.participants) ? dec.participants : []), userId],
         invites,
+        ...(dec.eventId ? { eventId: dec.eventId } : {}),
         ...(dec.tribeId ? { tribeId: dec.tribeId } : {}),
         createdAt: dec.createdAt,
         updatedAt: new Date().toISOString(),

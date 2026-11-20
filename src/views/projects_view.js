@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, ul, li, table, thead, tbody, tr, th, td, progress, video, audio } = require("../server/node_modules/hyperaxe")
 const { renderZoomableImage } = require("./gallery_view")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderCardTop, renderSpreadEditWarning, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, renderCountChip, renderSearchButton, renderJoinQr, renderAmountChip } = require("./main_views")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -180,14 +180,14 @@ const renderBackers = (project, filter) => {
     mine > 0 ? renderCardField(i18n.projectBackersYourPledge + ":", span({ class: "chip chip-you" }, `${mine} ECO`)) : null,
     backers.length
       ? table(
-          { class: "backers-table" },
+          { class: "backers-table stack-table" },
           thead(tr(th(i18n.projectBackerDate), th(i18n.projectBackerAuthor), th(i18n.projectBackerAmount))),
           tbody(
             ...backers.slice(0, 8).map((b) =>
               tr(
-                td(b.at ? moment(b.at).format("YYYY/MM/DD HH:mm") : ""),
-                td(userLink(b.userId)),
-                td(`${b.amount} ECO`)
+                td({ "data-label": i18n.projectBackerDate }, b.at ? moment(b.at).format("YYYY/MM/DD HH:mm") : ""),
+                td({ "data-label": i18n.projectBackerAuthor }, userLink(b.userId)),
+                td({ "data-label": i18n.projectBackerAmount }, `${b.amount} ECO`)
               )
             )
           )
@@ -418,6 +418,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
       const chips = [
         renderProjectStatusChip(pr.status),
         Array.isArray(pr.followers) && pr.followers.includes(userId) ? renderStateChip("transport", "★", i18n.projectFollowing || "FOLLOWING", "mine") : null,
+        goal > 0 ? renderAmountChip(`${pr.goal} ECO`) : null,
         renderLifespanChip(pr.lifetime, i18n),
         renderScopeChip(pr, i18n, clearnetEligible(pr) && pr.clearnet === true, clearnetItemHref('projects', pr.title, pr.id || pr.key)),
         pr.subscriptionIn === true
@@ -435,8 +436,7 @@ const renderProjectList = exports.renderProjectList = (projects, filter, spreadM
           div({ class: "shop-title-row" },
             h2({ class: "tribe-card-title" },
               a({ href: `/projects/${encodeURIComponent(pr.id)}` }, pr.title || i18n.projectsTitle)
-            ),
-            goal > 0 ? div({ class: "price-chip" }, `${pr.goal} ECO`) : null
+            )
           ),
           goal > 0 ? renderProgressBar(fundingPct, 100) : null,
           null
@@ -658,13 +658,14 @@ exports.singleProjectView = async (project, filter, comments, params = {}) => {
   const subscriptionOpts = pr.subscription ? { target: pr.rootId || pr.id, scope: "projects", subscribed: pr.subscription.subscribed === true, count: pr.subscription.count, isOwner: isAuthor, canWrite: isAuthor, returnTo } : null
   const projectSide = div({ class: "tribe-side" },
     renderCardTop(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, { arrow: false, date: pr.createdAt, chips, bylineExtra: [renderEditedChip(pr.id, pr.rootId, pr.updatedAt)], spread: params.spreads || null, author: pr.author, favKind: 'projects', isFavorite: pr.isFavorite, reportTitle: pr.title, returnTo: `/projects/${encodeURIComponent(pr.id)}`, subscription: subscriptionOpts, editAction: isAuthor ? `/projects/edit/${encodeURIComponent(pr.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('project', pr.id || pr.key) : undefined }),
+    renderDetailShare(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, pr.title, subscriptionOpts, null, null, pr.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, pr.title),
       div({ class: "price-chip" }, `${pr.goal || 0} ECO`)
     ),
     isAuthor && canClearnet ? renderClearnetSwitch('projects', pr.rootId || pr.id || pr.key, isClearnet) : null,
+    !pr.tribeId ? renderJoinQr('projects', pr.id || pr.key) : null,
     pr.image ? renderMediaBlob(pr.image, { class: "tribe-detail-image" }) : null,
-    renderDetailShare(pr.id || pr.key, `/projects/${encodeURIComponent(pr.id)}`, pr.title, subscriptionOpts, null, null, pr.author),
     renderProgressBlock(i18n.projectProgress + ":", `${pct}%`, pct, 100),
     goal > 0 ? renderProgressBar(fundingPct, 100) : null,
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null

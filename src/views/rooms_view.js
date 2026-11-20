@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, br, hr, label, textarea, input, select, option, img, details, summary, ul, li } = require("../server/node_modules/hyperaxe")
-const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare, RELATION_FILTERS, relationFilterLabel, hasRelation, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass , renderTribeBackRow } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderModuleStatsBy, moduleIsEmpty, liveClock, renderPhoneChip, contentDeleteAction, paged, renderVideoGrid, renderLiveFeed, renderIcon, renderDetailShare, RELATION_FILTERS, relationFilterLabel, hasRelation, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass , renderTribeBackRow, renderJoinQr } = require("./main_views")
 const { renderEncryptedChip, renderTransportChip, renderReachChip, renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
 const { renderStyledText } = require("../backend/renderStyledText")
 const moment = require("../server/node_modules/moment")
@@ -111,28 +111,11 @@ const renderRoomForm = (room, params = {}) => {
   const reachRaw = String(params.reach || draft.status || "").toUpperCase()
   const reach = ROOM_REACH.includes(reachRaw) ? reachRaw : "OPEN"
   const withReach = !isEdit && !tribeId
-  const showClearnet = isEdit ? clearnetEligible(room) : (withReach && reach === "OPEN")
+  const showClearnet = isEdit ? clearnetEligible(room) : withReach
   return div({ class: "div-center audio-form" },
     h2(isEdit ? i18n.roomUpdateSectionTitle : i18n.roomCreateSectionTitle),
-    withReach
-      ? [
-          form({ method: "GET", action: "/rooms" },
-            input({ type: "hidden", name: "filter", value: "create" }),
-            label(i18n.roomTypeLabel), br(),
-            div({ class: "apply-row" },
-              select({ name: "status", class: "report-category-select" },
-                ...ROOM_REACH.map(s => option({ value: s, ...(reach === s ? { selected: true } : {}) }, roomReachLabel(s)))
-              ),
-              button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
-            )
-          ),
-          hr({ class: "form-sep" }),
-          h2({ class: "report-category-fixed" }, roomReachLabel(reach))
-        ]
-      : null,
     form({ method: "POST", action: isEdit ? `/rooms/update/${encodeURIComponent(room.rootId)}` : "/rooms/create", enctype: "multipart/form-data" },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
-      withReach ? input({ type: "hidden", name: "status", value: reach }) : null,
       span(i18n.title || "Title"), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.roomTitlePlaceholder, value: draft.title || "" }), br(),
       span(i18n.roomDescriptionLabel), br(),
@@ -141,6 +124,13 @@ const renderRoomForm = (room, params = {}) => {
       input({ type: "file", name: "image", accept: "image/*" }), br(), br(),
       span(i18n.roomTagsLabel), br(),
       input({ type: "text", name: "tags", placeholder: i18n.tagsPlaceholder, value: safeArr(draft.tags).join(", ") }), br(),
+      ...(withReach ? [
+        span(i18n.roomTypeLabel), br(),
+        select({ name: "status" },
+          ...ROOM_REACH.map(s => option({ value: s, ...(s !== "OPEN" ? { class: "reach-closed" } : {}), ...(reach === s ? { selected: true } : {}) }, roomReachLabel(s)))
+        ),
+        br(), br()
+      ] : []),
       showClearnet ? renderClearnetSelector(draft.clearnet === true || String(draft.clearnet || "") === "1", i18n) : null,
       ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, isEdit ? i18n.save : i18n.roomCreate)
@@ -386,11 +376,12 @@ exports.singleRoomView = async (room, params = {}) => {
       ],
       spread: params.spreads || null, author: room.author, favKind: "rooms", isFavorite: room.isFavorite, returnTo: roomHref(room), reportTitle: room.title, editAction: isAuthor ? `/rooms?filter=edit&id=${encodeURIComponent(room.rootId)}` : undefined, leaveAction: !isAuthor && !room.tribeId && safeArr(room.members).includes(me) ? `/rooms/leave/${encodeURIComponent(room.rootId)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("room", room.rootId) : undefined
     }),
+    renderDetailShare(room.rootId, roomHref(room), room.title, null, null, null, room.author),
     renderTribeBackRow(room.tribeLink, `/rooms/${encodeURIComponent(room.rootId)}`),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, restricted ? i18n.roomStatusInviteOnly : (room.title || "—"))),
     isAuthor && canClearnet ? div({ class: "card-chips-row" }, renderClearnetSwitch("rooms", room.rootId, isClearnet)) : null,
+    !restricted && room.type !== "INVITE-ONLY" && !room.isClosed && !room.tribeId ? renderJoinQr("rooms", room.rootId) : null,
     restricted ? null : renderCover(room, "tribe-detail-image"),
-    renderDetailShare(room.rootId, roomHref(room), room.title, null, null, null, room.author),
     restricted || !room.description ? null : p({ class: "tribe-side-description" }, ...renderStyledText(room.description)),
     inviteActions.length ? div({ class: "tribe-side-actions" }, ...inviteActions) : null,
     isAuthor && !room.isClosed

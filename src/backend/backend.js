@@ -399,6 +399,7 @@ const fromLoopbackSocket = (ctx) => {
   return LOOPBACK_HOSTS.has(host);
 };
 const isLoopbackRequest = (ctx) => fromLoopbackSocket(ctx);
+const qrScanned = (ctx) => !config.public && String(ctx.get('sec-fetch-site') || '').toLowerCase() === 'none';
 const confirmPage = (ctx, { message, action, hidden = [], backHref = null }) => {
   ctx.status = 200;
   ctx.type = 'html';
@@ -471,13 +472,13 @@ const checkMod = (ctx, mod) => {
   return serverValue === 'on' || serverValue === undefined;
 };
 const getViewerId = () => SSBconfig?.config?.keys?.id || SSBconfig?.keys?.id;
-const actorLink = async (id) => {
+const actorLabel = async (id) => {
   let name = '';
   try { name = await about.name(id); } catch (_) {}
   const clean = String(name || '').trim().replace(/^@/, '');
-  const label = clean ? `@${clean}` : `${String(id).slice(0, 12)}…`;
-  return `[${label}](/author/${encodeURIComponent(id)})`;
+  return clean ? `@${clean}` : `${String(id).slice(0, 12)}…`;
 };
+const actorLink = async (id) => `[${await actorLabel(id)}](/author/${encodeURIComponent(id)})`;
 
 const _carbonCache = new Map();
 const CARBON_TTL_MS = 5 * 60 * 1000;
@@ -1013,18 +1014,7 @@ const CLEARNET_REACH_OK = {
   calendars: (c) => !!c && !c.tribeId && !c.encrypted && String(c.status || '').toUpperCase() === 'OPEN' && !c.isClosed && (!c.contentEncrypted || clearnetHasPublicInvite(c))
 };
 const clearnetReachConflict = (kind, b) => !!b && String(b.clearnet || '') === '1' && (!!b.tribeId || String(b[CLEARNET_REACH_FIELD[kind]] || 'OPEN').toUpperCase() !== 'OPEN');
-const clearnetDraft = (b, base = {}) => ({
-  ...base,
-  ...clearnetWithForm(b, b),
-  tags: Array.isArray(b.tags) ? b.tags : String(b.tags || '').split(',').map(t => t.trim()).filter(Boolean),
-  clearnet: true,
-  clearnetConflict: true
-});
-const renderClearnetConflict = async (ctx, render) => {
-  ctx.state.inlineError = require('../views/main_views').i18n.clearnetPrivateConflict;
-  ctx.status = 400;
-  ctx.body = await render();
-};
+const dropClearnet = (b) => { if (b) b.clearnet = '0'; };
 const applyClearnetChoice = async (ctx, kind, created, { recheck = false, allowed } = {}) => {
   const body = (ctx && ctx.request && ctx.request.body) || {};
   if (body.clearnet === undefined && !recheck && !clearnetBlockedContent(clearnetWithForm({}, body))) return;
@@ -1664,6 +1654,51 @@ const INVITE_JOINERS = {
   shops:     { mod: 'shopsMod',     join: async (code) => { const { shopId } = await shopsModel.joinByCode(code); return `/shops/${encodeURIComponent(shopId)}`; } }
 };
 const FEED_ID_RE = /^@[A-Za-z0-9+/_\-]{43}=\.ed25519$/;
+const OPEN_TARGETS = {
+  chats:     { mod: 'chatsMod',     get: (id) => chatsModel.getChatById(id),                  href: (id) => `/chats/${encodeURIComponent(id)}` },
+  pads:      { mod: 'padsMod',      get: (id) => padsModel.getPadById(id),                    href: (id) => `/pads/${encodeURIComponent(id)}` },
+  calendars: { mod: 'calendarsMod', get: (id) => calendarsModel.getCalendarById(id),          href: (id) => `/calendars/${encodeURIComponent(id)}` },
+  maps:      { mod: 'mapsMod',      get: (id) => mapsModel.getMapById(id, getViewerId()),     href: (id) => `/maps/${encodeURIComponent(id)}` },
+  events:    { mod: 'eventsMod',    get: (id) => eventsModel.getEventById(id),                href: (id) => `/events/${encodeURIComponent(id)}` },
+  school:    { mod: 'schoolMod',    get: (id) => schoolModel.getCourseById(id, getViewerId()), href: (id) => `/school/course/${encodeURIComponent(id)}` },
+  industry:  { mod: 'industryMod',  get: (id) => industryModel.getFacilityById(id),           href: (id) => `/industry/${encodeURIComponent(id)}` },
+  rooms:     { mod: 'roomsMod',     get: (id) => roomsModel.getRoomById(id),                  href: (id) => `/rooms/${encodeURIComponent(id)}` },
+  forum:     { mod: 'forumMod',     get: (id) => forumModel.getForumById(id),                 href: (id) => `/forum/${encodeURIComponent(id)}` },
+  mailing:   { mod: 'mailingMod',   get: (id) => mailingModel.getListById(id),                href: (id) => `/mailing/${encodeURIComponent(id)}` },
+  audios:    { mod: 'audiosMod',    get: (id) => audiosModel.getAudioById(id, getViewerId()), href: (id) => `/audios/${encodeURIComponent(id)}` },
+  images:    { mod: 'imagesMod',    get: (id) => imagesModel.getImageById(id, getViewerId()), href: (id) => `/images/${encodeURIComponent(id)}` },
+  videos:    { mod: 'videosMod',    get: (id) => videosModel.getVideoById(id, getViewerId()), href: (id) => `/videos/${encodeURIComponent(id)}` },
+  documents: { mod: 'docsMod',      get: (id) => documentsModel.getDocumentById(id),          href: (id) => `/documents/${encodeURIComponent(id)}` },
+  bookmarks: { mod: 'bookmarksMod', get: (id) => bookmarksModel.getBookmarkById(id, getViewerId()), href: (id) => `/bookmarks/${encodeURIComponent(id)}` },
+  files:     { mod: 'filesMod',     get: (id) => filesModel.getFileById(id, getViewerId()),   href: (id) => `/files/${encodeURIComponent(id)}` },
+  torrents:  { mod: 'torrentsMod',  get: (id) => torrentsModel.getTorrentById(id, getViewerId()), href: (id) => `/torrents/${encodeURIComponent(id)}` },
+  podcasts:  { mod: 'podcastsMod',  get: (id) => podcastsModel.getAnyById(id),                href: (id) => `/podcasts/${encodeURIComponent(id)}` },
+  blogs:     { mod: 'blogsMod',     get: (id) => blogModel.getBlogById(id),                   href: (id) => `/blogs/${encodeURIComponent(id)}` },
+  market:    { mod: 'marketMod',    get: (id) => marketModel.getItemById(id),                 href: (id) => `/market/${encodeURIComponent(id)}` },
+  jobs:      { mod: 'jobsMod',      get: (id) => jobsModel.getJobById(id, getViewerId()),     href: (id) => `/jobs/${encodeURIComponent(id)}` },
+  projects:  { mod: 'projectsMod',  get: (id) => projectsModel.getProjectById(id),            href: (id) => `/projects/${encodeURIComponent(id)}` },
+  housing:   { mod: 'housingMod',   get: (id) => housingModel.getHousingById(id, getViewerId()), href: (id) => `/housing/${encodeURIComponent(id)}` },
+  campaigns: { mod: 'campaignsMod', get: (id) => campaignsModel.getCampaignById(id, getViewerId()), href: (id) => `/campaigns/${encodeURIComponent(id)}` },
+  logistics: { mod: 'logisticsMod', get: (id) => logisticsModel.getRouteById(id),             href: (id) => `/logistics/${encodeURIComponent(id)}` },
+  emergencies: { mod: 'emergenciesMod', get: (id) => emergenciesModel.getEmergencyById(id),   href: (id) => `/emergencies/${encodeURIComponent(id)}` },
+  reports:   { mod: 'reportsMod',   get: (id) => reportsModel.getReportById(id),              href: (id) => `/reports/${encodeURIComponent(id)}` },
+  tasks:     { mod: 'tasksMod',     get: (id) => tasksModel.getTaskById(id),                  href: (id) => `/tasks/${encodeURIComponent(id)}` },
+  polls:     { mod: 'pollsMod',     get: (id) => pollsModel.getPollById(id, getViewerId()),   href: (id) => `/polls/${encodeURIComponent(id)}` },
+  votes:     { mod: 'votesMod',     get: (id) => votesModel.getVoteById(id),                  href: (id) => `/votes/${encodeURIComponent(id)}` },
+  transfers: { mod: 'transfersMod', get: (id) => transfersModel.getTransferById(id, getViewerId()), href: (id) => `/transfers/${encodeURIComponent(id)}` },
+  shops:     { mod: 'shopsMod',     get: (id) => shopsModel.getShopById(id),                  href: (id) => `/shops/${encodeURIComponent(id)}` },
+  products:  { mod: 'shopsMod',     get: (id) => shopsModel.getProductById(id),               href: (id) => `/shops/product/${encodeURIComponent(id)}`, home: '/shops' },
+  wiki:      { mod: 'wikiMod',      get: (id) => wikiModel.getPage(id),                       href: (id) => `/wiki/${encodeURIComponent(id)}` },
+  blueprints: { mod: 'industryMod', get: (id) => industryModel.getBlueprint(id),              href: (id) => `/industry/blueprint/${encodeURIComponent(id)}`, home: '/industry' },
+  builds:    { mod: 'industryMod',  get: (id) => industryModel.getBuild(id),                  href: (id) => `/industry/build/${encodeURIComponent(id)}`, home: '/industry' }
+};
+const openHomeOf = (kind) => (OPEN_TARGETS[kind] && OPEN_TARGETS[kind].home) || `/${kind}`;
+const openTargetOf = async (kind, id) => {
+  const target = OPEN_TARGETS[kind];
+  if (!target || !/^%[A-Za-z0-9+/=]{44}\.sha256$/.test(String(id || ''))) return null;
+  const item = await target.get(id).catch(() => null);
+  return item ? { item, href: target.href(id), title: String(item.title || item.name || item.question || item.concept || '') } : null;
+};
 const PUB_INVITE_RE = /~shs:|:\d+:@[A-Za-z0-9+/=_-]+\.ed25519~/;
 const joinPub = async (invite) => {
   const pubKey = (invite.match(/@[A-Za-z0-9+/=_-]{43,}\.ed25519/) || [])[0] || null;
@@ -1705,7 +1740,9 @@ const followInhabitant = async (ctx, feedId) => {
     ctx.redirect(`/search?query=${encodeURIComponent(feedId)}`);
   }
 };
-const INVITE_NO_MATCH = /invalid or expired invite code|crypto unavailable/i;
+const INVITE_NO_MATCH = /invalid or expired invite code|crypto unavailable|not found/i;
+const inviterOf = (ctx) => { const by = String((ctx.query && ctx.query.by) || ''); return FEED_ID_RE.test(by) && by !== getViewerId() ? by : null; };
+const inviterQuery = () => `?by=${encodeURIComponent(getViewerId())}`;
 const INVITES_USED_MAX = 10;
 const INVITE_TITLE = {
   tribes: async (id) => (await tribesModel.getTribeById(id)).title,
@@ -1736,6 +1773,68 @@ const recordInviteUse = async (kind, href, title = '') => {
     const list = [{ kind: k, href, title: String(name || ''), at: new Date().toISOString() }, ...readInvitesUsed().filter((e) => e && e.href !== href)].slice(0, INVITES_USED_MAX);
     fs.writeFileSync(stateFilePath('invites-used.json'), JSON.stringify(list));
   } catch (_) {}
+};
+const readPendingInvites = () => {
+  try {
+    const list = JSON.parse(fs.readFileSync(stateFilePath('invites-pending.json'), 'utf8'));
+    return Array.isArray(list) ? list.filter((e) => e && typeof e.code === 'string') : [];
+  } catch (_) { return []; }
+};
+const writePendingInvites = (list) => { try { fs.writeFileSync(stateFilePath('invites-pending.json'), JSON.stringify(list)); } catch (_) {} };
+const samePending = (a, b) => (a.kind || null) === (b.kind || null) && a.code === b.code && !!a.open === !!b.open;
+const keepPendingInvite = (kind, code, by = null, open = false) => {
+  const list = readPendingInvites();
+  const entry = { kind: kind || null, code, by, ...(open ? { open: true } : {}), at: new Date().toISOString() };
+  const before = list.find((e) => samePending(e, entry));
+  writePendingInvites([{ ...entry, by: by || (before && before.by) || null }, ...list.filter((e) => !samePending(e, entry))].slice(0, 20));
+  return !before;
+};
+const inviteLead = (t, kind, open) => {
+  const place = (kind && t[`invitePlace${kind[0].toUpperCase()}${kind.slice(1)}`]) || t.invitePlaceUnknown;
+  return (open ? t.openSavedAnon : t.inviteSavedAnon).replace('{place}', () => place);
+};
+const notifyPendingInvite = async (kind, open = false) => {
+  const t = require('../views/main_views').i18n;
+  await notifyBot(open ? 'OPEN_SAVED' : 'INVITE_SAVED', [getViewerId()], `${inviteLead(t, kind, open)} ${open ? t.openSavedText : t.inviteSavedText}`).catch(() => {});
+};
+const joinPendingInvite = async (pending) => {
+  for (const kind of pending.kind ? [pending.kind] : Object.keys(INVITE_JOINERS)) {
+    const entry = INVITE_JOINERS[kind];
+    if (!entry || !checkMod(null, entry.mod)) continue;
+    try { return { kind, href: await entry.join(pending.code, null) }; } catch (e) {
+      if (!INVITE_NO_MATCH.test(String(e && e.message))) return { failed: true };
+    }
+  }
+  return null;
+};
+let pendingInvitesLog = -1;
+const logOffset = async () => { try { const st = await (await cooler.open()).status(); return Number(st && st.sync && st.sync.since) || 0; } catch (_) { return -1; } };
+const retryPendingInvites = async () => {
+  const list = readPendingInvites();
+  if (!list.length) return;
+  const offset = await logOffset();
+  if (offset === pendingInvitesLog) return;
+  pendingInvitesLog = offset;
+  const done = [];
+  for (const pending of list) {
+    if (pending.open) {
+      const arrived = await openTargetOf(pending.kind, pending.code).catch(() => null);
+      if (!arrived) continue;
+      done.push(pending);
+      const { i18n } = require('../views/main_views');
+      await notifyBot('INVITE_ARRIVED', [getViewerId()], `${i18n.openArrivedText}: [${arrived.title || arrived.href}](${arrived.href})`).catch(() => {});
+      continue;
+    }
+    const res = await joinPendingInvite(pending).catch(() => null);
+    if (!res) continue;
+    done.push(pending);
+    if (res.failed) continue;
+    await recordInviteUse(res.kind, res.href);
+    const used = readInvitesUsed().find((e) => e.href === res.href);
+    const { i18n } = require('../views/main_views');
+    await notifyBot('INVITE_JOINED', [getViewerId()], `${i18n.inviteJoinedText}: [${(used && used.title) || res.href}](${res.href})`).catch(() => {});
+  }
+  if (done.length) writePendingInvites(readPendingInvites().filter((e) => !done.some((d) => samePending(d, e))));
 };
 const getUserTribeIds = async (uid) => {
   const allTribes = await tribesModel.listAll().catch(() => []);
@@ -2012,7 +2111,9 @@ async function fetchProfileItems(feedId, prefs) {
 const { BARE_MENTION_RE, HASHTAG_RE } = require('./renderStyledText');
 const { WORD_CHARS } = require('./word_chars');
 const feedForName = (name) => {
-  const feeds = [...new Set((about.named(name) || []).filter(m => m && String(m.name || '').toLowerCase() === String(name).toLowerCase()).map(m => String(m.feed || '')).filter(Boolean))];
+  const wanted = String(name).toLowerCase();
+  const fromTable = (about.named(name) || []).filter(m => m && String(m.name || '').toLowerCase() === wanted).map(m => String(m.feed || '')).filter(Boolean);
+  const feeds = [...new Set([...fromTable, ...nameCache.named(name)])];
   return feeds.length === 1 ? feeds[0] : null;
 };
 require('./renderStyledText').setMentionResolver(feedForName);
@@ -2993,11 +3094,12 @@ const hiddenView = async () => {
   if (store) store.hiddenView = pending;
   return pending;
 };
-const dropHidden = async (items, authorOf = extractItemAuthor) => {
+const dropHidden = async (items, authorOf = extractItemAuthor, keepIds = false) => {
   if (!Array.isArray(items)) return items;
   const h = await hiddenView();
   if (!h.authors.size && !h.ids.size) return items;
-  return items.filter(it => !viewerFilters.isItemHidden(it, authorOf, h));
+  const rule = keepIds ? { authors: h.authors, ids: new Set() } : h;
+  return items.filter(it => !viewerFilters.isItemHidden(it, authorOf, rule));
 };
 const hiddenModels = (models, h) => {
   if (!h || (!h.authors.size && !h.ids.size)) return models;
@@ -3076,10 +3178,18 @@ const byRelation = (items, filter) => {
   if (!rf || !Array.isArray(items)) return items;
   return items.filter(it => it && (rf === 'supported' ? it.isSupported : rf === 'mentions' ? it.isMentioned : it.isReplicated));
 };
+const invitedOnlyFor = (it, viewer) => {
+  if (!it || typeof it !== 'object' || it.tribeId) return false;
+  const up = (v) => String(v || '').toUpperCase();
+  const closed = up(it.status || it.type) === 'INVITE-ONLY' || up(it.mapType) === 'CLOSED' || up(it.visibility) === 'INVITE' || up(it.listType) === 'CLOSED';
+  if (!closed || it.isMember === true || it.isOwner === true) return false;
+  const inList = (v) => Array.isArray(v) && v.map((x) => String(x && typeof x === 'object' ? x.author || x.id || '' : x)).includes(String(viewer));
+  return String(it.author || '') !== String(viewer) && !['members', 'participants', 'students', 'invited'].some((k) => inList(it[k]));
+};
 const applyListFilters = async (items, ctx, opts = {}) => {
   if (!Array.isArray(items)) return items;
   const viewer = getViewerId();
-  let out = await dropHidden(items);
+  let out = (await dropHidden(items, extractItemAuthor, true)).filter(it => !invitedOnlyFor(it, viewer));
   if (!opts.skipTribeAccess) {
     const { memberOf, createdBy, privateNotAccessible } = await getViewerTribeAccessSets(viewer);
     out = out.filter(it => {
@@ -3135,7 +3245,8 @@ const CENSUS_TTL_MS = 30000;
 const censusOf = async (key, fn, fresh = false) => {
   const hit = fresh ? null : censusCache.get(key);
   if (hit && Date.now() - hit.at < CENSUS_TTL_MS) return hit.value;
-  const value = await fn();
+  const raw = await fn();
+  const value = Array.isArray(raw) ? raw.filter(it => !invitedOnlyFor(it, getViewerId())) : raw;
   censusCache.set(key, { at: Date.now(), value });
   return value;
 };
@@ -3321,9 +3432,45 @@ const postFeedToMastodon = async (text, media) => {
   }
 };
 const failWith = (ctx, key, to) => sendErrorPage(ctx, require('../views/main_views').i18n[key] || require('../views/main_views').i18n.actionFailed, { status: 400, ...(to ? { to } : {}) });
-const inviteCodeFail = (ctx, err) => {
+const inviteCodeFail = (ctx, err, to) => {
   const t = require('../views/main_views').i18n;
-  sendErrorPage(ctx, /already a (member|participant)/i.test(String(err && err.message)) ? t.inviteAlreadyMember : t.inviteCodeInvalid, { status: 400 });
+  const msg = String(err && err.message);
+  const text = /already a (member|participant)/i.test(msg) ? t.inviteAlreadyMember : /invite already used/i.test(msg) ? t.inviteAlreadyUsed : /closed event/i.test(msg) ? t.inviteContentClosed : t.inviteCodeInvalid;
+  sendErrorPage(ctx, text, { status: 400, exact: true, ...(to ? { to } : {}) });
+};
+const qrFollowInviter = async (ctx) => {
+  const by = inviterOf(ctx);
+  if (by) { try { await friend.follow(by); } catch (_) {} }
+  return by;
+};
+const qrOpenPending = async (ctx, mod, id) => {
+  if (!/^%[A-Za-z0-9+/=]{44}\.sha256$/.test(id)) { ctx.status = 400; ctx.body = ''; return; }
+  const by = await qrFollowInviter(ctx);
+  if (keepPendingInvite(mod, id, by, true)) await notifyPendingInvite(mod, true);
+  ctx.redirect(openHomeOf(mod));
+};
+const qrJoin = async (ctx, entry, mod, code) => {
+  let href;
+  try { href = await entry.join(code, ctx); } catch (err) {
+    if (INVITE_NO_MATCH.test(String(err && err.message))) {
+      const by = await qrFollowInviter(ctx);
+      if (keepPendingInvite(mod, code, by)) await notifyPendingInvite(mod);
+      ctx.redirect(`/${mod}`);
+      return;
+    }
+    inviteCodeFail(ctx, err, `/${mod}`);
+    return;
+  }
+  await recordInviteUse(mod, href);
+  ctx.redirect(href);
+};
+const qrFollow = async (ctx, feedId) => {
+  try { await friend.follow(feedId); } catch (_) {}
+  ctx.redirect(`/author/${encodeURIComponent(feedId)}`);
+};
+const qrSign = async (ctx, id) => {
+  try { await campaignsModel.sign(id, ''); } catch (e) { if (!/already/i.test(String(e && e.message))) return actionFail(ctx); }
+  ctx.redirect(`/campaigns/${encodeURIComponent(id)}`);
 };
 const roomErrorMessage = (code) => {
   const t = require('../views/main_views').i18n;
@@ -3703,6 +3850,37 @@ const readInterval = (b) => {
     intervalMonthly: [].concat(b.intervalMonthly).includes('1'),
     intervalYearly: [].concat(b.intervalYearly).includes('1')
   };
+};
+const calendarForEvent = async (eventKey, d) => {
+  const r = d.recurrence || {};
+  const evUrl = require('./renderStyledText').safeExternalHref(d.url);
+  return calendarsModel.createCalendar({
+    title: stripDangerousTags(d.title),
+    status: String(d.isPublic || '').toLowerCase() === 'private' ? 'CLOSED' : 'OPEN',
+    deadline: '',
+    tags: d.tags,
+    firstDate: d.date,
+    firstDateLabel: stripDangerousTags(d.title),
+    firstNote: [stripDangerousTags(d.description || '').trim().slice(0, 1000), d.location ? `📍 ${stripDangerousTags(d.location).trim()}` : '', evUrl || '', `/events/${encodeURIComponent(eventKey)}`].filter(Boolean).join('\n\n'),
+    intervalWeekly: r.weekly ? 1 : 0,
+    intervalMonthly: r.monthly ? 1 : 0,
+    intervalYearly: r.yearly ? 1 : 0,
+    intervalDeadline: r.until || '',
+    mapUrl: stripDangerousTags(d.mapUrl || ''),
+    eventId: eventKey
+  });
+};
+
+const syncEventCalendar = async (eventKey, b) => {
+  const cal = await calendarsModel.findCalendarByEvent(eventKey).catch(() => null);
+  if (!cal || cal.author !== getViewerId()) return;
+  const title = stripDangerousTags(String(b.title || '')).trim();
+  const mapUrl = stripDangerousTags(String(b.mapUrl || '')).trim();
+  const closing = String(b.isPublic || '').toLowerCase() === 'private' && cal.status === 'OPEN';
+  const patch = { ...(title && title !== cal.title ? { title } : {}), ...(mapUrl !== String(cal.mapUrl || '') ? { mapUrl } : {}), ...(closing ? { status: 'CLOSED' } : {}) };
+  if (Object.keys(patch).length) await calendarsModel.updateCalendarById(cal.rootId, patch);
+  const { intervalWeekly, intervalMonthly, intervalYearly } = readInterval(b);
+  if (b.date) await calendarsModel.updateEventDate(cal.rootId, eventKey, { date: b.date, label: title, intervalWeekly, intervalMonthly, intervalYearly, intervalDeadline: b.intervalDeadline || b.recurrenceUntil || '' });
 };
 
 const readGalleryUpload = async (ctx) => {
@@ -5241,6 +5419,7 @@ const SCHEDULED_PUBLISHERS = {
   event: async () => {
     for (const { res, entry } of await eventsModel.publishDue()) {
       try { await applyClearnetChoice({ request: { body: { clearnet: entry.data.clearnet } } }, 'events', res); } catch (_) {}
+      if (entry.data.addToCalendar === true && res && res.key) { try { await calendarForEvent(res.key, entry.data); } catch (_) {} }
     }
     try { activityModel.invalidateCache(); } catch (_) {}
   },
@@ -5467,7 +5646,7 @@ router
       return;
     }
     const fav = await contentFavorites.getFavoriteSet('school').catch(() => new Set());
-    let courses = await schoolModel.listCourses(listFilterFor(filter), getViewerId(), { q, sort });
+    let courses = (await schoolModel.listCourses(listFilterFor(filter), getViewerId(), { q, sort })).filter(c => !invitedOnlyFor(c, getViewerId()));
     courses = courses.map(c => ({ ...c, isFavorite: fav.has(String(c.rootId || c.id)) }));
     if (filter === 'favorites') courses = courses.filter(c => c.isFavorite);
     courses = byRelation(await markRelations(courses), filter);
@@ -5499,7 +5678,7 @@ router
   })
   .post('/school/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
-    if (clearnetConflict(ctx.request.body)) return renderClearnetConflict(ctx, () => schoolView([], 'create', null, { draft: clearnetDraft(ctx.request.body) }));
+    if (clearnetConflict(ctx.request.body)) dropClearnet(ctx.request.body);
     const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
     const courseType = String(b.courseType || 'OPEN').toUpperCase();
     if (courseType === 'PAID' && !(parseFloat(String(b.price || '').replace(',', '.')) > 0)) throw new Error('Invalid price');
@@ -5514,11 +5693,7 @@ router
   .post('/school/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
     if (await guardRatedMedia(ctx, ctx.params.id)) return;
-    if (clearnetConflict(ctx.request.body)) {
-      const existing = await schoolModel.getCourseById(ctx.params.id, getViewerId()).catch(() => null);
-      if (!existing) { ctx.redirect('/school'); return; }
-      return renderClearnetConflict(ctx, () => schoolView([], 'edit', clearnetDraft(ctx.request.body, existing), {}));
-    }
+    if (clearnetConflict(ctx.request.body)) dropClearnet(ctx.request.body);
     const b = ctx.request.body, imageBlob = (ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : undefined) || undefined;
     const courseType = String(b.courseType || 'OPEN').toUpperCase();
     if (courseType === 'PAID' && !(parseFloat(String(b.price || '').replace(',', '.')) > 0)) throw new Error('Invalid price');
@@ -5722,39 +5897,75 @@ router
       const code = String(ctx.params.code || '');
       if (!INVITE_JOINERS[mod] || !/^[A-Za-z0-9]{4,128}$/.test(code)) { ctx.status = 404; ctx.body = ''; return; }
       const QRCode = require('../server/node_modules/qrcode');
-      const targetUrl = `${QR_ACTION_BASE}/qr-action/join/${mod}/${encodeURIComponent(code)}`;
+      const targetUrl = `${QR_ACTION_BASE}/qr-action/join/${mod}/${encodeURIComponent(code)}${inviterQuery()}`;
       const buf = await QRCode.toBuffer(targetUrl, { type: 'png', width: 240, margin: 1, errorCorrectionLevel: 'M' });
       ctx.set('Content-Type', 'image/png');
       ctx.set('Cache-Control', 'no-store');
       ctx.body = buf;
     } catch (e) { ctx.status = 500; ctx.body = ''; }
   })
+  .get('/qr-public/:mod/:id', async (ctx) => {
+    try {
+      const mod = String(ctx.params.mod || '');
+      const id = String(ctx.params.id || '');
+      if (!OPEN_TARGETS[mod] || !checkMod(ctx, OPEN_TARGETS[mod].mod) || !/^%[A-Za-z0-9+/=]{44}\.sha256$/.test(id)) { ctx.status = 404; ctx.body = ''; return; }
+      const QRCode = require('../server/node_modules/qrcode');
+      const targetUrl = `${QR_ACTION_BASE}/qr-action/open/${mod}/${encodeURIComponent(id)}${inviterQuery()}`;
+      const buf = await QRCode.toBuffer(targetUrl, { type: 'png', width: 240, margin: 1, errorCorrectionLevel: 'M' });
+      ctx.set('Content-Type', 'image/png');
+      ctx.set('Cache-Control', 'no-store');
+      ctx.body = buf;
+    } catch (e) { ctx.status = 500; ctx.body = ''; }
+  })
+  .get('/qr-action/open/:mod/:id', async (ctx) => {
+    const mod = String(ctx.params.mod || '');
+    const target = OPEN_TARGETS[mod];
+    if (!target) { ctx.status = 404; ctx.body = ''; return; }
+    if (!checkMod(ctx, target.mod)) { ctx.redirect('/modules'); return; }
+    const id = String(ctx.params.id || '');
+    const found = await openTargetOf(mod, id);
+    if (found) { ctx.redirect(found.href); return; }
+    if (qrScanned(ctx)) return qrOpenPending(ctx, mod, id);
+    const by = inviterOf(ctx);
+    const t = require('../views/main_views').i18n;
+    confirmPage(ctx, { message: `${inviteLead(t, mod, true)} ${t.openNotArrivedText}`, action: `/qr-action/open/${encodeURIComponent(mod)}/${encodeURIComponent(id)}${by ? `?by=${encodeURIComponent(by)}` : ''}`, backHref: openHomeOf(mod) });
+  })
+  .post('/qr-action/open/:mod/:id', koaBody(), async (ctx) => {
+    const mod = String(ctx.params.mod || '');
+    const target = OPEN_TARGETS[mod];
+    if (!target) { ctx.status = 404; ctx.body = ''; return; }
+    if (!checkMod(ctx, target.mod)) { ctx.redirect('/modules'); return; }
+    const id = String(ctx.params.id || '');
+    if (!/^%[A-Za-z0-9+/=]{44}\.sha256$/.test(id)) { ctx.status = 400; ctx.body = ''; return; }
+    const found = await openTargetOf(mod, id);
+    if (found) { ctx.redirect(found.href); return; }
+    await qrOpenPending(ctx, mod, id);
+  })
   .get('/qr-action/join/:mod/:code', async (ctx) => {
     const entry = INVITE_JOINERS[String(ctx.params.mod || '')];
     if (!entry) { ctx.status = 404; ctx.body = ''; return; }
     if (!checkMod(ctx, entry.mod)) { ctx.redirect('/modules'); return; }
-    confirmPage(ctx, { message: require('../views/main_views').i18n.confirmJoinText, action: `/qr-action/join/${encodeURIComponent(ctx.params.mod)}/${encodeURIComponent(String(ctx.params.code || '').trim())}`, backHref: `/${encodeURIComponent(ctx.params.mod)}` });
+    if (qrScanned(ctx)) return qrJoin(ctx, entry, String(ctx.params.mod), String(ctx.params.code || '').trim());
+    const t = require('../views/main_views').i18n;
+    confirmPage(ctx, { message: `${inviteLead(t, String(ctx.params.mod), false)} ${t.confirmJoinText}`, action: `/qr-action/join/${encodeURIComponent(ctx.params.mod)}/${encodeURIComponent(String(ctx.params.code || '').trim())}${inviterOf(ctx) ? `?by=${encodeURIComponent(inviterOf(ctx))}` : ''}`, backHref: `/${encodeURIComponent(ctx.params.mod)}` });
   })
   .post('/qr-action/join/:mod/:code', koaBody(), async (ctx) => {
     const entry = INVITE_JOINERS[String(ctx.params.mod || '')];
     if (!entry) { ctx.status = 404; ctx.body = ''; return; }
     if (!checkMod(ctx, entry.mod)) { ctx.redirect('/modules'); return; }
-    const code = String(ctx.params.code || '').trim();
-    let href;
-    try { href = await entry.join(code, ctx); } catch (err) { inviteCodeFail(ctx, err); return; }
-    await recordInviteUse(String(ctx.params.mod), href);
-    ctx.redirect(href);
+    await qrJoin(ctx, entry, String(ctx.params.mod), String(ctx.params.code || '').trim());
   })
   .get('/qr-action/follow/:feedId', async (ctx) => {
     const feedId = paramId(ctx.params.feedId);
     if (!ssbRef.isFeedId(feedId)) { ctx.status = 400; ctx.body = 'Invalid feed id'; return; }
-    confirmPage(ctx, { message: require('../views/main_views').i18n.confirmFollowText, action: `/qr-action/follow/${encodeURIComponent(feedId)}`, backHref: `/author/${encodeURIComponent(feedId)}` });
+    if (qrScanned(ctx)) return qrFollow(ctx, feedId);
+    const label = await actorLabel(feedId);
+    confirmPage(ctx, { message: require('../views/main_views').i18n.confirmFollowText.replace('{who}', () => label), action: `/qr-action/follow/${encodeURIComponent(feedId)}`, backHref: `/author/${encodeURIComponent(feedId)}` });
   })
   .post('/qr-action/follow/:feedId', koaBody(), async (ctx) => {
     const feedId = paramId(ctx.params.feedId);
     if (!ssbRef.isFeedId(feedId)) { ctx.status = 400; ctx.body = 'Invalid feed id'; return; }
-    try { await friend.follow(feedId); } catch (_) {}
-    ctx.redirect(`/author/${encodeURIComponent(feedId)}`);
+    await qrFollow(ctx, feedId);
   })
   .post('/school/grant/:id', koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'schoolMod')) { ctx.redirect('/modules'); return; }
@@ -6912,7 +7123,7 @@ router
       ctx.body = await mailingView([], 'EDIT', { q, censusList, list });
       return;
     }
-    const lists = byViewerFilter((filter === 'ALL' && !q) ? censusList : await markRelations(decorate(await mailingModel.listAll({ filter: viewerOnlyFilter(filter) ? 'all' : filter, q }))), filter);
+    const lists = byViewerFilter((filter === 'ALL' && !q) ? censusList : await markRelations(decorate((await mailingModel.listAll({ filter: viewerOnlyFilter(filter) ? 'all' : filter, q })).filter(l => !invitedOnlyFor(l, uid)))), filter);
     const shownList = await applyWishScope(lists);
     const spreadMap = await spreadsForCards(pageOf(ctx, shownList.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0))).map(x => x && x.id).filter(id => typeof id === 'string' && id.startsWith('%')));
     await warmAuthorNames(pageOf(ctx, shownList.slice().sort((x, y) => (y.lastActivityTs || 0) - (x.lastActivityTs || 0))));
@@ -7094,13 +7305,15 @@ router
   .get('/qr-action/sign/:id', async ctx => {
     if (!checkMod(ctx, 'campaignsMod')) { ctx.redirect('/modules'); return; }
     const id = paramId(ctx.params.id);
-    confirmPage(ctx, { message: require('../views/main_views').i18n.confirmSignText, action: `/qr-action/sign/${encodeURIComponent(id)}`, backHref: `/campaigns/${encodeURIComponent(id)}` });
+    if (qrScanned(ctx)) return qrSign(ctx, id);
+    const t = require('../views/main_views').i18n;
+    const cp = await campaignsModel.getCampaignById(id).catch(() => null);
+    const what = cp && String(cp.title || '').trim() ? `«${String(cp.title).trim()}»` : t.invitePlaceCampaigns;
+    confirmPage(ctx, { message: t.confirmSignText.replace('{what}', () => what), action: `/qr-action/sign/${encodeURIComponent(id)}`, backHref: `/campaigns/${encodeURIComponent(id)}` });
   })
   .post('/qr-action/sign/:id', koaBody(), async ctx => {
     if (!checkMod(ctx, 'campaignsMod')) { ctx.redirect('/modules'); return; }
-    const id = paramId(ctx.params.id);
-    try { await campaignsModel.sign(id, ''); } catch (e) { if (!/already/i.test(String(e && e.message))) return actionFail(ctx); }
-    ctx.redirect(`/campaigns/${encodeURIComponent(id)}`);
+    await qrSign(ctx, paramId(ctx.params.id));
   })
   .get('/reports', async ctx => {
     const filter = qf(ctx);
@@ -8232,7 +8445,7 @@ router
       const oi = await tribesModel.getOpenInvite(ctx.params.id).catch(() => null);
       if (!oi) { ctx.status = 404; ctx.body = ''; return; }
       const QRCode = require('../server/node_modules/qrcode');
-      const joinUrl = `${QR_ACTION_BASE}/qr-action/join/tribes/${encodeURIComponent(oi.code)}`;
+      const joinUrl = `${QR_ACTION_BASE}/qr-action/join/tribes/${encodeURIComponent(oi.code)}${inviterQuery()}`;
       const buf = await QRCode.toBuffer(joinUrl, { type: 'png', width: 240, margin: 1, errorCorrectionLevel: 'M' });
       ctx.set('Content-Type', 'image/png');
       ctx.set('Cache-Control', 'no-store');
@@ -8245,28 +8458,12 @@ router
       const oi = await shopsModel.getOpenInvite(ctx.params.id).catch(() => null);
       if (!oi) { ctx.status = 404; ctx.body = ''; return; }
       const QRCode = require('../server/node_modules/qrcode');
-      const joinUrl = `${QR_ACTION_BASE}/shops/open-invite/join/${encodeURIComponent(ctx.params.id)}`;
+      const joinUrl = `${QR_ACTION_BASE}/qr-action/join/shops/${encodeURIComponent(oi.code)}${inviterQuery()}`;
       const buf = await QRCode.toBuffer(joinUrl, { type: 'png', width: 240, margin: 1, errorCorrectionLevel: 'M' });
       ctx.set('Content-Type', 'image/png');
       ctx.set('Cache-Control', 'no-store');
       ctx.body = buf;
     } catch (e) { ctx.status = 500; ctx.body = ''; }
-  })
-  .get("/qr-clearnet/:feedId", async (ctx) => {
-    const feedId = paramId(ctx.params.feedId);
-    const reqSize = parseInt(ctx.query.size, 10);
-    const width = Number.isFinite(reqSize) ? Math.max(64, Math.min(512, reqSize)) : 240;
-    try {
-      const QRCode = require('../server/node_modules/qrcode');
-      const targetUrl = `${resolveExternalBaseUrl(ctx)}/c/inhabitant/${encodeURIComponent(feedId)}`;
-      const buf = await QRCode.toBuffer(targetUrl, { type: 'png', width, margin: 1, errorCorrectionLevel: 'M' });
-      ctx.set('Content-Type', 'image/png');
-      ctx.set('Cache-Control', 'no-store');
-      ctx.body = buf;
-    } catch (e) {
-      ctx.status = 500;
-      ctx.body = '';
-    }
   })
   .get("/profiles/avatar/:key", async (ctx) => {
     const account = config.public ? null : profiles.accounts().find((p) => p.key === String(ctx.params.key || ""));
@@ -8729,7 +8926,7 @@ router
     const filter = String(ctx.query.filter || '').toLowerCase() === 'others' ? 'others' : 'pubs';
     const pubs = filter === 'pubs';
     const inviteCodes = pubs ? await suggestedPubs({ probe: true }).catch(() => []) : [];
-    ctx.body = await invitesView({ filter, deadKeys: pubs ? await deadPeerKeys() : new Set(), canJoin: !config.public && isLoopbackRequest(ctx), publicMode: !!config.public, inviteCodes, invitesUsed: pubs ? [] : readInvitesUsed() });
+    ctx.body = await invitesView({ filter, deadKeys: pubs ? await deadPeerKeys() : new Set(), canJoin: !config.public && isLoopbackRequest(ctx), publicMode: !!config.public, inviteCodes, invitesUsed: pubs ? [] : readInvitesUsed(), invitesPending: pubs ? [] : readPendingInvites() });
   })
   .get("/supporters", async (ctx) => {
     const feed = getViewerId();
@@ -9840,10 +10037,10 @@ router
     const { eventId } = ctx.params, filter = qf(ctx);
     const event = await eventsModel.getEventById(eventId).catch(() => null);
     if (!event) { sendErrorPage(ctx, `Event not found: ${eventId}`, { status: 404 }); return; }
-    const [comments, mapData, linkedCalendarId] = await Promise.all([
+    const [comments, mapData, linkedCalendar] = await Promise.all([
       commentsFor(eventId),
       resolveMapUrl(event.mapUrl),
-      calendarsModel.findCalendarByLinkText(`/events/${eventId}`).catch(() => null)
+      calendarsModel.findCalendarByEvent(event.rootId || eventId).catch(() => null)
     ]);
     await enrichMsgSize([event]);
     await enrichItemLifetime(event, { author: event.organizer });
@@ -9853,7 +10050,7 @@ router
     try { event.subscription = await subscriptionStateFor(event.rootId || event.id, event.organizer || event.author); } catch (_) {}
     const singleCensus = await markRelations(await censusOf('events', () => eventsModel.listAll(null, 'all')).catch(() => []));
     if (event) event.clearnet = await clearnetPublic('events', event).catch(() => false);
-    ctx.body = await singleEventView(await withFavorite(withCount(event, comments), 'events'), filter, comments, { censusList: singleCensus, mapData, baseUrl: resolveExternalBaseUrl(ctx), authorPrefs: evAuthorPrefs2, linkedCalendarId, spreads: await spreadForCard(event.id).catch(() => null) });
+    ctx.body = await singleEventView(await withFavorite(withCount(event, comments), 'events'), filter, comments, { censusList: singleCensus, mapData, baseUrl: resolveExternalBaseUrl(ctx), authorPrefs: evAuthorPrefs2, linkedCalendar, spreads: await spreadForCard(event.id).catch(() => null) });
   })
   .get('/c/events/:eventId', async (ctx) => {
     ctx.params.eventId = await clearnetIdFor('events', ctx.params.eventId);
@@ -10548,7 +10745,6 @@ router
     for (const entry of index) for (const k of Object.keys(entry.items)) items[k] = (items[k] || []).concat(entry.items[k]);
     const filterType = String(ctx.query.type || '').toLowerCase();
     let trending = [];
-    let trendingFeeds = [];
     {
       try {
         const { CLEARNET_MODULES } = require('../views/main_views');
@@ -10556,17 +10752,18 @@ router
         for (const m of CLEARNET_MODULES) for (const it of (items[m.key] || [])) for (const id of [it.id, it.rootId]) if (id && !byId.has(id)) byId.set(id, { ...it, modulePath: m.modulePath || m.key, kind: m.kind, moduleKey: m.key });
         if (!clearnetTrendingCache.keys || Date.now() - clearnetTrendingCache.at > CLEARNET_INDEX_TTL_MS) {
           const { filtered } = await trendingModel.listTrending('TOP');
-          clearnetTrendingCache = { at: Date.now(), keys: (filtered || []).map(t => t.key) };
+          const now = Date.now();
+          const hot = (t) => (Number(t.trendScore) || 0) / Math.pow(Math.max(0, now - (Number(t.value && t.value.timestamp) || now)) / 3600000 + 2, 1.5);
+          clearnetTrendingCache = { at: now, keys: (filtered || []).slice().sort((x, y) => hot(y) - hot(x)).map(t => t.key) };
         }
         for (const key of clearnetTrendingCache.keys) {
           const hit = byId.get(key);
-          const list = hit && hit.kind === 'feed' ? trendingFeeds : trending;
-          if (hit && !list.includes(hit)) list.push(hit);
+          if (hit && hit.kind !== 'feed' && !trending.includes(hit)) trending.push(hit);
         }
-      } catch (_) { trending = []; trendingFeeds = []; }
+      } catch (_) { trending = []; }
     }
     ctx.type = 'text/html';
-    ctx.body = await clearnetHubView({ items, tribes: await getClearnetTribes().catch(() => []), trending, trendingFeeds, filterType, query: String(ctx.query.q || '').trim(), page: ctx.query.page });
+    ctx.body = await clearnetHubView({ items, tribes: await getClearnetTribes().catch(() => []), trending, filterType, query: String(ctx.query.q || '').trim(), page: ctx.query.page });
   })
   .get("/c/tribe/:id", async (ctx) => {
     const { clearnetSlugFor, clearnetShortId } = require('../views/main_views');
@@ -12479,11 +12676,20 @@ router
     if (isMsgKey(id)) viewerFilters.hideContent({ id, href, label: String(b.label || '') });
     const rt = safeReturnTo(ctx, '/activity', ['/']);
     const samePage = href && rt.split(/[?#]/)[0] === href.split(/[?#]/)[0];
-    ctx.redirect(samePage ? '/activity' : rt);
+    if (samePage) { ctx.redirect('/activity'); return; }
+    const [base, frag] = rt.split('#');
+    const anchor = frag || require('../views/main_views').anchorFor(id);
+    ctx.redirect(anchor ? `${base}#${anchor}` : base);
+  })
+  .get("/hidden-content.svg", async (ctx) => {
+    ctx.type = 'image/svg+xml';
+    ctx.set('Cache-Control', 'no-store');
+    ctx.set('X-Content-Type-Options', 'nosniff');
+    ctx.body = pendingPicture(require('../views/main_views').i18n.hiddenForMeNote);
   })
   .post("/unhide/:id", koaBody(), async (ctx) => {
     viewerFilters.unhideContent(String(ctx.params.id || ''));
-    ctx.redirect(safeReturnTo(ctx, '/settings?filter=content#hidden', ['/settings']));
+    ctx.redirect(safeReturnTo(ctx, '/settings?filter=content#hidden', ['/']));
   })
   .post("/spread/:message", koaBody(), async (ctx) => {
     const { message } = ctx.params;
@@ -12917,7 +13123,7 @@ router
   .post("/maps/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'mapsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body;
-    if (clearnetReachConflict('maps', b)) return renderClearnetConflict(ctx, () => mapsView([], 'create', null, { lat: b.lat, lng: b.lng, zoom: b.zoom, title: b.title, description: b.description, markerLabel: b.markerLabel, tags: b.tags, mapType: b.mapType, clearnet: '1', ...(b.tribeId ? { tribeId: b.tribeId } : {}) }));
+    if (clearnetReachConflict('maps', b)) dropClearnet(b);
     if (b.tribeId) {
       const t = await tribesModel.getTribeById(b.tribeId).catch(() => null);
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
@@ -12940,9 +13146,7 @@ router
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
     }
     const b = ctx.request.body;
-    if (target && target.author === getViewerId() && (clearnetReachConflict('maps', b) || (String(b.clearnet || '') === '1' && !CLEARNET_REACH_OK.maps({ ...target, mapType: b.mapType || target.mapType })))) {
-      return renderClearnetConflict(ctx, () => mapsView([target], 'edit', target.key, { lat: b.lat, lng: b.lng, zoom: b.zoom, title: b.title, description: b.description, tags: b.tags, clearnet: '1', reach: String(b.mapType || ''), returnTo: String(b.returnTo || '') }));
-    }
+    if (target && target.author === getViewerId() && (clearnetReachConflict('maps', b) || (String(b.clearnet || '') === '1' && !CLEARNET_REACH_OK.maps({ ...target, mapType: b.mapType || target.mapType })))) dropClearnet(b);
     const imageId = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image', sealIf(target && target.tribeId))) || "" : "";
     await mapsModel.updateMapById(ctx.params.id, b.lat, b.lng, stripDangerousTags(b.description), b.mapType, b.tags, stripDangerousTags(b.title), imageId || undefined);
     await applyClearnetChoice(ctx, 'maps', target ? (target.rootId || target.key) : ctx.params.id, { recheck: true, allowed: CLEARNET_REACH_OK.maps(await mapsModel.getMapById(ctx.params.id, getViewerId()).catch(() => null)) });
@@ -13390,7 +13594,10 @@ router
   .get('/tribes/open-invite/join/:id', async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
     const tribeId = ctx.params.id;
-    confirmPage(ctx, { message: require('../views/main_views').i18n.confirmJoinText, action: '/tribes/open-invite/join', hidden: [{ name: 'tribeId', value: tribeId }], backHref: `/tribe/${encodeURIComponent(tribeId)}` });
+    const t = require('../views/main_views').i18n;
+    const tribe = await tribesModel.getTribeById(tribeId).catch(() => null);
+    const place = tribe && String(tribe.title || '').trim() ? `«${String(tribe.title).trim()}»` : t.invitePlaceTribes;
+    confirmPage(ctx, { message: `${t.inviteSavedAnon.replace('{place}', () => place)} ${t.confirmJoinText}`, action: '/tribes/open-invite/join', hidden: [{ name: 'tribeId', value: tribeId }], backHref: `/tribe/${encodeURIComponent(tribeId)}` });
   })
   .post('/tribe/:id/message', koaBody(), async ctx => {
     if (!checkMod(ctx, 'tribesMod')) { ctx.redirect('/modules'); return; }
@@ -14146,7 +14353,7 @@ router
       ctx.body = await eventView([], 'create', null, b.returnTo, { viewerPrefs: viewerPrefsDraft, draft: { ...b, images: draftImages } });
       return;
     }
-    if (clearnetConflict(b)) return renderClearnetConflict(ctx, () => eventView([], 'create', null, b.returnTo, { draft: { ...clearnetDraft(b), images: draftImages } }));
+    if (clearnetConflict(b)) dropClearnet(b);
     const { intervalWeekly, intervalMonthly, intervalYearly } = readInterval(b);
     const recurrence = {
       weekly: intervalWeekly,
@@ -14154,32 +14361,20 @@ router
       yearly: intervalYearly,
       until: b.intervalDeadline || b.recurrenceUntil || ''
     };
+    const addToCalendar = [].concat(b.addToCalendar).includes("1");
     const eventAttachment = await handleBlobUpload(ctx, 'blob');
     if (rejectPastDates(ctx, [[b.date]], '/events?filter=create')) return;
     const eventPublishAt = String(b.publishAt || '').trim();
     if (eventPublishAt) {
-      try { await eventsModel.scheduleEvent({ title: stripDangerousTags(b.title), description: stripDangerousTags(b.description) + (eventAttachment || ''), date: b.date, location: stripDangerousTags(b.location), price: b.price, url: b.url, attendees: b.attendees || [], tags: b.tags, isPublic: b.isPublic, mapUrl: stripDangerousTags(b.mapUrl), clearnetPublic: b.clearnetPublic, media: { images: draftImages, video: media.clip || '' }, recurrence, clearnet: b.clearnet }, eventPublishAt); }
+      try { await eventsModel.scheduleEvent({ title: stripDangerousTags(b.title), description: stripDangerousTags(b.description) + (eventAttachment || ''), date: b.date, location: stripDangerousTags(b.location), price: b.price, url: b.url, attendees: b.attendees || [], tags: b.tags, isPublic: b.isPublic, mapUrl: stripDangerousTags(b.mapUrl), clearnetPublic: b.clearnetPublic, media: { images: draftImages, video: media.clip || '' }, recurrence, clearnet: b.clearnet, ...(addToCalendar ? { addToCalendar: true } : {}) }, eventPublishAt); }
       catch (err) { sendErrorPage(ctx, err.message || String(err), { status: 400 }); return; }
       ctx.redirect('/events?filter=mine');
       return;
     }
     const evResult = await eventsModel.createEvent(stripDangerousTags(b.title), stripDangerousTags(b.description) + (eventAttachment || ''), b.date, stripDangerousTags(b.location), b.price, b.url, b.attendees || [], b.tags, b.isPublic, stripDangerousTags(b.mapUrl), b.clearnetPublic, { images: draftImages, video: media.clip || '' }, recurrence);
     await applyClearnetChoice(ctx, 'events', evResult);
-    if ([].concat(b.addToCalendar).includes("1") && evResult && evResult.key) {
-      try {
-        await calendarsModel.createCalendar({
-          title: stripDangerousTags(b.title),
-          status: 'OPEN',
-          deadline: '',
-          tags: b.tags,
-          firstDate: b.date,
-          firstDateLabel: stripDangerousTags(b.title),
-          firstNote: `/events/${evResult.key}`,
-          intervalWeekly: 0,
-          intervalMonthly: 0,
-          intervalYearly: 0
-        });
-      } catch (_) {}
+    if (addToCalendar && evResult && evResult.key) {
+      try { await calendarForEvent(evResult.key, { ...b, recurrence }); } catch (_) {}
     }
     ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events']));
   })
@@ -14199,9 +14394,10 @@ router
     if (await guardRatedMedia(ctx, ctx.params.id)) return;
     const b = ctx.request.body, existing = await eventsModel.getEventById(ctx.params.id);
     const media = await readGalleryUpload(ctx);
-    if (clearnetConflict(b) && !media.isMediaAction) return renderClearnetConflict(ctx, () => eventView([{ ...clearnetDraft(b, existing), id: existing.id, images: existing.images || [] }], 'edit', existing.id, b.returnTo));
+    if (clearnetConflict(b)) dropClearnet(b);
     await eventsModel.updateEventById(ctx.params.id, { title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), date: b.date, location: stripDangerousTags(b.location), price: b.price, url: b.url, attendees: b.attendees, tags: b.tags, isPublic: b.isPublic, createdAt: existing.createdAt, organizer: existing.organizer, mapUrl: stripDangerousTags(b.mapUrl), clearnetPublic: b.clearnetPublic, ...readInterval(b), recurrenceUntil: b.intervalDeadline || b.recurrenceUntil || '', ...galleryPatch(media, existing.images || []) });
     await applyClearnetChoice(ctx, 'events', ctx.params.id);
+    await syncEventCalendar(existing.rootId || existing.id, b).catch(() => {});
     if (media.isMediaAction) { ctx.redirect(`/events/edit/${encodeURIComponent(ctx.params.id)}`); return; }
     ctx.redirect(safeReturnTo(ctx, '/events?filter=mine', ['/events']));
   })
@@ -14571,7 +14767,7 @@ router
   })  
   .post("/market/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'marketMod')) { ctx.redirect('/modules'); return; }
-    if (clearnetConflict(ctx.request.body)) return renderClearnetConflict(ctx, () => marketView([], 'create', clearnetDraft(ctx.request.body), { q: '', minPrice: '', maxPrice: '', sort: 'recent', industry: String(ctx.request.body.industry || '') }));
+    if (clearnetConflict(ctx.request.body)) dropClearnet(ctx.request.body);
     const b = ctx.request.body, image = await handleBlobUpload(ctx, "image"), parsedStock = parseInt(String(b.stock || "0"), 10);
     if (!parsedStock || parsedStock <= 0) ctx.throw(400, "Stock must be a positive number.");
     const pickLast = v => Array.isArray(v) ? v[v.length - 1] : v, shpVal = pickLast(b.includesShipping);
@@ -14584,12 +14780,7 @@ router
   .post("/market/update/:id", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'marketMod')) { ctx.redirect('/modules'); return; }
     if (await guardRatedMedia(ctx, ctx.params.id)) return;
-    if (clearnetConflict(ctx.request.body)) {
-      const existing = await marketModel.getItemById(ctx.params.id).catch(() => null);
-      if (!existing) { ctx.redirect('/market'); return; }
-      const draft = clearnetDraft(ctx.request.body, existing);
-      return renderClearnetConflict(ctx, () => marketView([draft], 'edit', draft, { q: '', minPrice: '', maxPrice: '', sort: 'recent' }));
-    }
+    if (clearnetConflict(ctx.request.body)) dropClearnet(ctx.request.body);
     const b = ctx.request.body, parsedStock = parseInt(String(b.stock || "0"), 10);
     if (parsedStock < 0) ctx.throw(400, "Stock cannot be negative.");
     const pickLast = v => Array.isArray(v) ? v[v.length - 1] : v, shpVal = pickLast(b.includesShipping);
@@ -14688,7 +14879,7 @@ router
       ctx.body = await housingView([], 'CREATE', { maxImages: housingModel.MAX_IMAGES, draft: { ...b, images } })
       return
     }
-    if (clearnetConflict(b)) return renderClearnetConflict(ctx, () => housingView([], 'CREATE', { maxImages: housingModel.MAX_IMAGES, draft: { ...clearnetDraft(b), images } }))
+    if (clearnetConflict(b)) dropClearnet(b);
     let created = null
     try {
       if (rejectPastDates(ctx, [[b.availableFrom, { dayOnly: true }], [b.availableTo, { dayOnly: true }]], '/housing?filter=create')) return;
@@ -14720,12 +14911,7 @@ router
     if (!checkMod(ctx, 'housingMod')) { ctx.redirect('/modules'); return; }
     if (await guardRatedMedia(ctx, ctx.params.id)) return;
     const b = ctx.request.body
-    if (clearnetConflict(b)) {
-      let existing = null
-      try { existing = await housingModel.getHousingById(ctx.params.id, getViewerId()) } catch (_) {}
-      if (!existing) { ctx.redirect('/housing?filter=MINE'); return }
-      return renderClearnetConflict(ctx, () => housingView([clearnetDraft(b, existing)], 'EDIT', { maxImages: housingModel.MAX_IMAGES }))
-    }
+    if (clearnetConflict(b)) dropClearnet(b)
     const uploaded = await handleBlobUploads(ctx, 'images')
     const newClip = ctx.request.files?.video ? await handleBlobUpload(ctx, 'video') : null
     const patch = {
@@ -14821,7 +15007,7 @@ router
   .post('/housing/:housingId/comments', koaBodyMiddleware, async ctx => commentAction(ctx, 'housing', 'housingId'))
   .post('/jobs/create', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'jobsMod')) { ctx.redirect('/modules'); return; }
-    if (clearnetConflict(ctx.request.body)) return renderClearnetConflict(ctx, () => jobsView([], 'CREATE', { draft: clearnetDraft(ctx.request.body) }));
+    if (clearnetConflict(ctx.request.body)) dropClearnet(ctx.request.body);
     const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
     const data = { args: { job_type: stripDangerousTags(b.job_type), title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), requirements: stripDangerousTags(b.requirements), languages: stripDangerousTags(b.languages), job_time: b.job_time, tasks: stripDangerousTags(b.tasks), location: stripDangerousTags(b.location), vacants: b.vacants ? parseInt(b.vacants, 10) : 1, salary: b.salary != null && b.salary !== '' ? parseFloat(String(b.salary).replace(',', '.')) : 0, hoursOffered: b.hoursOffered != null && b.hoursOffered !== '' ? parseFloat(String(b.hoursOffered).replace(',', '.')) : 0, hoursRequested: b.hoursRequested != null && b.hoursRequested !== '' ? parseFloat(String(b.hoursRequested).replace(',', '.')) : 0, exchangeSkill: stripDangerousTags(b.exchangeSkill || ''), tags: b.tags, image: imageBlob, mapUrl: stripDangerousTags(b.mapUrl), industry: stripDangerousTags(b.industry || ''), visibility: b.visibility, clearnetPublic: b.clearnetPublic }, form: clearnetFormOf(ctx.request.body) };
     if (await scheduleModule(ctx, 'jobs', data, '/jobs?filter=MINE')) return;
@@ -14831,11 +15017,7 @@ router
   .post('/jobs/update/:id', koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'jobsMod')) { ctx.redirect('/modules'); return; }
     if (await guardRatedMedia(ctx, ctx.params.id)) return;
-    if (clearnetConflict(ctx.request.body)) {
-      const existing = await jobsModel.getJobById(ctx.params.id, getViewerId()).catch(() => null);
-      if (!existing) { ctx.redirect('/jobs'); return; }
-      return renderClearnetConflict(ctx, () => jobsView([clearnetDraft(ctx.request.body, existing)], 'EDIT', {}));
-    }
+    if (clearnetConflict(ctx.request.body)) dropClearnet(ctx.request.body);
     const b = ctx.request.body, imageBlob = (ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : undefined) || undefined;
     const patch = { job_type: stripDangerousTags(b.job_type), title: stripDangerousTags(b.title), description: stripDangerousTags(b.description), requirements: stripDangerousTags(b.requirements), languages: stripDangerousTags(b.languages), job_time: b.job_time, tasks: stripDangerousTags(b.tasks), location: stripDangerousTags(b.location), tags: b.tags, mapUrl: stripDangerousTags(b.mapUrl), visibility: b.visibility, exchangeSkill: stripDangerousTags(b.exchangeSkill || ''), clearnetPublic: b.clearnetPublic };
     if (b.vacants !== undefined && b.vacants !== '') patch.vacants = parseInt(b.vacants, 10);
@@ -14897,7 +15079,7 @@ router
   .post('/jobs/:jobId/comments', koaBodyMiddleware, async ctx => commentAction(ctx, 'jobs', 'jobId'))
   .post("/shops/create", koaBody({ multipart: true, formidable: { maxFileSize: maxSize } }), async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
-    if (clearnetConflict(ctx.request.body)) return renderClearnetConflict(ctx, () => shopsView([], 'create', null, { draft: clearnetDraft(ctx.request.body), returnTo: String(ctx.request.body.returnTo || '') }));
+    if (clearnetConflict(ctx.request.body)) dropClearnet(ctx.request.body);
     const b = ctx.request.body, imageBlob = ctx.request.files?.image ? await handleBlobUpload(ctx, 'image') : null;
     const data = { args: [stripDangerousTags(b.title), stripDangerousTags(b.shortDescription), stripDangerousTags(b.description), imageBlob, stripDangerousTags(b.url), stripDangerousTags(b.location), b.tags, b.visibility, stripDangerousTags(b.mapUrl), b.clearnetPublic], form: clearnetFormOf(ctx.request.body) };
     if (await scheduleModule(ctx, 'shops', data, '/shops?filter=mine')) return;
@@ -14946,7 +15128,10 @@ router
   })
   .get("/shops/open-invite/join/:id", async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
-    confirmPage(ctx, { message: require('../views/main_views').i18n.confirmJoinText, action: `/shops/open-invite/join/${encodeURIComponent(ctx.params.id)}`, backHref: `/shops/${encodeURIComponent(ctx.params.id)}` });
+    const t = require('../views/main_views').i18n;
+    const shop = await shopsModel.getShopById(ctx.params.id).catch(() => null);
+    const place = shop && String(shop.title || '').trim() ? `«${String(shop.title).trim()}»` : t.invitePlaceShops;
+    confirmPage(ctx, { message: `${t.inviteSavedAnon.replace('{place}', () => place)} ${t.confirmJoinText}`, action: `/shops/open-invite/join/${encodeURIComponent(ctx.params.id)}`, backHref: `/shops/${encodeURIComponent(ctx.params.id)}` });
   })
   .post("/shops/open-invite/join/:id", koaBody(), async (ctx) => {
     if (!checkMod(ctx, 'shopsMod')) { ctx.redirect('/modules'); return; }
@@ -15378,7 +15563,7 @@ router
     if (!checkMod(ctx, 'roomsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
     const tribeId = b.tribeId || null;
-    if (clearnetReachConflict('rooms', b)) return renderClearnetConflict(ctx, () => roomsView([], 'create', null, { tribeId: String(tribeId || ''), reach: String(b.status || ''), draft: clearnetDraft(b) }));
+    if (clearnetReachConflict('rooms', b)) dropClearnet(b);
     if (tribeId) {
       const t = await tribesModel.getTribeById(tribeId).catch(() => null);
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
@@ -15397,7 +15582,7 @@ router
     const b = ctx.request.body || {};
     const room = await roomsModel.getRoomById(ctx.params.id).catch(() => null);
     if (!room || room.author !== getViewerId()) { ctx.redirect('/rooms'); return; }
-    if (clearnetReachConflict('rooms', b) || (String(b.clearnet || '') === '1' && !CLEARNET_REACH_OK.rooms(room))) return renderClearnetConflict(ctx, () => roomsView([], 'edit', clearnetDraft(b, room), {}));
+    if (clearnetReachConflict('rooms', b) || (String(b.clearnet || '') === '1' && !CLEARNET_REACH_OK.rooms(room))) dropClearnet(b);
     const image = ctx.request.files?.image ? extractBlobId(await handleBlobUpload(ctx, 'image', sealIf(room.tribeId))) : null;
     const patch = { title: stripDangerousTags(String(b.title || '')), description: stripDangerousTags(String(b.description || '')), tags: b.tags || '' };
     if (image) patch.image = image;
@@ -15593,7 +15778,7 @@ router
     if (!checkMod(ctx, 'calendarsMod')) { ctx.redirect('/modules'); return; }
     const b = ctx.request.body || {};
     const tribeId = b.tribeId || null;
-    if (clearnetReachConflict('calendars', b)) return renderClearnetConflict(ctx, () => calendarsView([], 'create', null, { tribeId: String(tribeId || ''), reach: String(b.status || ''), draft: clearnetDraft(b) }));
+    if (clearnetReachConflict('calendars', b)) dropClearnet(b);
     if (tribeId) {
       const t = await tribesModel.getTribeById(tribeId).catch(() => null);
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
@@ -15632,9 +15817,7 @@ router
       if (!t || !t.members.includes(getViewerId())) { ctx.status = 403; ctx.redirect('/tribes'); return; }
     }
     const b = ctx.request.body || {};
-    if (target && target.author === getViewerId() && (clearnetReachConflict('calendars', b) || (String(b.clearnet || '') === '1' && !CLEARNET_REACH_OK.calendars({ ...target, status: 'OPEN', isClosed: false })))) {
-      return renderClearnetConflict(ctx, () => calendarsView([], 'edit', clearnetDraft(b, target), { reach: String(b.status || '') }));
-    }
+    if (target && target.author === getViewerId() && (clearnetReachConflict('calendars', b) || (String(b.clearnet || '') === '1' && !CLEARNET_REACH_OK.calendars({ ...target, status: 'OPEN', isClosed: false })))) dropClearnet(b);
     try {
       await calendarsModel.updateCalendarById(ctx.params.id, {
         title: stripDangerousTags(b.title || ""),
@@ -16051,6 +16234,12 @@ router
   .post("/peers/pause", koaBody(), async ctx => { await setNetworkPaused(true); ctx.redirect("/peers?filter=connections"); })
   .post("/peers/resume", koaBody(), async ctx => { await setNetworkPaused(false); ctx.redirect("/peers?filter=connections"); })
   .post("/settings/invite/accept", koaBody(), async ctx => acceptPubInvite(ctx, String(ctx.request.body.invite || '')))
+  .post("/invites/pending/discard", koaBody(), async (ctx) => {
+    const b = ctx.request.body || {};
+    const gone = { kind: String(b.kind || '') || null, code: String(b.code || ''), open: b.open === '1' };
+    writePendingInvites(readPendingInvites().filter((e) => !samePending(e, gone)));
+    ctx.redirect('/invites?filter=others');
+  })
   .post("/invites/join", koaBody(), async (ctx) => {
     const code = String((ctx.request.body || {}).code || '').trim();
     if (!code) { inviteCodeFail(ctx); return; }
@@ -16072,7 +16261,8 @@ router
       ctx.redirect(href);
       return;
     }
-    inviteCodeFail(ctx);
+    if (keepPendingInvite(null, code)) await notifyPendingInvite(null);
+    ctx.redirect('/invites?filter=others');
   })
   .post("/settings/invite/unfollow", koaBody(), async (ctx) => {
     const { key } = ctx.request.body || {};
@@ -16796,6 +16986,7 @@ const refreshAll = async (now) => {
   try { await checkNewSupporters(); } catch (_) {}
   try { await refreshTribeActivity(); } catch (_) {}
   try { await backupModel.importOwnFeed(); } catch (_) {}
+  try { await retryPendingInvites(); } catch (_) {}
   try { if (!config.public) await publishScheduled(); } catch (_) {}
   try { await larpModel.settleMyDecrees(); } catch (_) {}
   try { await checkLarpBot(); } catch (_) {}

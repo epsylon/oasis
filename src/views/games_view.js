@@ -40,14 +40,14 @@ const renderHallOfFame = (hall, games) => {
             p({ class: 'game-card-desc game-desc-yellow' }, game.desc())
           )
         ),
-        table({ class: 'hall-of-fame-table' },
+        table({ class: 'hall-of-fame-table stack-table' },
           tr(th('#'), th(i18n.gamesHallPlayer), th(i18n.gamesHallScore), th(i18n.gamesHallDate || 'Date')),
           ...hall[game.id].map((entry, idx) =>
             tr(
-              td(String(idx + 1)),
-              td(userLink(entry.author)),
-              td({ class: idx === 0 ? 'score-first' : '' }, String(entry.score)),
-              td(entry.ts ? moment(entry.ts).format('YYYY-MM-DD') : '\u2014')
+              td({ 'data-label': '#' }, String(idx + 1)),
+              td({ 'data-label': i18n.gamesHallPlayer }, userLink(entry.author)),
+              td({ class: idx === 0 ? 'score-first' : '', 'data-label': i18n.gamesHallScore }, String(entry.score)),
+              td({ 'data-label': i18n.gamesHallDate || 'Date' }, entry.ts ? moment(entry.ts).format('YYYY-MM-DD') : '\u2014')
             )
           )
         )

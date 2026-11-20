@@ -2,7 +2,7 @@ const { form, button, div, h2, p, section, input, label, textarea, br, a, select
   require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
-const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -279,11 +279,12 @@ exports.singleBookmarkView = async (bookmark, filter = "all", comments = [], par
       editAction: isAuthor ? `/bookmarks/edit/${encodeURIComponent(bookmark.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('bookmark', bookmark.id) : undefined
     }),
+    renderDetailShare(bookmark.id, href, bookmark.title, null, null, null, bookmark.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, bookmark.title || urlLink || "")
     ),
-    renderDetailShare(bookmark.id, href, bookmark.title, null, null, null, bookmark.author),
     isAuthor ? renderClearnetSwitch("bookmarks", bookmark.rootId || bookmark.id, isClearnet) : null,
+    !bookmark.tribeId ? renderJoinQr('bookmarks', bookmark.id) : null,
     tagsNode,
   );
 

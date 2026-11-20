@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, br, input, table, tr, th, td, label, span, select, option } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, anchorFor, renderCountChip, renderStateChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton } = require("./main_views");
+const { renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, anchorFor, renderCountChip, renderStateChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton, renderJoinQr } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
@@ -265,10 +265,11 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
 
   const voteSide = div({ class: "tribe-side" },
     renderCardTop(v.id, `/votes/${encodeURIComponent(v.id)}`, { arrow: false, date: v.createdAt, chips, bylineExtra: [renderEditedChip(v.id, v.rootId, v.updatedAt)], spread: params.spreads || null, author: v.createdBy, favKind: 'votes', isFavorite: v.isFavorite, reportTitle: v.question, editAction: canModifyVote(v) ? `/votes/edit/${encodeURIComponent(v.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: canModifyVote(v) ? contentDeleteAction('votes', v.id) : undefined }),
+    renderDetailShare(v.id, `/votes/${encodeURIComponent(v.id)}`, v.question, params.subscription ? { target: v.rootId || v.id, scope: "votes", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(v.createdBy || v.author) === String(userId), returnTo: `/votes/${encodeURIComponent(v.id)}` } : null, null, null, v.createdBy || v.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, v.question)
     ),
-    renderDetailShare(v.id, `/votes/${encodeURIComponent(v.id)}`, v.question, params.subscription ? { target: v.rootId || v.id, scope: "votes", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(v.createdBy || v.author) === String(userId), returnTo: `/votes/${encodeURIComponent(v.id)}` } : null, null, null, v.createdBy || v.author),
+    !v.tribeId ? renderJoinQr('votes', v.id) : null,
     tagsNode
   );
 
@@ -287,9 +288,9 @@ const renderVoteDetail = (v, voteOptionsDefault, firstRow, secondRow, mode, acti
         span({ class: "tribe-members-count" }, `${i18n.pollVoters}: ${totalVotesNum}`)
       ),
       div({ class: "vote-table" },
-        table(
+        table({ class: "stack-table" },
           tr(...voteOptions.map((opt) => th(voteLabel(opt)))),
-          tr(...voteOptions.map((opt) => td(baseCounts[opt])))
+          tr(...voteOptions.map((opt) => td({ "data-label": voteLabel(opt) }, baseCounts[opt])))
         )
       ),
       h2({ class: "job-section-title vote-outcome-title" },

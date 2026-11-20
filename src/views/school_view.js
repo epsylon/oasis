@@ -1,7 +1,7 @@
 const { div, h2, h3, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, th, details, summary, datalist, progress, hr } = require("../server/node_modules/hyperaxe")
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderCardTop, renderOpinionsVoting, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, renderWalletChip, contentDeleteAction, paged, renderPdfDocument, renderEditedChip, renderMediaLockNote, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderJoinQr, renderAmountChip } = require("./main_views")
 const { renderCommentsSection } = require("./comments_view")
 const opinionCategories = require("../backend/opinion_categories")
 const { config } = require("../server/SSB_server.js")
@@ -67,7 +67,7 @@ const renderModeButtons = (currentFilter, emptyMod = false, modesAvail = null) =
 const renderPriceChip = (course) =>
   isFree(course)
     ? renderStateChip("whole", "✓", i18n.schoolFree, "level")
-    : renderStateChip("whole", "¤", `${Number(course.price).toFixed(2)} ECO`, "level")
+    : renderAmountChip(`${Number(course.price)} ECO`)
 
 const renderStartDateChip = (course) => course.startDate ? renderCountChip("◷", i18n.schoolStartDate, moment(course.startDate).format("YYYY/MM/DD HH:mm")) : null
 
@@ -426,11 +426,12 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
       leaveAction: !isTeacher && (isStudent || myPending) ? `/school/unenroll/${encodeURIComponent(course.id)}` : undefined,
       deleteAction: isTeacher ? contentDeleteAction('schoolCourse', course.id) : undefined
     }),
+    renderDetailShare(course.id, returnTo, course.title, subscriptionOpts, null, null, course.author),
     h2({ class: "tribe-card-title" }, course.title),
     renderStarRating(course.opinions, safeArr(course.opinions_inhabitants).length),
     isTeacher && canClearnet ? renderClearnetSwitch('school', course.rootId || course.id, isClearnet) : null,
+    course.visibility === "PUBLIC" && course.status === "ONGOING" && !course.tribeId ? renderJoinQr("school", course.id) : null,
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    renderDetailShare(course.id, returnTo, course.title, subscriptionOpts, null, null, course.author),
     course.description ? p({ class: "tribe-side-description" }, ...renderStyledText(course.description)) : null,
     course.chatId && (isTeacher || isStudent || (course.visibility === "PUBLIC" && isFree(course)))
       ? div({ class: "tribe-side-actions shop-visibility-row stacked-action-row" },
@@ -529,7 +530,7 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
   const teacherProgress = isTeacher && safeArr(course.students).length
     ? div({ class: "school-progress-list" },
         h2(`${i18n.schoolStudents} (${course.students.length})`),
-        table({ class: "school-students-table" },
+        table({ class: "school-students-table stack-table" },
           tr(
             th(i18n.schoolStudents),
             th(i18n.schoolLessons),
@@ -543,15 +544,15 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
             const cert = safeArr(certificates).find(c => c.student === student) || null
             const eligible = done >= lessons.length && passedExams >= readyExams.length
             return tr({ class: eligible ? "school-row-passed" : "" },
-              td(userLink(student)),
-              td(`${done}/${lessons.length}`),
-              td(
+              td({ "data-label": i18n.schoolStudents }, userLink(student)),
+              td({ "data-label": i18n.schoolLessons }, `${done}/${lessons.length}`),
+              td({ "data-label": i18n.schoolExams },
                 readyExams.length ? `${passedExams}/${readyExams.length}` : "—",
                 failedExams.length
                   ? span({ class: "school-progress-failed", title: failedExams.map(x => x.title).join(", ") }, ` ✗${failedExams.length}`)
                   : null
               ),
-              td(cert
+              td({ "data-label": i18n.schoolCertified }, cert
                 ? a({ href: `/school/certificate/pdf/${encodeURIComponent(course.id)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
                 : eligible
                   ? a({ href: `${returnTo}?cert=${encodeURIComponent(student)}#school-cert`, class: "filter-btn school-cert-pdf" }, i18n.schoolIssueCertificate)
@@ -568,21 +569,21 @@ exports.singleCourseView = async (course, lessons = [], certificates = [], param
         const myFailed = readyExams.filter(x => x.myResult && !x.myResult.passed)
         return div({ class: "school-progress-list" },
           h2(i18n.schoolStudentPanel),
-          table({ class: "school-students-table" },
+          table({ class: "school-students-table stack-table" },
             tr(
               th(i18n.schoolLessons),
               th(i18n.schoolExams),
               th(i18n.schoolCertified)
             ),
             tr(
-              td(`${myCompleted}/${lessons.length}`),
-              td(
+              td({ "data-label": i18n.schoolLessons }, `${myCompleted}/${lessons.length}`),
+              td({ "data-label": i18n.schoolExams },
                 readyExams.length ? `${myPassed}/${readyExams.length}` : "—",
                 myFailed.length
                   ? span({ class: "school-progress-failed", title: myFailed.map(x => x.title).join(", ") }, ` ✗${myFailed.length}`)
                   : null
               ),
-              td((() => {
+              td({ "data-label": i18n.schoolCertified }, (() => {
                 const cert = safeArr(certificates).find(c => c.student === userId) || null
                 return cert
                   ? a({ href: `/school/certificate/pdf/${encodeURIComponent(course.id)}/${encodeURIComponent(cert.id)}`, class: "filter-btn school-cert-pdf" }, `⬇ ${i18n.schoolCertificatePdf || "PDF"}`)
@@ -817,9 +818,10 @@ exports.singleLessonView = async (course, lesson, materials = [], params = {}) =
       editAction: isTeacher ? `${lessonUrl}?edit=1` : undefined,
       deleteAction: String(lesson.author || course.author) === String(userId) ? `/school/lesson/delete/${encodeURIComponent(course.id)}/${encodeURIComponent(lesson.id)}` : undefined
     }),
+    renderDetailShare(lesson.id, lessonUrl, lesson.title || course.title, null, null, null, lesson.author || course.author),
     h2({ class: "tribe-card-title" }, a({ href: courseUrl }, course.title)),
     renderMediaBlob(course.image, '/assets/images/default-avatar.png', { class: 'tribe-detail-image' }),
-    renderDetailShare(lesson.id, lessonUrl, lesson.title || course.title, null, null, null, lesson.author || course.author),
+    course.visibility === "PUBLIC" && course.status === "ONGOING" && !course.tribeId ? renderJoinQr("school", course.id) : null,
     lesson.unit || lesson.sessionDate
       ? table({ class: "tribe-info-table" },
           lesson.unit ? tr(

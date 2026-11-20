@@ -1,5 +1,5 @@
 const { div, h2, h4, p, section, button, form, a, span, textarea, input, label, select, option, table, tr, td, details, summary } = require("../server/node_modules/hyperaxe")
-const { renderPublishAtField, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton , renderTribeBackRow } = require("./main_views")
+const { renderPublishAtField, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton , renderTribeBackRow, renderJoinQr } = require("./main_views")
 const { renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -221,6 +221,7 @@ exports.singlePadView = async (pad, entries, params) => {
   const padClosed = pad.isClosed
   const returnTo = `/pads/${encodeURIComponent(pad.rootId)}`
   const isRestrictedInviteOnly = !isMember && !isAuthor && pad.status === "INVITE-ONLY"
+  const padQr = pad.status === "OPEN" && !padClosed && !pad.tribeId ? renderJoinQr("pads", pad.rootId) : null
 
   const tags = !isRestrictedInviteOnly && Array.isArray(pad.tags) && pad.tags.length > 0
     ? div({ class: "tribe-side-tags" }, ...pad.tags.map(t => a({ href: `/search?query=%23${encodeURIComponent(t)}`, class: "tag-link" }, `#${t}`)))
@@ -296,13 +297,14 @@ exports.singlePadView = async (pad, entries, params) => {
       editAction: isAuthor ? `/pads?filter=edit&id=${encodeURIComponent(pad.rootId)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('pad', pad.rootId) : undefined
     }),
+    renderDetailShare(pad.rootId, returnTo, pad.title, subscriptionOpts, null, null, pad.author),
     renderTribeBackRow(pad.tribeLink, `/pads/${encodeURIComponent(pad.rootId)}`),
     div({ class: "pad-title-row" },
       div({ class: "shop-title-row" },
         h2({ class: "tribe-card-title" }, pad.title || "\u2014")
-      ),
-      renderDetailShare(pad.rootId, returnTo, pad.title, subscriptionOpts, null, null, pad.author)
+      )
     ),
+    padQr,
     tags,
     topButtons.length || (!isRestrictedInviteOnly && inviteActions.length)
       ? div({ class: "tribe-side-actions pad-actions-row" }, ...topButtons, ...(isRestrictedInviteOnly ? [] : inviteActions))
@@ -311,14 +313,7 @@ exports.singlePadView = async (pad, entries, params) => {
       ? div({ class: "pad-invite-section" },
           a({ class: "tribe-action-btn", href: "/invites?filter=others" }, i18n.tribeEnterInvite)
         )
-      : null,
-    details({ class: "pad-members-details", ...(pad.members.length <= 8 ? { open: true } : {}) },
-      summary({ class: "tribe-members-count" }, `${i18n.padMembersLabel || "Members"}: ${pad.members.length}`),
-      div({ class: "pad-members-chips" },
-        ...pad.members.map(m => span({ class: "pad-member-chip" }, span({ class: "pad-author-swatch " + memberColorClass(pad.members, m) }), userLink(m)))
-      )
-    ),
-    null
+      : null
   )
 
   let canonicalEntries = entries

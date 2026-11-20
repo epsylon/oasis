@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, a, img } = require("../server/node_modules/hyperaxe");
 const moment = require("../server/node_modules/moment");
 
-const { template, i18n, renderLayoutSwitch, renderLayoutItems, renderCardTop, renderModuleStats, CONTENT_FAV_KIND, FAV_KIND_TYPE, CONTENT_TORRENTABLE, paged, renderEditedChip, renderStateChip, renderCountChip, renderSearchButton } = require("./main_views");
+const { template, i18n, renderLayoutSwitch, renderLayoutItems, renderCardTop, renderModuleStats, CONTENT_FAV_KIND, FAV_KIND_TYPE, CONTENT_TORRENTABLE, paged, renderEditedChip, renderStateChip, renderCountChip, renderSearchButton, renderAmountChip } = require("./main_views");
 const { contentChipsOf, rootTypeLabel, transferAmountText } = require("./activity_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText, safeExternalHref } = require("../backend/renderStyledText");
@@ -87,8 +87,7 @@ const renderPriceAndPlace = (type, c) => {
   const price = priceTextOf(type, c);
   const place = safeText(c.location || c.place);
   return [
-    price ? div({ class: "price-chip" }, price) : null,
-    place ? p({ class: "job-meta-line" }, `📍 ${place}`) : null
+    price || place ? div({ class: "card-chip-line" }, price ? renderAmountChip(price) : null, place ? renderCountChip("📍", null, place) : null) : null
   ];
 };
 

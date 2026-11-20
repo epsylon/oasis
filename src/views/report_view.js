@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, textarea, br, input, span, label, select, option, video, audio, table, tr, td } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderPublishAtField, renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -421,10 +421,11 @@ exports.singleReportView = async (report, filter, comments = [], params = {}) =>
 
   const reportSide = div({ class: "tribe-side" },
     renderCardTop(report.id, `/reports/${encodeURIComponent(report.id)}`, { arrow: false, date: report.createdAt, chips, bylineExtra: [renderEditedChip(report.id, report.rootId, report.updatedAt)], spread: params.spreads || null, author: report.author, favKind: 'reports', isFavorite: report.isFavorite, reportTitle: report.title, report: false, returnTo: `/reports/${encodeURIComponent(report.id)}`, editAction: isAuthor ? `/reports/edit/${encodeURIComponent(report.id)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('report', report.id) : undefined }),
+    renderDetailShare(report.id, `/reports/${encodeURIComponent(report.id)}`, report.title, params.subscription ? { target: report.rootId || report.id, scope: "reports", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(report.author) === String(userId), returnTo: `/reports/${encodeURIComponent(report.id)}` } : null, null, null, report.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, report.title)
     ),
-    renderDetailShare(report.id, `/reports/${encodeURIComponent(report.id)}`, report.title, params.subscription ? { target: report.rootId || report.id, scope: "reports", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(report.author) === String(userId), returnTo: `/reports/${encodeURIComponent(report.id)}` } : null, null, null, report.author),
+    !report.tribeId ? renderJoinQr('reports', report.id) : null,
     tagsNode,
     statusRow
   );

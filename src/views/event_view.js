@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, table, tr, td, details, summary, ul, li, hr } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { renderMentionsFilter, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
-const { renderPhotoGallery, renderGalleryFields } = require("./gallery_view");
+const { renderMentionsFilter, clearnetItemHref, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderOpenClosedChip, renderLifespanChip, renderEcoTax, renderCardTop, renderCardByline, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, renderRelationFilters, hereAt, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderJoinQr, renderAmountChip } = require("./main_views");
+const { renderPhotoGallery, renderGalleryFields, imagesOf, isVideoEntry } = require("./gallery_view");
 const { renderIntervalBlock } = require("./calendars_view");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
@@ -116,13 +116,13 @@ const renderEventSummary = exports.renderEventSummary = (e, href) => [
       href ? a({ href }, e.title || i18n.eventsTitle) : (e.title || i18n.eventsTitle)
     )
   ),
-  e.date || (e.location && String(e.location).trim())
+  e.date || (e.location && String(e.location).trim()) || parseFloat(e.price || 0) > 0
     ? div({ class: "card-chip-line card-content" },
         e.date ? renderCountChip("📅", i18n.eventDateLabel, moment(e.date).format("YYYY/MM/DD HH:mm")) : null,
+        parseFloat(e.price || 0) > 0 ? renderAmountChip(`${parseFloat(e.price).toFixed(6)} ECO`) : null,
         e.location && String(e.location).trim() ? renderCountChip("📍", i18n.eventLocation, String(e.location)) : null
       )
-    : null,
-  parseFloat(e.price || 0) > 0 ? div({ class: "price-chip" }, `${parseFloat(e.price).toFixed(6)} ECO`) : null
+    : null
 ];
 
 const renderEventChips = exports.renderEventChips = (e) => [
@@ -248,7 +248,7 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
   const eventChipVisible = eventChipFor(currentFilter, censusEvents);
   const reachRaw = String(params.reach || "").toLowerCase();
   const editPrivacy = reachRaw === "public" || reachRaw === "private" ? reachRaw : normalizePrivacy(formData.isPublic);
-  const showClearnet = editPrivacy === "public" && clearnetEligible({ ...formData, isPublic: editPrivacy });
+  const showClearnet = clearnetEligible({ ...formData, isPublic: "public" });
   const editInterval = formData.interval
     || (formData.intervalWeekly ? "weekly" : formData.intervalMonthly ? "monthly" : formData.intervalYearly ? "yearly" : "");
   const editIntervalUntil = (formData.recurrenceUntil || formData.intervalDeadline)
@@ -301,30 +301,12 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
             { class: "event-form" },
             spreadWarning,
             form(
-              { method: "GET", action: currentFilter === "edit" ? `/events/edit/${encodeURIComponent(eventId)}` : "/events" },
-              currentFilter === "edit" ? null : input({ type: "hidden", name: "filter", value: "create" }),
-              typeof returnTo === "string" && returnTo.startsWith("/events") ? input({ type: "hidden", name: "returnTo", value: returnTo }) : null,
-              label(i18n.eventPrivacyLabel),
-              br(),
-              div({ class: "apply-row" },
-                select(
-                  { name: "isPublic", class: "report-category-select" },
-                  opt("public", editPrivacy !== "private", i18n.eventPublic),
-                  opt("private", editPrivacy === "private", i18n.eventPrivate)
-                ),
-                button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
-              )
-            ),
-            hr({ class: "form-sep" }),
-            h2({ class: "report-category-fixed" }, privacyLabel(editPrivacy)),
-            form(
               {
                 action: currentFilter === "edit" && eventToEdit.scheduledAt ? `/events/scheduled/update/${encodeURIComponent(eventId)}` : currentFilter === "edit" ? `/events/update/${encodeURIComponent(eventId)}` : "/events/create",
                 method: "POST",
                 enctype: "multipart/form-data"
               },
               input({ type: "hidden", name: "returnTo", value: ret }),
-              input({ type: "hidden", name: "isPublic", value: editPrivacy }),
               label(i18n.eventTitleLabel),
               br(),
               input({
@@ -410,6 +392,15 @@ exports.eventView = async (events, filter, eventId, returnTo, params = {}) => {
                 br(),
                 br()
               ] : []),
+              label(i18n.eventPrivacyLabel),
+              br(),
+              select(
+                { name: "isPublic" },
+                opt("public", editPrivacy !== "private", i18n.eventPublic),
+                option({ value: "private", class: "reach-closed", ...(editPrivacy === "private" ? { selected: true } : {}) }, i18n.eventPrivate)
+              ),
+              br(),
+              br(),
               showClearnet ? renderClearnetSelector(formData.clearnet === true || String(formData.clearnet || "") === "1", i18n) : null,
               button({ type: "submit" }, currentFilter === "edit" ? i18n.save : i18n.eventCreateButton)
             )
@@ -485,11 +476,6 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   const sideActions = [];
   const attendNode = renderEventAttendAction(event, isAttending, returnToSelf);
   if (attendNode) sideActions.push(attendNode);
-  if (params.linkedCalendarId) {
-    sideActions.push(form({ method: "GET", action: `/calendars/${encodeURIComponent(params.linkedCalendarId)}` },
-      button({ type: "submit", class: "tribe-action-btn" }, i18n.eventVisitCalendar || "Visit calendar")
-    ));
-  }
   const ownerActions = isOrganizer ? renderEventOwnerActions(event, returnToSelf) : [];
 
   const tagsNode = event.tags && event.tags.filter(Boolean).length
@@ -521,15 +507,21 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
   const price = parseFloat(event.price || 0);
   if (price > 0) pushRow(i18n.eventPriceLabel, `${price.toFixed(6)} ECO`);
   pushRow(i18n.eventAttendees, String(attendees.length));
+  const linkedCalendar = params.linkedCalendar;
+  if (linkedCalendar && linkedCalendar.rootId) pushRow(i18n.linkedCalendarLabel, a({ href: `/calendars/${encodeURIComponent(linkedCalendar.rootId)}`, class: "internal-link" },
+    span({ class: "internal-link-kind" }, String(i18n.linkedCalendarLabel).toUpperCase()),
+    span({ class: "internal-link-id" }, linkedCalendar.title || "\u2014")
+  ));
 
   const subscriptionOpts = event.subscription ? { target: event.id, scope: "events", subscribed: event.subscription.subscribed === true, count: event.subscription.count, isOwner: isEventOwner, returnTo: returnToSelf } : null;
   const eventSide = div({ class: "tribe-side" },
     renderCardTop(event.id, returnToSelf, { arrow: false, date: event.createdAt, chips, bylineExtra: [renderEditedChip(event.id, event.rootId, event.updatedAt)], spread: params.spreads || null, author: event.organizer || event.author, favKind: 'events', isFavorite: event.isFavorite, reportTitle: event.title, subscription: subscriptionOpts, editAction: isOrganizer && normalizeEventStatus(event.status) === "OPEN" ? `/events/edit/${encodeURIComponent(event.id)}?returnTo=${encodeURIComponent(returnToSelf)}` : undefined, deleteAction: isOrganizer ? contentDeleteAction('event', event.id) : undefined, returnTo: `/events?filter=${encodeURIComponent(currentFilter)}` }),
+    renderDetailShare(event.id, returnToSelf, event.title, subscriptionOpts),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, event.title)
     ),
-    renderDetailShare(event.id, returnToSelf, event.title, subscriptionOpts),
     isOrganizer && canClearnet ? renderClearnetSwitch('events', event.rootId || event.id, isClearnet) : null,
+    normalizePrivacy(event.isPublic) === "public" && normalizeEventStatus(event.status) !== "CLOSED" && !event.tribeId ? renderJoinQr("events", event.id) : null,
     tagsNode
   );
 
@@ -571,8 +563,9 @@ exports.singleEventView = async (event, filter, comments = [], params = {}) => {
 };
 
 exports.clearnetEventView = async (event) => {
-  const { escapeHtml: esc, renderRichText, renderKindTag, renderTagChips, renderClearnetPage } = require('./clearnet_view');
+  const { escapeHtml: esc, renderRichText, renderKindTag, renderTagChips, blobUrl: cnBlob, renderClearnetPage } = require('./clearnet_view');
   const title = esc(event.title || i18n.cnKindEvent);
+  const media = imagesOf(event).map(entry => ({ src: cnBlob(entry), video: isVideoEntry(entry) })).filter(m => m.src);
   const desc = renderRichText(event.description || '');
   const when = event.recurring && event.nextDate ? event.nextDate : event.date;
   const dateStr = when ? esc(moment(when).format("YYYY/MM/DD HH:mm")) : '';
@@ -588,6 +581,8 @@ exports.clearnetEventView = async (event) => {
 .cn-event-meta-id{font-family:monospace;font-size:11px;word-break:break-all;max-width:100%}
 .cn-event-desc{color:var(--fg-soft);white-space:pre-wrap;line-height:1.6;font-size:15px;margin:0 0 20px 0}
 .cn-event-link{display:inline-block;margin-top:12px;background:var(--bg-sub);border:1px solid var(--fg);color:var(--fg);padding:8px 16px;border-radius:6px;font-weight:600}
+.cn-event-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin:0 0 20px 0}
+.cn-event-gallery img,.cn-event-gallery video{width:100%;height:auto;display:block;border:1px solid var(--border);border-radius:6px;background:#000}
 `;
   const body = `
   <h1 class="cn-event-title">${title}</h1>
@@ -601,6 +596,7 @@ exports.clearnetEventView = async (event) => {
     ${event.createdAt ? `<span class="cn-event-meta-item">${esc(i18n.createdAtLabel)}: ${esc(moment(event.createdAt).format("YYYY/MM/DD"))}</span>` : ''}
   </div>
   <hr class="cn-sep"/>
+  ${media.length ? `<div class="cn-event-gallery">${media.map(m => m.video ? `<video controls preload="none" src="${m.src}"></video>` : `<img src="${m.src}" alt="${title}" loading="lazy"/>`).join('')}</div>` : ''}
   ${desc ? `<p class="cn-event-desc">${desc}</p>` : ''}
   ${urlHref ? `<a class="cn-event-link" href="${esc(urlHref)}" target="_blank" rel="noopener noreferrer">${esc(i18n.cnMoreInfo)}</a>` : ''}
   ${renderTagChips(event.tags)}
@@ -609,6 +605,7 @@ exports.clearnetEventView = async (event) => {
     title: `${event.title || 'Event'} | Oasis`,
     ogTitle: event.title || 'Event',
     ogDescription: event.description || '',
+    ogImage: (media.find(m => !m.video) || {}).src || null,
     extraCss,
     body,
     hubFeedId: event.organizer || null

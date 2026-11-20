@@ -1,5 +1,5 @@
 const { div, h2, p, section, button, form, a, span, textarea, br, input, label, select, option, img, table, tr, td, details, summary, video: videoHyperaxe, audio: audioHyperaxe } = require("../server/node_modules/hyperaxe")
-const { renderPublishAtField, template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderTribeBackRow } = require("./main_views")
+const { renderPublishAtField, template, i18n, userLink, userLinkLabel, renderStateChip, renderLifespanChip, renderCardTop, renderEngagement, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, renderTorrentDownload, contentDeleteAction, paged, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderTribeBackRow, renderJoinQr, renderDetailShare } = require("./main_views")
 const { renderEncryptedChip, renderScopeChip } = require("./clearnet_view")
 const { renderPollInline, outcomeOf, pollTypeLabel, renderPollTypeSelect } = require("./polls_view")
 const moment = require("../server/node_modules/moment")
@@ -405,10 +405,12 @@ exports.singleChatView = async (chat, filter, messages = [], params = {}) => {
   ].filter(Boolean)
   const chatSide = div({ class: "tribe-side" },
     renderCardTop(chat.key, `/chats/${encodeURIComponent(chat.key)}`, { arrow: false, date: chat.createdAt, chips: detailChips, spread: params.spreads || null, author: chat.author, favKind: 'chats', isFavorite: chat.isFavorite, returnTo: params.returnTo, reportTitle: chat.title, editAction: isAuthor ? `/chats/edit/${encodeURIComponent(chat.key)}` : undefined, leaveAction: !isAuthor && isMember ? `/chats/leave/${encodeURIComponent(chat.key)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('chat', chat.key) : undefined }),
+    chat.status === "OPEN" && !chat.tribeId ? renderDetailShare(chat.key, `/chats/${encodeURIComponent(chat.key)}`, chat.title, null, null, null, chat.author) : null,
     renderTribeBackRow(params.tribeLink, `/chats/${encodeURIComponent(chat.key)}`),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, chat.title || i18n.chatUntitled)
     ),
+    chat.status === "OPEN" && !chat.tribeId ? renderJoinQr("chats", chat.key) : null,
     renderMediaBlob(chat.image, "/assets/images/default-avatar.png", { class: "tribe-detail-image" }),
     chat.subscription && chatShares
       ? renderSubscriptionBox({

@@ -4,7 +4,7 @@ const {
 } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
 const moment = require("../server/node_modules/moment");
-const { renderPublishAtField, template, i18n, userLink, renderSpreadButton, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt, renderCountChip, asChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass } = require('./main_views');
+const { renderPublishAtField, template, i18n, userLink, renderSpreadButton, renderLifespanChip, renderContentActions, renderCardTop, renderCardByline, renderDetailShare, renderEngagement, renderInviteQrCard, renderStateChip, renderSubscriptionBox, renderModuleStats, moduleIsEmpty, paged, forumReplyAnchor, hasRelation, hereAt, renderCountChip, asChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderListTitle, listItemClass, renderJoinQr } = require('./main_views');
 const { renderEncryptedChip: renderForumEncryptedChip, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
 const { config } = require('../server/SSB_server.js');
 const { renderStyledText } = require('../backend/renderStyledText');
@@ -192,8 +192,10 @@ const renderThread = (nodes, level = 0, forumId, bestKey = null) => {
               placeholder: i18n.forumMessagePlaceholder,
               class: 'comment-textarea'
             }, draftFor(m.key)),
-            div({ class: 'comment-file-upload' }, input({ type: 'file', name: 'blob' })),
-            button({ type: 'submit', class: 'forum-send-btn' }, i18n.tribeForumReply)
+            div({ class: 'forum-send-row' },
+              input({ type: 'file', name: 'blob' }),
+              button({ type: 'submit', class: 'forum-send-btn' }, i18n.tribeForumReply)
+            )
           )
         )
       );
@@ -378,11 +380,12 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
           subscription: subscriptionOpts,
           deleteAction: isForumOwner ? `/forum/delete/${encodeURIComponent(forum.key)}` : undefined
         }),
+        renderDetailShare(forum.key, forumHref(forum), forum.title, subscriptionOpts, null, null, forum.author),
         div({ class: 'shop-title-row' },
           a({ class: 'forum-category', href: `/forum?filter=${encodeURIComponent(forum.category)}` }, `[${catLabel(forum.category)}]`),
           h2({ class: 'tribe-card-title' }, forum.title)
         ),
-        renderDetailShare(forum.key, forumHref(forum), forum.title, subscriptionOpts, null, null, forum.author),
+        !forum.isPrivate && !forum.tribeId ? renderJoinQr('forum', forum.key) : null,
         forum.isPrivate
           ? div({ class: 'tribe-side-actions forum-invite-row' },
               (forum.author === userId)
@@ -411,7 +414,7 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
         renderVoteRow(
           renderVoteColumn(forum.key, messagesData.totalScore, forum.key, messagesData.positiveVotes, messagesData.negativeVotes),
           div({ class: 'forum-body', [RAW_HTML]: sanitizeHtml(renderStyledHtml(forum.text || '')) })
-        )
+        ),
       ),
       div({ class: 'new-message-wrapper' },
         form({
@@ -427,8 +430,10 @@ exports.singleForumView = async (forum, messagesData, currentFilter, replyId = n
             class: 'new-message-textarea'
           }, draftFor(null)), br(),
           label(i18n.uploadMedia), br(),
-          input({ type: 'file', name: 'blob' }), br(),
-          button({ type: 'submit', class: 'forum-send-btn' }, i18n.forumSendButton)
+          div({ class: 'forum-send-row' },
+            input({ type: 'file', name: 'blob' }),
+            button({ type: 'submit', class: 'forum-send-btn' }, i18n.forumSendButton)
+          )
         )
       ),
       ...renderThread(messagesData.messages, 0, forum.key, bestReplyKey(messagesData.messages))

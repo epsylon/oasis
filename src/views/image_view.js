@@ -3,7 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, img, span, texta
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton, renderJoinQr } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
 const { renderMapLocationVisitLabel, renderMapEmbed } = require("./maps_view");
@@ -321,11 +321,12 @@ exports.singleImageView = async (imageObj, filter = "all", comments = [], params
       returnTo,
       reportTitle: imageObj.title
     }),
+    renderDetailShare(imageObj.key, href, imageObj.title, null, null, null, imageObj.author),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
       isAuthor ? renderClearnetSwitch('images', imageObj.rootId || imageObj.key, isClearnet) : null
     ),
-    renderDetailShare(imageObj.key, href, imageObj.title, null, null, null, imageObj.author),
+    !imageObj.tribeId ? renderJoinQr('images', imageObj.key) : null,
     tagsNode,
     renderMapEmbed(params.mapData, imageObj.mapUrl),
   );

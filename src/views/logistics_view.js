@@ -1,6 +1,6 @@
 const { hr, div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, table, tr, td, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
 const { renderScopeChip } = require("./clearnet_view");
-const { renderPublishAtField, template, i18n, renderLayoutSwitch, renderLayoutItems, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, template, i18n, renderLayoutSwitch, renderLayoutItems, renderStateChip, renderCardTop, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -324,8 +324,9 @@ exports.singleLogisticsView = async (route, params = {}) => {
     : null;
   const side = div({ class: "tribe-side" },
     renderCardTop(route.id, href, { arrow: false, date: route.createdAt, chips: [renderScopeChip(route, i18n), kindChip(route), modeChip(route), statusChip(route), priceChip(route), ...counterChips(route)], bylineExtra: [renderEditedChip(route.tipId, route.rootId, route.updatedAt)], author: route.author, favKind: "logistics", isFavorite: route.isFavorite, reportTitle: route.title, spread: params.spread || null, editAction: route.isOwner ? `/logistics?filter=edit&id=${encodeURIComponent(route.id)}` : undefined, deleteAction: route.isOwner ? contentDeleteAction("logisticsRoute", route.id) : null }),
-    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title)),
     renderDetailShare(route.id, href, route.title, null, null, null, route.author),
+    div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, route.title)),
+    !route.tribeId ? renderJoinQr("logistics", route.id) : null,
     renderTags(route.tags),
     statusRow
   );

@@ -1,3 +1,10 @@
+2026-11-20 · OASIS 1.4.3
+- QR codes in every module: one scan opens, joins, follows or signs, with no extra step.
+- Clearnet: its content has been restructured.
+- InvitesBot: invitations are kept until their content arrives.
+- Events added to a calendar keep their details, repetition and privacy, linked both ways.
+- Security improvements.
+
 2026-11-14 · OASIS 1.4.2
 - Avatars: up to 3 accounts, even in different cycles, one click to travel between them.
 - Backups of all your accounts or of just one, with their posts.

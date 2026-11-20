@@ -1,6 +1,6 @@
 const { div, h2, h4, p, section, button, form, a, span, br, hr, textarea, input, label, select, option, table, tr, td } = require("../server/node_modules/hyperaxe")
 const { renderStyledText } = require("../backend/renderStyledText")
-const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton , renderTribeBackRow } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderEngagement, renderDocumentActions, renderInviteQrCard, renderSubscriptionBox, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderDetailShare, RELATION_FILTERS, relationFilterLabel, renderCountChip, renderLayoutSwitch, renderLayoutItems, renderSearchButton , renderTribeBackRow, renderJoinQr } = require("./main_views")
 const { renderMapEmbed } = require("./maps_view")
 const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view")
 const moment = require("../server/node_modules/moment")
@@ -103,7 +103,7 @@ const renderCreateForm = (calendarToEdit, params) => {
   const draft = isEdit ? calendarToEdit : ((params && params.draft) || {})
   const reachRaw = String((params && params.reach) || draft.status || "").toUpperCase()
   const reach = CAL_REACH.includes(reachRaw) ? reachRaw : "OPEN"
-  const showClearnet = reach === "OPEN" && !tribeId && clearnetEligible({ ...(isEdit ? calendarToEdit : {}), status: reach, isClosed: false })
+  const showClearnet = !tribeId && clearnetEligible({ ...(isEdit ? calendarToEdit : {}), status: "OPEN", isClosed: false })
   const asLocal = (v) => v ? moment(v).format("YYYY-MM-DDTHH:mm") : ""
   const now = moment().add(1, "minute").format("YYYY-MM-DDTHH:mm")
   const deadlineMax = calendarToEdit && calendarToEdit.deadline
@@ -114,23 +114,8 @@ const renderCreateForm = (calendarToEdit, params) => {
   return div({ class: "div-center audio-form" },
     h2(sectionTitle),
     (params && params.spreadWarning) || null,
-    form({ method: "GET", action: "/calendars" },
-      input({ type: "hidden", name: "filter", value: isEdit ? "edit" : "create" }),
-      isEdit ? input({ type: "hidden", name: "id", value: calendarToEdit.rootId }) : null,
-      tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
-      label(i18n.calendarTypeLabel), br(),
-      div({ class: "apply-row" },
-        select({ name: "status", class: "report-category-select" },
-          ...CAL_REACH.map(s => option({ value: s, ...(reach === s ? { selected: true } : {}) }, calReachLabel(s)))
-        ),
-        button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
-      )
-    ),
-    hr({ class: "form-sep" }),
-    h2({ class: "report-category-fixed" }, calReachLabel(reach)),
     form({ method: "POST", action },
       tribeId ? input({ type: "hidden", name: "tribeId", value: tribeId }) : null,
-      input({ type: "hidden", name: "status", value: reach }),
       span(i18n.calendarTitleLabel || "Title"), br(),
       input({ type: "text", name: "title", maxlength: "100", required: true, placeholder: i18n.calendarTitlePlaceholder || "Calendar title...", value: draft.title || "" }),
       br(), br(),
@@ -158,6 +143,11 @@ const renderCreateForm = (calendarToEdit, params) => {
             br(), br()
           ]
         : null,
+      span(i18n.calendarTypeLabel), br(),
+      select({ name: "status" },
+        ...CAL_REACH.map(s => option({ value: s, ...(s === "CLOSED" ? { class: "reach-closed" } : {}), ...(reach === s ? { selected: true } : {}) }, calReachLabel(s)))
+      ),
+      br(), br(),
       showClearnet ? renderClearnetSelector(draft.clearnet === true || String(draft.clearnet || "") === "1", i18n) : null,
       ...(isEdit ? [] : renderPublishAtField()),
       button({ type: "submit", class: "create-button" }, isEdit ? i18n.save : (i18n.calendarCreate || "Create Calendar"))
@@ -245,11 +235,17 @@ exports.calendarsView = async (calendars, filter, calendarToEdit, params) => {
   )
 }
 
+const renderEventLink = (eventId, title) => a({ href: `/events/${encodeURIComponent(eventId)}`, class: "internal-link" },
+  span({ class: "internal-link-kind" }, String(i18n.linkedEventLabel).toUpperCase()),
+  span({ class: "internal-link-id" }, title || "\u2014")
+)
+
 exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
   const { month: monthStr, day: selectedDay } = params || {}
   const isAuthor = calendar.author === userId
   const isParticipant = calendar.participants.includes(userId)
   const calClosed = calendar.isClosed
+  const calTopQr = calendar.status === "OPEN" && !calClosed && !calendar.tribeId
   const shareUrl = `/calendars/${encodeURIComponent(calendar.rootId)}`
 
   const now = moment()
@@ -299,12 +295,14 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
       leaveAction: !isAuthor && isParticipant ? `/calendars/leave/${encodeURIComponent(calendar.rootId)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('calendar', calendar.rootId) : undefined
     }),
+    renderDetailShare(calendar.rootId, shareUrl, calendar.title, subscriptionOpts, null, null, calendar.author),
     renderTribeBackRow(calendar.tribeLink, `/calendars/${encodeURIComponent(calendar.rootId)}`),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, calendar.title || "\u2014")
     ),
-    renderDetailShare(calendar.rootId, shareUrl, calendar.title, subscriptionOpts, null, null, calendar.author),
     isAuthor && canClearnet ? renderClearnetSwitch("calendars", calendar.rootId, isClearnet) : null,
+    calTopQr ? renderJoinQr("calendars", calendar.rootId) : null,
+    calendar.eventId ? div({ class: "card-chips-row" }, renderEventLink(calendar.eventId, calendar.title)) : null,
     tags
   )
 
@@ -337,7 +335,7 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
           div({ class: "tribe-open-invite" },
             span({ class: "card-label" }, i18n.tribeInviteCodeText),
             span({ class: "tribe-open-invite-code" }, openInvite.code),
-            renderInviteQrCard({ qrDataUrl: `/qr-invite-code/calendars/${encodeURIComponent(openInvite.code)}` })
+            calTopQr ? null : renderInviteQrCard({ qrDataUrl: `/qr-invite-code/calendars/${encodeURIComponent(openInvite.code)}` })
           ),
           form({ method: "POST", action: `/calendars/open-invite/remove/${encodeURIComponent(calendar.rootId)}` },
             button({ type: "submit", class: "tribe-action-btn danger-btn" }, i18n.tribeRemoveInvitation)
@@ -406,7 +404,8 @@ exports.singleCalendarView = async (calendar, dates, notesByDate, params) => {
                     )
                   : null,
                 div({ class: "calendar-date-item-header" },
-                  `${moment(d.date).format("YYYY/MM/DD HH:mm")}${d.label ? " \u2014 " + d.label : ""}`
+                  `${moment(d.date).format("YYYY/MM/DD HH:mm")}${d.label ? " \u2014 " + d.label : ""}`,
+                  d.eventId ? renderEventLink(d.eventId, d.label) : null
                 ),
                 (() => {
                   const visibleNotes = notes.filter(n => n.text && String(n.text).trim())

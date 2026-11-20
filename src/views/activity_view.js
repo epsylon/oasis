@@ -1,6 +1,6 @@
 const { div, h2, p, section, button, form, a, input, img, textarea, br, span, video: videoHyperaxe, audio: audioHyperaxe, table, tr, td, th, details, summary } = require("../server/node_modules/hyperaxe");
 const RAW_HTML = Symbol.for('oasis.rawHtml');
-const { template, herePath, i18n, paged, listLayout, renderLayoutItems, renderLayoutSwitch, userLink, userLinkLabel, renderSupportButton, renderStateChip, renderCountChip, renderPhoneChip, renderModeChip, renderVisibilityChip, asChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref, clearnetItemHref, renderSearchButton, renderFilterFold, isFavoriteItem } = require('./main_views');
+const { template, herePath, i18n, paged, listLayout, renderLayoutItems, renderLayoutSwitch, userLink, userLinkLabel, renderSupportButton, renderStateChip, renderCountChip, renderPhoneChip, renderModeChip, renderVisibilityChip, asChip, renderSpreadButton, renderContentActions, renderCardTop, renderShareButton, renderOpinionsPill, renderEngagement, commentCountFor, renderVotesSummary, renderModuleStats, renderCardMetaRow, renderTorrentDownload, renderTorrentSourceDownload, renderFileDownloads, torrentDownloadHref, CONTENT_FAV_KIND, CONTENT_SPREADABLE, CONTENT_TORRENTABLE, contentDeleteAction, renderPdfDocument, forumReplyAnchor, renderCommentsSummary, commentsOpenHref, clearnetItemHref, renderSearchButton, renderFilterFold, isFavoriteItem, renderAmountChip } = require('./main_views');
 const { renderReportStatusChip, renderReportSeverityChip, renderReportCategoryChip } = require('./report_view');
 const { renderEventSummary, renderEventChips } = require('./event_view');
 const { renderTaskStatusChip, renderTaskPriorityChip } = require('./task_view');
@@ -26,7 +26,9 @@ const cardTitleLink = (title, href) => title ? div({ class: 'card-field' }, href
 const cardMeta = (icon, ...nodes) => p({ class: 'job-meta-line' }, `${icon} `, ...nodes);
 const cardChipLine = (icon, text) => text ? div({ class: 'card-chip-line' }, renderCountChip(icon, null, String(text))) : null;
 const cardDate = (value) => value && moment(value).isValid() ? cardChipLine('◷', moment(value).format('YYYY/MM/DD HH:mm')) : null;
-const cardPrice = (text) => text ? div({ class: 'price-chip' }, text) : null;
+const cardPrice = (text) => text ? renderAmountChip(text) : null;
+const cardDateChip = (value) => value && moment(value).isValid() ? renderCountChip('◷', null, moment(value).format('YYYY/MM/DD HH:mm')) : null;
+const cardChipRow = (...nodes) => nodes.filter(Boolean).length ? div({ class: 'card-chip-line' }, ...nodes.filter(Boolean)) : null;
 const statusIconOf = (s) => /CLOSED|DISCARDED|REJECTED|INVALID|CANCELLED|EXPIRED|FAILED|DISSOLVED|ARCHIVED/.test(s) ? '✗' : /PENDING|REVIEW|PROGRESS|PAUSED|PROPOSED|UNCONFIRMED|RESERVED/.test(s) ? '⧖' : '✓';
 const plainStatusChip = (raw, label = null) => {
   const s = String(raw || '').toUpperCase();
@@ -666,8 +668,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section transfer' },
           cardTitleRow(concept, titleHref),
-          cardPrice(transferAmountText(content)),
-          isUbiTransfer(content) ? null : cardDate(deadline)
+          cardChipRow(cardPrice(transferAmountText(content)), isUbiTransfer(content) ? null : cardDateChip(deadline))
         )
       );
     }
@@ -1219,14 +1220,13 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section market' },
           cardTitleRow(title, titleHref),
-          cardPrice(`${price} ECO`),
-          cardDate(deadline),
+          cardChipRow(cardPrice(`${price} ECO`), cardDateChip(deadline)),
           image ? renderMediaBlob(image, '/assets/images/default-market.png') : null,
           item_type === 'auction' && status !== 'SOLD' && status !== 'DISCARDED' && !isSeller
             ? div({ class: "auction-info" },
                 auctions_poll && auctions_poll.length > 0
                   ?
-                      table({ class: 'auction-bid-table' },
+                      table({ class: 'auction-bid-table stack-table' },
                         tr(
                           th(i18n.marketAuctionBidTime),
                           th(i18n.marketAuctionUser),
@@ -1235,9 +1235,9 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
                         ...(auctions_poll || []).map(bid => {
                           const [bidderId, bidAmount, bidTime] = bid.split(':');
                           return tr(
-                            td(moment(bidTime).format('YYYY-MM-DD HH:mm:ss')),
-                            td(userLink(bidderId)),
-                            td(`${parseFloat(bidAmount).toFixed(6)} ECO`)
+                            td({ 'data-label': i18n.marketAuctionBidTime }, moment(bidTime).format('YYYY-MM-DD HH:mm:ss')),
+                            td({ 'data-label': i18n.marketAuctionUser }, userLink(bidderId)),
+                            td({ 'data-label': i18n.marketAuctionBidAmount }, `${parseFloat(bidAmount).toFixed(6)} ECO`)
                           );
                         })
                       )
@@ -1269,7 +1269,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
         div({ class: 'card-section shop' },
           cardTitleRow(title || '', titleHref),
           shopId ? cardMeta('🏪', a({ href: `/shops/${encodeURIComponent(shopId)}`, class: 'user-link' }, shopLabel)) : null,
-          cardPrice(`${Number(price || 0).toFixed(6)} ECO`),
+          cardChipRow(cardPrice(`${Number(price || 0).toFixed(6)} ECO`)),
           prodImageNode ? div({ class: 'card-field' }, prodImageNode) : null
         )
       );
@@ -1327,7 +1327,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section tribe industry' },
           cardTitleRow(name || (i18n.industryBlueprint || 'Blueprint'), facility ? `/industry/${encodeURIComponent(facility)}` : null),
-          estTotal != null ? cardPrice(`${Number(estTotal).toFixed(2)} ECO`) : null,
+          estTotal != null ? cardChipRow(cardPrice(`${Number(estTotal).toFixed(2)} ECO`)) : null,
           image
             ? (/^(\/|https?:)/.test(String(image))
                 ? renderZoomableImage(image, { imgClass: 'feed-image tribe-image' })
@@ -1343,7 +1343,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section industry' },
           cardTitleRow(i18n.industryBuild || 'Build', target ? `/industry/build/${encodeURIComponent(target)}` : null),
-          cardPrice(`${Number(pot || 0).toFixed(6)} ECO`)
+          cardChipRow(cardPrice(`${Number(pot || 0).toFixed(6)} ECO`))
         )
       );
     }
@@ -1582,8 +1582,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section project' },
           cardTitleRow(title, titleHref),
-          typeof goal !== 'undefined' ? cardPrice(`${goal} ECO`) : null,
-          cardDate(deadline)
+          cardChipRow(typeof goal !== 'undefined' ? cardPrice(`${goal} ECO`) : null, cardDateChip(deadline))
         )
       );
     }
@@ -1622,8 +1621,7 @@ function renderActionCards(actions, userId, allActions, spreadMap = new Map(), e
       cardBody.push(
         div({ class: 'card-section job' },
           cardTitleRow(title, titleHref),
-          salary ? cardPrice(`${salary} ECO`) : null,
-          location ? cardChipLine('📍', location) : null
+          cardChipRow(salary ? cardPrice(`${salary} ECO`) : null, location ? renderCountChip('📍', null, String(location)) : null)
         )
       );
     }

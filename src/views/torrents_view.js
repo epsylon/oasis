@@ -2,7 +2,7 @@ const { form, button, div, h2, h3, p, section, input, br, a, span, textarea, sel
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderLicenseSelect, renderLicenseChip, renderScopeChip } = require('./clearnet_view');
 
-const { renderPublishAtField, renderMentionsFilter, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderStateChip, listLayout, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderSpreadButton, renderEcoTax, renderLifespanChip, renderSpreadEditWarning, renderCardTop, renderModuleStats, moduleIsEmpty, renderTorrentDownload, torrentDownloadHref, renderTorrentSourceDownload, contentDeleteAction, paged, formatSize, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderStateChip, listLayout, renderSearchButton, renderJoinQr } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
@@ -194,12 +194,12 @@ const renderDownloadRow = (d) => {
       ? form({ method: "POST", action: `/torrents/downloads/${encodeURIComponent(d.blobId)}/cancel` }, button({ type: "submit", class: "filter-btn" }, i18n.torrentCancel))
       : form({ method: "POST", action: `/torrents/downloads/${encodeURIComponent(d.blobId)}/remove` }, button({ type: "submit", class: "filter-btn" }, "✕"));
   return tr({ class: "torrent-download-row torrent-state-" + d.state },
-    td(titleNode),
-    td(d.size ? formatSize(d.size) : "—"),
-    td(String(d.seeds || 0)),
-    td({ class: "torrent-progress-cell" }, progress({ value: String(pct), max: "100", class: "torrent-progress" }), span({ class: "torrent-progress-text" }, ` ${pct}%`)),
-    td(torrentStateLabel(d.state)),
-    td(actions)
+    td({ "data-label": i18n.torrentSourceFile }, titleNode),
+    td({ "data-label": i18n.torrentSizeLabel }, d.size ? formatSize(d.size) : "—"),
+    td({ "data-label": i18n.torrentSeeds }, String(d.seeds || 0)),
+    td({ class: "torrent-progress-cell", "data-label": "" }, progress({ value: String(pct), max: "100", class: "torrent-progress" }), span({ class: "torrent-progress-text" }, ` ${pct}%`)),
+    td({ "data-label": i18n.statusLabel || "Status" }, torrentStateLabel(d.state)),
+    td({ "data-label": "" }, actions)
   );
 };
 
@@ -207,7 +207,7 @@ const renderDownloads = (downloads) => {
   const list = safeArr(downloads);
   if (!list.length) return p(i18n.torrentNoDownloads);
   return table(
-    { border: "1", class: "torrent-table torrent-downloads" },
+    { border: "1", class: "torrent-table torrent-downloads stack-table" },
     tr(
       th(i18n.torrentSourceFile),
       th(i18n.torrentSizeLabel),
@@ -385,11 +385,12 @@ exports.singleTorrentView = async (torrentObj, filter = "all", comments = [], pa
       editAction: String(torrentObj.author) === String(userId) ? `/torrents/edit/${encodeURIComponent(torrentObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: String(torrentObj.author) === String(userId) ? contentDeleteAction('torrent', torrentObj.key) : undefined
     }),
+    renderDetailShare(torrentObj.key, href, torrentObj.title, null, null, null, torrentObj.author),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
       clearnetAllowed && isAuthor ? renderClearnetSwitch('torrents', torrentObj.rootId || torrentObj.key, isClearnet) : null
     ),
-    renderDetailShare(torrentObj.key, href, torrentObj.title, null, null, null, torrentObj.author),
+    !torrentObj.tribeId ? renderJoinQr('torrents', torrentObj.key) : null,
     tagsNode,
   );
 

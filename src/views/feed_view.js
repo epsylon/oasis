@@ -340,6 +340,7 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
           reportTitle: safeText,
           ...(((signerId && String(signerId) === String(me)) || (authorId && String(authorId) === String(me))) ? { deleteAction: `/feed/delete/${encodeURIComponent(feed.key)}` } : {})
         }),
+        renderDetailShare(feed.key, feedHref, safeText, null, null, null, feed.value && feed.value.author),
         div(
           { class: "feed-row" },
           div(
@@ -355,14 +356,13 @@ exports.singleFeedView = (feed, comments = [], params = {}) => {
           div(
             { class: "feed-main" },
             div({ class: "feed-text" }, ...styledNodes),
+            authorId && String(authorId) === String(me) ? renderClearnetSwitch("feed", feed.rootId || feed.key, isClearnet) : null,
             tags.length
               ? div(
                   { class: "card-tags" },
                   tags.map((tag) => a({ href: `/search?query=%23${encodeURIComponent(tag)}`, class: "tag-link" }, `#${tag}`))
                 )
-              : null,
-            renderDetailShare(feed.key, feedHref, safeText, null, null, null, feed.value && feed.value.author),
-            authorId && String(authorId) === String(me) ? renderClearnetSwitch("feed", feed.rootId || feed.key, isClearnet) : null
+              : null
           )
         )
       ),

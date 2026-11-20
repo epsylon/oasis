@@ -245,7 +245,7 @@ exports.devMapView = async (modules) => {
     section(
       ...renderHeader("map"),
       div({ class: "dev-listing" },
-        table({ class: "dev-table" },
+        table({ class: "dev-table stack-table" },
           thead(tr(
             th(i18n.devColModule || "Module"),
             th(i18n.devColState || "State"),
@@ -256,12 +256,12 @@ exports.devMapView = async (modules) => {
           )),
           tbody(
             (modules || []).map(m => tr(
-              td(safeText(m.name)),
-              td(m.enabled ? (i18n.devOn || "on") : (i18n.devOff || "off")),
-              td(m.model ? a({ href: fileHref(m.model) }, safeText(m.model)) : span({ class: "dev-hint" }, "-")),
-              td(m.view ? a({ href: fileHref(m.view) }, safeText(m.view)) : span({ class: "dev-hint" }, "-")),
-              td(String(m.routes || 0)),
-              td(m.tests ? a({ href: dirHref(m.tests) }, safeText(m.tests)) : span({ class: "dev-hint" }, "-"))
+              td({ "data-label": i18n.devColModule || "Module" }, safeText(m.name)),
+              td({ "data-label": i18n.devColState || "State" }, m.enabled ? (i18n.devOn || "on") : (i18n.devOff || "off")),
+              td({ "data-label": i18n.devColModel || "Model" }, m.model ? a({ href: fileHref(m.model) }, safeText(m.model)) : span({ class: "dev-hint" }, "-")),
+              td({ "data-label": i18n.devColView || "View" }, m.view ? a({ href: fileHref(m.view) }, safeText(m.view)) : span({ class: "dev-hint" }, "-")),
+              td({ "data-label": i18n.devColRoutes || "Routes" }, String(m.routes || 0)),
+              td({ "data-label": i18n.devColTests || "Tests" }, m.tests ? a({ href: dirHref(m.tests) }, safeText(m.tests)) : span({ class: "dev-hint" }, "-"))
             ))
           )
         )

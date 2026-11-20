@@ -1,7 +1,7 @@
 const { form, button, div, h2, p, section, input, label, textarea, br, a, span, select, option, img, video, table, tr, td, hr } = require("../server/node_modules/hyperaxe")
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view")
-const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderCountChip, renderSearchButton } = require("./main_views")
+const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderOpenClosedChip, renderStateChip, renderVisibilityChip, renderLifespanChip, renderEcoTax, renderCardTop, renderOpinionsVoting, renderEngagement, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, renderEcoValueChip, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderCountChip, renderSearchButton, renderJoinQr, renderAmountChip } = require("./main_views")
 const { blobUrl, blobIdOf, isVideoEntry, imagesOf, renderPhotoGallery, renderGalleryFields } = require("./gallery_view")
 const moment = require("../server/node_modules/moment")
 const { config } = require("../server/SSB_server.js")
@@ -35,7 +35,6 @@ const safeText = (v) => String(v || "").trim()
 const clearnetEligible = (item) => String(item.status || "OPEN").toUpperCase() === "OPEN" && String(item.visibility || "PUBLIC").toUpperCase() === "PUBLIC" && !item.encrypted && !item.tribeId
 const housingClearnetHref = (item) => clearnetItemHref("housing", item.title, item.rootId || item.id)
 const HOUSING_REACH = ["PUBLIC", "HIDDEN"]
-const housingReachLabel = (v) => v === "HIDDEN" ? (i18n.visibilityHidden || "Hidden") : (i18n.visibilityPublic || "Public")
 
 const parseNum = (v) => {
   const n = parseFloat(String(v ?? "").replace(",", "."))
@@ -176,6 +175,7 @@ const renderHousingList = (items, filter, params = {}) => {
         renderTypeChip(item),
         renderStatusChip(item.status),
         requested ? renderRequestedChip() : null,
+        renderAmountChip(priceLabel(item)),
         renderLifespanChip(item.lifetime, i18n),
         renderScopeChip(item, i18n, clearnetEligible(item) && item.clearnet === true, housingClearnetHref(item)),
         renderCountChip("✉", i18n.housingRequests, item.requestCount || 0)
@@ -203,7 +203,6 @@ const renderHousingList = (items, filter, params = {}) => {
               )
             ),
             renderStarRating(item.opinions, safeArr(item.opinions_inhabitants).length),
-            div({ class: "price-chip" }, priceLabel(item)),
             safeText(item.place)
               ? div({ class: "card-field card-field-mb" },
                   span({ class: "card-label" }, `${String(i18n.housingPlace).toUpperCase()}: `),
@@ -230,30 +229,15 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
   const reachRaw = String(params.reach || "").toUpperCase()
   const ownReach = String(item.visibility || "").toUpperCase()
   const reach = HOUSING_REACH.includes(reachRaw) ? reachRaw : (HOUSING_REACH.includes(ownReach) ? ownReach : "PUBLIC")
-  const showClearnet = reach === "PUBLIC" && clearnetEligible({ ...item, visibility: reach })
+  const showClearnet = clearnetEligible({ ...item, visibility: "PUBLIC" })
   return div({ class: "div-center housing-form" },
     isEdit ? spreadWarning : null,
-    form({ method: "GET", action: isEdit ? `/housing/edit/${encodeURIComponent(item.id)}` : "/housing" },
-      isEdit ? null : input({ type: "hidden", name: "filter", value: "CREATE" }),
-      label(i18n.visibilityLabel || "Visibility"),
-      br(),
-      div({ class: "apply-row" },
-        select({ name: "visibility", class: "report-category-select" },
-          option({ value: "PUBLIC", ...(reach === "PUBLIC" ? { selected: true } : {}) }, i18n.visibilityPublic || "Public"),
-          option({ value: "HIDDEN", ...(reach === "HIDDEN" ? { selected: true } : {}) }, i18n.visibilityHidden || "Hidden")
-        ),
-        button({ type: "submit", class: "create-button" }, i18n.apply || "Apply")
-      )
-    ),
-    hr({ class: "form-sep" }),
-    h2({ class: "report-category-fixed" }, housingReachLabel(reach)),
     form({
       action: isEdit ? `/housing/update/${encodeURIComponent(item.id)}` : "/housing/create",
       method: "POST",
       enctype: "multipart/form-data"
     },
       input({ type: "hidden", name: "returnTo", value: "/housing?filter=MINE" }),
-      input({ type: "hidden", name: "visibility", value: reach }),
       label(i18n.housingType),
       br(),
       select({ name: "housing_type", required: true },
@@ -334,6 +318,14 @@ const renderHousingForm = (item = {}, mode = "create", maxImages = MAX_IMAGES, s
       label(i18n.housingTags),
       br(),
       input({ type: "text", name: "tags", placeholder: i18n.tagsPlaceholder, value: Array.isArray(item.tags) ? item.tags.join(", ") : (item.tags || "") }),
+      br(),
+      br(),
+      label(i18n.visibilityLabel || "Visibility"),
+      br(),
+      select({ name: "visibility" },
+        option({ value: "PUBLIC", ...(reach === "PUBLIC" ? { selected: true } : {}) }, i18n.visibilityPublic || "Public"),
+        option({ value: "HIDDEN", class: "reach-closed", ...(reach === "HIDDEN" ? { selected: true } : {}) }, i18n.visibilityHidden || "Hidden")
+      ),
       br(),
       br(),
       ...(showClearnet ? [renderClearnetSelector(item.clearnet === true || String(item.clearnet || "") === "1", i18n), br()] : []),
@@ -471,12 +463,13 @@ exports.singleHousingView = async (item, filter = "ALL", comments = [], params =
 
   const housingSide = div({ class: "tribe-side" },
     renderCardTop(item.id, `/housing/${encodeURIComponent(item.id)}`, { arrow: false, date: item.createdAt, chips, bylineExtra: [renderEditedChip(item.id, item.rootId, item.updatedAt)], spread: params.spreads || null, author: item.author, favKind: 'housing', isFavorite: item.isFavorite, reportTitle: item.title, returnTo, editAction: isAuthor ? `/housing/edit/${encodeURIComponent(item.id)}?returnTo=${encodeURIComponent(returnTo)}` : undefined, deleteAction: isAuthor ? contentDeleteAction("housing", item.id) : null }),
+    renderDetailShare(item.id, `/housing/${encodeURIComponent(item.id)}`, item.title, null, null, null, item.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, safeText(item.title) || i18n.housingTitle)
     ),
     isAuthor && canClearnet ? renderClearnetSwitch("housing", item.rootId || item.id, isClearnet) : null,
+    !isHidden && !item.tribeId ? renderJoinQr("housing", item.id) : null,
     renderStarRating(item.opinions, voters.length),
-    renderDetailShare(item.id, `/housing/${encodeURIComponent(item.id)}`, item.title, null, null, null, item.author),
     renderTags(item.tags),
     renderStatusRow(item, returnTo),
     visibilityRow

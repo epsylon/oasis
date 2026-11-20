@@ -17,7 +17,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -291,11 +291,12 @@ exports.singleVideoView = async (videoObj, filter = "all", comments = [], params
       editAction: String(videoObj.author) === String(userId) ? `/videos/edit/${encodeURIComponent(videoObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: String(videoObj.author) === String(userId) ? contentDeleteAction('video', videoObj.key) : undefined
     }),
+    renderDetailShare(videoObj.key, href, videoObj.title, null, null, null, videoObj.author),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
       isAuthor ? renderClearnetSwitch('videos', videoObj.rootId || videoObj.key, isClearnet) : null
     ),
-    renderDetailShare(videoObj.key, href, videoObj.title, null, null, null, videoObj.author),
+    !videoObj.tribeId ? renderJoinQr('videos', videoObj.key) : null,
     tagsNode,
     renderMapEmbed(params.mapData, videoObj.mapUrl),
   );

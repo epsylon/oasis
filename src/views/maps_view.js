@@ -5,7 +5,7 @@ const { renderStyledText, renderStyledHtml, escapeHtml } = require("../backend/r
 
 const moment = require("../server/node_modules/moment");
 const { renderCommentsSection } = require("./comments_view");
-const { renderPublishAtField, renderMentionsFilter, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton , renderTribeBackRow } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, clearnetItemHref, template, i18n, userLink, renderStateChip, renderLifespanChip, renderCardTop, renderSpreadEditWarning, renderDocumentActions, renderInviteQrCard, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, renderIcon, renderOpinionsVoting, renderEditedChip, renderMediaLockNote, renderEngagement, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton , renderTribeBackRow, renderJoinQr } = require("./main_views");
 const { renderEncryptedChip, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
 const { renderMapHtml, resolveView, makeView, fitView, parseView, viewParam, parsePick, MIN_ZOOM, MAX_ZOOM } = require("../maps/map_renderer");
@@ -197,7 +197,7 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
   const isEdit = filter === "edit";
   const reachRaw = String(params.reach || params.mapType || "").toUpperCase();
   const mapTypeVal = MAP_REACH.includes(reachRaw) ? reachRaw : (mapToEdit?.mapType || "SINGLE");
-  const showClearnet = mapTypeVal === "OPEN" && !params.tribeId && clearnetEligible({ ...(mapToEdit || {}), mapType: mapTypeVal });
+  const showClearnet = !params.tribeId && clearnetEligible({ ...(mapToEdit || {}), mapType: "OPEN" });
   const clearnetOn = params.clearnet !== undefined ? String(params.clearnet) === "1" : mapToEdit?.clearnet === true;
   const stepAction = isEdit ? `/maps/edit/${encodeURIComponent(mapId)}` : "/maps";
   const cleanUrl = isEdit
@@ -214,23 +214,10 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
   const zoomVal = view.zoom;
   const formId = "map-main-form";
   const nav = { form: formId, action: stepAction };
-  const keptKeys = ["lat", "lng", "zoom", "view", "title", "description", "markerLabel", "tags"];
 
   return div({ class: "div-center audio-form" },
     params.spreadWarning || null,
     h2(isEdit ? i18n.mapUpdateButton : i18n.mapCreateButton),
-    form({ method: "GET", action: stepAction },
-      isEdit ? null : input({ type: "hidden", name: "filter", value: "create" }),
-      params.tribeId ? input({ type: "hidden", name: "tribeId", value: params.tribeId }) : null,
-      isEdit && safeText(params.returnTo) ? input({ type: "hidden", name: "returnTo", value: safeText(params.returnTo) }) : null,
-      ...keptKeys.filter((k) => params[k] !== undefined && String(lastOf(params[k])) !== "").map((k) => input({ type: "hidden", name: k, value: String(lastOf(params[k])) })),
-      label(i18n.mapTypeLabel), br(),
-      div({ class: "apply-row" },
-        select({ name: "mapType", class: "report-category-select" },
-          ...MAP_REACH.map((t) => option({ value: t, ...(mapTypeVal === t ? { selected: true } : {}) }, mapReachLabel(t)))),
-        button({ type: "submit", class: "create-button" }, i18n.apply || "Apply"))),
-    hr({ class: "form-sep" }),
-    h2({ class: "report-category-fixed" }, mapReachLabel(mapTypeVal)),
     form({
         id: formId,
         action: isEdit ? `/maps/update/${encodeURIComponent(mapId)}` : "/maps/create",
@@ -239,7 +226,6 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
       },
         input({ type: "hidden", name: "returnTo", value: returnTo }),
         isEdit ? null : input({ type: "hidden", name: "filter", value: "create" }),
-        input({ type: "hidden", name: "mapType", value: mapTypeVal }),
         input({ type: "hidden", name: "view", value: viewParam(view) }),
         params.tribeId ? input({ type: "hidden", name: "tribeId", value: params.tribeId }) : null,
         label(i18n.title || "Title"), br(),
@@ -278,6 +264,10 @@ const renderMapForm = (filter, mapId, mapToEdit, params = {}) => {
         }),
         div({ class: "map-form-map-slot" },
           renderMap(pickerMarkers, null, 0, { view, id: "map", nav, pickForm: formId, pickAction: stepAction })),
+        label(i18n.mapTypeLabel), br(),
+        select({ name: "mapType" },
+          ...MAP_REACH.map((t) => option({ value: t, ...(t !== "OPEN" ? { class: "reach-closed" } : {}), ...(mapTypeVal === t ? { selected: true } : {}) }, mapReachLabel(t)))),
+        br(), br(),
         showClearnet ? renderClearnetSelector(clearnetOn, i18n) : null,
         ...(isEdit ? [] : renderPublishAtField()),
         button({ type: "submit", class: "create-button" }, isEdit ? i18n.save : i18n.mapCreateButton)));
@@ -545,12 +535,13 @@ exports.singleMapView = async (mapObj, filter = "all", params = {}) => {
       editAction: String(mapObj.author) === String(userId) ? `/maps/edit/${encodeURIComponent(mapObj.key)}?returnTo=${encodeURIComponent(returnTo)}` : undefined,
       deleteAction: String(mapObj.author) === String(userId) ? contentDeleteAction('map', mapObj.key) : undefined
     }),
+    renderDetailShare(mapObj.rootId || mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, mapObj.title, params.subscription ? { target: mapObj.rootId || mapObj.key, scope: "maps", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(mapObj.author) === String(userId), returnTo: `/maps/${encodeURIComponent(mapObj.key)}` } : null, null, null, mapObj.author),
     renderTribeBackRow(mapObj.tribeLink, `/maps/${encodeURIComponent(mapObj.rootId || mapObj.key)}`),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, mapObj.title || i18n.mapAllSectionTitle)
     ),
     canClearnet && String(mapObj.author) === String(userId) ? renderClearnetSwitch("maps", mapObj.rootId || mapObj.key, isClearnet) : null,
-    renderDetailShare(mapObj.rootId || mapObj.key, `/maps/${encodeURIComponent(mapObj.key)}`, mapObj.title, params.subscription ? { target: mapObj.rootId || mapObj.key, scope: "maps", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(mapObj.author) === String(userId), returnTo: `/maps/${encodeURIComponent(mapObj.key)}` } : null, null, null, mapObj.author),
+    mapObj.mapType === "OPEN" && !mapObj.tribeId ? renderJoinQr("maps", mapObj.rootId || mapObj.key) : null,
     renderTags(mapObj.tags)
   );
 

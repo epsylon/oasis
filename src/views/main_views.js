@@ -176,6 +176,8 @@ exports.userLinkLabel = userLinkLabel;
 const renderInviteQrCard = ({ qrDataUrl }) =>
   qrDataUrl ? div({ class: 'invite-qr-card' }, img({ src: qrDataUrl, alt: 'QR', class: 'invite-qr-img' })) : null;
 exports.renderInviteQrCard = renderInviteQrCard;
+const renderJoinQr = (mod, id) => id ? div({ class: 'detail-qr' }, renderInviteQrCard({ qrDataUrl: `/qr-public/${mod}/${encodeURIComponent(id)}` })) : null;
+exports.renderJoinQr = renderJoinQr;
 
 const renderLiveFeed = (src, imgClass) => {
   const id = `live-${String(src).replace(/[^a-zA-Z0-9]/g, '').slice(-24)}`;
@@ -618,6 +620,7 @@ const ACTION_ICONS = {
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
   leave: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   hide:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><line x1="3" y1="3" x2="21" y2="21"/>',
+  show:'<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
   spread: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/>',
   pin: '<path d="M9 3h6l-1 6 4 4H6l4-4-1-6z"/><line x1="12" y1="13" x2="12" y2="21"/>',
@@ -842,7 +845,41 @@ const layoutTypeChip = () => {
   return key && i18n[key] ? renderStateChip('whole', null, String(i18n[key]).toUpperCase(), 'module') : null;
 };
 const msgSizeFor = (id) => { const st = listScope(); return id && st && st.msgSizes instanceof Map ? st.msgSizes.get(String(id)) || 0 : 0; };
+const hiddenIdsNow = () => {
+  const st = listScope();
+  if (st && st.hiddenIdsSet) return st.hiddenIdsSet;
+  let set = new Set();
+  try { set = require('../models/viewer_filters').hiddenIds(); } catch (_) {}
+  if (st) st.hiddenIdsSet = set;
+  return set;
+};
+const hiddenForMe = (id) => {
+  if (typeof id !== 'string' || !hiddenIdsNow().has(id)) return false;
+  const path = String((listScope() || {}).path || '');
+  return !path.includes(id) && !path.includes(encodeURIComponent(id));
+};
+const renderHiddenCardTop = (id) => {
+  const anchor = anchorFor(id);
+  return div({ class: 'card-header activity-card-header card-top', ...(anchor ? { id: anchor } : {}) },
+    div({ class: 'content-actions' },
+      details({ class: 'card-menu' },
+        summary({ class: 'btn-singleview card-menu-toggle', title: i18n.cardMenuTitle }, CARD_MENU_GLYPH),
+        div({ class: 'card-menu-items' },
+          form({ method: 'POST', action: `/unhide/${encodeURIComponent(id)}`, class: 'content-action-form' },
+            input({ type: 'hidden', name: 'returnTo', value: hereAt(id) || '/' }),
+            button({ type: 'submit', class: 'btn-singleview btn-hide', title: i18n.showForMe }, renderIcon('show'))
+          )
+        )
+      )
+    ),
+    div({ class: 'card-hidden-note' },
+      img({ src: '/hidden-content.svg', alt: i18n.hiddenForMeNote, class: 'card-hidden-picture' })
+    )
+  );
+};
+
 const renderCardTop = (msgId, viewHref, opts = {}) => {
+  if (hiddenForMe(msgId)) return renderHiddenCardTop(msgId);
   const o = (opts && typeof opts === 'object') ? opts : {};
   const rs = relationSets();
   const cardAuthor = typeof o.bylineAuthor === 'string' && o.bylineAuthor.startsWith('@') ? o.bylineAuthor : o.author;
@@ -1084,6 +1121,9 @@ const renderRelationshipBlock = (relationship, feedId) => {
 exports.renderRelationshipBlock = renderRelationshipBlock;
 
 exports.renderStateChip = renderStateChip;
+const trimAmount = (text) => String(text).replace(/\d+\.\d+/g, (n) => String(Number(Number(n).toFixed(6))));
+const renderAmountChip = (text) => text ? renderStateChip("whole", "¤", trimAmount(text), "level") : null;
+exports.renderAmountChip = renderAmountChip;
 exports.renderOpenClosedChip = renderOpenClosedChip;
 exports.renderVisibilityChip = renderVisibilityChip;
 exports.renderModeChip = renderModeChip;
@@ -1265,7 +1305,7 @@ const errorView = ({ title, message, backHref }) => {
   return exports.template(
     heading,
     section(
-      div({ class: 'tags-header' },
+      div({ class: 'tags-header action-page' },
         message ? p({ class: 'error-page-message' }, String(message)) : null,
         div({ class: 'error-page-actions' },
           a({ href: backHref || '/', class: 'filter-btn' }, i18n.goBack || 'Go back')
@@ -1275,6 +1315,7 @@ const errorView = ({ title, message, backHref }) => {
   );
 };
 exports.errorView = errorView;
+
 
 const keepTextView = ({ title, action, fields = [], hidden = [], enctype = null, backHref = null }) => {
   const formAttrs = { method: 'POST', action };
@@ -1309,7 +1350,7 @@ exports.keepTextView = keepTextView;
 const confirmView = ({ title, message, action, hidden = [], backHref = null }) => exports.template(
   title || i18n.confirmActionTitle,
   section(
-    div({ class: 'tags-header' },
+    div({ class: 'tags-header action-page' },
       h2(title || i18n.confirmActionTitle),
       message ? p({ class: 'error-page-message' }, String(message)) : null,
       form({ method: 'POST', action, class: 'confirm-actions' },
@@ -4123,8 +4164,10 @@ const CLEARNET_HUB_CSS = `
 .cn-filter-btn{display:inline-block;padding:3px 8px;background:var(--bg-elev);color:var(--fg-soft);border:1px solid var(--border);border-radius:10px;font-size:10px;letter-spacing:1px;text-transform:uppercase;text-decoration:none;transition:border-color .15s ease,color .15s ease,background .15s ease}
 .cn-filter-btn:hover{border-color:var(--fg);color:var(--fg);text-decoration:none}
 .cn-filter-btn.active{background:var(--bg-sub);border-color:var(--fg);color:var(--fg);font-weight:600}
-.cn-hub-grid{columns:280px;column-gap:14px;margin-top:16px}
-.cn-hub-grid > .cn-hub-card{break-inside:avoid;margin:0 0 14px 0;width:100%}
+.cn-hub-grid{display:flex;gap:14px;align-items:flex-start;margin-top:16px}
+.cn-hub-col{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:14px}
+.cn-hub-col > .cn-hub-card{margin:0;width:100%;min-width:0}
+@media (max-width:700px){.cn-hub-grid{flex-direction:column;align-items:stretch}.cn-hub-col{display:contents}}
 .cn-hub-kind{color:var(--fg-dim);font-size:10px;text-transform:uppercase;letter-spacing:2px;font-weight:600}
 .cn-hub-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;padding:12px 14px 0}
 .cn-hub-head + .cn-hub-thumb{margin-top:10px;border-top:1px solid var(--border)}
@@ -4153,6 +4196,14 @@ audio.cn-hub-player{background:transparent;height:36px}
 .cn-hub-meta{color:var(--fg-dim);font-size:11px;text-transform:uppercase;letter-spacing:1px;margin-top:auto}
 .cn-empty-content{background:var(--bg-elev);border:1px dashed var(--border);border-radius:8px;padding:24px;text-align:center;color:var(--fg-dim);font-size:14px}
 `;
+
+const CN_HUB_COLUMNS = 3;
+const renderClearnetHubGrid = (cards) => {
+  const cols = Array.from({ length: CN_HUB_COLUMNS }, () => []);
+  cards.forEach((html, i) => cols[i % CN_HUB_COLUMNS].push(String(html).replace('class="cn-hub-card', `class="cn-o${i + 1} cn-hub-card`)));
+  const order = cards.map((_, i) => `.cn-o${i + 1}{order:${i + 1}}`).join('');
+  return `<style>${order}</style><div class="cn-hub-grid">${cols.map(c => `<div class="cn-hub-col">${c.join('')}</div>`).join('')}</div>`;
+};
 
 const renderClearnetHubCard = (modulePath, it) => {
   const { blobUrl: cnBlob, escapeHtml: esc, renderRichText, renderTagChips } = require('./clearnet_view');
@@ -4211,20 +4262,19 @@ const buildClearnetHub = ({ items = {}, filterBase, filterType = '', query = '',
   const paged = paginateClearnet(visibleItems, page);
   const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter, q: query }, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
   const sections = visibleItems.length
-    ? `<h2 class="cn-section">${esc(i18n.cnNetworkContent)} (${visibleItems.length})</h2><div class="cn-hub-grid">${paged.items.map(it => renderClearnetHubCard(it.modulePath, it)).join('')}</div>${pager}`
+    ? `<h2 class="cn-section">${esc(i18n.cnNetworkContent)} (${visibleItems.length})</h2>${renderClearnetHubGrid(paged.items.map(it => renderClearnetHubCard(it.modulePath, it)))}${pager}`
     : (allItems.length ? `<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
   return { sections, filters: allItems.length ? filterButtons : '', total: allItems.length, visible: visibleItems.length, page: paged.page, pages: paged.pages, per: paged.per };
 };
 
 exports.CLEARNET_HUB_CSS = CLEARNET_HUB_CSS;
 
-exports.clearnetHubView = async ({ items = {}, tribes = [], trending = [], trendingFeeds = [], filterType = '', query = '', page = 1 }) => {
+exports.clearnetHubView = async ({ items = {}, tribes = [], trending = [], filterType = '', query = '', page = 1 }) => {
   const { escapeHtml: esc, renderClearnetPage, renderClearnetHubSearch, blobUrl: cnBlob, CLEARNET_PAGER_CSS, renderClearnetPager, kindLabel } = require('./clearnet_view');
   const active = String(filterType || '').toLowerCase();
   const notFiltered = (key) => key !== active;
   const hub = buildClearnetHub({ items, filterBase: '/c', filterType, query, page });
   const matches = clearnetMatcher(query);
-  const shownFeeds = notFiltered('feed') ? (trendingFeeds || []).filter(matches) : [];
   const shownTrending = (trending || []).filter(it => notFiltered(it.moduleKey) && matches(it));
   const extraCss = CLEARNET_HUB_CSS + CLEARNET_PAGER_CSS + `
 body{max-width:1440px}
@@ -4238,8 +4288,6 @@ body{max-width:1440px}
 .cn-slide-radio{position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none}
 .cn-slide-radio:not(:checked) + .cn-slide{display:none}
 .cn-pager-btn.cn-slide-prev,.cn-pager-btn.cn-slide-next{cursor:pointer}
-.cn-feed-track{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;align-items:start}
-.cn-feed-track .cn-hub-snippet{-webkit-line-clamp:6}
 @media (max-width:1180px){.cn-hub-layout{display:flex;flex-direction:column;align-items:stretch}.cn-hub-left{order:1}.cn-hub-right{order:2}.cn-hub-main{order:3}.cn-hub-side:empty{display:none}.cn-side-list{display:block;columns:240px;column-gap:10px}.cn-side-list > .cn-hub-card{break-inside:avoid;margin:0 0 10px 0;width:100%}}
 `;
   const shownTribes = (tribes || []).filter(matches);
@@ -4249,14 +4297,7 @@ body{max-width:1440px}
     const href = `/c/tribe/${encodeURIComponent(clearnetSlugFor(t.title, t.id))}`;
     return `<div class="cn-hub-card cn-pop-card"><a class="cn-hub-cover" href="${href}" aria-label="${esc(t.title)}"></a><img class="cn-pop-thumb" src="${img}" alt="" loading="lazy"/><div class="cn-hub-body"><a class="cn-hub-title" href="${href}">${esc(t.title || i18n.cnUntitled)}</a><div class="cn-hub-meta">${esc(i18n.cnPublicContent)}: ${Number(t.content) || 0}</div></div></div>`;
   };
-  const modByKey = Object.fromEntries(CLEARNET_MODULES.map(m => [m.key, m]));
-  const mod = (key) => modByKey[key] || { key, modulePath: key, kind: key };
   const card = (it, modulePath, kind) => renderClearnetHubCard(modulePath, { ...it, kind: kindLabel(kind) });
-  const sideSection = (title, html) => html ? `<section class="cn-side-section"><h2 class="cn-section">${esc(title)}</h2><div class="cn-side-list">${html}</div></section>` : '';
-  const listOf = (key, list) => list.map(it => card(it, mod(key).modulePath || key, mod(key).kind)).join('');
-  const latest = (key, n) => (items[key] || []).filter(matches).slice().sort((a, b) => (Number(b.ts) || 0) - (Number(a.ts) || 0)).slice(0, n);
-  const today = new Date().toISOString().slice(0, 10);
-  const upcoming = (items.events || []).filter(e => String(e.meta || '') >= today && matches(e)).sort((a, b) => String(a.meta).localeCompare(String(b.meta))).slice(0, 5);
   const slider = (name, list, size, wrap) => {
     const groups = [];
     for (let i = 0; i < list.length; i += size) groups.push(list.slice(i, i + size));
@@ -4272,20 +4313,9 @@ body{max-width:1440px}
     : '';
   const trendingBlock = sideSlider('cn-trending', i18n.trendingTitle, shownTrending, cards);
   const tribesBlock = sideSlider('cn-tribes', i18n.cnTribesContent, ranked, g => g.map(tribeCard).join(''));
-  const left = [
-    trendingBlock,
-    notFiltered('events') ? sideSection(cnModuleLabel(mod('events')), listOf('events', upcoming)) : ''
-  ].join('');
-  const right = [
-    tribesBlock,
-    ...['campaigns', 'jobs', 'market'].filter(notFiltered).map(k => sideSection(cnModuleLabel(mod(k)), listOf(k, latest(k, 3))))
-  ].join('');
-  const feedsBlock = shownFeeds.length
-    ? `<h2 class="cn-section">${esc(i18n.cnFeedsLabel)} (${shownFeeds.length})</h2>${slider('cn-feeds', shownFeeds, 3, (g, nav) => nav
-      ? `<div class="cn-slide"><div class="cn-feed-track">${cards(g)}</div><div class="cn-slide-arrows">${nav.join('')}</div></div>`
-      : `<div class="cn-feed-track">${cards(g)}</div>`)}`
-    : '';
-  const main = `${feedsBlock}${hub.sections || (feedsBlock || ranked.length ? '' : `<div class="cn-empty-content">${esc(i18n.cnHubEmpty)}</div>`)}`;
+  const left = trendingBlock;
+  const right = tribesBlock;
+  const main = hub.sections || (ranked.length ? '' : `<div class="cn-empty-content">${esc(i18n.cnHubEmpty)}</div>`);
   const body = `${hub.filters || ''}<div class="cn-hub-layout"><aside class="cn-hub-side cn-hub-left">${left}</aside><div class="cn-hub-main">${main}</div><aside class="cn-hub-side cn-hub-right">${right}</aside></div>`;
   return renderClearnetPage({
     title: `Oasis HUB | ${i18n.clearnetSectionTitle}`,
@@ -4327,7 +4357,7 @@ exports.clearnetInhabitantView = async ({ feedId, name, description, image, pref
   const paged = paginateClearnet(visibleItems, page);
   const pager = renderClearnetPager({ base: filterBase, params: { type: activeFilter }, page: paged.page, pages: paged.pages, per: paged.per, total: paged.total });
   const sections = totalCount
-    ? `<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${totalCount})</h2>${filterButtons}<div class="cn-hub-grid">${paged.items.map(it => renderHubItem(it.modulePath, it)).join('')}</div>${pager}`
+    ? `<h2 class="cn-section">${esc(i18n.cnPublicContent)} (${totalCount})</h2>${filterButtons}${renderClearnetHubGrid(paged.items.map(it => renderHubItem(it.modulePath, it)))}${pager}`
     : (allItems.length ? `${filterButtons}<div class="cn-empty-content">${esc(i18n.cnCategoryEmpty)}</div>` : '');
   const noResults = `<div class="cn-empty-content">${esc(i18n.cnInhabitantEmpty)}</div>`;
   const extraCss = CLEARNET_HUB_CSS + CLEARNET_PAGER_CSS + `
@@ -4452,8 +4482,7 @@ const renderUserSensors = (u, opts = {}) => {
     ? (() => {
         const path = `/c/inhabitant/${encodeURIComponent(u.id)}`;
         return div({ class: 'profile-reach' },
-          renderReachChip(true, i18n, path),
-          renderInviteQrCard({ qrDataUrl: `/qr-clearnet/${encodeURIComponent(u.id)}` })
+          renderReachChip(true, i18n, path)
         );
       })()
     : null;
@@ -4529,30 +4558,34 @@ exports.authorView = async ({
     gpgFingerprint, ecoAddress, estimatedUBI, lastClaimedDate, totalClaimed,
     larpHouse, stats,
     mutual: !!(relationship && relationship.following && relationship.followsMe)
-  }, { relationshipNode: div({ class: "profile-side-relationship" }, relationshipBlock) });
+  });
+  const relationshipNode = div({ class: "profile-side-relationship" }, relationshipBlock);
 
   const sideColumn = div({ class: "tribe-side profile-side" },
     img({ class: "inhabitant-photo-details", src: avatarUrl, alt: name }),
     h2({ class: "profile-side-name" }, name),
+    relationshipNode,
     description !== ""
       ? div({ class: "profile-side-description", [RAW_HTML]: sanitizeHtml(renderStyledHtml(description)) })
       : null,
-    div({ class: "profile-side-mention" },
-      a({ href: `/author/${encodeURIComponent(feedId)}` }, strong(feedId))
-    ),
     feedId ? renderInviteQrCard({ qrDataUrl: `/qr/${encodeURIComponent(feedId)}` }) : null,
-    oasisVersion ? div({ class: "profile-side-version" },
-      '🌴 ' + (i18n.oasisVersionLabel || 'Oasis Version') + ': ',
-      strong(oasisVersion)
-    ) : null,
-    ...userSensors,
     div({ class: "profile-side-actions" },
       isOwnProfile ? a({ href: `/profile/edit`, class: "filter-btn" }, `✎ ${i18n.editProfile}`) : null,
       isOwnProfile ? a({ href: "/supporters", class: "filter-btn" }, `♥ ${i18n.viewSupporters}`) : null,
       a({ href: `/likes/${encodeURIComponent(feedId)}`, class: "filter-btn" }, `⟳ ${i18n.viewLikes}`),
       !isOwnProfile ? a({ href: `/pm?recipients=${encodeURIComponent(feedId)}`, class: "filter-btn" }, `✉ ${i18n.pmCreateButton}`) : null,
       !isOwnProfile ? renderCallButton(feedId, { pam: true }) : null
-    )
+    ),
+    ...userSensors,
+    div({ class: "profile-side-mention" },
+      a({ class: "profile-id-chip", href: `/author/${encodeURIComponent(feedId)}` },
+        span({ class: "profile-id-value" }, feedId)
+      )
+    ),
+    oasisVersion ? div({ class: "profile-side-version" },
+      '🌴 ' + (i18n.oasisVersionLabel || 'Oasis Version') + ': ',
+      strong(oasisVersion)
+    ) : null
   );
 
   let mainColumnContent = [];
@@ -4791,12 +4824,13 @@ const inboxBotLabel = (bot) => ({
   blogs: i18n.pmBotBlogs, jobs: i18n.pmBotJobs, projects: i18n.pmBotProjects, market: i18n.pmBotMarket, shops: i18n.pmBotShops,
   political: i18n.pmBotPolitical, banking: i18n.pmBotBanking, school: i18n.pmBotSchool, industry: i18n.pmBotIndustry,
   housing: i18n.pmBotHousing, wiki: i18n.pmBotWiki, emergencies: i18n.pmBotEmergencies, podcasts: i18n.pmBotPodcasts,
-  campaigns: i18n.pmBotCampaigns, logistics: i18n.pmBotLogistics, social: i18n.pmBotSocial, larp: i18n.pmBotLarp, tribes: i18n.pmBotTribes, reminders: i18n.privateReminders
+  campaigns: i18n.pmBotCampaigns, logistics: i18n.pmBotLogistics, social: i18n.pmBotSocial, invites: i18n.pmBotInvites, larp: i18n.pmBotLarp, tribes: i18n.pmBotTribes, reminders: i18n.privateReminders
 })[bot] || bot;
 const INBOX_BOT_ICONS = {
   blogs: '📝', jobs: '💼', projects: '💚', market: '💰', shops: '🛍️', political: '🏛️', larp: '🎭', banking: '💰', school: '🎓', industry: '🏭',
-  housing: '🏠', wiki: '📖', emergencies: '🚨', podcasts: '🎙️', campaigns: '✍', logistics: '🚚', social: '♥', tribes: '🔔', reminders: '⏰'
+  housing: '🏠', wiki: '📖', emergencies: '🚨', podcasts: '🎙️', campaigns: '✍', logistics: '🚚', social: '♥', invites: '🔑', tribes: '🔔', reminders: '⏰'
 };
+const INVITES_BOT_TITLES = { INVITE_SAVED: 'inviteSavedTitle', OPEN_SAVED: 'openSavedTitle', INVITE_JOINED: 'inviteJoinedTitle', INVITE_ARRIVED: 'openArrivedTitle' };
 const inboxBotSender = (bot) => [INBOX_BOT_ICONS[bot], inboxBotLabel(bot)].filter(Boolean).join(' ');
 exports.INBOX_BOT_ORDER = INBOX_BOT_ORDER;
 exports.inboxBotLabel = inboxBotLabel;
@@ -5422,8 +5456,17 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
     )
   }
 
-  function TribesBotCard({ sentAt, from, toLinks, text, key, msgSize }) {
-    const title = i18n.tribeWatchNoticeTitle
+  function InvitesBotCard({ sentAt, from, toLinks, text, key, msgSize, title }) {
+    return div(
+      { class: 'pm-card invites-bot-notification thread-level-0' },
+      headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
+      h2({ class: 'pm-title' }, `🔑 ${i18n.pmBotInvites} · ${title}`),
+      div({ class: 'message-text', [RAW_HTML]: sanitizeHtml(clickableLinks(text || '')) }),
+      actions({ key, replyId: from, subjectRaw: title, text })
+    )
+  }
+
+  function TribesBotCard({ sentAt, from, toLinks, text, key, msgSize, title = i18n.tribeWatchNoticeTitle }) {
     return div(
       { class: 'pm-card tribes-bot-notification thread-level-0' },
       headerLine({ sentAt, from, toLinks, subject: title, msgKey: key, msgSize }),
@@ -5667,6 +5710,9 @@ exports.privateView = async (messagesInput, filter, decrypted = null, notice = '
             }
             if (subjectU === 'TRIBE_ACTIVITY') {
               return TribesBotCard({ sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })
+            }
+            if (INVITES_BOT_TITLES[subjectU]) {
+              return InvitesBotCard({ sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize, title: i18n[INVITES_BOT_TITLES[subjectU]] })
             }
             if (subjectU === 'WIKI_EDITED' || subjectU === 'WIKI_RESTORED') {
               return WikiBotCard({ subjectU, sentAt, from: fromResolved, toLinks, text, key: msg.key, msgSize })

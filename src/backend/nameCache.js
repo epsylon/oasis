@@ -14,6 +14,14 @@ const set = (feedId, name, ts) => {
   if (!prev || (prev.ts || 0) <= t) cache.set(id, { name, ts: t })
 }
 
+const named = (name) => {
+  const wanted = String(name || '').toLowerCase()
+  if (!wanted) return []
+  const out = []
+  for (const [feedId, entry] of cache) if (entry && String(entry.name).toLowerCase() === wanted) out.push(feedId)
+  return out
+}
+
 const has = (feedId) => !!feedId && cache.has(String(feedId))
 const size = () => cache.size
 
@@ -28,4 +36,4 @@ const setImage = (feedId, img) => {
   images.set(String(feedId), link)
 }
 
-module.exports = { get, set, has, size, image, setImage }
+module.exports = { get, set, named, has, size, image, setImage }

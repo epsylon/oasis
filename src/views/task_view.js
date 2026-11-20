@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, input, select, option, a, br, textarea, label, span, table, tr, td, video } = require("../server/node_modules/hyperaxe");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
 const moment = require("../server/node_modules/moment");
-const { renderPublishAtField, renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderCardByline, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, template, i18n, renderOpinionsVoting, renderEngagement, userLink, renderStateChip, renderLifespanChip, renderEcoTax, renderSpreadEditWarning, renderCardTop, renderCardByline, renderDocumentActions, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderCountChip, renderLayoutSwitch, renderLayoutItems, layoutExcerpt, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderPhotoGallery, renderGalleryFields, imagesOf, renderZoomableImage } = require("./gallery_view");
 const { renderTribeOriginChip, renderScopeChip } = require("./clearnet_view");
 const { config } = require("../server/SSB_server.js");
@@ -401,10 +401,11 @@ exports.singleTaskView = async (task, filter, comments = [], params = {}) => {
 
   const taskSide = div({ class: "tribe-side" },
     renderCardTop(task.id, `/tasks/${encodeURIComponent(task.id)}`, { arrow: false, date: task.createdAt, chips, bylineExtra: [renderEditedChip(task.id, task.rootId, task.updatedAt)], spread: params.spreads || null, author: task.author, favKind: 'tasks', isFavorite: task.isFavorite, reportTitle: task.title, editAction: isAuthor ? `/tasks/edit/${encodeURIComponent(task.id)}?returnTo=${encodeURIComponent(returnToSelf)}` : undefined, deleteAction: isAuthor ? contentDeleteAction('task', task.id) : undefined }),
+    renderDetailShare(task.id, `/tasks/${encodeURIComponent(task.id)}`, task.title, params.subscription ? { target: task.rootId || task.id, scope: "tasks", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(task.author) === String(userId), returnTo: `/tasks/${encodeURIComponent(task.id)}` } : null, null, null, task.author),
     div({ class: "shop-title-row" },
       h2({ class: "tribe-card-title" }, task.title)
     ),
-    renderDetailShare(task.id, `/tasks/${encodeURIComponent(task.id)}`, task.title, params.subscription ? { target: task.rootId || task.id, scope: "tasks", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(task.author) === String(userId), returnTo: `/tasks/${encodeURIComponent(task.id)}` } : null, null, null, task.author),
+    !task.tribeId ? renderJoinQr('tasks', task.id) : null,
     tagsNode,
     isAuthor ? renderTaskStatusRow(task, returnToSelf) : null
   );

@@ -1,7 +1,7 @@
 const { div, h2, p, section, button, form, a, input, label, span, textarea, br, table, tr, td, select, option } = require("../server/node_modules/hyperaxe");
 const { renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection: renderSharedCommentsSection } = require("./comments_view");
-const { template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, hereAt, renderCountChip, userLink, renderLayoutSwitch, renderLayoutItems, renderSearchButton , renderTribeBackRow } = require("./main_views");
+const { template, i18n, renderOpinionsVoting, renderEngagement, renderCardTop, renderStateChip, renderLifespanChip, renderSpreadEditWarning, renderModuleStatsBy, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, renderScheduledChip, hasRelation, hereAt, renderCountChip, userLink, renderLayoutSwitch, renderLayoutItems, renderSearchButton , renderTribeBackRow, renderJoinQr } = require("./main_views");
 const moment = require("../server/node_modules/moment");
 const { config } = require("../server/SSB_server.js");
 const { MAX_OPTIONS, MAX_OPTION_LENGTH, POLL_KINDS, pollKindOf } = require("../models/polls_model_limits");
@@ -396,9 +396,10 @@ exports.singlePollView = async (poll, comments = [], params = {}) => {
 
   const pollSide = div({ class: "tribe-side" },
     renderCardTop(poll.id, href, { arrow: false, date: poll.createdAt, chips, bylineExtra: [renderEditedChip(poll.tipId, poll.rootId, poll.updatedAt)], spread: params.spreads || null, author: poll.author, favKind: 'polls', isFavorite: poll.isFavorite, returnTo: href, reportTitle: poll.question, editAction, deleteAction: isOwn ? contentDeleteAction('poll', poll.id) : undefined }),
+    renderDetailShare(poll.id, href, poll.question, params.subscription ? { target: poll.rootId || poll.id, scope: "polls", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(poll.author) === String(userId), returnTo: href } : null, null, null, poll.author),
     renderTribeBackRow(poll.tribeLink, `/polls/${encodeURIComponent(poll.rootId || poll.id)}`),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, poll.question)),
-    renderDetailShare(poll.id, href, poll.question, params.subscription ? { target: poll.rootId || poll.id, scope: "polls", subscribed: params.subscription.subscribed, count: params.subscription.count, isOwner: String(poll.author) === String(userId), returnTo: href } : null, null, null, poll.author),
+    !poll.tribeId ? renderJoinQr('polls', poll.id) : null,
     tagsNode,
     statusRow
   );

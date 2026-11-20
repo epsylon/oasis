@@ -3,7 +3,7 @@ const { form, button, div, h2, p, section, input, label, br, a, span, textarea, 
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderPdfDocument, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderSearchButton, renderJoinQr } = require("./main_views");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText");
 
@@ -279,11 +279,12 @@ exports.singleDocumentView = async (doc, filter = "all", comments = [], params =
       editAction: isAuthor ? `/documents/edit/${encodeURIComponent(doc.key)}?returnTo=${encodeURIComponent(returnTo)}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('document', doc.key) : undefined
     }),
+    renderDetailShare(doc.key, href, doc.title, null, null, null, doc.author),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
       isAuthor ? renderClearnetSwitch('documents', doc.rootId || doc.key, isClearnet) : null
     ),
-    renderDetailShare(doc.key, href, doc.title, null, null, null, doc.author),
+    !doc.tribeId ? renderJoinQr('documents', doc.key) : null,
     tagsNode,
   );
 

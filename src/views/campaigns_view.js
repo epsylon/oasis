@@ -1,5 +1,5 @@
 const { div, h2, h3, p, section, button, form, a, span, br, textarea, input, label, select, option, img, progress, video: videoHyperaxe } = require("../server/node_modules/hyperaxe");
-const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt, renderCountChip, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, userLink, renderStateChip, renderCardTop, renderSubscriptionBox, renderModuleStats, renderOpinionsVoting, renderEngagement, moduleIsEmpty, contentDeleteAction, paged, renderEditedChip, renderMediaLockNote, renderDetailShare, hasRelation, RELATION_FILTERS, relationFilterLabel, hereAt, renderCountChip, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderClearnetSelector, renderClearnetSwitch, renderScopeChip } = require("./clearnet_view");
 const { renderCommentsSection } = require("./comments_view");
 const { renderMapEmbed } = require("./maps_view");
@@ -221,9 +221,10 @@ exports.singleCampaignView = async (cp, params = {}) => {
       bylineExtra: [renderEditedChip(cp.tipId, cp.rootId, cp.updatedAt)],
       author: cp.author, favKind: "campaigns", isFavorite: cp.isFavorite, reportTitle: cp.title, spread: params.spread || null, returnTo: href, subscription: subscriptionOpts, editAction: cp.isOwner ? `/campaigns?filter=edit&id=${encodeURIComponent(cp.id)}` : undefined, deleteAction: cp.isOwner ? contentDeleteAction("campaign", cp.id) : undefined
     }),
+    renderDetailShare(cp.id, href, cp.title, subscriptionOpts, null, null, cp.author),
     div({ class: "shop-title-row" }, h2({ class: "tribe-card-title" }, cp.title)),
     cp.isOwner && canClearnet ? renderClearnetSwitch("campaigns", cp.rootId || cp.id, isClearnet) : null,
-    renderDetailShare(cp.id, href, cp.title, subscriptionOpts, null, null, cp.author),
+    !cp.tribeId ? renderJoinQr("campaigns", cp.id) : null,
     renderTags(cp.tags),
     statusRow
   );

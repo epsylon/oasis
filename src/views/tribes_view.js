@@ -1682,6 +1682,7 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
         ],
         author: tribe.author, reportTitle: tribe.title, subscription: subscriptionOpts, editAction: showOwnerControls ? `/tribes/edit/${encodeURIComponent(tribe.id)}` : undefined, leaveAction: canLeave ? (isLarpHouse ? '/larp/leave' : `/tribes/leave/${encodeURIComponent(tribe.id)}`) : undefined, deleteAction: showOwnerControls ? contentDeleteAction('tribe', tribe.id) : undefined
       }),
+      renderDetailShare(tribe.id, tribeHref, tribe.title, subscriptionOpts, null, tribe.watch ? renderWatchPill({ tribeId: tribe.id, watching: tribe.watch.following, returnTo: `/tribe/${encodeURIComponent(tribe.id)}` }) : null, tribe.author),
       tribe.parentTribe
         ? div({ class: 'tribe-parent-box' },
             h2({ class: 'tribe-info-label' }, i18n.tribeMainTribeLabel || 'MAIN TRIBE'),
@@ -1690,7 +1691,6 @@ exports.tribeView = async (tribe, userIdParam, query, section, sectionData) => {
             )
           )
         : null,
-    renderDetailShare(tribe.id, tribeHref, tribe.title, subscriptionOpts, null, tribe.watch ? renderWatchPill({ tribeId: tribe.id, watching: tribe.watch.following, returnTo: `/tribe/${encodeURIComponent(tribe.id)}` }) : null, tribe.author),
       div({ class: 'shop-title-row' },
         h2({ class: 'tribe-card-title' }, tribe.title)
       ),

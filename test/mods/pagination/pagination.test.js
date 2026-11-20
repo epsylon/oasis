@@ -76,7 +76,7 @@ describe('pagination: moving through a module list', (t) => {
 describe('pagination: the public clearnet pages', (t) => {
   const A = '@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa=.ed25519';
   const many = (n, make) => Array.from({ length: n }, (_, i) => make(i));
-  const cards = (html) => (String(html).match(/class="cn-hub-card"/g) || []).length;
+  const cards = (html) => (String(html).match(/class="(?:[^"]* )?cn-hub-card(?: [^"]*)?"/g) || []).length;
   const gridCards = (html) => { const s = String(html); const i = s.indexOf('class="cn-hub-grid"'); return i < 0 ? 0 : cards(s.slice(i, s.indexOf('<aside', i) < 0 ? undefined : s.indexOf('<aside', i))); };
 
   t('the hub shows one page at a time, keeps the filters in the page links and clamps out-of-range pages', async () => {

@@ -587,7 +587,7 @@ const allocationsTable = (rows = [], userId) =>
   rows.length === 0
     ? div(p(i18n.bankNoAllocations))
     : table(
-        { class: "bank-allocs" },
+        { class: "bank-allocs stack-table" },
         thead(
           tr(
             th(i18n.bankAllocDate),
@@ -601,12 +601,12 @@ const allocationsTable = (rows = [], userId) =>
         tbody(
           ...rows.map(r =>
             tr(
-              td(moment(r.createdAt).format("YYYY/MM/DD HH:mm")),
-              td(r.concept || ""),
-              td(userLink(r.from)),
-              td(userLink(r.to)),
-              td(String(Number(r.amount || 0).toFixed(6))),
-              td(
+              td({ "data-label": i18n.bankAllocDate }, moment(r.createdAt).format("YYYY/MM/DD HH:mm")),
+              td({ "data-label": i18n.bankAllocConcept }, r.concept || ""),
+              td({ "data-label": i18n.bankAllocFrom }, userLink(r.from)),
+              td({ "data-label": i18n.bankAllocTo }, userLink(r.to)),
+              td({ "data-label": i18n.bankAllocAmount }, String(Number(r.amount || 0).toFixed(6))),
+              td({ "data-label": i18n.bankAllocStatus },
                 r.status === "CLOSED" || r.status === "CLAIMED"
                   ? span({ class: "ubi-tick-ok", title: r.status }, "✓")
                   : r.status === "UNCLAIMED" || r.status === "UNCONFIRMED"
@@ -622,17 +622,17 @@ const renderEpochList = (epochs = []) =>
   epochs.length === 0
     ? div(p(i18n.bankNoEpochs))
     : table(
-        { class: "bank-epochs" },
+        { class: "bank-epochs stack-table" },
         thead(tr(th(i18n.bankEpochId), th(i18n.bankPool), th(i18n.bankEpochAllocations), th(""))),
         tbody(
           ...paged(epochs
             .sort((a, b) => String(b.id).localeCompare(String(a.id))))
             .map(e =>
               tr(
-                td(e.id),
-                td(String(Number(e.pool || 0).toFixed(6))),
-                td(String(Number(e.recipients || 0))),
-                td(
+                td({ "data-label": i18n.bankEpochId }, e.id),
+                td({ "data-label": i18n.bankPool }, String(Number(e.pool || 0).toFixed(6))),
+                td({ "data-label": i18n.bankEpochAllocations }, String(Number(e.recipients || 0))),
+                td({ "data-label": "" },
                   form({ method: "GET", action: `/banking/epoch/${encodeURIComponent(e.id)}` },
                     button({ type: "submit", class: "filter-btn" }, i18n.bankViewEpoch)
                   )
@@ -773,15 +773,15 @@ const renderAddresses = (data, userId) => {
             { label: i18n.bankLocal, count: rows.filter(r => r.source !== "ssb").length },
             { label: i18n.bankFromOasis, count: rows.filter(r => r.source === "ssb").length }
           ]),
-          table({ class: "bank-addresses" },
+          table({ class: "bank-addresses stack-table" },
             thead(tr(th(i18n.bankAddAddressLabel.replace(/\s*\(.*\)\s*$/, "")), th(i18n.bankAddAddressUser), th(i18n.bankAddress), th(i18n.bankAddressSource), th(""))),
             tbody(
               ...paged(rows).map(r => tr(
-                td(a({ href: payHref(r), class: "bank-address-pay" }, r.label || (r.id ? "" : i18n.bankAddressUnnamed))),
-                td(r.id ? userLink(r.id) : ""),
-                td(a({ href: payHref(r), class: "bank-address-pay" }, strong({ class: "bank-address-code" }, r.address))),
-                td(r.source === "ssb" ? i18n.bankFromOasis : i18n.bankLocal),
-                td(r.source === "ssb" && String(r.id) !== String(userId)
+                td({ "data-label": i18n.bankAddAddressLabel.replace(/\s*\(.*\)\s*$/, "") }, a({ href: payHref(r), class: "bank-address-pay" }, r.label || (r.id ? "" : i18n.bankAddressUnnamed))),
+                td({ "data-label": i18n.bankAddAddressUser }, r.id ? userLink(r.id) : ""),
+                td({ "data-label": i18n.bankAddress }, a({ href: payHref(r), class: "bank-address-pay" }, strong({ class: "bank-address-code" }, r.address))),
+                td({ "data-label": i18n.bankAddressSource }, r.source === "ssb" ? i18n.bankFromOasis : i18n.bankLocal),
+                td({ "data-label": "" }, r.source === "ssb" && String(r.id) !== String(userId)
                   ? ""
                   : form({ method: "POST", action: "/banking/addresses/delete", class: "addr-del" },
                       input({ type: "hidden", name: "userId", value: r.id || "" }),

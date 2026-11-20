@@ -93,6 +93,7 @@ Everything Oasis itself stores. It is all plain JSON except the keyrings, it is 
 | `content/larp-seen.json` | What LarpBot has already told you about (decrees, results, Wall posts of your house, the pending test, the House of the solstice), so it does not repeat itself. |
 | `content/viewer_hidden.json` | Inhabitants you muted and content you hid. Applied only by this node; nothing about it is published. |
 | `content/invites-used.json` | The latest invitations you used, with what you joined and when. |
+| `content/invites-pending.json` | Invitations, and shared content you scanned, that had not reached this node yet, with who gave them to you. Oasis tries them again when new messages arrive, and drops each one when you join, when it can no longer work, or when you discard it in Invitations. |
 | `content/agenda-config.json` | How you arranged your Agenda. |
 | `content/list-layouts.json` | The view chosen for the module lists (cards, list or grid), one value shared by all of them. Kept only by this node; a PUB in public mode does not keep it. |
 | `content/last-page.json` | The last page opened on this node, so that the first visit to the home after Oasis starts goes back to it (once; opening any other page first cancels it). Kept only by this node; a PUB in public mode does not keep it. |

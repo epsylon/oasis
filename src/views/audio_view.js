@@ -18,7 +18,7 @@ const {
 const { renderCommentsSection: renderSharedCommentsSection, renderCommentsLink } = require("./comments_view");
 
 const { renderLicenseChip, renderLicenseSelect, renderClearnetSelector, renderClearnetSwitch, renderTribeOriginChip, renderScopeChip } = require('./clearnet_view');
-const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderPlayerFollow, renderSearchButton } = require("./main_views");
+const { renderPublishAtField, renderMentionsFilter, renderCardMetaRow, renderOpinionsPill, renderCommentsPill, renderShareButton, clearnetItemHref, template, i18n, renderLayoutSwitch, renderLayoutItems, renderOpinionsVoting, renderEngagement, userLink, renderEcoTax, renderLifespanChip, renderCardTop, renderCardByline, renderSpreadEditWarning, renderModuleStats, moduleIsEmpty, contentDeleteAction, paged, blobUrlOf, renderMediaLockNote, renderEditedChip, renderDetailShare, hasRelation, renderRelationFilters, renderPlayerFollow, renderSearchButton, renderJoinQr } = require("./main_views");
 const { renderDownloadButton } = require("./gallery_view");
 const { config } = require("../server/SSB_server.js");
 const { renderStyledText } = require("../backend/renderStyledText")
@@ -305,11 +305,12 @@ exports.singleAudioView = async (audioObj, filter = "all", comments = [], params
       editAction: isAuthor ? `/audios/edit/${encodeURIComponent(audioObj.key)}?returnTo=${encodeURIComponent(buildReturnTo(filter, { q, sort }))}` : undefined,
       deleteAction: isAuthor ? contentDeleteAction('audio', audioObj.key) : undefined
     }),
+    renderDetailShare(audioObj.key, href, audioObj.title, null, null, null, audioObj.author),
     div({ class: "shop-title-row" },
       title ? h2({ class: "tribe-card-title" }, title) : null,
       isAuthor ? renderClearnetSwitch('audios', audioObj.rootId || audioObj.key, isClearnet) : null
     ),
-    renderDetailShare(audioObj.key, href, audioObj.title, null, null, null, audioObj.author),
+    !audioObj.tribeId ? renderJoinQr('audios', audioObj.key) : null,
     tagsNode,
     renderMapEmbed(params.mapData, audioObj.mapUrl),
     sideActions.length ? div({ class: "tribe-side-actions" }, ...sideActions) : null
@@ -378,9 +379,10 @@ exports.audioTranscodeDetailView = async ({ audio, decoded = false, stegoPayload
       ),
       div({ class: "bookmark-item card" },
         renderCardTop(audio.key, `/audios/${encodeURIComponent(audio.key)}`, { author: audio.author, date: audio.createdAt, chips: [renderScopeChip(audio, i18n, audio.clearnet === true, clearnetItemHref('audios', audio.title, audio.key)), itemSize ? renderEcoTax(itemSize, audio.key) : null], reportTitle: audio.title }),
+        renderDetailShare(audio.key, `/audios/${encodeURIComponent(audio.key)}`, audio.title, null, null, null, audio.author),
         audio.title ? h2(audio.title) : null,
         renderAudioPlayer(audio, { skipTranscode: true }),
-        renderDetailShare(audio.key, `/audios/${encodeURIComponent(audio.key)}`, audio.title, null, null, null, audio.author),
+        !audio.tribeId ? renderJoinQr('audios', audio.key) : null,
         safeText(audio.description) ? p({ class: "melody-bcs-desc" }, audio.description) : null,
         renderTags(audio.tags),
         form({ method: "POST", action: `/melody/transcode/${encodeURIComponent(audio.key)}`, class: "audio-transcode-run-form audio-transcode-form" },
